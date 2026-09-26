@@ -1,0 +1,6 @@
+.git
+artifacts
+data
+*.session.json
+.env
+node_modules
