@@ -13,7 +13,7 @@ MAP_AUDIT='''async room => {
   const svg=document.querySelector('#map'),box=svg.getBoundingClientRect(),troops=new Map(state.provinces.map(p=>[p.id,p]));
   const shown=e=>getComputedStyle(e).display!=='none' && e.getBoundingClientRect().width>0;
   const units=[];
-  for(const e of svg.querySelectorAll('.map-counter,.battle-counter')){
+  for(const e of svg.querySelectorAll('.map-counter,.battle-counter:not(.resolved)')){
     if(!shown(e))continue;
     const body=e.querySelector('.counter-body,.battle-body').getBoundingClientRect();
     const members=e.dataset.cluster?e.dataset.cluster.split(','):[e.dataset.province];
@@ -251,6 +251,47 @@ def hostile_name_check(page,report):
     assert result['focus']=='germany' and not result['wrong'] and result['bad'] and not result['leaked'],result
     report['assertions'].append('A hostile alliance name renders only as capped text (no element injection); setRelationFocus/setMapMode recolour focus, allies, enemies and neutrals and reject unknown values.')
 
+BATTLE_AUDIT='''async () => {
+  const {teamColor,battleColors,colorDistance}=await import('/relations.js');
+  const state=await (await fetch('/api/games/ui-war')).json(),map=await (await fetch('/map.json')).json();
+  const color=id=>map.countries.find(c=>c.id===id)?.color;
+  return state.battles.map(b=>{
+    const engaged=state.armies.filter(a=>a.engaged&&a.to===b.province),by=new Map();for(const a of engaged)by.set(a.country,(by.get(a.country)||0)+a.amount);
+    const lead=[...by].sort((x,y)=>y[1]-x[1]||x[0].localeCompare(y[0]))[0]?.[0],owner=state.provinces.find(p=>p.id===b.province).owner;
+    const attack=engaged.reduce((n,a)=>n+a.amount,0),defend=state.provinces.find(p=>p.id===b.province).troops;
+    const expected=battleColors(teamColor(state,lead,color(lead)),teamColor(state,owner,color(owner)));
+    const g=document.querySelector(`#map .battle-counter:not(.resolved)[data-province="${b.province}"]`);
+    const bar=g.querySelector('.battle-attack-bar').getBoundingClientRect(),full=g.querySelector('.battle-defend-bar').getBoundingClientRect();
+    const style=getComputedStyle(g.querySelector('.battle-attack-bar'));
+    return {province:b.province,attack,defend,shownAttack:Number(g.dataset.attack),shownDefend:Number(g.dataset.defend),
+      expectedRatio:attack/(attack+defend),measured:bar.width/full.width,attackFill:g.querySelector('.battle-attack-bar').getAttribute('fill'),
+      defendFill:g.querySelector('.battle-defend-bar').getAttribute('fill'),expected,distance:colorDistance(expected.attacker,expected.defender),
+      transition:style.transitionDuration};
+  });
+}'''
+
+def battle_checks(page,server,report,capture):
+    page.set_viewport_size({'width':1366,'height':768});page.locator('#europe-view').click();page.wait_for_timeout(700)
+    def check(label):
+        rows=page.evaluate(BATTLE_AUDIT);assert rows,label
+        for r in rows:
+            assert r['shownAttack']==r['attack'] and r['shownDefend']==r['defend'],(label,r)
+            ratio=min(.94,max(.06,r['expectedRatio']))
+            assert abs(r['measured']-ratio)<.01,(label,r)
+            assert r['attackFill']==r['expected']['attacker'] and r['defendFill']==r['expected']['defender'] and r['distance']>=20,(label,r)
+        return rows
+    before=check('tick 56')
+    assert all(r['transition'].startswith('0.4') for r in before),before
+    server.stdin.write('war 58\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==58
+    page.wait_for_timeout(2600);after=check('tick 58')
+    assert any((a['attack'],a['defend'])!=(b['attack'],b['defend']) for a,b in zip(after,before) if a['province']==b['province']),(before,after)
+    capture('18-battle-tug-of-war.png',900)
+    page.emulate_media(reduced_motion='reduce')
+    assert all(r['transition'] in ('0s','0s, 0s') for r in page.evaluate(BATTLE_AUDIT)),page.evaluate(BATTLE_AUDIT)
+    page.emulate_media(reduced_motion='no-preference')
+    ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
+    report['assertions'].append('Battle tokens are a tug-of-war bar: team colours (coalition or country, kept ≥20 ΔE apart), split at attacker/(attacker+defender) within 1% (6% minimum per side), updating after a real stepped round; 0.4 s transition, none under reduced motion; unique IDs.')
+
 def map_checks(page,server,report,capture):
     views=[('world',0),('europe',0),('europe',1),('europe',2),('europe',3)]
     page.locator('#back').click();page.locator('[data-room="ui-fixture"][data-resume]').click()
@@ -480,6 +521,7 @@ def main():
             map_checks(page,server,report,capture)
             wrap_checks(page,report,capture)
             relations_checks(page,report,capture)
+            battle_checks(page,server,report,capture)
             page.emulate_media(reduced_motion='reduce');assert page.evaluate('getComputedStyle(document.querySelector("#battle-signal")).animationName')=='none'
             if not args.bridge:effect_checks(page,report);hostile_name_check(page,report)  # dynamic module import needs native HTTP
             for selector in ['#declaration','#alliance-seal','.alliance-ribbon','#fallen-seal','.fallen-strike']:
