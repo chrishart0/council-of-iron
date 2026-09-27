@@ -81,6 +81,18 @@ Not verified: real touch-drag of the sheet on a device (the drag code path runs 
 - The atlas fits the 1280×680 world into the viewport, so in portrait phones the world view is a thin band until you pinch or press Home; the rail covers the eastern edge on desktop until panned. Camera insets are passed but not yet used by the atlas.
 - Tablet-portrait idle coverage is ~55%: the 288 px rail is a large share of 768 px.
 
+# v0.7 — Voice input (user request: "humans can type or use STT voice input")
+
+Typing stays primary; the mic is a shortcut into the same text box. `public/voice.js` + `public/voice.css` are self-contained: they attach a mic button to every field marked `data-voice` (the World reply box and the Dispatches message box, so world, coalition and private replies on desktop and phones) and never send anything.
+
+- **Talk:** tap the mic to start and tap again to stop, or press and hold and release (walkie-talkie). While recording the button turns red with a pulsing dot, and a live level bar (AnalyserNode) and elapsed time appear beside it. Recording stops by itself after 30 s or ~1.5 s of silence following speech. **Esc** cancels (and does not close the panel underneath). **Ctrl+Shift+Space** toggles while the composer has focus; other game shortcuts still never fire inside text entry.
+- **Review, then Send:** a spinner shows while transcribing; the text is inserted at the caret (with a space if text is already there), trimmed to the field's 500-character limit, the field is focused and the status says "Review, then Send". Nothing is sent automatically; the normal chat action applies its cooldown and validation.
+- **Paths:** the default is the server's local GPU speech-to-text (MediaRecorder picks WebM/Opus, Ogg/Opus or MP4/AAC for iOS Safari; microphone tracks are released as soon as recording stops). If the server has none but the browser has the Web Speech API, the mic (dashed outline) uses it and says "browser speech (may use a cloud service)". With neither, the mic is hidden. Spectators get no mic.
+- **HTTPS:** phones only grant the microphone to secure pages. On plain http the mic stays visible but dimmed with the tooltip "Voice input needs HTTPS", and tapping it explains why instead of failing silently. See `docs/OPERATIONS.md` → HTTPS for phones.
+- **Accessibility and safety:** `aria-pressed` on the mic, an accessible name that states which path it uses, and a polite `role=status` line for "Recording…", "Transcribing…", results and errors. The transcript is untrusted player text and only ever reaches `input.value` / `textContent`.
+
+Verified by `tests/voice-browser.py` (part of `python tests/browser.py`): Chromium's fake microphone plays generated speech through MediaRecorder, the `/stt` proxy and a fake sidecar (or the real GPU sidecar with `--real-stt URL`); it checks silence auto-stop, insertion after existing text, focus, no automatic send, Esc, the shortcut, hold-to-talk, the insecure-context message and the spectator view. Not yet verified on a physical phone.
+
 # v0.7 — Sound
 
 A presentation-only layer. It changes no rule, event, headline classification or API field. Every sound repeats something already visible (a banner, a World-feed row, the threat strip or an order toast), so muting loses no information.

@@ -10,7 +10,7 @@ The only playable scenario is `imperial-1910-v3`. New rooms freeze their rules, 
 
 One Node process, one local SQLite database, a small number of trusted participants. On this test host, `npm start` defaults to `0.0.0.0:3107` with public origin `http://192.168.1.216:3107`; port 3000 is occupied by another service. Set `HOST`, `PORT` and `PUBLIC_ORIGIN` for another LAN address or a reverse proxy. The origin should be only scheme, host and optional port, with no path or trailing slash. Host and cross-origin checks are deliberate; an unexpected host returns 403 rather than silently exposing a locally running agent’s game.
 
-For Internet access, terminate TLS at a reverse proxy, preserve the public Host header and set `PUBLIC_ORIGIN=https://your-game.example`. Restrict access to invited testers through the proxy/VPN. TLS, enrollment controls, transport abuse protections and moderation are not provided as a production-ready public service. Do not expose an unlimited anonymous server merely because the game runs locally.
+For Internet access, terminate TLS at a reverse proxy (or use the optional built-in listener in *HTTPS for phones* below), preserve the public Host header and set `PUBLIC_ORIGIN=https://your-game.example`. Restrict access to invited testers through the proxy/VPN. TLS, enrollment controls, transport abuse protections and moderation are not provided as a production-ready public service. Do not expose an unlimited anonymous server merely because the game runs locally.
 
 The database is `data/council.db` (SQLite WAL). Persist the entire `data/` directory. Do not run two processes against the same match data: SQLite serializes writes, but it does not coordinate two independent in-memory simulation authorities. There is no horizontal scaling or hot failover.
 
@@ -47,3 +47,55 @@ The server stores a private initial checkpoint for new matches and materializes 
 Public archives include the match map/rules and survive restart without replaying the original private command log. The original full snapshot remains private to the server administrator and still contains diplomatic messages; the review feature does not authorize disclosing it. Apply the existing private-data backup and retention policy. Spectators can inspect public finished reports without a credential; supplied invalid/wrong-room credentials are rejected.
 
 Replay generation is synchronous, once per match, and sparse archives increase the snapshot's size. At most four decoded readers are cached for per-tick HTTP reads. This remains a small single-process prototype, not a claim of high-concurrency archival service performance. An earlier 630-tick regression fixture produced roughly 2.24 MB of uncompressed replay JSON plus its report; other games vary. An incompatible saved history may remain score-only; the server must not invent approximate past state. Public replay format 1 supports the current industrial scenario and retained materialized archives.
+
+## Voice input for chat (optional, self-host)
+
+Players can dictate chat with a mic button beside every composer; see `docs/UI-DESIGN.md` → Voice input. The game needs nothing extra: without a speech sidecar, `GET /api/stt` reports `{available:false}`, the browser falls back to its own Web Speech API when it has one (labelled "may use a cloud service"), and otherwise hides the mic.
+
+**Local GPU sidecar** (`tools/stt/`, Python, dev/self-host only; not a runtime dependency of the Node server):
+
+```sh
+cd tools/stt && uv sync --frozen        # pinned: faster-whisper 1.2.1, ctranslate2 4.7.1, cuBLAS/cuDNN wheels
+npm run stt                             # 127.0.0.1:3190; first run downloads the model (~1.6 GB) to ~/.cache/huggingface
+STT_URL=http://127.0.0.1:3190 npm start # the game proxies seated players' recordings to it
+npm run test:stt                        # generated speech (espeak-ng) in, key words and latency out
+npm run bench:stt                       # compare models; downloads large-v3 (~3 GB) if absent
+```
+
+Settings (env): `STT_MODEL` (default `large-v3-turbo`), `STT_BEAM` (5), `STT_LANGUAGE` (`en`; `auto` detects, slower), `STT_DEVICE` (`cuda`; `cpu` works, slowly), `STT_PORT`/`STT_HOST` (keep 127.0.0.1). The model loads once at startup and is warmed; Silero VAD (faster-whisper `vad_filter`) trims silence; country, province and diplomacy words from `public/imperial-map.json` are passed as Whisper hotwords. To run it as a service: `tools/stt/council-stt.service` is a systemd user unit (instructions inside).
+
+Measured on this host (RTX 5090, driver 580, CUDA float16, beam 5, espeak-ng speech encoded as Opus/WebM and AAC/MP4; median of repeated runs, model warm):
+
+| Model | ~6 s clip, sidecar | RTF | Key words |
+|---|---|---|---|
+| **large-v3-turbo** (default) | 101 ms (beam 1: 92 ms) | 0.016 | 13/13 |
+| large-v3 | 205 ms | 0.032 | 13/13 |
+| distil-large-v3.5 (English only) | 88 ms (beam 1: 83 ms) | 0.014 | 13/13, more small errors |
+
+After compacting the hotword list to fit Whisper's prompt budget, `npm run test:stt` measured a median 81 ms HTTP round trip (RTF ≈0.012) over 18 WebM/MP4 requests of 6–7 s. Through the game server over HTTPS on the LAN (upload, auth, proxy, decode, VAD, decode): median 101 ms (WebM, 24 KB) and 86 ms (MP4, 47 KB) for a 6 s utterance; a 5.1 s recording from Chromium's MediaRecorder took 72 ms in the sidecar. Turbo matched large-v3's transcripts at half the latency, so it is the default. The synthetic speech is clean; real microphones, accents and noisy rooms will be less accurate, and the hotword list made no measurable difference on these clean clips. Partial (streaming) results are not implemented: a whole utterance already returns in ~0.1 s.
+
+Privacy and limits: the route is `POST /api/games/ROOM/stt` for seated players only (no spectators), one request in flight and 12 per minute per seat, 2 MB (≈30 s) maximum, `audio/webm`, `audio/ogg` or `audio/mp4`. Neither the game server nor the sidecar stores audio or transcripts or writes them to logs (the sidecar logs byte counts and timings only). The transcript returns only to the requesting player, who edits it and sends it as a normal chat action.
+
+## HTTPS for phones (needed for the microphone)
+
+Mobile browsers only allow microphone access in a secure context, so `http://192.168.1.216:PORT` shows "Voice input needs HTTPS" on a phone. Two ways to serve HTTPS; the server can listen on HTTP and HTTPS at once (`TLS_CERT`, `TLS_KEY` PEM paths, `TLS_PORT` default 3443). `PUBLIC_ORIGIN` accepts a comma-separated list of origins.
+
+**Self-signed LAN certificate** (works now, no account changes):
+
+```sh
+scripts/dev-cert.sh 192.168.1.216       # writes data/tls/{ca.pem,ca.crt,cert.pem,key.pem}; never commit data/
+STT_URL=http://127.0.0.1:3190 TLS_CERT=data/tls/cert.pem TLS_KEY=data/tls/key.pem PORT=3109 TLS_PORT=3443 \
+  PUBLIC_ORIGIN=http://192.168.1.216:3109,https://192.168.1.216:3443 npm start
+```
+
+Open `https://192.168.1.216:3443` on the phone. Either tap through the certificate warning once (browsers still treat an accepted-certificate https page as a secure context; not yet verified on a physical phone here), or install `data/tls/ca.crt` on the phone to avoid the warning (iOS: open the file, install the profile, then enable it in Settings → General → About → Certificate Trust Settings; Android: Settings → Security → Install a certificate → CA certificate). Only install a CA you generated yourself; remove it when done.
+
+**Tailscale (valid certificate, tailnet-only).** On this host the tailnet name is `x58.tailc34d54.ts.net`, but **Serve and HTTPS certificates are not enabled on the tailnet**; enabling them is an admin-console change (`tailscale serve` prints the enable link) and was not done. After an admin enables them:
+
+```sh
+tailscale serve --bg --https=443 http://127.0.0.1:3109     # tailnet devices only; never use `tailscale funnel`
+PUBLIC_ORIGIN=http://192.168.1.216:3109,https://x58.tailc34d54.ts.net PORT=3109 STT_URL=http://127.0.0.1:3190 npm start
+tailscale serve status        # check;   tailscale serve reset   # undo
+```
+
+The phone must run the Tailscale app on the same tailnet and open `https://x58.tailc34d54.ts.net`. Alternatively `tailscale cert x58.tailc34d54.ts.net` writes a certificate and key that can be passed as `TLS_CERT`/`TLS_KEY`.

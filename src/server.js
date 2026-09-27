@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { createServer as createTlsServer } from 'node:https';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
@@ -10,6 +11,7 @@ import { buildReview, unavailableReview } from './review.js';
 import { replayReader } from '../public/replay-model.js';
 import { operationalInsights } from '../public/insights.js';
 import { choose } from '../agents/policy.js';
+import { makeStt } from './stt.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 export const MAP = JSON.parse(readFileSync(resolve(root, 'public/imperial-map.json'), 'utf8'));
@@ -43,6 +45,8 @@ const staticFiles = new Map([
     .map(([ext, type]) => [`/audio/${stem}.${ext}`, [`public/audio/${stem}.${ext}`, type]])),
   ['/map.json', ['public/imperial-map.json', 'application/json']],
   ['/expand.js', ['public/expand.js', 'text/javascript; charset=utf-8']],
+  ['/voice.js', ['public/voice.js', 'text/javascript; charset=utf-8']],
+  ['/voice.css', ['public/voice.css', 'text/css; charset=utf-8']],
   // Installable web app: "Add to Home Screen" opens a chrome-free full-screen game (manifest-src falls under default-src 'self').
   ['/manifest.webmanifest', ['public/manifest.webmanifest', 'application/manifest+json']],
   ['/icon.svg', ['public/icon.svg', 'image/svg+xml']],
@@ -62,7 +66,11 @@ async function body(req) {
 function json(res, status, data) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); }
 /** `clockScale` accelerates ALL game timing in local tests; no HTTP endpoint can advance time. */
 export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScale = 1,
-  publicOrigin = process.env.PUBLIC_ORIGIN || '', league = process.env.LEAGUE_MODE === '1', automatic = true } = {}) {
+  publicOrigin = process.env.PUBLIC_ORIGIN || '', league = process.env.LEAGUE_MODE === '1', automatic = true,
+  sttUrl = process.env.STT_URL || '', tls = null } = {}) {
+  // PUBLIC_ORIGIN may list several comma-separated origins (e.g. LAN http plus an HTTPS name for phones).
+  const publicOrigins = publicOrigin.split(',').map(o=>o.trim()).filter(Boolean);
+  const stt = makeStt({ url: sttUrl });
   const store = new Store(dbPath), games = new Map(store.load()
     .filter(g=>g.scenario===MAP.id && (g.rules?.economyShare===.6 || g.status==='finished' && g.afterAction))
     .map(g=>[g.id,g]));
@@ -95,16 +103,16 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
     if (g.status === 'finished') afterAction(g);
     else save(g);
   }
-  const server = createServer(async (req,res) => {
+  const handler = async (req,res) => {
     res.setHeader('Cache-Control','no-store');
     res.setHeader('X-Content-Type-Options','nosniff');
     res.setHeader('Referrer-Policy','no-referrer');
     res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
     try {
-      const port=server.address()?.port;
-      const allowedHosts=new Set([`localhost:${port}`,`127.0.0.1:${port}`, ...(publicOrigin ? [new URL(publicOrigin).host] : [])]);
+      const port=req.socket.localPort, scheme=req.socket.encrypted ? 'https' : 'http';
+      const allowedHosts=new Set([`localhost:${port}`,`127.0.0.1:${port}`, ...publicOrigins.map(o=>new URL(o).host)]);
       requireRule(allowedHosts.has(req.headers.host),'Unrecognized Host. Configure PUBLIC_ORIGIN for LAN/proxy access.',403);
-      if(req.headers.origin) requireRule(req.headers.origin===`http://${req.headers.host}` || req.headers.origin===publicOrigin,'Cross-origin request rejected.',403);
+      if(req.headers.origin) requireRule(req.headers.origin===`${scheme}://${req.headers.host}` || publicOrigins.includes(req.headers.origin),'Cross-origin request rejected.',403);
       const url=new URL(req.url,`http://${req.headers.host}`), path=url.pathname;
       if(req.method==='GET' && staticFiles.has(path)) {
         const [file,type]=staticFiles.get(path);
@@ -128,6 +136,8 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         requireRule(++bucket.count<=1200,'Transport request limit exceeded.',429);
       }
       if(path==='/api/health' && req.method==='GET') return json(res,200,{ok:true,version:'0.5.0'});
+      // Optional human voice input (docs/API.md): capability flag only; no game state.
+      if(path==='/api/stt' && req.method==='GET') return json(res,200,{available:await stt.available()});
       if(path==='/api/players' && req.method==='POST') {
         const data=await body(req); return json(res,201,store.register(text(data.name,'Player name',40)));
       }
@@ -157,7 +167,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         g.rules.revealAllianceChatAfterMatch=true;
         games.set(g.id,g);save(g);return json(res,201,{id:g.id});
       }
-      const match=path.match(/^\/api\/games\/([a-zA-Z0-9-]+)(?:\/(join|start|bots|actions|preview|plan|map|review|replay|feed))?$/);
+      const match=path.match(/^\/api\/games\/([a-zA-Z0-9-]+)(?:\/(join|start|bots|actions|preview|plan|map|review|replay|feed|stt))?$/);
       if(match) {
         const g=games.get(match[1]);requireRule(g,'Room not found.',404);
         const endpoint=match[2], gameMap=MAP;
@@ -222,6 +232,11 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
           }
           save(g);return json(res,200,{ok:true,players:g.players.length});
         }
+        if(endpoint==='stt' && req.method==='POST') {
+          // Seated players only; the transcript goes back to this player and is never stored, logged or sent as chat.
+          const p=seat();requireRule(g.status!=='finished','This match has finished.',409);
+          return json(res,200,await stt.transcribe(req,`${g.id}:${p.id}`));
+        }
         if(endpoint==='actions' && req.method==='POST') {
           const p=seat(),data=await body(req);
           const result=act(g,gameMap,p.id,data.action,data.opId);save(g);return json(res,200,result);
@@ -233,8 +248,9 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
       if(!res.headersSent) json(res,error.status || 500,{error: error instanceof RuleError ? error.message : 'Internal server error.'});
       else res.end();
     }
-  });
-  server.requestTimeout=15000;server.headersTimeout=10000;
+  };
+  const server = createServer(handler), tlsServer = tls ? createTlsServer(tls, handler) : null;
+  for(const s of [server,tlsServer].filter(Boolean)) {s.requestTimeout=15000;s.headersTimeout=10000;}
   const interval=automatic ? setInterval(()=>{
     const now=performance.now(), elapsed=(now-previous)*clockScale;previous=now;
     try {
@@ -244,15 +260,21 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         if(count) step(g,count);
       }
       for(const [ip,bucket] of ipBudgets) if(Date.now()-bucket.at>60000) ipBudgets.delete(ip);
+      stt.prune();
     } catch(error) { console.error('Simulation halted to avoid unsaved progress:',error);clearInterval(interval); }
   },100) : null;
-  return {server,store,games,step, async close(){clearInterval(interval);for(const g of games.values())save(g);
-    await new Promise(resolve=>server.close(resolve));store.close();} };
+  return {server,tlsServer,store,games,step, async close(){clearInterval(interval);for(const g of games.values())save(g);
+    await Promise.all([server,tlsServer].filter(s=>s?.listening).map(s=>new Promise(resolve=>s.close(resolve))));store.close();} };
 }
 if(process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
   const port=Number(process.env.PORT || 3107),host=process.env.HOST || '0.0.0.0';
-  const publicOrigin=process.env.PUBLIC_ORIGIN || `http://192.168.1.216:${port}`;
-  const app=makeServer({publicOrigin});
+  // Optional HTTPS listener (TLS_CERT/TLS_KEY PEM paths) so phones get a secure context for the microphone.
+  const tls=process.env.TLS_CERT && process.env.TLS_KEY ? {cert:readFileSync(process.env.TLS_CERT),key:readFileSync(process.env.TLS_KEY)} : null;
+  const tlsPort=Number(process.env.TLS_PORT || 3443);
+  const publicOrigin=process.env.PUBLIC_ORIGIN || [`http://192.168.1.216:${port}`,...(tls?[`https://192.168.1.216:${tlsPort}`]:[])].join(',');
+  const app=makeServer({publicOrigin,tls});
   app.server.listen(port,host,()=>console.log(`Council of Iron: ${publicOrigin} (SQLite; single process)`));
+  app.tlsServer?.listen(tlsPort,host,()=>console.log(`HTTPS listener on port ${tlsPort}`));
+  if(process.env.STT_URL) console.log('Voice input: proxying to the configured STT sidecar.');
   for(const signal of ['SIGTERM','SIGINT']) process.once(signal,()=>app.close().then(()=>process.exit(0)));
 }

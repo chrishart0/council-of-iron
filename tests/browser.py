@@ -429,5 +429,9 @@ def main():
     if args.executable:ui_command.extend(['--executable',args.executable])
     if args.ui_gif:ui_command.extend(['--gif',args.ui_gif])
     subprocess.run(ui_command,cwd=ROOT,check=True)
+    # Voice input: fake microphone through MediaRecorder, the /stt proxy and a fake sidecar.
+    voice_command=[sys.executable,str(ROOT/'tests/voice-browser.py'),'--artifacts',str(artifacts/'voice')]
+    if args.executable:voice_command.extend(['--executable',args.executable])
+    if not args.bridge:subprocess.run(voice_command,cwd=ROOT,check=True)
 
 if __name__=='__main__':main()

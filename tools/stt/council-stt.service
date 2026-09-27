@@ -1,0 +1,18 @@
+# systemd user unit for the optional STT sidecar.
+#   mkdir -p ~/.config/systemd/user && cp tools/stt/council-stt.service ~/.config/systemd/user/
+#   Edit WorkingDirectory below to this checkout's tools/stt, then:
+#   systemctl --user daemon-reload && systemctl --user enable --now council-stt
+#   journalctl --user -u council-stt -f     (timings only; never audio or transcripts)
+[Unit]
+Description=Council of Iron speech-to-text sidecar (faster-whisper, local GPU)
+After=network.target
+
+[Service]
+WorkingDirectory=%h/git/council-of-iron/tools/stt
+ExecStart=%h/.local/bin/uv run --frozen server.py
+Environment=STT_HOST=127.0.0.1 STT_PORT=3190 STT_MODEL=large-v3-turbo
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
