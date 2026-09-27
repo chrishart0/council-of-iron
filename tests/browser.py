@@ -98,6 +98,10 @@ def main():
                 page.locator('#send-army').click()
                 expect(page.locator('#toast')).to_contain_text('Army committed')
                 cli('war','france')
+                # Engine headline -> the same World feed row for every viewer, with a live banner.
+                expect(page.locator('#feed-list [data-kind="war"]').first).to_contain_text('French Republic',timeout=10000)
+                expect(page.locator('#feed-list [data-kind="war"]').first).to_contain_text('British Empire')
+                report['assertions'].append('A CLI war declaration appeared as a red World-feed headline in the browser.')
                 cli('move','england','north-france','6')
                 page.locator('#source').select_option('central-us')
                 page.locator('#destination').select_option('west-us')
@@ -115,6 +119,16 @@ def main():
                 agent_state=cli('state')
                 offer=next(q for q in agent_state['proposals'] if q['name']=='Atlantic Accord')
                 cli('accept',offer['id'])
+                # Alliance activation plays a dedicated seal animation, queued behind any other banner.
+                expect(page.locator('#alliance-seal')).to_be_visible(timeout=30000)
+                expect(page.locator('#alliance-name')).to_have_text('Atlantic Accord')
+                expect(page.locator('#alliance-standards figcaption')).to_have_count(2)
+                expect(page.locator('#alliance-standards')).to_contain_text('United States')
+                # Capture once the ribbon has stamped (its entrance animation is finished).
+                page.wait_for_function("()=>!document.querySelector('.alliance-ribbon').getAnimations().some(a=>a.playState==='running')",timeout=5000)
+                page.screenshot(path=str(artifacts/'alliance-seal.png'))
+                expect(page.locator('#feed-list [data-kind="alliance"]').first).to_contain_text('Atlantic Accord')
+                report['assertions'].append('Alliance activation showed the standards-and-ribbon seal with country names and a matching feed headline.')
                 expect(page.locator('#coalition-info')).to_contain_text('Atlantic Accord',timeout=15000)
                 report['assertions'].append('Browser proposed coalition; CLI accepted; public notice elapsed; both shared the coalition and payout projection.')
                 capture(page,1000)
@@ -131,8 +145,19 @@ def main():
                 page.locator('#chat-text').fill('Hold the Atlantic. This dispatch is private.')
                 page.locator('#chat-form button').click()
                 expect(page.locator('#messages')).to_contain_text('This dispatch is private.')
-                assert any(e.get('text')=='Hold the Atlantic. This dispatch is private.' for e in cli('state')['events'])
+                # Drain the agent's cursor: the added banner waits let more events accumulate than one page.
+                agent_events,agent_cursor=[],0
+                while True:
+                    agent_state=cli('state',str(agent_cursor));agent_events+=agent_state['events'];agent_cursor=agent_state['cursor']
+                    if not agent_state['hasMore']:break
+                assert any(e.get('text')=='Hold the Atlantic. This dispatch is private.' for e in agent_events)
                 cli('chat','dm','usa','<img src=x onerror="window.INJECTED=true"> Agreed. I will hold.')
+                page.wait_for_timeout(10000/12+200)  # shared chat cooldown on the 12x test clock
+                cli('chat','world','<img src=x onerror="window.INJECTED=true"> The envoy speaks to all.')
+                expect(page.locator('#feed-list .feed-chat').last).to_contain_text('The envoy speaks to all.',timeout=10000)
+                assert page.locator('#world-feed img').count()==0 and not page.evaluate('window.INJECTED')
+                assert 'Agreed. I will hold.' not in page.locator('#feed-list').inner_text()
+                report['assertions'].append('Agent world speech reached the browser World feed as inert text; private messages stayed out of it.')
                 expect(page.locator('#messages')).to_contain_text('Agreed. I will hold.')
                 assert page.locator('#messages img').count()==0
                 expect(page.locator('#unread')).to_have_text('')
@@ -162,12 +187,18 @@ def main():
                 assert spectator.locator('.war-room').bounding_box()['height'] >= 1049
                 page.locator('#channel').select_option('world')
                 expect(page.locator('#chat-form button')).to_be_enabled(timeout=10000)
-                page.locator('#chat-text').fill('<img src=x onerror="window.INJECTED=true"> Public call to the council.')
-                page.locator('#chat-form button').click()
-                expect(spectator.locator('#spectator-bubbles')).to_contain_text('Public call to the council.',timeout=10000)
-                assert spectator.locator('#spectator-bubbles img').count()==0
+                # Reply from the World feed itself: the shared chat action on channel world.
+                expect(page.locator('#feed-send')).to_be_enabled(timeout=10000)
+                page.locator('#feed-text').fill('<img src=x onerror="window.INJECTED=true"> Public call to the council.')
+                page.locator('#feed-send').click()
+                expect(page.locator('#feed-text')).to_have_value('')
+                expect(spectator.locator('#feed-list')).to_contain_text('Public call to the council.',timeout=10000)
+                assert spectator.locator('#world-feed img').count()==0
+                expect(spectator.locator('#feed-form')).to_be_hidden()
+                expect(spectator.locator('#feed-list [data-kind="war"]').first).to_be_visible()
+                assert any(e.get('channel')=='world' and e.get('text','').endswith('Public call to the council.') for e in http(f'/api/games/{room}/feed')['items'])
                 spectator.screenshot(path=str(artifacts/'spectator-fullscreen.png'),full_page=True)
-                assert 'This dispatch is private.' not in spectator.locator('#spectator-bubbles').inner_text()
+                assert 'This dispatch is private.' not in spectator.locator('#world-feed').inner_text()
                 spectator.keyboard.press('Escape')
                 expect(spectator.locator('body')).not_to_have_class(re.compile('spectator-map-fullscreen'))
                 spectator.set_viewport_size({'width':390,'height':844})
@@ -176,7 +207,7 @@ def main():
                 assert spectator.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1')
                 spectator.screenshot(path=str(artifacts/'spectator-mobile.png'),full_page=True)
                 spectator.close()
-                report['assertions'].append('Lobby spectator opened a full-viewport map on desktop and mobile; new world chat appeared as escaped bubbles, while private dispatches stayed hidden.')
+                report['assertions'].append('Lobby spectator opened a full-viewport map on desktop and mobile; the feed reply posted world chat that the read-only spectator feed showed as escaped text, while private dispatches stayed hidden.')
                 # External process now controls the existing agent seat over the real API.
                 bot=subprocess.Popen(['node','agents/bot.js'],cwd=ROOT,env={**os.environ,'COUNCIL_URL':url,'COUNCIL_SESSION':str(Path(tmp)/'agent.session.json'),'COUNCIL_TOKEN':'','COUNCIL_MATCH':room},stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
                 page.locator('[data-tab="orders"]').click()
@@ -194,9 +225,18 @@ def main():
                 # Reconnect a second page with the same browser identity, not another join.
                 if args.bridge:saved=page.evaluate('window.__testStorage')
                 else:saved=None
+                caught_up=http(f'/api/games/{room}/feed')['cursor']
                 reconnect=context.new_page();load_page(reconnect,room,saved)
                 expect(reconnect.locator('#commander-title')).to_have_text('United States')
                 expect(reconnect.locator('#phase')).to_have_text('IN SESSION')
+                expect(reconnect.locator('#feed-list [data-kind="alliance"]').first).to_be_visible()
+                # Old headlines are history only: no banner for anything that predates the reconnect.
+                shown=set()
+                for _ in range(25):
+                    shown.update(int(x) for x in reconnect.locator('#declaration:not([hidden]),#alliance-seal:not([hidden]),#fallen-seal:not([hidden])').evaluate_all('(n)=>n.map(e=>e.dataset.seq).filter(Boolean)'))
+                    reconnect.wait_for_timeout(100)
+                assert all(seq>caught_up for seq in shown),(shown,caught_up)
+                report['assertions'].append('Reconnect rebuilt the World feed from history without replaying old banners.')
                 report['assertions'].append('Same-seat reconnect restored country and private inbox without duplicate orders.')
                 reconnect.close()
                 # Mobile width: no document-level horizontal overflow, controls remain reachable.

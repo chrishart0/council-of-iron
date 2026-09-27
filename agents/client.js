@@ -46,6 +46,8 @@ export class CouncilClient {
   }
   gamePath(suffix='') {if(!this.match)throw new Error('Join a match or set COUNCIL_MATCH first.');return `/api/games/${this.match}${suffix}`;}
   observe(after=0) { return this.request(this.gamePath(`?after=${after}`)); }
+  /** Public World feed (world chat + engine headlines), oldest first. Reply with chat on channel world. */
+  feed(after=0,limit=100) { return this.request(this.gamePath(`/feed?${new URLSearchParams({after,limit})}`)); }
   review() {return this.request(this.gamePath('/review'));}
   replay(tick) {return this.request(this.gamePath(`/replay?tick=${encodeURIComponent(tick)}`));}
   action(action,opId=randomUUID()) { return this.request(this.gamePath('/actions'),'POST',{action,opId}); }

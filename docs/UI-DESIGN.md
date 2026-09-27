@@ -1,3 +1,50 @@
+# v0.6 — Event clarity
+
+Goal: anyone at the table — a human player, a spectator or an agent — can tell what just changed in the world without reading the War log. This is a presentation and observation change; no rule, balance value or event ID changed (the recorded 530-tick handplay event-log hash is unchanged).
+
+## One classification, many renderers
+
+`src/engine.js` classifies each **public** event once (`classifyHeadline`) and stores the result beside the adjudication log in `g.headlines` (keyed by event ID), so historic event hashes and replays stay exact. `observe` and the new `worldFeed` attach it as `event.headline`: structured public facts only (kind, country/province IDs, counts). Clients write the prose; the engine never sends text that could differ between clients. Private events (recipients) are never headlines. Games saved before v0.6 simply lack the field for older events.
+
+**Major battle rule.** A completed battle is a headline when `casualties ≥ max(20, ceil(3% × all troops on the map at the end of that tick))`. The headline carries `casualties`, `worldTroops` and `threshold`, so anyone can check it. Why: a fixed count means nothing when the world holds 700 troops early and 2,400 late; a pure share lets tiny early skirmishes through, hence the floor. Measured, not tuned for balance: in six seeded heuristic-bot war-rule matches (2,551 battles) 3% marked about 6% of battles (~25 per match), 2% marked 16% (too noisy for banners) and "any factory province captured" would have marked 26%, so factory captures are not a battle criterion — actual industry loss has its own headline. In the recorded 530-tick handplay game it marks 6 of 78 battles (17 headlines in all). Casualties stay a single shared total: there is no per-country kill attribution.
+
+**Industry threshold.** Only completions at the room's `maxDevelopment` (level III today) are headlines. Level II builds are routine opening economy and would bury the feed; reaching the top tier is the notable commitment (24 troops, 90 ticks). Every completion remains in the War log.
+
+## Event matrix
+
+| Event (engine type → `headline.kind`) | World feed | Banner (live only, queued) | Map effect `atlas.effect?.()` | Agent-visible |
+|---|---|---|---|---|
+| `war_declared` → `war` | red row, focuses target | War seal “WAR DECLARED” | `war {from,to}` | `headline` on observe + `world_feed` |
+| `peace_accepted` → `peace` | white row | Treaty “PEACE AGREED” (double-ruled) | `peace {from,to}` | same |
+| `alliance_activated` → `alliance` | brass row with alliance name (player text) | Standards draw together, brass ribbon stamps “ALLIANCE FORMED · name” | `alliance {countries}` | same; name is on the event, not the headline |
+| `eliminated` → `eliminated` | “X has fallen” row | Fallen standard dims and is struck through, country name shown; own country gets a DEFEAT variant | `eliminated {country}` | same |
+| `departed` → `departure`, `coalition_dissolved` → `dissolved` | grey row | Council dispatch | — | same |
+| `dominance` → `dominance` | gold row | “VICTORY COUNTDOWN” | — | same |
+| stopped hold → `dominance_broken` (in `dominanceBreaks`, `seq` = that tick's last event) | grey row | — (existing countdown strip) | — | `world_feed` item `type:"dominance_broken"` |
+| `battle` meeting the major rule → `major_battle` | orange row, focuses province | “Major battle at P · N troops lost” | `captured {province,owner}` if ownership changed | same |
+| `industry_damaged` → `industry_down` | gear row | — | `industry_down {province,level}` | same |
+| `development_completed` at max level → `industry_up` | gear row | — | `industry_up {province,level}` | same |
+| `finished` → `finished` | gold row | — (result screen takes over) | — | same |
+| world `message` | chat row, escaped text | — | — | `world_feed` item, `untrusted:true` |
+| minor battles, level II builds, orders, alliance/DM chat | — (War log / Dispatches only) | — | — | ordinary `observe` events |
+
+## Browser behavior
+
+- **World feed** is a collapsible overlay in the map's lower-left corner (310 px, list ≤ 220 px), so it never enters or displaces the command dock. At ≤ 760 px it flows below the map, collapsed by default; the choice is remembered per browser. Rows are appended, never re-rendered, so scroll and focus survive polling. Headline rows carry icon + tone (war red, peace white, alliance brass, battle orange, industry gear) and are buttons that focus the map on the province or country — only on click; nothing moves the camera automatically. An unread count shows live items that arrived while collapsed.
+- **Reply** posts through the ordinary `chat` action on channel `world`, so the shared 10-second chat cooldown applies and is displayed. Spectators see the same feed read-only; it replaces the old temporary chat bubbles. The Dispatches tab keeps the full wire; its badge now counts only coalition and private messages.
+- **Banners** share one queue (at most five waiting). The highest-ranked waiting banner shows next; headlines naming the viewer's own country outrank others; when full, the least important is dropped (it stays in the feed). Bursts shorten each banner. Banners are `pointer-events:none`, never take focus, and are only created for events received after the initial catch-up (the existing `messageCatchupComplete` pattern), so reconnects and room switches never replay them. All player text is written with `textContent`; insignia are the authored constants from `presentation.js`, always beside the country name. Under `prefers-reduced-motion` all feed/banner animations are off and banners appear in their final state.
+
+## Verified
+
+- `tests/feed.test.js`: the threshold and floor, minor battles excluded, legacy battle casualties, private events never classified, level II excluded, identical headline for spectator/player observations, public-only chronological feed with cursor and unsplittable pages, deterministic headlines, legacy saves without the field, a real elimination, and the banner/effect plan (own vs other elimination).
+- `tests/server.test.js`: `/feed` over HTTP, CLI `feed` and MCP `world_feed` return identical items; DMs excluded; invalid cursor/limit rejected.
+- `tests/browser.py` (12× live match): a CLI war declaration appears as a feed headline; the alliance seal shows both standards and names; hostile HTML from an agent and from the feed reply renders as inert text for player and spectator; the reply reaches the public feed API; a reconnect rebuilds the feed and shows no banner for any pre-reconnect headline.
+- `tests/ui-browser.py` (recorded position): catch-up shows history with no flashes/banners; the real tick-535 battle (128 of 2,367 troops) raises one “Major battle at Northern India” banner and fresh row; reopening replays nothing; reduced motion disables every new animation.
+
+Not verified: the atlas map effects are called with optional chaining and are exercised only once the parallel map work lands; the fallen-standard animation is covered by unit tests and styling, not by a live browser elimination; no human usability or enjoyment study.
+
+---
+
 # v0.5 — The command table
 
 This is a layout and interaction pass, not a claim that automated tests can establish taste, fun or “world-class” quality. The earlier local reskin was not on master. This release replaces the old CSS system rather than adding its hundreds of bevel/shadow overrides.

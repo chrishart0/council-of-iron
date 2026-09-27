@@ -33,6 +33,12 @@ def main():
             page.locator('[data-room="ui-fixture"][data-resume]').click()
             expect(page.locator('#commander-title')).to_have_text('British Empire')
             expect(page.locator('.country-card')).to_have_count(8)
+            # Catch-up: the World feed shows history but nothing flashes or announces itself.
+            expect(page.locator('#world-feed')).to_be_visible()
+            expect(page.locator('#feed-list [data-kind="major_battle"]').first).to_be_visible()
+            assert page.locator('#feed-list .feed-headline').count()>=10
+            assert page.locator('#feed-list .fresh').count()==0
+            for banner in ['#declaration','#alliance-seal','#fallen-seal']:expect(page.locator(banner)).to_be_hidden()
             def capture(name,hold=900):
                 # Clean real DOM capture: not a mockup, no credentials or local player storage.
                 page.screenshot(path=str(out/name),full_page=True)
@@ -76,6 +82,11 @@ def main():
                 if w==390:capture('07-mobile-command.png')
             page.set_viewport_size({'width':1600,'height':1000});page.locator('#world-view').click()
             server.stdin.write('535\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==535
+            expect(page.locator('#declaration')).to_contain_text('Major battle at Northern India',timeout=5000)
+            expect(page.locator('#declaration')).to_contain_text('troops lost')
+            expect(page.locator('#feed-list .fresh[data-kind="major_battle"]').last).to_contain_text('Northern India')
+            page.screenshot(path=str(out/'13-major-battle-banner.png'))
+            report['assertions'].append('A live recorded major battle (casualties above max(20, 3% of all troops)) raised one banner and a fresh feed row.')
             expect(page.locator('#battle-signal')).to_have_attribute('data-tone','lost')
             expect(page.locator('#battle-signal')).to_contain_text('Northern India')
             expect(page.locator('#countdown-break')).to_be_visible()
@@ -88,6 +99,11 @@ def main():
             page.locator('#back').click();page.locator('[data-room="ui-fixture"][data-resume]').click()
             expect(page.locator('#commander-title')).to_have_text('British Empire')
             expect(page.locator('#battle-signal')).to_be_hidden()
+            page.wait_for_timeout(900)
+            for banner in ['#declaration','#alliance-seal','#fallen-seal']:expect(page.locator(banner)).to_be_hidden()
+            assert page.locator('#feed-list .fresh').count()==0
+            expect(page.locator('#feed-list [data-kind="major_battle"]').last).to_contain_text('Netherlands')
+            report['assertions'].append('Reopening the room rebuilt the World feed without replaying banners or fresh-row flashes.')
             report['assertions'].append('Actual recorded losses and defense trigger factual, dismissible notices; broken hold explains itself; reopening suppresses old battle popups.')
             page.set_viewport_size({'width':1500,'height':1150});page.locator('#back').click()
             page.locator('#room-name').fill('Choose your standard');page.locator('#create-form button').click()
@@ -106,6 +122,8 @@ def main():
             ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
             report['assertions'].append('After-action standards identify all winning members; exact map playback keeps separate SVG IDs and no live command surface.')
             page.emulate_media(reduced_motion='reduce');assert page.evaluate('getComputedStyle(document.querySelector("#battle-signal")).animationName')=='none'
+            for selector in ['#declaration','#alliance-seal','.alliance-ribbon','#fallen-seal','.fallen-strike']:
+                assert page.evaluate(f'getComputedStyle(document.querySelector("{selector}")).animationName')=='none',selector
             assert not report['pageErrors'],report['pageErrors'];report['status']='passed'
             browser.close()
         if args.gif:

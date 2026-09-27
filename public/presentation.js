@@ -17,6 +17,11 @@ const icons = {
   economy: '<path d="M4 20h16M6 17V9h3v8m3 0V4h3v13m3 0v-6h3v6"/>',
   diplomacy: '<path d="M4 4v16m0-15c6-5 10 5 16 0v10c-6 5-10-5-16 0"/>',
   compass: '<circle cx="12" cy="12" r="9"/><path d="M15 6l-1 8-8 4 4-8 5-4Z"/>',
+  war: '<path d="M4 4l10 10m-3 3l3-3 3 3-3 3-3-3Zm9-13L10 14m3 3l-3-3-3 3 3 3 3-3Z"/>',
+  treaty: '<path d="M6 3h10l3 3v15H6V3Zm10 0v3h3M9 10h7m-7 4h7m-7 4h4"/>',
+  ribbon: '<circle cx="12" cy="9" r="6"/><path d="M8.5 14L6 22l3-2 2 3 1-8m1.5-1L18 22l-3-2-2 3"/><path d="M9.5 9l2 2 3-4"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M4.9 4.9l2.1 2.1m10 10l2.1 2.1m0-14.2L17 7m-10 10l-2.1 2.1"/><circle cx="12" cy="12" r="7"/>',
+  fallen: '<path d="M5 21V3m0 1h12l-3 4 3 4H5M3 21h8M14 15l6 6m0-6l-6 6"/>',
 };
 const factions = {
   britain: { code: 'BR', short: 'Britain', motif: '<path d="M13 29l-3-12 9 6 5-11 5 11 9-6-3 12H13Zm0 5h22M20 9h8m-4-4v8"/>' },
