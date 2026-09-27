@@ -102,13 +102,137 @@ def wrap_checks(page,report,capture):
     assert len(pacific)==3 and all(wd<640 for wd in pacific),widths
     assert all(wd<640 for _,wd in widths),widths
     ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
-    assert page.locator('#map use.world-copy').count()==4
+    assert page.locator('#map use.world-copy').count()==6  # base, lines and effects, each repeated at ±1 world
     page.set_viewport_size({'width':390,'height':844});page.wait_for_timeout(150)
     page.locator('#world-view').click();drag_map(page,-page.locator('#map').bounding_box()['width']*1.5);page.wait_for_timeout(100)
     x,y,w,h=view_box(page);assert 0<=x+w/2<1280 and w<=1280.5
     result=page.evaluate(MAP_AUDIT,'ui-war');assert not result['badSums'] and not result['missing'] and not result['overlaps'],result
     page.set_viewport_size({'width':1366,'height':768})
     report['assertions'].append('World wraps east–west: drag and arrow-key pans beyond one world width in both directions normalize the view; a repeated copy selects the same province; counters stay once each, summed correctly and non-overlapping across the dateline; Pacific sea links take the short way; no duplicate IDs.')
+
+RELATIONS_AUDIT='''async room => {
+  const {allianceColors,coalitions,warKey}=await import('/relations.js');
+  const state=await (await fetch(`/api/games/${room}`)).json(),map=await (await fetch('/map.json')).json();
+  const svg=document.querySelector('#map'),owner=new Map(state.provinces.map(p=>[p.id,p.owner||null]));
+  const wars=new Set(state.rules.warRequired?state.wars:[]),side=new Map(state.players.map(p=>[p.id,p.side]));
+  const hostile=(a,b)=>a&&b&&a!==b&&side.get(a)!==side.get(b)&&wars.has(warKey(a,b));
+  const expectedFronts=[...svg.querySelectorAll('[data-border]')].map(e=>e.dataset.border).filter(k=>{const [a,b]=k.split('|');return hostile(owner.get(a),owner.get(b));}).sort();
+  const contact=new Set(expectedFronts.map(k=>{const [a,b]=k.split('|');return warKey(owner.get(a),owner.get(b));}));
+  const expectedSea=map.edges.filter(e=>e.sea&&hostile(owner.get(e.from),owner.get(e.to))&&!contact.has(warKey(owner.get(e.from),owner.get(e.to)))).map(e=>`${e.from}|${e.to}`).sort();
+  const colors=allianceColors(state);
+  const blocs=coalitions(state).map(c=>{const g=svg.querySelector(`.alliance-bloc[data-bloc="${c.id}"]`);
+    return {id:c.id,name:c.name,exists:Boolean(g),inBase:Boolean(g?.closest('[id$="world-base"]')),members:g?.dataset.members,expectedMembers:c.members.join(','),
+      provinces:g?.dataset.provinces,expectedProvinces:state.provinces.filter(p=>c.members.includes(p.owner)).map(p=>p.id).sort().join(','),
+      color:g?.querySelector('.bloc-line').getAttribute('stroke'),expectedColor:colors[c.id]};});
+  const ticks=state.provinces.filter(p=>p.owner).map(p=>{const r=svg.querySelector(`#${svg.id==='map'?'':svg.id+'-'}marker-${p.id} .counter-bloc`);
+    return {id:p.id,shown:r.style.display!=='none',fill:r.getAttribute('fill'),expected:colors[side.get(p.owner)]||null};});
+  return {fronts:[...svg.querySelectorAll('.war-fronts [data-front]')].map(e=>e.dataset.front).sort(),expectedFronts,
+    frontsInBase:[...svg.querySelectorAll('.war-fronts')].every(e=>e.closest('[id$="world-base"]')),
+    sea:[...svg.querySelectorAll('.sea-fronts [data-sea-front]')].map(e=>e.dataset.seaFront).sort(),expectedSea,blocs,
+    badTicks:ticks.filter(t=>t.shown!==Boolean(t.expected)||t.expected&&t.fill!==t.expected).map(t=>t.id),
+    labels:[...svg.querySelectorAll('.alliance-name')].map(g=>g.dataset.bloc),
+    legend:[...document.querySelectorAll('.atlas-legend')].filter(l=>svg.parentElement.contains(l)).map(l=>l.textContent).join('|')};
+}'''
+
+ARMY_AUDIT='''() => {
+  const svg=document.querySelector('#map'),kids=[...svg.children],index=e=>kids.indexOf(e);
+  const armies=svg.querySelector('.map-armies'),lastUse=Math.max(...[...svg.querySelectorAll(':scope>use')].map(index));
+  const shown=e=>{for(let n=e;n&&n!==svg;n=n.parentElement)if(getComputedStyle(n).display==='none')return false;const r=e.getBoundingClientRect();return r.width>0&&r.height>0;};
+  const inter=(a,b)=>a.left<b.right-1&&b.left<a.right-1&&a.top<b.bottom-1&&b.top<a.bottom-1;
+  const box=svg.getBoundingClientRect(),on=r=>r.right>box.left&&r.left<box.right&&r.bottom>box.top&&r.top<box.bottom;
+  const marks=[...svg.querySelectorAll('.moving-army')].filter(g=>!g.classList.contains('engaged')).map(g=>g.querySelector('.army-arrow')).filter(shown).map(e=>e.getBoundingClientRect()).filter(on);
+  const names=[...svg.querySelectorAll('.map-counter:not(.counter-merged) .province-name,.country-name,.alliance-label')].filter(shown).map(e=>[e.textContent,e.getBoundingClientRect()]);
+  return {last:svg.lastElementChild===armies,afterEverything:index(armies)>lastUse&&['.map-battles','.map-counters','.map-clusters','.country-names','.alliance-names','.map-effects']
+      .every(s=>{const e=svg.querySelector(s);return e&&(e.closest('[id$="world-fx"]')||e).compareDocumentPosition(armies)&Node.DOCUMENT_POSITION_FOLLOWING;}),
+    inCopies:svg.querySelectorAll('[id$="world-base"] .moving-army,[id$="world-lines"] .moving-army,[id$="world-fx"] .moving-army').length,
+    visible:marks.length,covered:names.filter(([,r])=>marks.some(m=>inter(r,m))).map(([t])=>t)};
+}'''
+
+def relations_checks(page,report,capture):
+    page.set_viewport_size({'width':1366,'height':768})
+    # Alliances in the default political view (legacy recorded match with three coalitions).
+    page.locator('#back').click();page.locator('[data-room="ui-fixture"][data-resume]').click()
+    expect(page.locator('#commander-title')).to_have_text('British Empire');page.locator('#world-view').click();page.wait_for_timeout(200)
+    first=page.evaluate(RELATIONS_AUDIT,'ui-fixture')
+    assert len(first['blocs'])==3,first['blocs']
+    for b in first['blocs']:
+        assert b['exists'] and b['inBase'] and b['members']==b['expectedMembers'] and b['provinces']==b['expectedProvinces'] and b['color']==b['expectedColor'],b
+        assert b['name'] in first['legend'],(b,first['legend'])
+    assert len({b['color'] for b in first['blocs']})==3 and not first['badTicks'],first
+    assert first['labels'],'no alliance name placed at world view'
+    assert first['fronts']==[] and first['sea']==[],first  # legacy rules: no formal war fronts
+    capture('15-alliance-blocs.png',900)
+    page.wait_for_timeout(1300);again=page.evaluate(RELATIONS_AUDIT,'ui-fixture')
+    assert [b['color'] for b in again['blocs']]==[b['color'] for b in first['blocs']]
+    # Seam: blocs are part of the repeated world layer, so the copy across the dateline shows them.
+    drag_map(page,page.locator('#map').bounding_box()['width']/2);assert page.locator('#map use.world-copy[href$="world-base"]').count()==2
+    report['assertions'].append('Political view shows each coalition as one outline in a stable alliance colour around exactly its members’ provinces (repeated across the seam), a name label and legend entry, softened internal borders and alliance ticks on member counters.')
+    # War fronts, diplomacy mode, hover relations and the army layer on real formal wars.
+    page.locator('#back').click();page.locator('[data-room="ui-war"][data-resume]').click()
+    expect(page.locator('#commander-title')).to_have_text('British Empire');page.keyboard.press('Escape')
+    audit=page.evaluate(RELATIONS_AUDIT,'ui-war')
+    assert audit['fronts'] and audit['fronts']==audit['expectedFronts'] and audit['frontsInBase'],audit
+    assert audit['sea']==audit['expectedSea'],audit
+    assert 'At war' in audit['legend'] and 'France – Germany' in audit['legend'],audit['legend']
+    toggle=page.locator('.board-panel .atlas-mode-toggle, #map ~ .atlas-modes .atlas-mode-toggle').first
+    fills=lambda:page.evaluate('''async()=>{const s=await (await fetch('/api/games/ui-war')).json();return s.provinces.map(p=>[p.id,p.owner,document.querySelector('#province-'+p.id).getAttribute('fill')]);}''')
+    toggle.click();expect(page.locator('#map')).to_have_attribute('data-mode','diplomacy')
+    for pid,owner,fill in fills():
+        assert fill==('#d9b45a' if owner=='britain' else '#6d716a' if not owner else '#8f8d80'),(pid,owner,fill)
+    expect(page.locator('.atlas-legend').first).to_contain_text('Relations of British Empire')
+    page.locator('#world-view').click();capture('16-diplomacy-mode.png',900)
+    toggle.click();expect(page.locator('#map')).to_have_attribute('data-mode','political')
+    for pid,owner,fill in fills():
+        if owner=='germany':assert fill=='#8e8b7d',(pid,fill)
+    page.locator('#europe-view').click();page.wait_for_timeout(150)
+    box=page.locator('#marker-bavaria .counter-body').bounding_box();page.mouse.move(box['x']+box['width']/2,box['y']+box['height']/2);page.wait_for_timeout(450)
+    expect(page.locator('#map')).to_have_attribute('data-outline-focus','germany')
+    assert page.locator('#map .relation-enemy').get_attribute('d') and not page.locator('#map .relation-ally').get_attribute('d')
+    page.mouse.move(5,5);page.wait_for_timeout(100);expect(page.locator('#map')).to_have_attribute('data-outline-focus','')
+    report['assertions'].append('Formal wars draw a front on exactly the land borders between warring owners (sea links only without land contact) and list the wars in the legend; diplomacy mode recolours focus/ally/enemy/neutral and back; hovering a country outlines its enemies and allies.')
+    # Moving armies are the top layer and no name label covers them.
+    for view,steps in [('europe',0),('europe',1),('europe',2),('world',0)]:
+        page.locator('#'+view+'-view').click()
+        for _ in range(steps):page.locator('#zoom-out').click()
+        page.wait_for_timeout(200);army=page.evaluate(ARMY_AUDIT)
+        assert army['last'] and army['afterEverything'] and army['inCopies']==0,army
+        assert not army['covered'],(view,steps,army)
+        if view=='europe' and steps==0:assert army['visible']>=2,army
+    page.locator('#europe-view').click();page.wait_for_timeout(150)
+    page.locator('#map .moving-army:not(.engaged)').first.focus()
+    expect(page.locator('.atlas-tooltip').first).to_contain_text('→');expect(page.locator('.atlas-tooltip').first).to_contain_text('troops')
+    capture('17-armies-on-top.png',900)
+    ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
+    report['assertions'].append('Moving armies are the last map layer (above every world copy, counters, battles, names and effects); name labels avoid them at four zoom levels; an army is focusable and reports route, size and ETA.')
+
+HOSTILE_NAME='''async () => {
+  const {Atlas}=await import('/atlas.js');
+  const map=await (await fetch('/map.json')).json(),state=await (await fetch('/api/games/ui-fixture')).json();
+  const evil='<img src=x onerror="window.__pwned=1">Accord of a very long hostile name';
+  const side=state.sides.find(s=>s.members.length>1);side.name=evil;
+  const host=document.createElement('div');host.style.cssText='position:fixed;left:0;top:0;width:800px;height:425px';
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.id='hostile-test-map';svg.style.cssText='width:800px;height:425px';
+  host.append(svg);document.body.append(host);
+  const atlas=new Atlas(svg,map,()=>{});atlas.update(state,null,null);atlas.world();
+  await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));atlas.layout();
+  const labels=[...svg.querySelectorAll('.alliance-label')].map(e=>e.textContent),legend=host.querySelector('.atlas-legend').textContent;
+  const focus=atlas.setRelationFocus('germany');atlas.setMapMode('diplomacy');
+  const fill=id=>svg.querySelector('#hostile-test-map-province-'+id).getAttribute('fill');
+  const rel=(await import('/relations.js')).relationsOf(state,'germany');
+  const owners=Object.fromEntries(state.provinces.map(p=>[p.id,p.owner]));
+  const wrong=state.provinces.filter(p=>{const o=p.owner,f=fill(p.id);return !o?f!=='#6d716a':o==='germany'?f!=='#d9b45a':rel.allies.includes(o)?f!=='#4f9e94':rel.enemies.includes(o)?f!=='#b8483c':f!=='#8f8d80';}).map(p=>p.id);
+  const bad=atlas.setMapMode('nope')===false&&atlas.setRelationFocus('<x>')===null;
+  const result={labels,legendHasName:legend.includes(evil.slice(0,20)),injected:Boolean(host.querySelector('img'))||Boolean(window.__pwned),focus,wrong,bad,
+    leaked:document.querySelectorAll('#map [data-bloc]').length>0&&[...document.querySelectorAll('#map .alliance-bloc')].some(g=>g.closest('#hostile-test-map'))};
+  atlas.destroy();host.remove();return result;
+}'''
+
+def hostile_name_check(page,report):
+    result=page.evaluate(HOSTILE_NAME)
+    assert not result['injected'] and result['legendHasName'],result
+    assert all(len(l)<=28 for l in result['labels']),result
+    assert result['focus']=='germany' and not result['wrong'] and result['bad'] and not result['leaked'],result
+    report['assertions'].append('A hostile alliance name renders only as capped text (no element injection); setRelationFocus/setMapMode recolour focus, allies, enemies and neutrals and reject unknown values.')
 
 def map_checks(page,server,report,capture):
     views=[('world',0),('europe',0),('europe',1),('europe',2),('europe',3)]
@@ -329,12 +453,18 @@ def main():
             capture('09-victory-review.png');page.locator('#aar-tab-replay').click()
             expect(page.locator('#replay-stage')).to_be_visible()
             page.locator('#replay-slider').fill('530');page.locator('[data-aar-map="europe"]').click();capture('10-replay.png')
+            # The review atlas has its own blocs, legend and mode chip; toggling it never touches the live map.
+            review_chip=page.locator('.aar-replay-map .atlas-mode-toggle');expect(review_chip).to_have_count(1)
+            assert page.locator('#review-map .alliance-bloc').count()>=1
+            review_chip.click();expect(page.locator('#review-map')).to_have_attribute('data-mode','political')  # observer: no focus country
+            expect(page.locator('.aar-replay-map .atlas-legend')).to_contain_text('Hover a country');review_chip.click()
             ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
             report['assertions'].append('After-action standards identify all winning members; exact map playback keeps separate SVG IDs and no live command surface.')
             map_checks(page,server,report,capture)
             wrap_checks(page,report,capture)
+            relations_checks(page,report,capture)
             page.emulate_media(reduced_motion='reduce');assert page.evaluate('getComputedStyle(document.querySelector("#battle-signal")).animationName')=='none'
-            if not args.bridge:effect_checks(page,report)  # dynamic module import needs native HTTP
+            if not args.bridge:effect_checks(page,report);hostile_name_check(page,report)  # dynamic module import needs native HTTP
             for selector in ['#declaration','#alliance-seal','.alliance-ribbon','#fallen-seal','.fallen-strike']:
                 assert page.evaluate(f'getComputedStyle(document.querySelector("{selector}")).animationName')=='none',selector
             assert not report['pageErrors'],report['pageErrors'];report['status']='passed'

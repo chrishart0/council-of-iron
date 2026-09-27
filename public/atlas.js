@@ -1,5 +1,7 @@
 import { journeyPoint } from './movement.js';
 import { borderNetwork, insideRings, provinceRings } from './map-geometry.js';
+import { allianceColors, atWar, coalitions, relationsOf, warKey } from './relations.js';
+import { faction } from './presentation.js';
 /** Presentation only: the server decides every movement, battle and ownership change.
  * Every SVG fragment below is an authored constant; player text never enters map markup.
  */
@@ -12,6 +14,9 @@ function node(tag, attributes = {}) {
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 /** Decorative on-map effects other modules may request with `atlas.effect(kind, data)`. */
 export const MAP_EFFECTS = Object.freeze(['industry_up', 'industry_down', 'captured', 'alliance', 'war', 'peace', 'eliminated']);
+/** Map colouring modes: country colours, or relations relative to a focus country. */
+export const MAP_MODES = Object.freeze(['political', 'diplomacy']);
+const RELATION = Object.freeze({ focus: '#d9b45a', ally: '#4f9e94', enemy: '#b8483c', neutral: '#8f8d80', none: '#6d716a' });
 /** Level of detail by on-screen pixels per map unit: country totals, merged counters, every province. */
 export const LOD = Object.freeze({ far: 1.2, near: 2.6 });
 const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
@@ -19,6 +24,7 @@ const NEUTRAL = '#a5a28c', ALLIANCE = '#f6d77f', COUNTER_H = 21, PAD = 3;
 const SWORDS = 'M-6-6L5 5M2.4 6.6L6.6 2.4M6-6L-5 5M-6.6 2.4L-2.4 6.6';
 const FACTORY = 'M-8 7V-1l4.5 3V-1l4.5 3V-7h3.5V7Z';
 const CRACK = 'M-2-9l3 5-3 3 4 3-2 7';
+const ARROW = 'M-6.5-5.5L7.5 0-6.5 5.5-3 0Z';
 const counterWidth = troops => Math.max(32, String(troops).length * 7 + 15);
 const networks = new WeakMap();
 /** World width in map units: the map repeats horizontally at this period. */
@@ -40,14 +46,17 @@ export class Atlas {
     this.markers = new Map(); this.armies = new Map(); this.pointers = new Map();
     this.clusters = new Map(); this.battleMarks = new Map(); this.seenRounds = new Map();
     this.lastOwned = new Map(); this.timers = new Set(); this.pointEffects = new Set();
+    this.frontEls = new Map(); this.blocEls = new Map(); this.blocSeq = 0; this.mode = 'political'; this.relationFocus = null; this.hoverFocus = null;
+    this.armyRects = [];
     this.reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
     svg.replaceChildren(); svg.classList.add('atlas-v6');
     if (!svg.id) svg.id = `atlas-${++instances}`;
-    // Horizontal wraparound: every world-space layer lives once in `base` (under counters) or
-    // `top` (routes, armies, effects); two <use> copies repeat each at ±WORLD. <use> shadow
-    // trees add no document IDs. Counters stay single, interactive and placed on the copy
-    // nearest the view centre.
-    this.base = node('g', { id: `${svg.id}-world-base` }); this.top = node('g', { id: `${svg.id}-world-top`, 'pointer-events': 'none' });
+    // Horizontal wraparound: world-space layers live once in `base` (fills, borders, blocs,
+    // fronts), `lines` (routes, traces) or `fx` (effects); two <use> copies repeat each at
+    // ±WORLD, and <use> shadow trees add no document IDs. Counters, names, battles and moving
+    // armies are single interactive overlays placed on the copy nearest the view centre.
+    this.base = node('g', { id: `${svg.id}-world-base` });
+    this.lines = node('g', { id: `${svg.id}-world-lines`, 'pointer-events': 'none' }); this.fx = node('g', { id: `${svg.id}-world-fx`, 'pointer-events': 'none' });
     const defs = node('defs');
     defs.innerHTML = '<radialGradient id="ocean-light"><stop stop-color="#284d59"/><stop offset="1" stop-color="#112833"/></radialGradient><marker id="march-head" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7" fill="#f2d59b"/></marker>';
     defs.innerHTML = defs.innerHTML.replaceAll('ocean-light', `${this.prefix}ocean-light`).replaceAll('march-head', `${this.prefix}march-head`);
@@ -79,39 +88,65 @@ export class Atlas {
     this.base.append(node('path', { d: map.provinces.map(p => p.path).join(' '), fill: `url(#${this.prefix}land-grain)`, 'pointer-events': 'none' }));
     this.provinceBorders = node('g', { class: 'province-borders', 'pointer-events': 'none' });
     this.countryBorders = node('g', { class: 'country-borders', 'pointer-events': 'none' });
-    this.borders = network.borders.map(b => { const el = node('path', { d: b.d, 'data-border': `${b.a}|${b.b}` }); this.provinceBorders.append(el); return { ...b, el, country: false }; });
-    this.base.append(this.provinceBorders, this.countryBorders, node('path', { d: coast, class: 'coastline', 'pointer-events': 'none' }));
+    this.alliedBorders = node('g', { class: 'allied-borders', 'pointer-events': 'none' });
+    this.borders = network.borders.map(b => { const el = node('path', { d: b.d, 'data-border': `${b.a}|${b.b}` }); this.provinceBorders.append(el); return { ...b, el, kind: 'province' }; });
+    // Alliance blocs, war fronts and hover relations sit above borders, below routes.
+    this.blocs = node('g', { class: 'alliance-blocs', 'pointer-events': 'none', 'aria-hidden': 'true' });
+    this.fronts = node('g', { class: 'war-fronts', 'pointer-events': 'none', 'aria-hidden': 'true' });
+    this.relationLines = node('g', { class: 'relation-outlines', 'pointer-events': 'none', 'aria-hidden': 'true' });
+    this.relationPaths = Object.fromEntries(['ally', 'enemy', 'focus'].map(kind => [kind, node('path', { class: `relation-${kind}` })]));
+    this.relationLines.append(...Object.values(this.relationPaths));
+    this.base.append(this.provinceBorders, this.alliedBorders, this.countryBorders, node('path', { d: coast, class: 'coastline', 'pointer-events': 'none' }));
     const compass = node('g', { 'aria-hidden': 'true', 'pointer-events': 'none', transform: 'translate(110 560)', opacity: .38, stroke: '#ddc591', fill: 'none' });
     compass.append(node('circle', { r: 27, 'stroke-width': .7 }), node('circle', { r: 22, 'stroke-width': .4 }), node('path', { d: 'M0-40L6-6 40 0 6 6 0 40-6 6-40 0-6-6Z', 'stroke-width': .8 }), node('path', { d: 'M0-40V0H-40L-6-6Z', fill: '#ddc591', 'stroke-width': .4 }));
     const north = node('text', { y: -46, 'text-anchor': 'middle', stroke: 'none', fill: '#eed9ac', 'font-size': 12, 'font-family': 'Georgia' }); north.textContent = 'N'; compass.append(north); this.base.append(compass);
     this.areaEffects = node('g', { class: 'map-effects map-area-effects', 'aria-hidden': 'true', 'pointer-events': 'none' });
     this.countryNames = node('g', { class: 'country-names', 'pointer-events': 'none', 'aria-hidden': 'true' });
-    this.connections = node('g', { 'pointer-events': 'none' }); this.routes = node('g', { 'pointer-events': 'none' }); this.marches = node('g', { 'pointer-events': 'none' });
-    this.trails = node('g', { 'pointer-events': 'none' }); this.base.append(this.areaEffects);
-    this.top.append(this.connections, this.routes, this.trails, this.marches);
+    this.allianceNames = node('g', { class: 'alliance-names', 'pointer-events': 'none', 'aria-hidden': 'true' });
+    this.connections = node('g', { 'pointer-events': 'none' }); this.routes = node('g', { 'pointer-events': 'none' });
+    this.marches = node('g', { class: 'map-armies' }); this.seaFronts = node('g', { class: 'sea-fronts', 'aria-hidden': 'true' });
+    this.trails = node('g', { 'pointer-events': 'none' }); this.base.append(this.areaEffects, this.blocs, this.fronts, this.relationLines);
+    this.lines.append(this.seaFronts, this.connections, this.routes, this.trails);
     this.leaders = node('g', { class: 'counter-leaders', 'pointer-events': 'none', 'aria-hidden': 'true' });
     const markers = node('g', { class: 'map-counters' });
     for (const p of map.provinces) {
       const group = node('g', { id: `${this.prefix}marker-${p.id}`, 'data-province': p.id, tabindex: 0, role: 'button', class: 'map-counter' });
       const disc = node('rect', { x: -16, y: -10, width: 32, height: COUNTER_H, rx: 1, class: 'counter-body' }); const text = node('text', { x: 2, y: .5, class: 'counter-value', id: `${this.prefix}troops-${p.id}` });
       const stripe = node('rect', { x: -16, y: -10, width: 4, height: COUNTER_H, class: 'counter-stripe' });
+      const bloc = node('rect', { x: -19, y: -10, width: 2.5, height: COUNTER_H, class: 'counter-bloc' });
       const label = node('text', { y: -17, class: 'province-name' }); label.textContent = p.name;
       const industry = node('g', { class: 'industry-pips', 'aria-hidden': 'true' }); group.append(industry);
-      group.append(disc, stripe, text, label); markers.append(group); this.markers.set(p.id, { group, disc, stripe, text, label, industry });
+      group.append(bloc, disc, stripe, text, label); markers.append(group); this.markers.set(p.id, { group, disc, stripe, bloc, text, label, industry });
     }
     this.clusterLayer = node('g', { class: 'map-clusters' }); this.battleLayer = node('g', { class: 'map-battles' });
     this.effects = node('g', { class: 'map-effects', 'aria-hidden': 'true', 'pointer-events': 'none' });
-    this.top.append(this.effects);
-    const copies = layer => [-WORLD, WORLD].map(x => node('use', { href: `#${layer.id}`, x, class: 'world-copy', 'aria-hidden': 'true', ...(layer === this.top ? { 'pointer-events': 'none' } : {}) }));
-    svg.append(...copies(this.base), this.base, ...copies(this.top), this.top, this.countryNames, this.leaders, markers, this.clusterLayer, this.battleLayer);
+    this.fx.append(this.effects);
+    // Bottom to top: ocean → fills/borders/blocs/fronts (copied) → routes (copied) → names →
+    // counters → battles → effects (copied) → moving armies, drawn once above every copy.
+    const copies = layer => [-WORLD, WORLD].map(x => node('use', { href: `#${layer.id}`, x, class: 'world-copy', 'aria-hidden': 'true', ...(layer === this.base ? {} : { 'pointer-events': 'none' }) }));
+    svg.append(...copies(this.base), this.base, ...copies(this.lines), this.lines, this.allianceNames, this.countryNames, this.leaders, markers, this.clusterLayer, this.battleLayer,
+      ...copies(this.fx), this.fx, this.marches);
     this.tooltip = document.createElement('div'); this.tooltip.className = 'atlas-tooltip'; this.tooltip.hidden = true; svg.parentElement.append(this.tooltip);
+    // Map-mode toggle and legend: plain DOM, text only via textContent.
+    this.chip = document.createElement('div'); this.chip.className = 'atlas-modes';
+    this.modeButton = document.createElement('button'); this.modeButton.type = 'button'; this.modeButton.className = 'atlas-mode-toggle';
+    this.modeButton.addEventListener('click', () => this.setMapMode(this.mode === 'political' ? 'diplomacy' : 'political'));
+    this.legend = document.createElement('div'); this.legend.className = 'atlas-legend';
+    this.chip.append(this.legend, this.modeButton); svg.parentElement.append(this.chip);
+    svg.addEventListener('focusin', event => {
+      const army = event.target.closest?.('[data-army]')?.dataset.army;
+      if (army) { this.showArmy(army, event.target.getBoundingClientRect()); return; }
+      const id = event.target.closest?.('[data-province]')?.dataset.province;
+      this.hoverCountry(this.byId?.get(id)?.owner || null);
+    });
+    svg.addEventListener('focusout', () => { this.hoverCountry(null); this.tooltip.hidden = true; });
     svg.addEventListener('contextmenu', event => event.preventDefault());
     svg.addEventListener('wheel', event => { event.preventDefault(); this.zoom(event.deltaY > 0 ? 1.12 : .89, event.clientX, event.clientY); }, { passive: false });
     svg.addEventListener('pointerdown', event => this.down(event));
     svg.addEventListener('pointermove', event => this.move(event));
     svg.addEventListener('pointerup', event => this.up(event));
     svg.addEventListener('pointercancel', event => { this.pointers.delete(event.pointerId); this.gesture = null; this.dragged = true; });
-    svg.addEventListener('pointerleave', () => { this.tooltip.hidden = true; });
+    svg.addEventListener('pointerleave', () => { this.tooltip.hidden = true; this.hoverCountry(null); });
     if (!svg.hasAttribute('tabindex')) svg.setAttribute('tabindex', 0);
     svg.addEventListener('keydown', event => {
       // Arrow keys pan (wrapping east–west); never while typing, since only map elements listen.
@@ -145,7 +180,7 @@ export class Atlas {
       this.gesture = { x: event.clientX, y: event.clientY, vx: this.view.x, vy: this.view.y,
         ...this.hit(event), shiftKey: event.shiftKey, target: event.button === 2 }; this.dragged = false;
     } else { this.dragged = true; this.gesture = null; this.pinchDistance = this.distance(); }
-    this.tooltip.hidden = true;
+    if (!this.gesture?.army) this.tooltip.hidden = true;
   }
   distance() { const [a, b] = this.pointers.values(); return b ? Math.hypot(a.x - b.x, a.y - b.y) : 0; }
   move(event) {
@@ -167,16 +202,17 @@ export class Atlas {
   up(event) {
     const gesture = this.gesture; this.pointers.delete(event.pointerId);
     if (this.svg.hasPointerCapture(event.pointerId)) this.svg.releasePointerCapture(event.pointerId);
-    if (!this.dragged && gesture?.cluster) this.fit(gesture.cluster.split(','));
+    if (!this.dragged && gesture?.army) this.showArmy(gesture.army, { left: event.clientX - 14, top: event.clientY + 65, width: 0 });
+    else if (!this.dragged && gesture?.cluster) this.fit(gesture.cluster.split(','));
     else if (!this.dragged && gesture?.id) this.onSelect(gesture.id, { shiftKey: gesture.shiftKey, target: gesture.target });
     if (!this.pointers.size) this.gesture = null;
   }
   /** What a pointer event is on. A click on a repeated world copy resolves to the same province. */
   hit(event) {
-    const el = event.target, cluster = el.closest?.('[data-cluster]')?.dataset.cluster;
+    const el = event.target, cluster = el.closest?.('[data-cluster]')?.dataset.cluster, army = el.closest?.('[data-army]')?.dataset.army;
     let id = el.closest?.('[data-province]')?.dataset.province;
-    if (!id && !cluster && el.closest?.('use.world-copy')) id = this.provinceAt(this.coordinates(event.clientX, event.clientY));
-    return { cluster, id };
+    if (!id && !cluster && !army && el.closest?.('use.world-copy')) id = this.provinceAt(this.coordinates(event.clientX, event.clientY));
+    return { cluster, id, army };
   }
   provinceAt(point) {
     const x = ((point.x % WORLD) + WORLD) % WORLD;
@@ -187,8 +223,10 @@ export class Atlas {
   near(x) { const cx = this.view.x + this.view.w / 2; return cx + wrapDelta(x - cx); }
   pan(dx, dy) { this.view.x += dx; this.view.y += dy; this.applyView(); }
   hover(event) {
-    const { cluster, id } = this.hit(event);
+    const { cluster, id, army } = this.hit(event);
     const p = this.byId?.get(id);
+    this.hoverCountry(cluster ? this.byId?.get(cluster.split(',')[0])?.owner || null : p?.owner || null);
+    if (army) { this.showArmy(army, { left: event.clientX - 14, top: event.clientY + 65, width: 0 }); return; }
     let title, detail;
     if (cluster && this.state) {
       const members = cluster.split(',').map(id => this.byId.get(id)).filter(Boolean);
@@ -200,13 +238,23 @@ export class Atlas {
       detail = battle ? `Battle in progress · attackers ${battle.attack} vs defenders ${battle.defend}` :
         `${this.countries.get(p.owner)?.name || 'Uncontrolled'} · ${p.troops} troops · industry ${p.development}`;
     } else { this.tooltip.hidden = true; return; }
+    this.tip(title, detail, event.clientX, event.clientY);
+  }
+  tip(title, detail, clientX, clientY) {
     this.tooltip.replaceChildren();
     const strong = document.createElement('strong'); strong.textContent = title;
     const span = document.createElement('span'); span.textContent = detail;
     this.tooltip.append(strong, span); this.tooltip.hidden = false;
     const rect = this.svg.parentElement.getBoundingClientRect();
-    this.tooltip.style.left = `${clamp(event.clientX - rect.left + 14, 8, rect.width - 260)}px`;
-    this.tooltip.style.top = `${Math.max(8, event.clientY - rect.top - 65)}px`;
+    this.tooltip.style.left = `${clamp(clientX - rect.left + 14, 8, rect.width - 260)}px`;
+    this.tooltip.style.top = `${Math.max(8, clientY - rect.top - 65)}px`;
+  }
+  showArmy(id, at) {
+    const a = this.state?.armies.find(a => a.id === id);
+    if (!a) return;
+    const eta = Math.max(0, Math.ceil(a.arrivesAt - this.state.tick));
+    this.tip(`${this.countries.get(a.country)?.name || 'Army'} · ${a.amount} troops`,
+      `${this.places.get(a.from)?.name} → ${this.places.get(a.to)?.name}${a.returning ? ' · returning' : ''} · arrives in ${eta}s`, at.left + at.width / 2, at.top);
   }
   applyView() {
     // Never more than one world width on screen, so each province and counter is seen once.
@@ -247,6 +295,22 @@ export class Atlas {
     const width = Math.min(w, this.view.w * .7), h = width * 680 / 1280;
     this.view = { x: (Math.min(...xs) + Math.max(...xs)) / 2 - width / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 - h / 2, w: width, h };
     this.applyView();
+  }
+  /** 'political' (country colours) or 'diplomacy' (relations to the focus country). */
+  setMapMode(mode) {
+    if (!MAP_MODES.includes(mode)) return false;
+    this.mode = mode; this.paintRelations(); return true;
+  }
+  /** Country whose relations are shown; null returns to the viewer's own country. */
+  setRelationFocus(country) {
+    this.relationFocus = typeof country === 'string' && this.countries.has(country) ? country : null;
+    this.paintRelations(); return this.relationFocus;
+  }
+  hoverCountry(country) {
+    if (country === this.pendingHover) return;
+    this.pendingHover = country; clearTimeout(this.hoverTimer);
+    if (!country) { if (this.hoverFocus) { this.hoverFocus = null; this.paintOutlines(); } return; }
+    this.hoverTimer = setTimeout(() => { this.hoverFocus = country; this.paintOutlines(); }, 300);
   }
   level(px) { return px < LOD.far ? 'far' : px < LOD.near ? 'mid' : 'near'; }
   /** Units to draw before screen placement: single provinces, or same-owner merges. */
@@ -298,11 +362,15 @@ export class Atlas {
     const px = matrix.a, scale = 1 / px, level = this.level(px);
     this.grain.setAttribute('patternTransform', `scale(${scale})`);
     this.svg.dataset.lod = level; this.svg.classList.toggle('atlas-zoomed', level === 'near');
+    // Keep the mode chip inside the visible map, whatever else shares the container.
+    const box = this.svg.getBoundingClientRect(), host = this.chip.parentElement?.getBoundingClientRect();
+    if (host) { this.chip.style.bottom = `${Math.max(0, host.bottom - box.bottom) + 10}px`; this.chip.style.right = `${Math.max(0, host.right - box.right) + 10}px`; }
     for (const fx of this.pointEffects) fx.g.setAttribute('transform', `translate(${fx.x} ${fx.y}) scale(${scale})`);
     if (!this.state) {
       for (const p of this.map.provinces) this.markers.get(p.id).group.setAttribute('transform', `translate(${p.x} ${p.y}) scale(${scale})`);
       return;
     }
+    this.armyRects = this.armyObstacles(px);
     const units = this.units(level, px).sort((a, b) => this.rank(b) - this.rank(a) || a.members[0].localeCompare(b.members[0]));
     // Deterministic screen placement: keep each counter at its anchor, or nudge it outward
     // until it overlaps nothing already placed; a leader line points back to the anchor.
@@ -349,7 +417,7 @@ export class Atlas {
         if (level !== 'far') for (const [dy, y] of [[-COUNTER_H / 2 - 15, -17], [COUNTER_H / 2 + (level === 'near' ? 8 : 1), level === 'near' ? 29 : 22]]) {
           const label = { x: u.x * px + u.dx - width / 2, y: u.y * px + u.dy + dy, w: width, h: 13 };
           const overlaps = q => label.x < q.x + q.w && q.x < label.x + label.w && label.y < q.y + q.h && q.y < label.y + label.h;
-          if (u.locked && y < 0 || !placed.some(q => q !== u.rect && overlaps(q)) && !labels.some(overlaps)) {
+          if (u.locked && y < 0 || !placed.some(q => q !== u.rect && overlaps(q)) && !labels.some(overlaps) && !this.armyRects.some(overlaps)) {
             named = true; labels.push(label); marker.label.setAttribute('y', y); break;
           }
         }
@@ -362,17 +430,19 @@ export class Atlas {
     }
     for (const [id, marker] of this.markers) marker.group.classList.toggle('counter-merged', !shownMarkers.has(id));
     for (const [key, cluster] of this.clusters) if (!usedClusters.has(key)) { cluster.group.remove(); this.clusters.delete(key); }
-    this.paintCountryNames(level, px, scale, placed);
+    const taken = [...placed, ...labels, ...this.armyRects];
+    this.paintCountryNames(level, px, scale, taken);
+    this.paintAllianceNames(level, px, scale, taken);
     this.positions();
   }
   cluster(key) {
     if (!this.clusters.has(key)) {
       const group = node('g', { class: 'map-counter map-cluster', 'data-cluster': key, tabindex: 0, role: 'button' });
       const disc = node('rect', { y: -10, height: COUNTER_H, rx: 1, class: 'counter-body' }), stripe = node('rect', { y: -10, width: 4, height: COUNTER_H, class: 'counter-stripe' });
-      const text = node('text', { x: 2, y: .5, class: 'counter-value' }), badge = node('g', { class: 'cluster-badge' });
+      const text = node('text', { x: 2, y: .5, class: 'counter-value' }), badge = node('g', { class: 'cluster-badge' }), bloc = node('rect', { y: -10, width: 2.5, height: COUNTER_H, class: 'counter-bloc' });
       const badgeBody = node('rect', { y: -16, height: 12, rx: 6 }), badgeText = node('text', { y: -9.6 });
-      badge.append(badgeBody, badgeText); group.append(disc, stripe, text, badge); this.clusterLayer.append(group);
-      this.clusters.set(key, { group, disc, stripe, text, badgeBody, badgeText });
+      badge.append(badgeBody, badgeText); group.append(bloc, disc, stripe, text, badge); this.clusterLayer.append(group);
+      this.clusters.set(key, { group, disc, stripe, bloc, text, badgeBody, badgeText });
     }
     return this.clusters.get(key);
   }
@@ -380,6 +450,8 @@ export class Atlas {
     const width = counterWidth(u.troops), color = this.countries.get(u.owner)?.color || NEUTRAL, count = String(u.members.length);
     cluster.disc.setAttribute('width', width); cluster.disc.setAttribute('x', -width / 2); cluster.disc.setAttribute('stroke', color);
     cluster.stripe.setAttribute('x', -width / 2); cluster.stripe.setAttribute('fill', color);
+    const blocColor = this.blocColor?.(u.owner); cluster.bloc.style.display = blocColor ? '' : 'none';
+    if (blocColor) { cluster.bloc.setAttribute('fill', blocColor); cluster.bloc.setAttribute('x', -width / 2 - 3); }
     cluster.text.textContent = u.troops; cluster.badgeText.textContent = count;
     const bw = 6 + count.length * 6; cluster.badgeBody.setAttribute('width', bw); cluster.badgeBody.setAttribute('x', width / 2 - bw + 4);
     cluster.badgeText.setAttribute('x', width / 2 - bw / 2 + 4);
@@ -387,10 +459,60 @@ export class Atlas {
     cluster.group.classList.toggle('owned', Boolean(u.owner && u.owner === this.state.you));
     cluster.group.setAttribute('aria-label', `${this.countries.get(u.owner)?.name || 'Uncontrolled'}: ${u.members.length} provinces, ${u.troops} troops combined. Activate to zoom in.`);
   }
-  paintCountryNames(level, px, scale, placed) {
+  /** Screen rectangles swept by each visible army over the next interpolation window. */
+  armyObstacles(px) {
+    if (!this.state) return [];
+    const speed = this.state.status === 'running' && !this.reducedMotion ? this.state.speed || 1 : 0, rects = [];
+    for (const army of this.state.armies) {
+      if (army.engaged) continue;
+      const size = this.armies.get(army.id)?.large ? 1.3 : 1;
+      const at = t => journeyPoint(army, this.positionsById, Math.min(t, army.arrivesAt - .01));
+      const a = at(this.state.tick), b = at(this.state.tick + 2 * speed), ax = this.near(a.x), bx = ax + wrapDelta(b.x - a.x);
+      const x0 = Math.min(ax, bx) * px - 12 * size, x1 = Math.max(ax, bx) * px + 12 * size;
+      const y0 = Math.min(a.y, b.y) * px - 24 * size, y1 = Math.max(a.y, b.y) * px + 9 * size;
+      rects.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
+    }
+    return rects;
+  }
+  /** Largest land-contiguous group of provinces among `ids`. */
+  region(ids) {
+    const pool = new Set(ids), seen = new Set(); let best = [];
+    for (const start of ids) {
+      if (seen.has(start)) continue;
+      const group = [], queue = [start]; seen.add(start);
+      while (queue.length) { const id = queue.shift(); group.push(id); for (const n of this.landNeighbors.get(id) || []) if (pool.has(n) && !seen.has(n)) { seen.add(n); queue.push(n); } }
+      if (group.length > best.length) best = group;
+    }
+    return best;
+  }
+  /** Coalition names across each bloc (player text: textContent only, length capped). */
+  paintAllianceNames(level, px, scale, taken) {
+    this.allianceNames.replaceChildren();
+    if (level === 'near') return;
+    const overlaps = r => taken.some(q => r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.y + q.h && q.y < r.y + r.h);
+    for (const bloc of this.blocInfo || []) {
+      const members = new Set(bloc.members), owned = this.state.provinces.filter(p => members.has(p.owner)).map(p => p.id);
+      const best = this.region(owned);
+      if (!best.length) continue;
+      const raw = bloc.name.length > 28 ? `${bloc.name.slice(0, 27)}…` : bloc.name, text = raw.toUpperCase();
+      const width = text.length * 10.8 + 14, height = 28;
+      const mx = best.reduce((n, id) => n + this.places.get(id).x, 0) / best.length, my = best.reduce((n, id) => n + this.places.get(id).y, 0) / best.length;
+      const anchors = [{ x: mx, y: my }, ...best.map(id => this.places.get(id)).sort((a, b) => Math.hypot(a.x - mx, a.y - my) - Math.hypot(b.x - mx, b.y - my) || a.id.localeCompare(b.id))];
+      const onLand = (x, y) => owned.some(id => insideRings([x, y], this.rings.get(id)));
+      search: for (const { x, y } of anchors) for (const dy of [0, 30, -30, 48, -48]) {
+        const sx = this.near(x), r = { x: sx * px - width / 2, y: y * px + dy - 11, w: width, h: height };
+        if (!onLand(x, y + dy * scale) || overlaps(r)) continue;
+        const g = node('g', { class: 'alliance-name', 'data-bloc': bloc.id, transform: `translate(${sx} ${y + dy * scale}) scale(${scale})` });
+        const label = node('text', { class: 'alliance-label', fill: bloc.color }); label.textContent = text;
+        g.append(label);
+        bloc.members.slice(0, 8).forEach((id, i, all) => g.append(node('rect', { class: 'alliance-pip', x: (i - all.length / 2) * 11 + 1, y: 9, width: 9, height: 5, fill: this.countries.get(id)?.color || NEUTRAL })));
+        this.allianceNames.append(g); taken.push(r); break search;
+      }
+    }
+  }
+  paintCountryNames(level, px, scale, taken) {
     this.countryNames.replaceChildren();
     if (level !== 'far') return;
-    const taken = [...placed];
     for (const c of this.map.countries) {
       const owned = this.state.provinces.filter(p => p.owner === c.id).map(p => p.id);
       if (!owned.length) continue;
@@ -425,7 +547,6 @@ export class Atlas {
     for (const p of state.provinces) {
       const shape = this.shapes.get(p.id), marker = this.markers.get(p.id);
       if (!shape) continue;
-      shape.setAttribute('fill', this.countries.get(p.owner)?.color || '#aaa994');
       const role = p.id === source ? 'selected' : p.id === destination ? 'destination' : neighbors.includes(p.id) ? 'neighbor' : '';
       shape.setAttribute('class', `province ${role}${p.owner ? ' occupied' : ''}`);
       marker.group.setAttribute('class', `map-counter ${role}${p.owner === state.you && state.you ? ' owned' : ''}`);
@@ -443,11 +564,7 @@ export class Atlas {
       }
       marker.group.setAttribute('aria-label', `${this.places.get(p.id).name}, ${p.troops} troops, ${this.countries.get(p.owner)?.name || 'uncontrolled'}${p.owner ? `, industry ${p.development}` : ''}`);
     }
-    // Province borders are thin; a border between two different owners is a country border.
-    for (const b of this.borders) {
-      const country = (this.byId.get(b.a)?.owner || null) !== (this.byId.get(b.b)?.owner || null);
-      if (country !== b.country) { b.country = country; (country ? this.countryBorders : this.provinceBorders).append(b.el); }
-    }
+    this.paintRelations();
     for (const c of this.map.countries) {
       const owned = state.provinces.filter(p => p.owner === c.id).map(p => p.id);
       if (owned.length) this.lastOwned.set(c.id, owned);
@@ -463,23 +580,142 @@ export class Atlas {
     }
     const ids = new Set(state.armies.map(a => a.id));
     for (const [id, entry] of this.armies) if (!ids.has(id)) { entry.group.remove(); this.armies.delete(id); }
+    // Moving armies: the top map layer, drawn once on the copy nearest the view centre.
+    const strength = new Map();
+    for (const p of state.provinces) if (p.owner) strength.set(p.owner, (strength.get(p.owner) || 0) + p.troops);
+    for (const a of state.armies) strength.set(a.country, (strength.get(a.country) || 0) + a.amount);
+    const biggest = new Set(state.armies.filter(a => !a.engaged && a.amount >= 5).sort((a, b) => b.amount - a.amount || a.id.localeCompare(b.id)).slice(0, 3).map(a => a.id));
     for (const army of state.armies) {
       if (!this.armies.has(army.id)) {
-        const group = node('g', { class: 'moving-army' }), disc = node('path', { d: 'M-5-4L6 0-5 4-2 0Z' }), label = node('text', { y: -10 });
-        group.append(disc, label); this.marches.append(group); this.armies.set(army.id, { group, disc, label });
+        const group = node('g', { class: 'moving-army', 'data-army': army.id, tabindex: 0, role: 'button' });
+        const body = node('g'), halo = node('path', { class: 'army-halo', d: ARROW }), disc = node('path', { class: 'army-arrow', d: ARROW });
+        const pill = node('rect', { class: 'army-pill', y: -22, height: 13, rx: 2 }), label = node('text', { class: 'army-count', y: -15.3 });
+        body.append(halo, disc); group.append(node('circle', { class: 'army-hit', r: 8 }), body, pill, label); this.marches.append(group);
+        this.armies.set(army.id, { group, body, disc, pill, label });
       }
       const entry = this.armies.get(army.id), hostile = me && sides.get(army.country) !== me.side && state.provinces.some(p => p.id === army.to && p.owner === state.you);
-      const origin = army.startPoint || this.places.get(army.from), target = this.places.get(army.to); let dx = target.x - origin.x; if (dx > 640) dx -= 1280; if (dx < -640) dx += 1280;
-      entry.disc.setAttribute('transform', `rotate(${Math.atan2(target.y - origin.y, dx) * 180 / Math.PI})`);
-      entry.disc.setAttribute('fill', hostile ? '#ee987a' : this.countries.get(army.country)?.color || NEUTRAL);
+      const origin = army.startPoint || this.places.get(army.from), target = this.places.get(army.to), dx = wrapDelta(target.x - origin.x);
+      entry.body.setAttribute('transform', `rotate(${Math.atan2(target.y - origin.y, dx) * 180 / Math.PI})`);
+      const color = this.countries.get(army.country)?.color || NEUTRAL;
+      entry.disc.setAttribute('fill', color); entry.pill.setAttribute('stroke', color);
       // Engaged armies are shown by the battle marker at their target, not as a moving arrow.
       entry.group.classList.toggle('hostile', Boolean(hostile)); entry.group.classList.toggle('engaged', Boolean(army.engaged));
+      entry.group.classList.toggle('returning', Boolean(army.returning));
       entry.group.classList.toggle('minor', army.amount < 20 && !hostile && army.country !== state.you);
-      entry.label.textContent = army.amount >= 3 ? army.amount : '';
+      entry.large = !army.engaged && army.amount >= 5 && (army.amount >= .25 * (strength.get(army.country) || Infinity) || biggest.has(army.id));
+      entry.group.classList.toggle('large', entry.large);
+      const count = army.amount >= 3 ? String(army.amount) : '', w = count.length * 6.6 + 7;
+      entry.label.textContent = count; entry.pill.style.display = count ? '' : 'none';
+      entry.pill.setAttribute('width', w); entry.pill.setAttribute('x', -w / 2);
+      entry.group.setAttribute('aria-label', `${this.countries.get(army.country)?.name || 'Army'}: ${army.amount} troops, ${this.places.get(army.from)?.name} to ${this.places.get(army.to)?.name}${army.returning ? ', returning' : ''}`);
     }
     this.paintBattles(state);
     this.layout();
     if (!this.frame && !this.reducedMotion && state.status === 'running') this.frame = requestAnimationFrame(() => this.animate());
+  }
+  /** Colours, border classes, war fronts, alliance blocs, hover outlines and the legend. */
+  paintRelations() {
+    const state = this.state;
+    if (!state) { this.paintLegend({}, null); return; }
+    const colors = allianceColors(state), sideOf = new Map(state.players.map(p => [p.id, p.side])), owner = id => this.byId.get(id)?.owner || null;
+    this.blocColor = country => country ? colors[sideOf.get(country)] || null : null;
+    const focus = this.mode === 'diplomacy' ? this.relationFocus || state.you || this.hoverFocus || null : null;
+    const rel = focus ? relationsOf(state, focus) : null;
+    const fill = country => !rel ? this.countries.get(country)?.color || '#aaa994' : !country ? RELATION.none : country === focus ? RELATION.focus :
+      rel.allies.includes(country) ? RELATION.ally : rel.enemies.includes(country) ? RELATION.enemy : RELATION.neutral;
+    for (const p of state.provinces) {
+      this.shapes.get(p.id)?.setAttribute('fill', fill(p.owner));
+      const marker = this.markers.get(p.id), bloc = this.blocColor(p.owner);
+      if (!marker) continue;
+      marker.bloc.style.display = bloc ? '' : 'none';
+      if (bloc) { marker.bloc.setAttribute('fill', bloc); marker.bloc.setAttribute('x', -counterWidth(p.troops) / 2 - 3); }
+    }
+    this.svg.dataset.mode = rel ? 'diplomacy' : 'political'; this.svg.dataset.relationFocus = focus || '';
+    // Province borders (same owner), softened allied borders (same coalition), country borders.
+    for (const b of this.borders) {
+      const oa = owner(b.a), ob = owner(b.b);
+      const kind = oa === ob ? 'province' : oa && ob && sideOf.get(oa) === sideOf.get(ob) ? 'allied' : 'country';
+      if (kind !== b.kind) { b.kind = kind; ({ province: this.provinceBorders, allied: this.alliedBorders, country: this.countryBorders })[kind].append(b.el); }
+    }
+    // War fronts: every land border between owners at war; sea links only where no land contact.
+    const formal = Boolean(state.rules?.warRequired), want = new Map(), contact = new Set();
+    if (formal) for (const b of this.borders) {
+      const oa = owner(b.a), ob = owner(b.b);
+      if (oa && ob && oa !== ob && atWar(state, oa, ob)) { want.set(`${b.a}|${b.b}`, b); contact.add(warKey(oa, ob)); }
+    }
+    for (const [key, el] of this.frontEls) if (!want.has(key)) { el.remove(); this.frontEls.delete(key); }
+    for (const [key, b] of want) if (!this.frontEls.has(key)) {
+      const el = node('g', { class: 'war-front', 'data-front': key });
+      el.append(node('path', { d: b.d, class: 'war-front-glow' }), node('path', { d: b.d, class: 'war-front-teeth' }));
+      this.fronts.append(el); this.frontEls.set(key, el);
+    }
+    this.seaFronts.replaceChildren();
+    if (formal) for (const e of this.map.edges) {
+      const oa = owner(e.from), ob = owner(e.to);
+      if (e.sea && oa && ob && oa !== ob && atWar(state, oa, ob) && !contact.has(warKey(oa, ob)))
+        this.seaFronts.append(node('path', { d: this.path(e.from, e.to), class: 'sea-front', 'data-sea-front': `${e.from}|${e.to}` }));
+    }
+    // Alliance blocs: one outline around the union of the members' land, inner glow via a clip.
+    const live = new Set();
+    this.blocInfo = [];
+    for (const c of coalitions(state)) {
+      const members = new Set(c.members), ids = state.provinces.filter(p => members.has(p.owner)).map(p => p.id).sort();
+      if (!ids.length) continue;
+      live.add(c.id); this.blocInfo.push({ ...c, color: colors[c.id] });
+      let e = this.blocEls.get(c.id);
+      if (!e) {
+        const clipId = `${this.svg.id}-bloc-${++this.blocSeq}`, clip = node('clipPath', { id: clipId }), shape = node('path');
+        const band = node('path', { class: 'bloc-band', 'clip-path': `url(#${clipId})` }), line = node('path', { class: 'bloc-line' }), g = node('g', { class: 'alliance-bloc' });
+        clip.append(shape); g.append(clip, band, line); this.blocs.append(g); e = { g, shape, band, line }; this.blocEls.set(c.id, e);
+      }
+      const key = ids.join(',');
+      if (e.key !== key) {
+        e.key = key; const d = this.outline(new Set(ids));
+        e.shape.setAttribute('d', ids.map(id => this.places.get(id).path).join('')); e.band.setAttribute('d', d); e.line.setAttribute('d', d);
+      }
+      e.g.dataset.bloc = c.id; e.g.dataset.members = c.members.join(','); e.g.dataset.provinces = key;
+      e.band.setAttribute('stroke', colors[c.id]); e.line.setAttribute('stroke', colors[c.id]);
+    }
+    for (const [id, e] of this.blocEls) if (!live.has(id)) { e.g.remove(); this.blocEls.delete(id); }
+    this.paintOutlines(); this.paintLegend(colors, focus);
+  }
+  /** Temporary relation outlines for a hovered/focused country or the chosen relation focus. */
+  paintOutlines() {
+    if (this.mode === 'diplomacy' && !this.relationFocus && !this.state?.you && this.state) { this.paintRelationsSoon(); }
+    const who = this.state ? this.hoverFocus || this.relationFocus : null;
+    const rel = who ? relationsOf(this.state, who) : null;
+    const land = countries => this.state.provinces.filter(p => countries.includes(p.owner)).map(p => p.id);
+    for (const [kind, list] of [['focus', rel ? [who] : []], ['ally', rel?.allies || []], ['enemy', rel?.enemies || []]])
+      this.relationPaths[kind].setAttribute('d', list.length ? this.outline(new Set(land(list))) : '');
+    this.svg.dataset.outlineFocus = who || '';
+  }
+  paintRelationsSoon() {
+    if (this.relationsFrame) return;
+    this.relationsFrame = requestAnimationFrame(() => { this.relationsFrame = null; if (this.svg.dataset.relationFocus !== (this.hoverFocus || '')) this.paintRelations(); });
+  }
+  paintLegend(colors, focus) {
+    const diplomacy = this.mode === 'diplomacy';
+    this.modeButton.textContent = diplomacy ? 'Political view' : 'Diplomacy view';
+    this.modeButton.setAttribute('aria-pressed', String(diplomacy)); this.chip.classList.toggle('diplomacy', diplomacy);
+    this.legend.replaceChildren();
+    const heading = text => { const b = document.createElement('b'); b.textContent = text; this.legend.append(b); };
+    const item = (color, text, kind) => {
+      const row = document.createElement('span'), swatch = document.createElement('i'), label = document.createElement('span');
+      row.className = `legend-item legend-${kind}`; swatch.style.background = color; label.textContent = text; row.append(swatch, label); this.legend.append(row);
+    };
+    if (diplomacy) {
+      heading(focus ? `Relations of ${this.countries.get(focus)?.name || focus}` : 'Hover a country');
+      item(RELATION.focus, focus ? this.countries.get(focus)?.name || 'Focus' : 'Focus', 'focus'); item(RELATION.ally, 'Allies', 'ally');
+      item(RELATION.enemy, 'At war', 'enemy'); item(RELATION.neutral, 'Neutral', 'neutral'); item(RELATION.none, 'Uncontrolled', 'none');
+    } else {
+      if ((this.blocInfo || []).length) heading('Alliances');
+      for (const bloc of this.blocInfo || []) item(bloc.color, bloc.name.length > 28 ? `${bloc.name.slice(0, 27)}…` : bloc.name, 'bloc');
+      const wars = this.state?.rules?.warRequired ? (this.state.wars || []) : [];
+      if (wars.length) heading('At war');
+      for (const pair of wars.slice(0, 4)) item('#d8342a', pair.split(':').map(id => faction(id).short).join(' – '), 'war');
+      if (wars.length > 4) heading(`+${wars.length - 4} more wars`);
+    }
+    this.legend.hidden = !this.legend.childElementCount;
   }
   /** Persistent clash markers for phased battles: attacker strength vs defending garrison. */
   paintBattles(state) {
@@ -566,8 +802,8 @@ export class Atlas {
       } else if (kind === 'alliance') {
         const members = known(data.countries);
         if (members.length < 2) return false;
-        const outline = this.outline(new Set(members.flatMap(c => this.territory(c))));
-        if (outline) g.append(node('path', { class: 'fx-glow', d: outline, stroke: ALLIANCE }), node('path', { class: 'fx-glow-core', d: outline }));
+        const outline = this.outline(new Set(members.flatMap(c => this.territory(c)))), color = this.blocColor?.(members[0]) || ALLIANCE;
+        if (outline) g.append(node('path', { class: 'fx-glow', d: outline, stroke: color }), node('path', { class: 'fx-glow-core', d: outline }));
         const capitals = members.map(c => this.places.get(this.capital(c))).filter(Boolean);
         for (const other of capitals.slice(1)) g.append(node('path', { class: 'fx-link', d: this.pointPath(capitals[0], other) }));
         for (const capital of capitals) { const ring = node('g'); ring.append(node('circle', { class: 'fx-ring', r: 18, stroke: ALLIANCE })); this.pointEffect(ring, capital, still); }
@@ -632,14 +868,16 @@ export class Atlas {
     const scale = 1 / (this.svg.getScreenCTM()?.a || 1);
     for (const army of this.state.armies) {
       const point = journeyPoint(army, this.positionsById, Math.min(this.state.tick + elapsed, army.arrivesAt - .01));
-      this.armies.get(army.id)?.group.setAttribute('transform', `translate(${point.x} ${point.y}) scale(${scale})`);
+      const entry = this.armies.get(army.id);
+      entry?.group.setAttribute('transform', `translate(${this.near(point.x)} ${point.y}) scale(${scale * (entry.large ? 1.3 : 1)})`);
     }
   }
   destroy() {
     if (this.frame) cancelAnimationFrame(this.frame); this.frame = null;
     if (this.layoutFrame) cancelAnimationFrame(this.layoutFrame); this.layoutFrame = null;
     for (const t of this.timers) clearTimeout(t); this.timers.clear();
-    this.resize.disconnect(); this.tooltip.remove();
+    clearTimeout(this.hoverTimer); if (this.relationsFrame) cancelAnimationFrame(this.relationsFrame);
+    this.resize.disconnect(); this.tooltip.remove(); this.chip.remove();
   }
   animate() { this.frame = null; this.positions(); if (this.state?.status === 'running') this.frame = requestAnimationFrame(() => this.animate()); }
 }

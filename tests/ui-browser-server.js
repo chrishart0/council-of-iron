@@ -19,7 +19,9 @@ const w=createGame({id:'ui-war',name:'The Rhine front',hostId:profiles.britain.i
 for(const c of MAP.countries)join(w,MAP,{country:c.id,name:profiles[c.id].name,profileId:profiles[c.id].id,kind:'agent'});
 start(w);
 const warOrders={0:[['russia',{type:'declare_war',country:'ottoman'}],['russia',{type:'move',from:'ukraine',to:'east-anatolia',amount:10}],['germany',{type:'declare_war',country:'france'}]],
-  25:[['germany',{type:'move',from:'rhineland',to:'alpine-france',amount:11}]]};
+  25:[['germany',{type:'move',from:'rhineland',to:'alpine-france',amount:11}]],
+  // Columns still on the march at tick 55, for army-layer checks.
+  40:[['britain',{type:'move',from:'england',to:'low-countries',amount:8}],['france',{type:'move',from:'occitania',to:'iberia',amount:8}],['germany',{type:'move',from:'saxony',to:'balkans',amount:8}]]};
 const stepWar=to=>{while(w.tick<to){for(const [country,action] of warOrders[w.tick]||[])act(w,MAP,country,action,`ui-war-${w.tick}-${country}-${action.type}`);tick(w);}};
 stepWar(55);app.games.set(w.id,w);app.store.save(w);
 app.server.listen(0,'127.0.0.1',()=>console.log(JSON.stringify({url:`http://127.0.0.1:${app.server.address().port}`,identity:profiles.britain})));

@@ -30,6 +30,7 @@ const staticFiles = new Map([
   ['/review.css', ['public/review.css', 'text/css; charset=utf-8']],
   ['/map-layers.css', ['public/map-layers.css', 'text/css; charset=utf-8']],
   ['/map-geometry.js', ['public/map-geometry.js', 'text/javascript; charset=utf-8']],
+  ['/relations.js', ['public/relations.js', 'text/javascript; charset=utf-8']],
   ['/replay-model.js', ['public/replay-model.js', 'text/javascript; charset=utf-8']],
   ['/insights.js', ['public/insights.js', 'text/javascript; charset=utf-8']],
   ['/movement.js', ['public/movement.js', 'text/javascript; charset=utf-8']],
