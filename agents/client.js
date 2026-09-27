@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { leaderboard, warsOf, relationsOf } from '../public/leaderboard.js';
+import { leaderboard, warsOf } from '../public/leaderboard.js';
+import { relationsOf } from '../public/relations.js';
 
 export class CouncilClient {
   constructor({ url = process.env.COUNCIL_URL || 'http://127.0.0.1:3107', token = process.env.COUNCIL_TOKEN || '',

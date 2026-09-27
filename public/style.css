@@ -140,10 +140,13 @@ body[data-status=lobby] .hud-rail{display:none}
 .right-rail>*{pointer-events:auto}
 .atlas-tooltip{position:absolute;z-index:8;pointer-events:none;background:#0e222af5;border:1px solid #b99d64a0;padding:11px 14px;box-shadow:0 5px 25px #0004;max-width:255px;color:#eae6d4}.atlas-tooltip strong{display:block;font:19px var(--serif);margin-bottom:4px}.atlas-tooltip span{font-size:11px;color:#bfc8b5}
 /* Map camera cluster: bottom-left, beside (never under) the command card. */
-.map-controls{position:absolute;z-index:10;left:calc(var(--gap) + var(--safe-l));bottom:calc(var(--bottom) + var(--gap));display:flex;flex-direction:column;gap:4px;outline:none}
-.map-controls button[aria-pressed=true]{border-color:#e0bc7c;color:#ffe0a4;background:#394343}.map-controls button{width:56px;min-height:34px;padding:4px;font-size:11px;background:#10242bf0;border-color:#a88e5c80;box-shadow:0 4px 12px #0006}.map-controls .zoom-button{font-size:18px;line-height:1}
+.map-controls{position:absolute;z-index:10;left:calc(var(--gap) + var(--safe-l));bottom:calc(var(--bottom) + var(--gap));display:flex;align-items:flex-end;gap:8px;outline:none;pointer-events:none}
+.map-controls>*{pointer-events:auto}.camera-buttons{display:flex;flex-direction:column;gap:4px}
+.camera-buttons button{width:56px;min-height:34px;padding:4px;font-size:11px;background:#10242bf0;border-color:#a88e5c80;box-shadow:0 4px 12px #0006}.camera-buttons .zoom-button{font-size:18px;line-height:1}
+/* The atlas's own key (legend + Political/Diplomacy toggle) is mounted here, beside the camera buttons. */
+.map-key .atlas-modes{position:static;max-width:min(240px,calc(100vw - 100px))}.map-key:empty{display:none}
 .war-room:has(#command-panel:not([hidden])) .map-controls{left:calc(var(--panel-w) + 2 * var(--gap) + var(--safe-l))}
-@media(pointer:coarse){.map-controls .zoom-button{display:none}.map-controls button{min-height:44px}}
+@media(pointer:coarse){.camera-buttons .zoom-button{display:none}.camera-buttons button{min-height:44px}}
 /* Command panel: selection-driven. Orders is a bottom-left card under the alerts;
    Council and Dispatches are a full-height left drawer (alerts step aside). */
 .command-panel{--sheet-max:calc(100dvh - var(--alerts-bottom,var(--top)) - var(--bottom) - 2 * var(--gap));position:absolute;z-index:30;left:calc(var(--gap) + var(--safe-l));bottom:calc(var(--bottom) + var(--gap));width:var(--panel-w);max-width:calc(100% - 2 * var(--gap));max-height:var(--sheet-max);display:flex;flex-direction:column;background:var(--glass);border:1px solid var(--glass-edge);box-shadow:0 14px 40px #000a;outline:none}
@@ -196,6 +199,8 @@ body[data-status=lobby] .hud-rail{display:none}
  :root{--rail-w:288px;--panel-w:330px}
  /* Not enough width for drawer + rail: an open Council/Dispatches drawer takes the rail's place. */
  .war-room:has(#command-panel:not([hidden]):not([data-tab=orders])) .right-rail{display:none}
+ /* No room for the map key between an open card and the rail: it returns when the card closes. */
+ .war-room:has(#command-panel:not([hidden])) .map-key{display:none}
  .war-room:has(#command-panel:not([hidden]):not([data-tab=orders])) .alerts{width:min(340px,calc(100% - var(--panel-w) - 3 * var(--gap) - var(--safe-l) - var(--safe-r)))}
 }
 @media(max-width:1599px){.chip-name{display:none}}
@@ -233,7 +238,10 @@ body[data-status=lobby] .hud-rail{display:none}
  .command-panel:not([data-tab=orders]){height:var(--sheet-max)}
  /* The province/diplomacy sheet takes priority over the history sheet and camera buttons. */
  .war-room:has(#command-panel:not([hidden])) :is(.world-feed,.map-controls){display:none}
- .map-controls{left:auto;right:calc(var(--gap) + var(--safe-r))}
+ .map-controls{left:auto;right:calc(var(--gap) + var(--safe-r));flex-direction:column-reverse}
+ /* Phones: the collapsed key fits the 56 px camera column; an expanded key narrows the World ticker. */
+ .map-controls{align-items:flex-end}.map-key .atlas-modes.collapsed{max-width:56px}.map-key .atlas-modes.collapsed .atlas-key-toggle{width:56px;padding:3px 2px;font-size:9px}
+ .war-room:has(.map-key .atlas-modes:not(.collapsed)) .world-feed.collapsed{right:calc(2 * var(--gap) + min(240px,calc(100vw - 100px)) + var(--safe-r))}
  .amount-presets button,.command-footer>button,.panel-close{min-height:44px}
  .order-modes button{min-height:44px}
  .lobby{padding:16px;gap:12px}.lobby form{display:grid;grid-template-columns:1fr;width:100%;flex-basis:100%}.lobby form button{justify-content:center}#host-controls{flex-direction:column}

@@ -2,7 +2,8 @@
  * relations come from leaderboard.js. Rows are fixed slots updated in place (textContent), so
  * polling never flickers or reflows. Alliance names are player text: textContent only.
  */
-import { leaderboard, warsOf, allianceColor } from './leaderboard.js';
+import { leaderboard, warsOf } from './leaderboard.js';
+import { allianceColors } from './relations.js';
 import { insignia } from './presentation.js';
 
 const ARROW_MS = 4000;
@@ -40,7 +41,7 @@ export class LeaderboardPanel {
     }
     this.previous = new Map(board.rows.map(r => [r.id, r.rank])); this.lastMode = this.mode;
     // Coalitions still in their activation notice are "forming": shown dashed, distinct from active.
-    this.forming = new Map();
+    this.colors = allianceColors(state); this.forming = new Map();
     for (const q of state.proposals || []) if (q.status === 'pending') for (const id of q.roster) this.forming.set(id, q);
     while (this.list.children.length < board.rows.length) this.list.append(this.slot());
     while (this.list.children.length > board.rows.length) this.list.lastElementChild.remove();
@@ -67,7 +68,7 @@ export class LeaderboardPanel {
     const side = row.kind === 'alliance' ? row.id : state.players.find(p => p.id === row.id)?.side;
     const alliance = side && !side.startsWith('solo:') ? state.sides.find(s => s.id === side) : null;
     const pending = !alliance && row.kind !== 'alliance' ? this.forming.get(row.id) : null;
-    const color = alliance ? allianceColor(alliance.id) : pending ? allianceColor(pending.coalition) || '#c8a773' : null;
+    const color = alliance ? this.colors[alliance.id] : pending ? this.colors[pending.id] : null;
     li.dataset.band = alliance ? 'active' : pending ? 'forming' : '';
     li.dataset.side = alliance?.id || '';
     if (color) li.style.setProperty('--band', color); else li.style.removeProperty('--band');

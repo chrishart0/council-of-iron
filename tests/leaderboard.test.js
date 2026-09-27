@@ -45,12 +45,12 @@ test('a live engine observation gives spectators and players the same totals', (
   const usa = a.rows.find(r => r.id === 'usa');
   assert.equal(usa.troops, g.provinces.filter(p => p.owner === 'usa').reduce((n, p) => n + p.troops, 0) + 5);
 });
-test('relations, wars and alliance colours come only from public wars and sides', async () => {
-  const { relationsOf, warsOf, allianceColor, allianceColors, ALLIANCE_PALETTE } = await import('../public/leaderboard.js');
-  const sided = { ...view, wars: ['britain:germany', 'france:germany', 'germany:usa'],
+test('rows carry public relations from relations.js; wars group into side-vs-side fronts', async () => {
+  const { relationsOf } = await import('../public/relations.js');
+  const { warsOf } = await import('../public/leaderboard.js');
+  const sided = { ...view, rules: { warRequired: true }, wars: ['britain:germany', 'france:germany', 'germany:usa'],
     players: view.players.map(p => ({ ...p, side: view.sides.find(s => s.members.includes(p.id)).id })) };
   assert.deepEqual(relationsOf(sided, 'britain'), { allies: ['usa'], enemies: ['germany'], neutral: ['france', 'japan'] });
-  assert.deepEqual(relationsOf(sided, 'germany').enemies, ['britain', 'france', 'usa']);
   // Fronts group country pairs by side: the coalition fights Germany once, France fights it separately.
   const fronts = warsOf(sided);
   assert.deepEqual(fronts.map(f => [f.sides.map(s => [s.side, s.name, s.countries]), f.pairs]), [
@@ -63,7 +63,8 @@ test('relations, wars and alliance colours come only from public wars and sides'
     britain: ['you', ['germany']], japan: ['neutral', []] });
   assert.deepEqual(leaderboard(sided, { mode: 'alliances', you: 'france' }).rows.find(r => r.id === 'coalition-1').atWarWith, ['germany']);
   assert.equal(leaderboard(sided).rows[0].relation, undefined, 'no viewer, no relation');
-  // Colour follows the coalition counter, so it survives list order changes and dissolution.
-  assert.equal(allianceColor('coalition-1'), ALLIANCE_PALETTE[0]); assert.equal(allianceColor('coalition-8'), ALLIANCE_PALETTE[1]);
-  assert.equal(allianceColor('solo:france:0'), null); assert.deepEqual(allianceColors(sided), { 'coalition-1': ALLIANCE_PALETTE[0] });
+  // Legacy rooms (no formal war): every non-ally is hostile, exactly as the engine lets them attack; no fronts are listed.
+  const legacy = { ...sided, rules: { warRequired: false }, wars: [] };
+  assert.equal(leaderboard(legacy, { you: 'britain' }).rows.find(r => r.id === 'france').relation, 'enemy');
+  assert.deepEqual(warsOf(legacy), []);
 });

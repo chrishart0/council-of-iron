@@ -6,8 +6,9 @@ import { Atlas } from './atlas.js';
 import { escapeHTML as esc, syncOptions, setHTML, operationId, confirmAction } from './ui.js';
 import { WorldFeed, Herald, presentHeadline } from './feed.js';
 import { LeaderboardPanel } from './leaderboard-panel.js';
-// Relations/colours: DOM-free shared helpers (swap for public/relations.js when the map branch lands).
-import { relationsOf, warsOf, allianceColor } from './leaderboard.js';
+// Relations and alliance colours: the same DOM-free helpers the atlas and agent tools use.
+import { relationsOf, allianceColors } from './relations.js';
+import { warsOf } from './leaderboard.js';
 const time = n => `${Math.floor(Math.max(0,n)/60).toString().padStart(2,'0')}:${Math.floor(Math.max(0,n)%60).toString().padStart(2,'0')}`;
 const signed = n => `${n>=0?'+':''}${n.toFixed(1)}`;
 let identity;try{identity=JSON.parse(localStorage.getItem('coi.identity'));}catch{identity=null;}
@@ -22,7 +23,7 @@ let spectating=false;
 let panelOpen=false, panelOpener=null;
 const narrow=matchMedia('(max-width:759px)');
 let messageCatchupComplete=false;
-let worldFeed, herald, standings, mapMode='political';
+let worldFeed, herald, standings;
 const country = id => map.countries.find(c=>c.id===id);
 const place = id => map.provinces.find(p=>p.id===id);
 const sideName = id => state?.sides.find(s=>s.id===id)?.name || id;
@@ -37,7 +38,7 @@ const feedNames={
   province:id=>place(id)?.name || id,
   // Alliance names are player text; callers render them with textContent only.
   side:id=>history.find(e=>e.type==='alliance_activated' && e.side===id)?.name || namedSide(id),
-  sideColor:id=>allianceColor(id),
+  sideColor:id=>state && allianceColors(state)[id],
   time:n=>time(n),
 };
 /** Live headlines only (never catch-up): queue banners and ask the atlas for a brief effect. */
@@ -150,9 +151,8 @@ function initMap(){
   $('scoreboard').innerHTML=map.countries.map(c=>`<button type="button" class="country-card" data-country-focus="${c.id}" style="--country:${c.color}"></button>`).join('');
   atlas?.destroy();
   const previous=$('map'),replacement=previous.cloneNode(false);previous.replaceWith(replacement);
-  atlas=new Atlas(replacement,map,selectProvince);
-  // Diplomacy map mode is an optional atlas capability; the control appears only where it exists.
-  $('map-mode').hidden=typeof atlas.setMapMode!=='function';if(!$('map-mode').hidden)atlas.setMapMode(mapMode);
+  // The atlas key (legend + Political/Diplomacy toggle) mounts in the camera cluster, beside the buttons.
+  atlas=new Atlas(replacement,map,selectProvince,{legend:{placement:'bottom-left',container:$('map-key'),collapsed:matchMedia('(max-width:759px), (max-height:499px)').matches}});
   $('landing-map').innerHTML=map.provinces.map(p=>`<path d="${p.path}"/>`).join('');
 }
 /** Screen insets (px) covered by the HUD, rail and open panel, so a camera move can centre the target in the
@@ -424,7 +424,7 @@ function renderRelations(){
   if(me){
     const alliance=allianceOf(me.id),forming=!alliance && formingOf(me.id);
     const members=(alliance?alliance.members:forming?forming.roster:[]).filter(id=>id!==me.id);
-    const color=alliance?allianceColor(alliance.id):forming?allianceColor(forming.coalition) || '#c8a773':null;
+    const colors=allianceColors(state),color=alliance?colors[alliance.id]:forming?colors[forming.id]:null;
     ally.dataset.state=alliance?'active':forming?'forming':'independent';ally.dataset.allies=members.join(',');
     if(color)ally.style.setProperty('--band',color);else ally.style.removeProperty('--band');
     ally.replaceChildren(el('span','chip-label',alliance?'Allied':forming?'Forming':'Independent'),...(members.length?[standards(members)]:[]),...(alliance || forming?[el('small','chip-name',(alliance || forming).name)]:[]));
@@ -432,9 +432,10 @@ function renderRelations(){
   }
   const enemies=me?relationsOf(state,me.id).enemies:[],fronts=warsOf(state);
   war.dataset.state=me?(enemies.length?'war':'peace'):(fronts.length?'war':'peace');war.dataset.enemies=enemies.join(',');
+  // Legacy rooms have no declarations: every non-ally is hostile (relations.js, like the engine).
   const openRoom=!state.rules.warRequired;
-  const label=me?(enemies.length?'At war':openRoom?'No declarations':'At peace'):fronts.length?`${fronts.length} ${fronts.length===1?'war':'wars'}`:openRoom?'No declarations':'No wars';
-  war.replaceChildren(el('span','chip-swords',enemies.length || !me && fronts.length?'⚔':'☮'),el('span','chip-label',label),...(enemies.length?[standards(enemies)]:[]));
+  const label=me?(enemies.length?(openRoom?'Open war':'At war'):'At peace'):openRoom?'Open war':fronts.length?`${fronts.length} ${fronts.length===1?'war':'wars'}`:'No wars';
+  war.replaceChildren(el('span','chip-swords',enemies.length || !me && (fronts.length || openRoom)?'⚔':'☮'),el('span','chip-label',label),...(enemies.length?[standards(enemies)]:[]));
   war.setAttribute('aria-label',`${me && enemies.length?`At war with ${enemies.map(id=>country(id).name).join(', ')}`:label}${openRoom?' (this room needs no declaration to attack)':''}. Open the list of wars.`);
 }
 /** Council → Wars: every active war as side ⚔ side, with its start and your involvement. */
@@ -464,12 +465,12 @@ function renderRelationBanner(){
   const p=state.provinces.find(v=>v.id===id),owner=p?.owner || null;
   if(!p || owner && owner===state.you){banner.hidden=true;banner.dataset.key='';return;}
   const me=myPlayer(),alliance=owner?allianceOf(owner):null,enemies=me?relationsOf(state,me.id).enemies:[];
-  const kind=!me?'watch':!owner?'unclaimed':state.players.find(x=>x.id===owner)?.side===me.side?'ally':enemies.includes(owner)?'enemy':state.rules.warRequired?'neutral':'open';
+  const kind=!me?'watch':!owner?'unclaimed':state.players.find(x=>x.id===owner)?.side===me.side?'ally':enemies.includes(owner)?(state.rules.warRequired?'enemy':'open'):'neutral';
   const [title,detail]={watch:[owner?'OWNER':'UNCLAIMED',''],unclaimed:['UNCLAIMED','No declaration needed to march in.'],ally:['ALLIED','Reinforce or pass through; troops you send become theirs.'],
-    enemy:['AT WAR','You can attack.'],neutral:['NEUTRAL','Declare war in the Council before attacking.'],open:['NOT ALLIED','This room needs no declaration: you can attack.']}[kind];
+    enemy:['AT WAR','You can attack.'],neutral:['NEUTRAL','Declare war in the Council before attacking.'],open:['HOSTILE','This room needs no declaration: you can attack.']}[kind];
   const key=JSON.stringify([id,owner,kind,alliance?.id,alliance?.name]);banner.hidden=false;
   if(banner.dataset.key===key)return;banner.dataset.key=key;banner.dataset.relation=kind;
-  const dot=el('i','alliance-dot');if(alliance)dot.style.setProperty('--band',allianceColor(alliance.id));
+  const dot=el('i','alliance-dot');if(alliance)dot.style.setProperty('--band',allianceColors(state)[alliance.id]);
   const who=el('span','relation-owner',`${place(id).name} · ${owner?country(owner).name:'no owner'}`);
   if(alliance)who.append(' · ',dot,el('span','',alliance.name));
   banner.replaceChildren(el('b','relation-kind',title),...(detail?[el('span','relation-detail',detail)]:[]),who);
@@ -483,10 +484,6 @@ function frontProvinces(a,b){
     if(place(p.id).neighbors.some(n=>other.has(state.provinces.find(q=>q.id===n)?.owner)))ids.push(p.id);
   }
   return ids.length?ids:[...a,...b].map(id=>state.provinces.find(p=>p.owner===id)?.id || country(id)?.start[0]).filter(Boolean);
-}
-function setMapMode(mode){
-  mapMode=mode;atlas?.setMapMode?.(mode);
-  $('map-mode').setAttribute('aria-pressed',String(mode==='diplomacy'));
 }
 function renderChat(){
   const box=$('messages'),atBottom=box.scrollHeight-box.scrollTop-box.clientHeight<40;
@@ -507,7 +504,7 @@ function renderScoreboard(){
     const troops=land.reduce((n,v)=>n+v.troops,0)+state.armies.filter(a=>a.country===c.id).reduce((n,a)=>n+a.amount,0);
     const button=$('scoreboard').querySelector(`[data-country-focus="${c.id}"]`);
     button.classList.toggle('mine',c.id===state.you);
-    const alliance=p?allianceOf(c.id):null;button.dataset.band=alliance?'active':'';if(alliance)button.style.setProperty('--band',allianceColor(alliance.id));else button.style.removeProperty('--band');
+    const alliance=p?allianceOf(c.id):null;button.dataset.band=alliance?'active':'';if(alliance)button.style.setProperty('--band',allianceColors(state)[alliance.id]);else button.style.removeProperty('--band');
     button.title=`${c.name} · ${p?.name || 'Unclaimed'} · ${p?namedSide(p.side):'Neutral'} · ${land.length} provinces · ${troops} troops${projection?` · ${signed(projection.projectedPrestige)} Prestige if victorious`:''}`;
     button.setAttribute('aria-label',`Inspect ${button.title}`);
     setHTML(button,`${insignia(c.id)}<span class="country-summary"><b>${esc(faction(c.id).short)}</b><span class="country-metrics">${icon('land')}${land.length} ${icon('troops')}${troops}</span><small>${p?esc(p.eliminatedAt!==null?'Eliminated':p.side.startsWith('solo:')?'Independent':namedSide(p.side)):'Unclaimed'}</small></span>`);
@@ -742,7 +739,7 @@ document.addEventListener('keydown',event=>{
   }
   if(event.key.toLowerCase()==='j'){toggleJournal($('war-journal').hidden);return;}
   if(event.key.toLowerCase()==='c')focusCountry();
-  if(event.key.toLowerCase()==='m' && atlas?.setMapMode)setMapMode(mapMode==='diplomacy'?'political':'diplomacy');
+  if(event.key.toLowerCase()==='m')atlas.setMapMode(atlas.mode==='diplomacy'?'political':'diplomacy');
   if(event.key.toLowerCase()==='q')atlas.zoom(1.25);
   if(event.key.toLowerCase()==='e')atlas.zoom(.8);
 });
@@ -784,7 +781,7 @@ document.addEventListener('click',safely(async event=>{
     $('council-tab').scrollTop=document.querySelector('.war-council').offsetTop-$('council-tab').offsetTop; // never scrollIntoView: it would scroll the clipped stage too
     if(!$('declare-war').disabled)$('declare-war').focus();
   }
-  if(button.id==='map-mode')setMapMode(mapMode==='diplomacy'?'political':'diplomacy');
+
 }));
 for(const element of document.querySelectorAll('[data-icon]'))element.innerHTML=icon(element.dataset.icon);
 worldFeed=new WorldFeed({list:$('feed-list'),unread:$('feed-unread'),toggle:$('feed-toggle'),body:$('feed-body'),jump:$('feed-jump')},feedNames);

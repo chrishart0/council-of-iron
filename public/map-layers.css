@@ -7,6 +7,62 @@
 .atlas-v6[data-lod=far] .province-borders path{stroke-opacity:.2;stroke-dasharray:none}
 .country-borders path{fill:none;stroke:#10232b;stroke-opacity:.92;stroke-width:1.7;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
 .atlas-v6[data-lod=near] .country-borders path{stroke-width:2.2}
+/* Borders between members of one coalition: softer than a border between unrelated owners. */
+.allied-borders path{fill:none;stroke:#10232b;stroke-opacity:.45;stroke-width:.9;stroke-dasharray:5 2.5;vector-effect:non-scaling-stroke}
+/* Alliance blocs: an inner glow band (clipped to the bloc) plus a crisp outline in the alliance colour. */
+.bloc-band{fill:none;stroke-width:11;stroke-opacity:.42;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.atlas-v6[data-lod=far] .bloc-band{stroke-width:8}
+.bloc-line{fill:none;stroke-width:2;stroke-linejoin:round;stroke-opacity:.95;vector-effect:non-scaling-stroke}
+.alliance-label{font:700 15px var(--serif,Georgia,serif);letter-spacing:3.4px;text-anchor:middle;dominant-baseline:central;paint-order:stroke;stroke:#0d1c22;stroke-width:4;stroke-linejoin:round}
+.alliance-pip{stroke:#0d1c22;stroke-width:1}
+.counter-bloc{pointer-events:none;stroke:#0d1c22;stroke-width:.6}
+/* War fronts: a crimson hatched band over the owner border; sea links only when no land contact. */
+.war-front path{fill:none;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.war-front-glow{stroke:#b3170f;stroke-opacity:.55;stroke-width:6;stroke-linecap:round;animation:front-shimmer 3.2s ease-in-out infinite}
+.war-front-teeth{stroke:#ff4a33;stroke-width:7;stroke-dasharray:1.6 2.4}
+.atlas-v6[data-lod=far] .war-front-glow{stroke-width:7}.atlas-v6[data-lod=far] .war-front-teeth{stroke-width:8.5;stroke-dasharray:1.8 2.2}
+.sea-front{fill:none;stroke:#e0372b;stroke-opacity:.8;stroke-width:1.3;stroke-dasharray:4 4;vector-effect:non-scaling-stroke}
+@keyframes front-shimmer{0%,100%{stroke-opacity:.55}50%{stroke-opacity:.35}}
+/* Hover/focus relations (also in political mode). */
+.relation-outlines path{fill:none;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.relation-enemy{stroke:#ff4b3a;stroke-width:2.6}
+.relation-ally{stroke:#5fc4ff;stroke-width:2.6}
+.relation-focus{stroke:#f3d27b;stroke-width:2.2;stroke-dasharray:6 3}
+/* Map mode chip + legend (HTML, inside the map container). */
+.atlas-modes{position:absolute;z-index:7;display:flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:min(260px,calc(100% - 20px));pointer-events:none;--atlas-legend-inset:10px}
+/* Placement: class at-<corner>; the host can also override --atlas-legend-inset or mount the key elsewhere. */
+.atlas-modes.at-bottom-left{left:calc(var(--atlas-map-left,0px) + var(--atlas-legend-inset));bottom:calc(var(--atlas-map-bottom,0px) + var(--atlas-legend-inset))}
+.atlas-modes.at-bottom-right{right:calc(var(--atlas-map-right,0px) + var(--atlas-legend-inset));bottom:calc(var(--atlas-map-bottom,0px) + var(--atlas-legend-inset));align-items:flex-end}
+.atlas-modes.at-top-left{left:calc(var(--atlas-map-left,0px) + var(--atlas-legend-inset));top:calc(var(--atlas-map-top,0px) + var(--atlas-legend-inset));flex-direction:column-reverse}
+.atlas-modes.at-top-right{right:calc(var(--atlas-map-right,0px) + var(--atlas-legend-inset));top:calc(var(--atlas-map-top,0px) + var(--atlas-legend-inset));align-items:flex-end;flex-direction:column-reverse}
+.atlas-modes.at-bottom-left,.atlas-modes.at-top-left{align-items:flex-start}
+.atlas-key-toggle{font:600 10px var(--sans,system-ui,sans-serif);letter-spacing:.6px;min-height:24px;padding:3px 9px;background:#0e222aee;color:#c9b27f;border:1px solid #5f716290;border-radius:12px;cursor:pointer}
+.atlas-key-toggle[hidden]{display:none}
+.atlas-modes.collapsed .atlas-legend,.atlas-modes.collapsed:not(.empty) .atlas-mode-toggle{display:none}
+.atlas-modes>*{pointer-events:auto}
+.atlas-mode-toggle{font:600 11px var(--sans,system-ui,sans-serif);min-height:28px;padding:4px 10px;background:#0e222aee;color:#efe3c2;border:1px solid #b99d64a0;border-radius:2px;cursor:pointer}
+.atlas-mode-toggle[aria-pressed=true]{background:#e2c993;color:#132831}
+.atlas-legend{display:flex;flex-direction:column;gap:3px;background:#0e222ae8;border:1px solid #5f716260;padding:7px 9px;font:11px var(--sans,system-ui,sans-serif);color:#e5dfca}
+.atlas-legend[hidden]{display:none}
+.atlas-legend b{font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:#c9b27f;margin-top:2px}
+.legend-item{display:flex;align-items:center;gap:7px;min-width:0}.legend-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.legend-item i{flex:none;width:12px;height:9px;border:1px solid #0d1c22}
+.legend-bloc i{height:4px;width:16px;border-radius:2px}
+.legend-forming i{height:0;width:14px;border:0;border-top:2px dashed currentColor;background:none!important}
+.bloc-forming{fill:none;stroke-width:2.2;stroke-dasharray:7 5;stroke-opacity:.95;vector-effect:non-scaling-stroke}
+.legend-war i{height:4px;width:16px;background:repeating-linear-gradient(90deg,#e0372b 0 2px,transparent 2px 4px)!important;border:0}
+@media(max-width:520px){.atlas-legend{font-size:10px;padding:5px 7px}.atlas-mode-toggle{min-height:32px}}
+/* Moving armies: the top map layer; prominent, constant screen size, small hit area. */
+.map-armies .moving-army{pointer-events:none;cursor:pointer}
+.map-armies .army-hit{fill:transparent;pointer-events:all}
+.map-armies .army-halo{fill:none;stroke:#0b1519;stroke-width:4;stroke-linejoin:round}
+.map-armies .army-arrow{stroke:#fff6dc;stroke-opacity:.8;stroke-width:.9;stroke-linejoin:round}
+.map-armies .hostile .army-halo{stroke:#7a1410}
+.map-armies .hostile .army-arrow{stroke:#ffb49c;stroke-width:1.6}
+.map-armies .returning .army-arrow{stroke-dasharray:2 1.5}
+.map-armies .army-pill{fill:#0e1f26;stroke-width:1.4}
+.map-armies .army-count{font:750 10.5px var(--sans,system-ui,sans-serif);text-anchor:middle;fill:#fff3d2;stroke:none;paint-order:normal}
+.map-armies .moving-army:focus{outline:none}.map-armies .moving-army:focus .army-halo{stroke:#ffe1a0}
 .country-name{font:600 12.5px var(--serif,Georgia,serif);letter-spacing:2.6px;text-anchor:middle;dominant-baseline:central;fill:#fbf1d6;fill-opacity:.9;paint-order:stroke;stroke:#10252d;stroke-width:3.2;stroke-linejoin:round;stroke-opacity:.85}
 .counter-leader{fill:none;stroke:#f3e2b5;stroke-opacity:.7;stroke-width:1;vector-effect:non-scaling-stroke}
 .map-counter.counter-merged{display:none}
@@ -18,7 +74,7 @@
 .cluster-badge text{font:700 8.5px var(--sans,system-ui,sans-serif);fill:#132831;text-anchor:middle;dominant-baseline:central}
 .moving-army.engaged{display:none}
 /* Country view: small foreign columns keep their arrow; their numbers return when zoomed in. */
-.atlas-v6[data-lod=far] .moving-army.minor text{display:none}
+.atlas-v6[data-lod=far] .moving-army.minor :is(text,.army-pill){display:none}
 .industry-pips{pointer-events:none}.industry-pips rect{fill:#e9d29c;stroke:#132b34;stroke-width:1}.industry-rising{fill:#a9e0a0;stroke:#132b34;stroke-width:.8}
 /* Battle in progress: attacker | crossed swords | defender. */
 .battle-counter{cursor:pointer}
@@ -73,4 +129,5 @@
 /* Reduced motion: no pulse or travel; effects are a brief static highlight. */
 .map-effect.still *,.map-effect.still{animation:none!important}
 .map-effect.still .fx-ring.fx-late,.map-effect.still .fx-smoke{display:none}
-@media(prefers-reduced-motion:reduce){.battle-pulse,.round-loss,.battle-counter.battle-hit .battle-body{animation:none!important}.battle-pulse{opacity:.5}}
+@media(prefers-reduced-motion:reduce){.war-front-glow,.battle-pulse,.round-loss,.battle-counter.battle-hit .battle-body{animation:none!important}.battle-pulse{opacity:.5}}
+.atlas-v6:focus{outline:none}.atlas-v6:focus-visible{outline:2px solid #e2c993;outline-offset:-2px}

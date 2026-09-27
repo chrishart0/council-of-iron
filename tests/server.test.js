@@ -266,7 +266,7 @@ test('World feed is one public, cursor-based stream for HTTP, CLI and MCP with e
   const alliances=JSON.parse(JSON.parse(lb.stdout.trim().split('\n')[1]).result.content[0].text);
   assert.equal(alliances.mode,'alliances');assert.equal(alliances.rows.length,2);
   // Wars: the same shared helpers over the public observation, for CLI and MCP.
-  const {warsOf,relationsOf}=await import('../public/leaderboard.js');
+  const {warsOf}=await import('../public/leaderboard.js'),{relationsOf}=await import('../public/relations.js');
   const view=(await f.call(`/api/games/${id}`)).data;
   const cliWars=await subprocess('agents/cli.js',['wars'],env);assert.equal(cliWars.code,0,cliWars.stderr);
   const wars=JSON.parse(cliWars.stdout);

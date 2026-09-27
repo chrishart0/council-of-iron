@@ -39,7 +39,7 @@ compact strip, narrower rail, order card up to full height on the left.
 - **Order card** (bottom-left): peek (title, order type, relation line, commit dock) → half → full, via the chevron/grab handle (click, arrow keys, or drag on phones). A map click opens it peeking so the map stays usable; the Orders button opens it at half.
 - **Council / Dispatches**: a full-height left drawer (a bottom sheet on phones). Council now starts with **Wars** (side ⚔ side, since when, "you are involved"; click to frame the front) and **The Powers** roster (the old bottom scoreboard). At widths under 1100 px an open drawer takes the rail's place.
 - **Menu** (☰): room name/label, connection, identity, Copy room link, All rooms, Change identity, browser Full screen, map-control help, scenario note. In review it becomes the page heading.
-- **Map controls**: bottom-left, beside the card; +/− hidden on coarse pointers (pinch), World/Europe/Home stay. A Diplomacy map-mode toggle (M) appears only when the atlas provides `setMapMode`.
+- **Map controls**: bottom-left, beside the card; +/− hidden on coarse pointers (pinch), World/Europe/Home stay. The atlas key (legend and Political/Diplomacy toggle) sits beside them; M toggles the mode.
 - **Camera insets**: `focus`/`home`/`fit` calls pass `{insets:{top,right,bottom,left}}` as an optional trailing argument describing the covered edges; the current atlas ignores it.
 
 ## Deviations from the first proposal, and why
@@ -50,7 +50,7 @@ compact strip, narrower rail, order card up to full height on the left.
 - **Bottom navigation up to 1023 px wide** (tablets upright too), not only phones: the top strip cannot hold relation chips, stats and four buttons at 768 px.
 - **Spectators** can still tap a province to see an inspector card (owner, incoming waves); there is no order form, dock or order type.
 - Zoom +/− are hidden on coarse pointers; **World/Europe/Home stay** (presets, not replaceable by pinch).
-- Relation/alliance helpers live in `public/leaderboard.js` as interim shared helpers until `public/relations.js` from the map branch is merged.
+- Relations and alliance colours come from the map branch's shared `public/relations.js` (merged); `warsOf` stays in `public/leaderboard.js`. The atlas's own key (legend + Political/Diplomacy toggle) is mounted in the camera cluster via `new Atlas(svg, map, onSelect, {legend: {placement, container, collapsed}})`; it hides beside an open card below 1100 px, and starts collapsed on phones. M toggles the map mode.
 
 ## Verified (automated, not a usability study)
 
@@ -68,7 +68,6 @@ Not verified: real touch-drag of the sheet on a device (the drag code path runs 
 ## Known issues
 
 - The atlas fits the 1280×680 world into the viewport, so in portrait phones the world view is a thin band until you pinch or press Home; the rail covers the eastern edge on desktop until panned. Camera insets are passed but not yet used by the atlas.
-- Army tooltips do not yet show the owner's alliance (atlas-owned; left for the map branch).
 - Tablet-portrait idle coverage is ~55%: the 288 px rail is a large share of 768 px.
 
 ---
@@ -85,7 +84,45 @@ A presentation-only pass on the atlas. No rule, map ID, province geometry or adj
 
 **Effects API.** `atlas.effect(kind, data)`; supported kinds are exported as `MAP_EFFECTS`: `industry_up`/`industry_down` `{province, level}`, `captured` `{province, owner}`, `alliance` `{countries}`, `war`/`peace` `{from, to}`, `eliminated` `{country}`. Each is a ≈2 s decorative animation (reduced motion: a 1.6 s static highlight) in `aria-hidden` layers of that map instance only, with no element IDs. Fronts use current ownership: shared land borders, else sea links, else a capital-to-capital line. `eliminated` uses the last territory the atlas saw. It returns `false` for unknown kinds, unknown IDs or malformed data and never throws. Player text never enters these SVG fragments.
 
-**Verified.** `tests/ui-browser.py` compares the live DOM with the public room state at five zoom depths on 1366×768, 1920×1080 and 390px: each province appears once, merged totals equal the member garrisons, owners never mix, visible counters do not overlap, battle markers exist for every battle with attacker strength equal to the engaged armies. A second recorded test position (`ui-war`, real formal-war battles; test-only private stdin stepping) checks the round flash. Effects are checked on a separate atlas instance for scoping, `aria-hidden`, bad-input tolerance and reduced motion. These checks do not establish legibility for real players; country-name placement in dense Europe (Britain, France and Germany often have no room at world zoom) and army-label overlap with names are known limits.
+**East–west wraparound.** The world repeats horizontally with a period of 1280 map units (`WORLD`). World-space layers live once in three groups: `base` (ocean names, meridians, sea links, fills, borders, coastline, alliance blocs, war fronts, relation outlines, area effects), `lines` (sea fronts, selection links, recruitment arrows, army traces) and `fx` (point effects). Each group is repeated by two `<use>` copies at ±1280, so ownership, borders, blocs, fronts, selection and effects are live on every copy, and `<use>` shadow trees add no document IDs. Names, counters, merged counters, battle markers and moving armies are single interactive overlays: each is drawn once, on the copy nearest the view centre. After every pan the view centre is normalized into [0, 1280), and an active drag follows the shift, so drag, pinch, wheel, arrow keys (focus the map) and World/Europe/Home all wrap seamlessly. Vertical movement stays clamped. Zoom out is capped at one world width actually visible on screen (accounting for the panel's aspect ratio; very wide panels crop a little height at World view), so no province or ocean label appears twice. A click or tap on a copy resolves the point to the same province with the shared geometry. Links and army traces use the shortest wrapped delta, so Pacific routes cross the dateline instead of spanning the map. Meridians are spaced to divide the world width, so the seam has no irregular gap. There is no pan inertia, with or without reduced motion. The server and `movement.js` are unchanged.
+
+**Layer order** (bottom to top): ocean and grid → fills → province, allied and country borders → coastline → alliance blocs → war fronts and relation outlines (all repeated) → sea fronts and route traces (repeated) → alliance and country names → counters and merged counters → battle markers → effects (repeated) → **moving armies**, the last child of the map SVG, above every copy. Armies are drawn once on the nearest copy. Each has a dark halo, an owner-coloured direction arrow, a troop-count pill and an 8 px hit circle, and all of it stays the same size on screen. Large columns (≥25% of the owner's troops, or the three biggest on the map) are 1.3× larger. Hover or keyboard focus shows the owner, size, route, a returning flag and the ETA. Engaged armies are still represented by the battle marker; columns still approaching stay above it. Province, country and alliance names treat each army's swept screen rectangle over the next interpolation window as an obstacle and move or wait rather than cover it.
+
+**Alliances (political view).** `public/relations.js` is pure and shared. It exports `relationsOf`, `atWar`, `coalitions`, `formingAlliances` and `allianceColors`.
+- **Palette:** `ALLIANCE_PALETTE` has four hues (lime, aqua, pink, blue). An 8-seat room has at most four coalitions. Any two hues are ≥38 CIE76 ΔE apart under simulated normal, protan, deutan and tritan vision (Machado 2009 matrices), and each is ≥15 from war crimson, the diplomacy gold and all eight country fills. `tests/relations.test.js` enforces this.
+- **Colour assignment:** each coalition prefers the palette slot hashed from its name. Active coalitions claim slots first, oldest first; forming ones follow by activation time. So a forming alliance normally keeps its colour when it activates, and the test checks that. A proposal that joins an existing coalition uses that coalition's colour.
+- **Blocs:** each is one outline around the union of its members' land, drawn as a crisp line plus an inner glow band clipped to the bloc (scoped `clipPath` IDs). Borders between members are softened (thin dashed) and stay distinct from the heavy border between unrelated owners.
+- **Counter ticks:** member counters and merged counters carry a thin alliance-colour tick beside the country stripe.
+- **Names:** at world and mid zoom, the coalition name is placed on the bloc's largest contiguous land with member colour pips. It is player text, set with `textContent` only and capped at 28 characters, and it avoids counters, country names and armies.
+- **Forming alliances:** approved proposals inside the activation delay (public `proposals` with status `pending`) get a dashed outline in their future colour around the future roster's land, and a "· forming" legend entry.
+
+**Map key.** The key is an HTML chip holding a collapse button, the legend and the Diplomacy toggle.
+- **Placement:** `new Atlas(svg, map, onSelect, { legend: { placement, container, collapsed } })`, where `placement` is one of `LEGEND_PLACEMENTS` (default `bottom-left`). The chip is positioned inside the visible map using CSS variables `--atlas-map-*` that the atlas keeps up to date, plus `--atlas-legend-inset`.
+- **Custom mounting:** `container` mounts the chip anywhere the host chooses.
+- **Collapse:** `setLegendCollapsed(bool)` collapses it to a single "Map key" chip. It starts collapsed at ≤520 px.
+- **Runtime changes:** `setLegendPlacement(p)` moves it.
+
+**Wars.** With formal war rules, every land border between owners at war carries a crimson hatched front over the country border (thicker at world zoom; a slow opacity shimmer, static under reduced motion). A dashed red sea link is drawn only when two warring countries have no land contact. The legend lists up to four wars by country. Legacy rooms without formal war draw no fronts, because every non-allied border there is hostile and fronts would just repeat the country borders; `relationsOf` still reports those relations exactly as the engine does. `atlas.setMapMode('political'|'diplomacy')` and `atlas.setRelationFocus(country|null)` are public, and `MAP_MODES` is exported. Diplomacy mode colours the focus country (default: the viewer; spectators: the country under the pointer) gold, allies blue-green, enemies red, other countries grey and uncontrolled land slate. Country and alliance labels are kept. Hovering or keyboard-focusing a country's counter or land for 300 ms, or setting a relation focus, outlines its enemies in red and its allies in blue in either mode. The map-mode toggle and legend are a small HTML chip in the map container, created per atlas (the live and review maps each have their own). On phones the political-mode legend is hidden, leaving the toggle.
+
+**Verified.** `tests/ui-browser.py` also drags and arrow-key-pans more than one world width in each direction and checks that the view centre is normalized and matches the distance travelled. It centres the dateline, clicks Australia on the repeated copy (the element under the pointer is the `<use>`) and checks that the inspector selects Australia. There it re-runs the counter audit (once each, correct sums, no overlaps) at two zoom levels and at 390px. It checks that every sea-link path, including the three Pacific links, is narrower than half the world, and that a trans-Pacific army's trace and marker take the short way. It checks for no duplicate IDs and exactly six copies. `tests/ui-browser.py` also compares the live DOM with the public room state at five zoom depths on 1366×768, 1920×1080 and 390px: each province appears once, merged totals equal the member garrisons, owners never mix, visible counters do not overlap, battle markers exist for every battle with attacker strength equal to the engaged armies. A second recorded test position (`ui-war`, real formal-war battles; test-only private stdin stepping) checks the round flash. Effects are checked on a separate atlas instance for scoping, `aria-hidden`, bad-input tolerance and reduced motion. Relations checks, on the `ui-fixture` match with three coalitions:
+- one bloc per coalition, covering exactly its members' provinces, inside the repeated world layer;
+- colours equal `allianceColors` and are stable across polls;
+- member counter ticks are correct;
+- at least one name is placed, and every name appears in the legend.
+
+On `ui-war` (real formal wars, plus three columns still marching at tick 55):
+- fronts exist exactly on the borders between warring owners, with sea fronts only where expected;
+- diplomacy mode recolours every province as specified and back;
+- hover outlines work;
+- the army layer is the last SVG child, after every `<use>` and overlay, and no army is inside a copied group;
+- no visible name label intersects an army arrow at four zoom levels;
+- a focused army shows its route and size;
+- IDs are unique.
+
+A separate atlas instance takes a hostile alliance name (`<img onerror>`): no element is created and the label is capped. The review atlas has its own chip and blocs. These checks do not establish legibility for real players. Known limits:
+- country names and some alliance names often have no room in dense Europe at world zoom;
+- the magenta and violet palette slots are the closest pair;
+- HUD overlays from other panels can cover map labels.
 
 ## Event clarity
 
