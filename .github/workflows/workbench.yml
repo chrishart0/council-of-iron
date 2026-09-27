@@ -1,22 +1,102 @@
-name: Refinement workbench
+name: Verify and publish industrial RTS refinement
 on:
   push:
     branches: [refine-v03-workbench]
     paths: [.github/workflows/workbench.yml]
+  workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
+concurrency:
+  group: council-v03-publication
+  cancel-in-progress: false
 jobs:
-  source:
+  publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ed22b813465d2d4818d1ee4272e9a47ae22550f0
-          persist-credentials: false
-      - run: git archive --format=tar HEAD > /tmp/council-source.tar
-      - uses: actions/upload-artifact@v4
+          fetch-depth: 0
+      - name: Reconstruct the locally tested patch and select its exact base
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, lzma
+          data=b''.join(Path(f'.github/v03-payload/{i:02}.part').read_bytes() for i in range(1,11))
+          assert hashlib.sha256(data).hexdigest()=='36369dc2767bff6ba15d5847faaf5c2960a2af9a2b87062c8366a5261905e706'
+          patch=lzma.decompress(data)
+          assert hashlib.sha256(patch).hexdigest()=='e9e62c52ff207bb20a6a5c8b4e94194c952f72b51d496ba41cc2cc954db2f99d'
+          Path('/tmp/v03.patch').write_bytes(patch)
+          PY
+          git checkout --detach ed22b813465d2d4818d1ee4272e9a47ae22550f0
+          git apply --unidiff-zero --check /tmp/v03.patch
+          git apply --unidiff-zero /tmp/v03.patch
+      - uses: actions/setup-node@v4
         with:
-          name: council-source
-          path: /tmp/council-source.tar
-          retention-days: 3
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Reproduce the authored scenario
+        run: |
+          python -m pip install shapely==2.1.2 -r tests/requirements.txt
+          python scripts/build_imperial_map.py
+          echo '5e71abad601fbb2411415eb3371eef02c1814cdc93f5467bf3befb06201ed8f1  public/imperial-map.json' | sha256sum --check
+      - name: Syntax and all regression tests
+        run: |
+          mkdir -p artifacts
+          npm run check
+          npm test | tee artifacts/node-tests.log
+          grep -q '# pass 59' artifacts/node-tests.log
+          grep -q '# fail 0' artifacts/node-tests.log
+      - name: Reproduce the two fresh-seed full-match holdouts
+        run: |
+          node scripts/tournament.js --rounds 256 --seed 610000 --mode solo --out artifacts/native-holdout-solo.json
+          node scripts/tournament.js --rounds 256 --seed 710000 --mode diplomacy --out artifacts/native-holdout-diplomacy.json
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          expected=json.loads(Path('docs/testing/v03-summary.json').read_text())['reports']
+          for mode in ['solo','diplomacy']:
+              actual=json.loads(Path(f'artifacts/native-holdout-{mode}.json').read_text())['summary']
+              assert actual['rounds']==256 and actual['invariantFailures']==0
+              for field in ['countryWins','draws','meanDuration','meanPrestige']:
+                  assert actual[field]==expected[f'final-{mode}'][field],(mode,field,actual[field])
+          PY
+      - run: python -m playwright install --with-deps chromium
+      - name: Native browser and external-agent playthrough; record real gameplay GIF
+        run: python tests/browser.py --gif docs/media/gameplay.gif
+      - name: Record verification and publish tested application files
+        env:
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          import json, os, hashlib
+          report=json.loads(Path('artifacts/browser-report.json').read_text())
+          assert report['status']=='passed' and report['transport']=='native-browser-http'
+          assert not report['pageErrors']
+          gif=Path('docs/media/gameplay.gif'); image=Image.open(gif)
+          assert image.n_frames>=20 and gif.stat().st_size<8_000_000
+          receipt={'workflow':os.environ['RUN_URL'],'baseCommit':'ed22b813465d2d4818d1ee4272e9a47ae22550f0','status':'passed','transport':report['transport'],'nodeTestsPassed':59,'holdoutMatchesRepeated':512,'browserAssertions':report['assertions'],'outcome':report['outcome'],'gif':{'path':str(gif),'frames':image.n_frames,'bytes':gif.stat().st_size,'sha256':hashlib.sha256(gif.read_bytes()).hexdigest()},'limitations':'Automated browser controls and heuristic agents; no live-LLM or independent-human enjoyment trial.'}
+          Path('docs/testing/v03-native-ci.json').write_text(json.dumps(receipt,indent=2)+'\n')
+          p=Path('docs/PLAYTEST.md')
+          note='## Native v0.3 verification\n\nThe [native publication run]('+os.environ['RUN_URL']+') passed all 59 Node tests, reproduced both 256-match fresh-seed holdouts with identical aggregate results, and completed the actual-browser/external-agent playthrough. Coordinated arrivals, timed group recall and completed industry investment were exercised. The README GIF was recorded from this native run. [Machine-readable receipt](testing/v03-native-ci.json).\n\n'
+          p.write_text(p.read_text().replace('## Historical v0.2 test record',note+'## Historical v0.2 test record'))
+          PY
+          test "$(git ls-remote origin refs/heads/master | cut -f1)" = ed22b813465d2d4818d1ee4272e9a47ae22550f0
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --name-only | grep -q '^.github/'; then echo 'Refusing to publish workbench transport or workflow files'; exit 1; fi
+          git diff --cached --stat
+          git commit -m 'Ship v0.3: industry, colonial starts, synchronized attacks and timed recalls'
+          git push origin HEAD:master
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v03-native-playtest
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
