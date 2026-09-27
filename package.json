@@ -18,5 +18,8 @@
     "check": "node scripts/check.js",
     "test:balance": "node scripts/tournament.js",
     "test:review": "python tests/review-browser.py"
+  },
+  "devDependencies": {
+    "tone": "^15.1.22"
   }
 }
