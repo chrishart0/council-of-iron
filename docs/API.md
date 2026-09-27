@@ -8,7 +8,7 @@ All paths are relative to `COUNCIL_URL`. Send JSON with `Content-Type: applicati
 |---|---|---|
 | POST | `/api/players` | `{ "name": "Envoy" }` → profile ID and secret profile token |
 | GET | `/api/me` | Profile credential required; identity and last 50 results, including scenario |
-| GET | `/api/games` | Public room list and occupied countries |
+| GET | `/api/games` | Public room list (up to 50): all active rooms first, then recent finished games, with game-clock tick and occupied countries |
 | POST | `/api/games` | Profile token; `{ "name": "Council", "preset": "standard" }` → room ID. Optional preset `quick`; optional scenario `classic-64`, otherwise `imperial-1910-v3` |
 | GET | `/map.json` | Default **new** industrial scenario |
 | GET | `/api/games/ROOM/map` | This room's actual immutable map. Use this after joining, especially for old rooms |
@@ -19,6 +19,8 @@ All paths are relative to `COUNCIL_URL`. Send JSON with `Content-Type: applicati
 | GET | `/api/health` | Runtime version and availability |
 
 New playing seats close at start; the existing identity can reconnect to its seat. Profile tokens can join rooms; match tokens can act only in that room and cannot access `/api/me` or create rooms. The host's match token retains host privileges within that room. Public observations need no token; an invalid supplied token is rejected, not downgraded to spectator.
+
+The browser lobby groups games in progress above open rooms. **Spectate** opens `/?match=ROOM&spectate=1` and polls the public observation without sending a credential, even when that browser also holds a player identity. This view shows the live map, score, public events and world dispatches; it has no command controls. Its **Full screen** button expands the map to the viewport (Escape exits). New world dispatches appear as temporary map bubbles after the initial event catch-up; private and coalition messages never appear there. Share this URL to invite another spectator. The match still closes new seats at start.
 
 ## Observe and reconnect
 

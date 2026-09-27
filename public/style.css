@@ -49,6 +49,19 @@ main{max-width:1800px;padding:28px 3vw 24px;margin:auto}
 .room-card{padding:14px 0;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px}
 .room-card:first-child{padding-top:0}.room-card p{font:21px/1.2 var(--serif);margin:0 0 6px}
 .room-card small{font-size:10px;color:var(--muted)}.room-card button{font-size:12px;white-space:nowrap}
+.room-group{margin:18px 0}.room-group h3{font:17px var(--serif);margin:0;border-bottom:1px solid var(--line);padding-bottom:7px}.room-group h3 small{font:11px var(--sans);color:var(--muted)}
+.spectator-note{margin:0;padding:10px 15px;background:#284149;color:#e9dfbf;font-size:12px;border:1px solid #a88f61}
+.spectating #move-form,.spectating #order-modes,.spectating .standing-order,.spectating #alliance-form,.spectating #leave-alliance,.spectating #chat-form,.spectating .rules-details{display:none}
+.spectating #home-view{display:none}
+.spectator-map-fullscreen{overflow:hidden}
+.spectator-map-fullscreen #game .war-room{position:fixed;inset:0;z-index:9;width:100vw;height:100dvh;max-height:none;display:block;border:0;border-radius:0}
+.spectator-map-fullscreen #game .board-panel{width:100%;height:100%}
+.spectator-map-fullscreen #game .command-panel,.spectator-map-fullscreen #game .scenario-note,.spectator-map-fullscreen #game .map-caption{display:none}
+.spectator-map-fullscreen #map{height:0;min-height:0;flex:1}
+.spectator-bubbles{position:absolute;right:20px;bottom:50px;z-index:5;width:min(330px,calc(100% - 40px));display:flex;flex-direction:column;align-items:flex-end;gap:9px;pointer-events:none}
+.spectator-bubble{max-width:100%;background:#f4f1eaf2;color:var(--ink);border:1px solid #bca878;border-radius:12px 12px 3px 12px;box-shadow:0 6px 22px #06191cb3;padding:10px 13px;overflow-wrap:anywhere;font-size:12px;line-height:1.45}
+.spectator-bubble header{font-size:10px;color:#765c35;font-weight:750;margin-bottom:4px}.spectator-bubble p{margin:0}
+.spectator-map-fullscreen .spectator-bubbles{bottom:24px}
 .standings-panel{margin-top:20px}.standing-row{display:flex;justify-content:space-between;padding:10px;border-bottom:1px solid var(--line);font-size:12px;gap:12px}
 .standing-row b{font-variant-numeric:tabular-nums}.room-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;color:#eae8d9}
 .room-heading h1{font-size:29px;margin:0}.room-heading .eyebrow{margin-bottom:5px;color:var(--gold);font-size:9px}
@@ -167,6 +180,10 @@ footer{display:flex;justify-content:space-between;gap:15px;margin:0 3vw;padding:
  .amount-row input{width:100px;min-height:44px}.amount-presets button{font-size:12px;min-height:44px}.button-row button{min-height:42px}#send-army{min-height:46px}.province-readout span{font-size:9px}
  footer{font-size:8px;letter-spacing:.4px;margin-inline:4vw}.standing-row{font-size:11px}
 }
+.spectator-map-fullscreen .map-toolbar{flex-wrap:wrap}
+.spectator-map-fullscreen .map-toolbar>div{width:auto}
+.spectator-map-fullscreen .map-toolbar>span{max-width:45%;flex-basis:auto}
+.spectator-map-fullscreen .spectator-bubbles{width:min(320px,calc(100% - 24px));right:12px;bottom:12px}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
 
 /* Industrial planning uses the same restrained command surface as diplomacy. */

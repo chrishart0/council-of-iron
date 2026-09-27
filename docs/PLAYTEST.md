@@ -1,3 +1,11 @@
+# Full-screen spectator verification — 27 September 2026
+
+The native `python tests/browser.py` run passed with no page errors. Its spectator check expanded the live map to the desktop and 390-pixel mobile viewports, exited with Escape, displayed a newly sent world dispatch as an escaped bubble, and found no private dispatch in the spectator view. The full live match, agent interaction and recorded-match review suites also passed. All 81 Node tests, `npm run check`, and the 32-round diplomacy balance run passed; the balance run reported zero invariant failures. These are automated checks, not a human playtest.
+
+# Spectator mode verification — 27 September 2026
+
+Local verification passed: 81 Node tests, `npm run check`, and a 32-round diplomacy balance run with zero invariant failures. The native `python tests/browser.py` run passed with no page errors. Its new browser check found a running match in the lobby, opened its read-only live view, saw all eight standings, and confirmed that a private dispatch visible to a seated player was absent for the spectator. The same run completed its live match, after-action review, and second-room industrial checks. This is automated browser and heuristic-agent evidence, not a human playtest.
+
 # v0.4 review and feedback verification — 27 September 2026
 
 The after-action feature and live explanatory controls do not change the industrial/classic battle, movement, recruitment, scoring or country-balance rules. The original 343-action hands-on match still reproduces its event digest and final result.

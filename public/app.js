@@ -12,6 +12,8 @@ let atlas, previewKey='', generation=0, pendingCommand=false, readMessageId=0, p
 let pollController=null, inspected=null;
 const attackSelections = new Map();
 let plannedDestination=null, mapReadyFor=null, orderMode='march';
+let spectating=false;
+let messageCatchupComplete=false, messageBubbles=[];
 const country = id => map.countries.find(c=>c.id===id);
 const place = id => map.provinces.find(p=>p.id===id);
 const sideName = id => state?.sides.find(s=>s.id===id)?.name || id;
@@ -37,17 +39,22 @@ function showIdentity(){ $('identity').textContent=identity?.name || 'Observer';
 function options(id,values,current){syncOptions($(id),values,current);}
 async function rooms(){
   const data=await request('/api/games');
-  $('rooms').innerHTML=data.games.length?data.games.map(g=>`<div class="room-card"><div><p>${esc(g.name)}</p><small>${esc(g.status.toUpperCase())} · ${g.players.length}/8 SEATS · ${g.speed===1?'30 MIN':'5 MIN'} · ${esc(g.id)}</small></div><button data-room="${esc(g.id)}">${g.status==='lobby'?'Enter':g.status==='finished'?'Review':'Watch'} →</button></div>`).join(''):'<p class="muted">The chamber is empty. Open the first council.</p>';
+  const sections=[['running','Games in progress','Spectate'],['lobby','Open rooms','Enter'],['finished','Completed games','Review']];
+  $('rooms').innerHTML=data.games.length?sections.map(([status,title,label])=>{
+    const found=data.games.filter(g=>g.status===status);
+    return found.length?`<section class="room-group"><h3>${title} <small>${found.length}</small></h3>${found.map(g=>`<div class="room-card"><div><p>${esc(g.name)}</p><small>${g.players.length}/8 SEATS · ${g.speed===1?'30 MIN':'5 MIN'} · ${status==='running'?`${time(g.tick)} elapsed · `:''}${esc(g.id)}</small></div><button data-room="${esc(g.id)}" data-spectate="${status==='running'}">${label} →</button></div>`).join('')}</section>`:'';
+  }).join(''):'<p class="muted">The chamber is empty. Open the first council.</p>';
   const standings=await request('/api/standings');
   $('standings').innerHTML=standings.standings.length?standings.standings.map(p=>`<div class="standing-row"><span>${esc(p.name)} <small class="muted">${p.provisional?'PROVISIONAL':''} · ${p.matches} matches</small></span><b>${signed(p.prestige)}</b></div>`).join(''):'<p class="muted small">No decisive matches recorded yet. Results persist on this server.</p>';
 }
-async function openRoom(id){
+async function openRoom(id,watch=false){
   generation++;pollController?.abort();review?.destroy();review=null;document.body.classList.remove('reviewing');
+  setMapFullscreen(false);spectating=watch;messageCatchupComplete=false;messageBubbles=[];
   orderMode='march';matchId=id;mapReadyFor=null;state=null;cursor=0;history=[];source=null;destination=null;inspected=null;previewKey='';readMessageId=0;
   document.body.classList.add('in-game');atlas.world();
   $('home').hidden=true;$('game').hidden=false;$('result').hidden=true;
-  const url=new URL(location);url.searchParams.set('match',id);url.hash='';window.history.replaceState({},'',url);
-  const epoch=generation,loaded=await request(`/api/games/${id}/map`);
+  const url=new URL(location);url.searchParams.set('match',id);if(watch)url.searchParams.set('spectate','1');else url.searchParams.delete('spectate');url.hash='';window.history.replaceState({},'',url);
+  const epoch=generation,loaded=await request(`/api/games/${id}/map`,'GET',undefined,watch?null:identity?.token);
   if(epoch!==generation || matchId!==id)return;
   map=loaded;initMap();attackSelections.clear();plannedDestination=null;mapReadyFor=id;
   await poll();
@@ -58,14 +65,18 @@ async function poll(){
   if(polling===epoch)return;
   polling=epoch;const controller=new AbortController();pollController=controller;
   try {
+    const liveMessages=[];
     for(let page=0;page<10;page++) {
-      const response=await fetch(`/api/games/${room}?after=${cursor}`,{headers:identity?.token?{Authorization:`Bearer ${identity.token}`}:{},signal:controller.signal});
+      const response=await fetch(`/api/games/${room}?after=${cursor}`,{headers:!spectating && identity?.token?{Authorization:`Bearer ${identity.token}`}:{},signal:controller.signal});
       const next=await response.json();
       if(epoch!==generation || room!==matchId)return;
       if(!response.ok)throw new Error(next.error || 'Unable to observe this room.');
+      if(messageCatchupComplete)liveMessages.push(...next.events.filter(e=>e.type==='message' && e.channel==='world'));
       state=next;cursor=next.cursor;history.push(...next.events);
       if(!next.hasMore)break;
     }
+    if(!state.hasMore)messageCatchupComplete=true;
+    if(state.status==='running' && !state.you)pushMessageBubbles(liveMessages,epoch);
     $('connection').textContent=state.status==='finished'?'Review':'Live';render();
   }catch(e){if(e.name!=='AbortError' && epoch===generation){$('connection').textContent='Reconnecting';toast(e.message,true);}}
   finally{if(polling===epoch)polling=false;}
@@ -112,7 +123,25 @@ function availableTroops(){
 }
 function paintMap(){
   if(!state)return;atlas.update(state,source,destination);
-  $('selection-label').textContent=source?`${place(source).name}${destination?' → '+place(destination).name:' · Choose a connected destination'}`:'Select a province to begin';
+  $('selection-label').textContent=!state.you?`${state.name} · ${time(state.tick)} · LIVE`:source?`${place(source).name}${destination?' → '+place(destination).name:' · Choose a connected destination'}`:'Select a province to begin';
+}
+function setMapFullscreen(on){
+  document.body.classList.toggle('spectator-map-fullscreen',on);
+  const button=$('spectator-fullscreen');button.setAttribute('aria-pressed',String(on));button.textContent=on?'Exit full screen':'Full screen';
+  if(atlas)requestAnimationFrame(()=>atlas.layout());
+}
+function renderMessageBubbles(){
+  const box=$('spectator-bubbles');
+  box.hidden=!state || state.status!=='running' || Boolean(state.you) || !messageBubbles.length;
+  if(box.hidden){box.replaceChildren();return;}
+  box.innerHTML=messageBubbles.map(e=>`<article class="spectator-bubble"><header>${esc(country(e.from)?.name || e.from)} · ${time(e.tick)}</header><p>${esc(e.text)}</p></article>`).join('');
+}
+function pushMessageBubbles(events,epoch){
+  for(const e of events){
+    messageBubbles.push(e);messageBubbles=messageBubbles.slice(-3);
+    setTimeout(()=>{if(generation!==epoch)return;messageBubbles=messageBubbles.filter(m=>m.id!==e.id);renderMessageBubbles();},12000);
+  }
+  if(events.length)renderMessageBubbles();
 }
 function renderOrders(){
   const scroll=$('orders-tab').scrollTop;
@@ -320,6 +349,10 @@ function showTab(name){
 }
 function render(){
   if(!state)return;
+  document.body.classList.toggle('spectating',state.status==='running' && !state.you);
+  $('spectator-note').hidden=state.status!=='running' || Boolean(state.you);
+  $('spectator-fullscreen').hidden=state.status!=='running' || Boolean(state.you);
+  if(state.status!=='running')setMapFullscreen(false);
   document.querySelector('.scenario-note').textContent=map.notice;
   $('game-name').textContent=state.name;$('room-label').textContent=`COUNCIL ${state.id.toUpperCase()} · ${state.eligible?'LEAGUE':'EXPERIMENTAL'} · ${state.players.length}/8 SEATS`;
   $('lobby').hidden=state.status!=='lobby';$('join-form').hidden=Boolean(state.you);
@@ -334,9 +367,10 @@ function render(){
   const dominant=Object.entries(state.dominance)[0];
   $('victory-status').textContent=dominant && state.status==='running'?`${namedSide(dominant[0])} wins in ${state.rules.hold-(state.tick-dominant[1])}s unless stopped`:`${state.rules.threshold} provinces · hold ${state.rules.hold} game seconds`;
   renderOrders();paintMap();renderCouncil();renderChat();renderScoreboard();renderResult();renderOperations();
+  renderMessageBubbles();
   $('events').innerHTML=history.map(e=>({e,description:describe(e)})).filter(x=>x.description).slice(-30).reverse().map(({e,description})=>`<div class="event"><time>${time(e.tick)}</time>${esc(description)}</div>`).join('');
 }
-async function home(){review?.destroy();review=null;document.body.classList.remove('reviewing');generation++;pollController?.abort();document.body.classList.remove('in-game');matchId=null;state=null;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');await rooms();}
+async function home(){review?.destroy();review=null;setMapFullscreen(false);document.body.classList.remove('reviewing','spectating');generation++;pollController?.abort();document.body.classList.remove('in-game');matchId=null;state=null;spectating=false;messageBubbles=[];messageCatchupComplete=false;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');await rooms();}
 $('create-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('display-name').value);const g=await request('/api/games','POST',{name:$('room-name').value,preset:$('preset').value});await openRoom(g.id);}));
 $('join-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('join-name').value);await request(`/api/games/${matchId}/join`,'POST',{country:$('country-choice').value,kind:'human'});await poll();toast('Your seat is reserved.');}));
 $('fill-bots').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/bots`,'POST',{});await poll();}));
@@ -377,6 +411,7 @@ $('share').addEventListener('click',safely(async()=>{try{await navigator.clipboa
 $('account-button').addEventListener('click',safely(async()=>{const name=prompt('Create a separate local player identity. Existing results stay with the old identity. Enter a new display name:');if(name?.trim()){await ensureIdentity(name,true);if(matchId)await poll();}}));
 $('zoom-in').onclick=()=>atlas.zoom(.7);$('zoom-out').onclick=()=>atlas.zoom(1.4);
 $('world-view').onclick=()=>atlas.world();$('europe-view').onclick=()=>atlas.europe();$('home-view').onclick=focusCountry;
+$('spectator-fullscreen').onclick=()=>setMapFullscreen(!document.body.classList.contains('spectator-map-fullscreen'));
 document.querySelector('.tabs').addEventListener('keydown',event=>{
   if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
   event.preventDefault();const names=['orders','council','dispatches'],index=names.indexOf(tab);
@@ -385,7 +420,10 @@ document.querySelector('.tabs').addEventListener('keydown',event=>{
 });
 document.addEventListener('keydown',event=>{
   if(!state || document.body.classList.contains('reviewing') || event.ctrlKey || event.metaKey || event.altKey || event.target.closest('input,select,textarea,dialog') || $('confirm-dialog').open)return;
-  if(event.key==='Escape'){source=null;destination=null;inspected=null;renderOrders();paintMap();}
+  if(event.key==='Escape'){
+    if(document.body.classList.contains('spectator-map-fullscreen')){setMapFullscreen(false);return;}
+    source=null;destination=null;inspected=null;renderOrders();paintMap();
+  }
   if(event.key.toLowerCase()==='c')focusCountry();
   if(event.key.toLowerCase()==='q')atlas.zoom(1.25);
   if(event.key.toLowerCase()==='e')atlas.zoom(.8);
@@ -394,7 +432,7 @@ document.addEventListener('click',safely(async event=>{
   const button=event.target.closest('button');if(!button)return;
   if(button.dataset.reserveFrom){source=button.dataset.reserveFrom;destination=button.dataset.reserveTo;inspected=source;orderMode='march';$('amount').value=freeTroops(source);showTab('orders');renderOrders();paintMap();toast('Transfer drafted; review the garrison before committing.');}
   if(button.dataset.orderMode){orderMode=button.dataset.orderMode;renderOrders();$('orders-tab').scrollTop=0;}
-  if(button.dataset.room)await openRoom(button.dataset.room);
+  if(button.dataset.room)await openRoom(button.dataset.room,button.dataset.spectate==='true');
   if(button.dataset.home)await home();
   if(button.dataset.fraction){$('amount').value=Math.max(1,Math.floor(availableTroops()*Number(button.dataset.fraction)));renderOrders();}
   if(button.dataset.focus){atlas.focus(button.dataset.focus);inspected=button.dataset.focus;renderOrders();}
@@ -408,5 +446,5 @@ document.addEventListener('click',safely(async event=>{
   }
   if(button.dataset.tab)showTab(button.dataset.tab);
 }));
-try{map=await request('/map.json','GET',undefined,null);initMap();showIdentity();const initial=new URL(location).searchParams.get('match');if(initial)await openRoom(initial);else await rooms();$('connection').textContent=state?.status==='finished'?'Review':'Live';}catch(e){toast(e.message,true);}
+try{map=await request('/map.json','GET',undefined,null);initMap();showIdentity();const params=new URL(location).searchParams,initial=params.get('match');if(initial)await openRoom(initial,params.get('spectate')==='1');else await rooms();$('connection').textContent=state?.status==='finished'?'Review':'Live';}catch(e){toast(e.message,true);}
 setInterval(()=>{if(matchId)poll();},750);

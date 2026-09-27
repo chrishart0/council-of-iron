@@ -44,6 +44,17 @@ test('HTTP lobby: human and agent identities, occupied countries, host controls,
   const rejoined=await f.call(`/api/games/${id}/join`,'POST',{country:'usa'},a.token);
   assert.equal(rejoined.status,200);assert.equal((await f.call(`/api/games/${id}`,'GET',undefined,rejoined.data.token)).data.you,'usa');
 });
+test('public lobby keeps active rooms visible ahead of recent finished games',async t=>{
+  const f=await fixture(t),host=await f.register('Host'),active=await f.room(host,'Live council');
+  for(let i=0;i<50;i++){
+    const id=await f.room(host,`Finished ${i}`);
+    f.app.games.get(id).status='finished';
+  }
+  const listed=(await f.call('/api/games')).data.games;
+  assert.equal(listed.length,50);
+  assert.equal(listed[0].id,active);
+  assert.equal(listed[0].status,'lobby');
+});
 test('HTTP authentication, match scopes, origin/host protection, JSON validation and no time travel endpoint',async t=>{
   const f=await fixture(t),{a,id,sa}=await f.boot(),other=await f.room(a,'Other');
   assert.equal((await f.call(`/api/games/${id}/start`,'POST',{})).status,401);

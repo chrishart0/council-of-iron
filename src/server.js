@@ -111,8 +111,13 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
       if(path==='/api/standings' && req.method==='GET') {
         const eligible=url.searchParams.get('eligible')==='true'; return json(res,200,{eligible,standings:store.standings(eligible,url.searchParams.get('scenario') || MAP.id)});
       }
-      if(path==='/api/games' && req.method==='GET') return json(res,200,{games:[...games.values()].reverse().slice(0,50).map(g=>({
-        id:g.id,name:g.name,status:g.status,tick:g.tick,speed:g.speed,players:g.players.map(p=>({id:p.id,name:p.name,kind:p.kind})),eligible:g.eligible}))});
+      if(path==='/api/games' && req.method==='GET') {
+        const all=[...games.values()],active=all.filter(g=>g.status!=='finished').reverse();
+        const listed=[...active,...all.filter(g=>g.status==='finished').reverse().slice(0,50-active.length)];
+        return json(res,200,{games:listed.map(g=>({
+          id:g.id,name:g.name,status:g.status,tick:g.tick,speed:g.speed,
+          players:g.players.map(p=>({id:p.id,name:p.name,kind:p.kind})),eligible:g.eligible}))});
+      }
       if(path==='/api/games' && req.method==='POST') {
         const me=auth(), data=await body(req);
         requireRule(Object.hasOwn(PRESETS,data.preset || 'standard'),'Unknown time preset.');
