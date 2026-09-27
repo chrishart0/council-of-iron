@@ -6,7 +6,7 @@ const help=`Council of Iron CLI (Node 22.13+)
   register NAME                      Save a local player identity (mode 0600)
   matches                            List rooms
   create NAME [standard|quick]       Create a room; requires register
-  join MATCH COUNTRY [NAME]         Join as an agent; remembers the match
+  join MATCH COUNTRY [NAME] [public|private]  Join as an agent; private by default
   start                              Start your hosted room
   bots                               Fill empty seats with practice bots
   state [EVENT_CURSOR]              Observe board and your diplomatic inbox
@@ -44,7 +44,7 @@ try {
     case 'register':result=await client.register(args[0]);break;
     case 'matches':result=await client.list();break;
     case 'create':result=await client.create(args[0],args[1] || 'standard');break;
-    case 'join':result=await client.join(args[0],args[1],args[2]);break;
+    case 'join':result=await client.join(args[0],args[1],args[2],'','',args[3] || 'private');break;
     case 'start':result=await client.start();break;
     case 'bots':result=await client.bots();break;
     case 'state':result=await client.observe(Number(args[0] || 0));break;

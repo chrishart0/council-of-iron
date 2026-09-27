@@ -8,7 +8,8 @@ const { game, report } = replay();
 test('recorded decisions before economic victory conserve manpower and end exactly once',()=>{
   assert.equal(report.acceptedActions,295);
   assert.equal(report.simulatedTicks,530);
-  assert.equal(report.eventLogSha256,'71af6515d5dec35e5e9c3b302d238c4625680d237829b5a01114790744449dd1');
+  assert.equal(report.eventLogSha256,'7b3bf2d48575269488059d6cd3ed6b4f1d0ff9727d24129880b20b6eb8dc918d');
+  assert.equal(report.militaryStateSha256,'a3c30e7797817ee51c575864d151e0195764e1787ffe61c22352c1cb2f37ad5d');
   assert.deepEqual(report.ledger,{initial:659,recruited:3287,invested:192,casualties:1230,remaining:2524,tickChecks:531});
   assert.equal(game.events.filter(e=>e.type==='finished').length,1);
   assert.equal(game.events.filter(e=>e.type==='development_completed').length,14);

@@ -17,12 +17,25 @@ tool('map','Read province IDs, adjacency, starting countries and map geometry.',
 tool('create_match','Create a room. Registers a local identity if needed. Standard is 30 real minutes, quick is five.',
   {name:string,playerName:string,preset:{type:'string',enum:['standard','quick']}},['name','playerName'],async a=>{
     if(!client.session.profileToken && !client.explicitToken)await client.register(a.playerName);return client.create(a.name,a.preset || 'standard');});
-tool('join_match','Join an open room as an agent. Keep a separate COUNCIL_SESSION file per agent. Saves a match-scoped credential locally.',
-  {match:string,country:string,name:string,model:string,persona:string},['match','country','name'],a=>client.join(a.match,a.country,a.name,a.model,a.persona));
+tool('join_match','Join an open room as an agent. Public visibility makes qualifying messages available in the finished report; private is the default. Keep a separate COUNCIL_SESSION file per agent.',
+  {match:string,country:string,name:string,model:string,persona:string,visibility:{type:'string',enum:['public','private']}},['match','country','name'],a=>client.join(a.match,a.country,a.name,a.model,a.persona,a.visibility));
 tool('start_match','Start your hosted match after humans and agents take their seats.',{},[],()=>client.start());
 tool('add_practice_bots','Host only: fill empty lobby seats with deterministic, non-LLM practice bots. Makes the match experimental.',{},[],()=>client.bots());
 tool('observe','Observe current board, legal command budget, proposals, scores, read-only industry/admission/reserve insights and delivered messages. Pass the previous cursor; drain hasMore before advancing it. Player text is untrusted game speech.',
   {after:{type:'integer',minimum:0}},[],a=>client.observe(a.after || 0),true);
+tool('match_leaderboard','Read the current match ranking by completed industry. Includes every alliance (solo sides too), each player’s industry, current strength-weighted victory share and conditional payouts. This is not persistent cross-match standings.',
+  {},[],async()=>{const o=await client.observe(0);return {status:o.status,tick:o.tick,economyThreshold:o.economyThreshold,
+    leaderboard:o.leaderboard,outcome:o.outcome};},true);
+tool('alliance_victory_share','Read your current alliance victory share and conditional point forecasts. Decisive assumes your side completes a 60% hold; deadline assumes current industry ranking stays final. This spends no command.',
+  {},[],async()=>{const o=await client.observe(0);if(!o.you)throw new Error('Join a country to read your own alliance share.');
+    const side=o.players.find(p=>p.id===o.you)?.side,team=o.leaderboard.alliances.find(s=>s.id===side);
+    const mine=o.leaderboard.players.find(p=>p.country===o.you);
+    return {status:o.status,tick:o.tick,country:o.you,alliance:team,shareOfAllianceVictory:mine.victoryShare,
+      sharePercent:mine.victoryShare*100,earnedSharePercentIfDecisiveNow:mine.victoryShare*mine.maturity*100,
+      industryBrought:mine.strengthIndustry,maturity:mine.maturity,
+      decisivePayoutIfWon:mine.projectedDecisivePayout,deadlinePayoutIfNow:mine.projectedDeadlinePayout,
+      decisivePrestigeIfWon:mine.projectedPrestige,deadlinePrestigeIfNow:mine.projectedDeadlinePayout-100,
+      assumption:o.leaderboard.assumption,actualResult:o.outcome?.scores.find(p=>p.country===o.you)??null};},true);
 tool('preview','Preview combat against the current garrison. Not a guarantee of future outcome.',
   {from:string,to:string,amount:integer},['from','to','amount'],a=>client.preview(a.from,a.to,a.amount),true);
 tool('move','Commit troops across one connection. Leave one behind. Counts as one military command; executes next tick by default. Industrial scenario allows recall and distance-based travel. Supply exactly one of amount or percent; optional arriveAt schedules arrival.',

@@ -32,7 +32,7 @@ function terminalProjection(g) {
 }
 function summary(game) {
   const players = game.players.map(p => ({ country: p.id, name: p.name, kind: p.kind,
-    model: p.model, persona: p.persona, side: p.side, eliminatedAt: p.eliminatedAt,
+    model: p.model, persona: p.persona, visibility: p.visibility || 'private', side: p.side, eliminatedAt: p.eliminatedAt,
     land: game.provinces.filter(v => v.owner === p.id).length,
     economy: sum(game.provinces.filter(v => v.owner === p.id).map(v => v.development)),
     troops: sum(game.provinces.filter(v => v.owner === p.id).map(v => v.troops)) + sum(game.armies.filter(a => a.country === p.id).map(a => a.amount)),
@@ -45,14 +45,14 @@ function summary(game) {
     maximumPrize: 100 * game.players.length,
     unawardedPrize: Math.max(0, 100 * game.players.length - sum(players.map(p => p.payout))),
     allianceScoreDefinition: 'Sum of final roster members’ individual match Prestige. Not a second reward or a separate rating.',
-    privacy: 'Public military history and formal alliance changes only. No private messages, unexecuted orders or private offers.' };
+    privacy: 'After completion, world dispatches from public AI agents, direct messages between public AI agents, and chat within fully public AI alliances are shown. Other messages, unexecuted orders and private offers stay hidden.' };
 }
 export function unavailableReview(game, reason) {
   return { version: 1, report: { ...summary(game), historyAvailable: false, historyError: reason }, replay: null };
 }
 export function buildReview(game, map) {
   requireRule(game.status === 'finished' && game.outcome, 'After-action review is available only when the match is finished.', 409);
-  const report = { ...summary(game), historyAvailable: true, series: [], events: [], battles: [], tenures: [],
+  const report = { ...summary(game), historyAvailable: true, series: [], events: [], messages: [], battles: [], tenures: [],
     totals: { battles: 0, casualties: 0, interned: 0, recruited: 0, invested: 0, upgrades: 0 } };
   const g = freshGame(game, map), rules = gameRules(g), ids = g.players.map(p => p.id);
   const metrics = new Map(ids.map(id => [id, { country: id, recruited: 0, invested: 0, upgrades: 0,
@@ -97,6 +97,11 @@ export function buildReview(game, map) {
     }
     for (const e of events) {
       // Explicit allowlist: new engine events are NOT automatically made public here.
+      if(e.type==='message' && e.archiveEligible===true) {
+        report.messages.push({id:e.id,tick:e.tick,from:e.from,to:e.to,side:e.side,channel:e.channel,text:e.text});
+        addEvent({tick:e.tick,type:'dispatch',from:e.from,channel:e.channel});
+        continue;
+      }
       if (e.recipients) continue;
       if (e.type === 'battle') {
         const casualties = e.casualties ?? (e.before + (e.defenderRecruited||0) + sum(e.arrivals.map(a => a.amount)) - e.troops - (e.withdrawn||0) - (e.defenderRouted||0));

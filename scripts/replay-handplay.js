@@ -28,12 +28,15 @@ function validator(g) {
   };
 }
 function summary(g,ledger,transport) {
-  assert.equal(digest(projection(g)),'a3e9d4386a42d193ac48bb0a586ef55ea716903a65b25fc73ba333953ba17db9');
+  // This recording's military board is unchanged; the outcome digest changes with the new point formula.
+  const militaryStateSha256=digest({tick:g.tick,status:g.status,provinces:g.provinces,armies:g.armies,sides:sides(g)});
+  assert.equal(militaryStateSha256,'a3c30e7797817ee51c575864d151e0195764e1787ffe61c22352c1cb2f37ad5d');
+  assert.equal(digest(projection(g)),'138dedbacf6f4aa2da9da2555aff81dc58412e8bc5d16c6ee0ff7ad8e8e56f94');
   return {baseCommit:fixture.baseCommit,method:fixture.method,transport,status:'passed',
     simulatedTicks:g.tick,decisionTicks:fixture.decisionTicks,acceptedActions:g.actionLog.length,
     byAction:counts(g.actionLog,a=>a.action.type),byCountry:counts(g.actionLog,a=>a.country),
     rejectedInputs:fixture.rejectedActions.filter(a=>a.tick<g.tick).length,events:counts(g.events,e=>e.type),ledger,
-    finalStateSha256:digest(projection(g)),eventLogSha256:digest(g.events),outcome:g.outcome,
+    finalStateSha256:digest(projection(g)),militaryStateSha256,eventLogSha256:digest(g.events),outcome:g.outcome,
     countryTerritories:counts(g.provinces,p=>p.owner),
     note:'Replaying one recorded game is not another independent match or a balance sample.'};
 }

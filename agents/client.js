@@ -38,9 +38,9 @@ export class CouncilClient {
     delete this.session.seatToken;delete this.session.country;
     this.persist();return result;
   }
-  async join(match,country,name='Agent',model='',persona='') {
+  async join(match,country,name='Agent',model='',persona='',visibility='private') {
     if(!this.session.profileToken && !this.explicitToken)await this.register(name);
-    const result=await this.request(`/api/games/${match}/join`,'POST',{country,kind:'agent',model,persona},this.explicitToken || this.session.profileToken);
+    const result=await this.request(`/api/games/${match}/join`,'POST',{country,kind:'agent',model,persona,visibility},this.explicitToken || this.session.profileToken);
     this.match=match;this.session.match=match;this.session.country=country;this.session.seatToken=result.token;this.persist();
     return {match,country,sessionFile:this.sessionPath};
   }

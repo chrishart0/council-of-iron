@@ -4,6 +4,7 @@ import { travelTicks, journeyPoint } from '../public/movement.js';
  */
 export const RULES = Object.freeze({ duration: 1800, recruit: 20,
   notice: 30, hold: 90, economyShare: .6, maturity: 300, orderWindow: 10,
+  strengthExponent: .75, deadlinePrizes: [.5, .25, .25],
   orderLimit: 3, chatWindow: 10, messageLength: 500, proposalLife: 120,
   diplomacyLife: 60, warRequired: true,
   marchSetup: 15, kmPerTick: 35, maxScheduleDelay: 300, maxAttackSources: 16,
@@ -68,16 +69,18 @@ export function createGame({ id, name, hostId, speed = 1, eligible = false }, ma
     armies: [], battles: [], orders: [], proposals: [], departures: [], coalitions: [], wars: [], diplomacy: [], events: [], receipts: {},
     dominance: {}, outcome: null, actionLog: [] };
 }
-export function join(g, map, { profileId, name, country, kind = 'human', model = '', persona = '' }) {
+export function join(g, map, { profileId, name, country, kind = 'human', model = '', persona = '', visibility = 'private' }) {
   requireRule(g.status === 'lobby', 'Seats are closed after the match starts.', 409);
   requireRule(['human', 'agent', 'bot'].includes(kind), 'Unknown player kind.');
+  requireRule(['public','private'].includes(visibility), 'Choose public or private agent visibility.');
+  requireRule(kind !== 'human' || visibility === 'private', 'Human seats are private.');
   const existing = g.players.find(p => p.profileId === profileId);
   if (existing) { requireRule(existing.id === country, 'You already occupy another country.', 409); return existing; }
   const c = map.countries.find(c => c.id === country);
   requireRule(c, 'Choose a listed country.');
   requireRule(!g.players.some(p => p.id === country), 'That country is taken.', 409);
   const p = { id: country, profileId, name: text(name, 'Player name', 40), kind,
-    model: String(model).slice(0, 100), persona: String(persona).slice(0, 100),
+    model: String(model).slice(0, 100), persona: String(persona).slice(0, 100), visibility,
     side: `solo:${country}:0`, joinedAt: 0, eliminatedAt: null, orderTicks: [], lastChat: null };
   g.players.push(p);
   for (const id of c.start) Object.assign(province(g, id), { owner: country, troops: c.garrisons?.[id] ?? c.startTroops ?? 10, development: c.development?.[id] ?? 1 });
@@ -407,8 +410,13 @@ function chat(g, p, a) {
     player(g, a.to); recipients = [...new Set([p.id, a.to])];
   }
   p.lastChat = g.tick;
+  const publicAgent = id => { const actor=player(g,id);return actor.kind!=='human' && actor.visibility==='public'; };
+  const archiveEligible = publicAgent(p.id) && (a.channel==='world' ||
+    a.channel==='dm' && publicAgent(a.to) ||
+    a.channel==='alliance' && members(g,p.side).every(member=>publicAgent(member.id)));
   const e = event(g, 'message', { from: p.id, channel: a.channel, to: a.channel === 'dm' ? a.to : null,
-    text: message, untrusted: true }, recipients);
+    text: message, untrusted: true,
+    ...(archiveEligible ? {archiveEligible:true,side:a.channel==='alliance'?p.side:null} : {}) }, recipients);
   return { messageId: e.id };
 }
 /** Every client, including built-in practice bots, passes through this function.
@@ -709,20 +717,66 @@ export function sides(g) {
 }
 export const economyThreshold = g => Math.ceil(g.provinces.filter(p => p.owner)
   .reduce((n, p) => n + p.development, 0) * (gameRules(g).economyShare ?? .6));
-export function score(g, winningSide = null, draw = false) {
+const ownedIndustry = (g, country) => g.provinces.filter(v => v.owner === country)
+  .reduce((n, v) => n + v.development, 0);
+function strengthShares(g, side) {
+  const roster = members(g, side), exponent = gameRules(g).strengthExponent ?? .75;
+  const weights = roster.map(p => ownedIndustry(g, p.id) ** exponent);
+  const total = weights.reduce((n, value) => n + value, 0);
+  return Object.fromEntries(roster.map((p, i) => [p.id, total ? weights[i] / total : 0]));
+}
+function deadlinePrizes(g) {
+  const ranked = sides(g).sort((a, b) => b.economy - a.economy);
+  const slots = gameRules(g).deadlinePrizes ?? [.5, .25, .25], result = {};
+  if (ranked.length > 1 && ranked[0].economy === ranked[1].economy) return result;
+  for (let i = 0; i < ranked.length;) {
+    let end = i + 1;
+    while (end < ranked.length && ranked[end].economy === ranked[i].economy) end++;
+    const fraction = ranked.slice(i, end).reduce((n, _, j) => n + (slots[i + j] ?? 0), 0) / (end - i);
+    for (let j = i; j < end; j++) result[ranked[j].id] = fraction;
+    i = end;
+  }
+  return result;
+}
+export function score(g, winningSide = null, draw = false, reason = 'domination') {
   const duration = Math.max(1, Math.min(gameRules(g).maturity, g.tick));
+  const pool = 100 * g.players.length;
+  const prizes = deadlinePrizes(g);
+  const deadlineDraw = sides(g).filter(s => s.economy === Math.max(...sides(g).map(t => t.economy))).length > 1;
   return g.players.map(p => {
     const roster = members(g, p.side), maturity = Math.min(1, Math.max(0, (p.eliminatedAt ?? g.tick) - p.joinedAt) / duration);
-    const share = 100 * g.players.length / roster.length;
-    const payout = draw ? 100 : p.side === winningSide ? share * maturity : 0;
+    const victoryShare = strengthShares(g, p.side)[p.id];
+    const share = pool * victoryShare;
+    const prizeFraction = reason === 'deadline' ? (prizes[p.side] ?? 0) : p.side === winningSide ? 1 : 0;
+    const payout = draw || reason === 'deadline' && deadlineDraw ? 100
+      : (winningSide === null && reason !== 'deadline' ? 0 : share * maturity * prizeFraction);
     return { country: p.id, maturity, maximumShare: share, projectedPrestige: share * maturity - 100,
+      victoryShare, strengthIndustry: ownedIndustry(g, p.id),
+      projectedDeadlinePayout: deadlineDraw ? 100 : share * maturity * (prizes[p.side] ?? 0),
       payout, prestige: payout - 100 };
   });
+}
+export function leaderboard(g) {
+  const pool = 100 * g.players.length, deadline = deadlinePrizes(g);
+  const ranked = sides(g).sort((a, b) => b.economy - a.economy || a.id.localeCompare(b.id));
+  const deadlineDrawIfNow = ranked.length > 1 && ranked[0].economy === ranked[1].economy;
+  const projected = score(g);
+  const alliances = ranked.map((side, i) => ({ ...side,
+    rank: ranked.findIndex(other => other.economy === side.economy) + 1,
+    decisivePrize: pool, deadlinePrizeIfNow: deadlineDrawIfNow ? side.members.length * 100 : pool * (deadline[side.id] ?? 0),
+    dominanceStartedAt: g.dominance[side.id] ?? null }));
+  const players = projected.map(({ payout, prestige, ...p }) => ({ ...p, side: player(g, p.country).side,
+    projectedDecisivePayout: p.maximumShare * p.maturity,
+    projectedDeadlinePayout: p.projectedDeadlinePayout }))
+    .sort((a, b) => b.strengthIndustry - a.strengthIndustry || a.country.localeCompare(b.country));
+  for (const p of players) p.rank = players.findIndex(other => other.strengthIndustry === p.strengthIndustry) + 1;
+  return { tick: g.tick, prizePool: pool, deadlineDrawIfNow, alliances, players,
+    assumption: 'Current completed industry, final allegiance, and earned tenure held fixed. Decisive forecast assumes this side completes the 60% hold; deadline forecast assumes the current ranking is final. A tie for first at the deadline draws and pays 100 per player. Captures, development, membership, and time can change every share.' };
 }
 function finish(g, winningSide, reason) {
   g.status = 'finished';
   g.outcome = { winningSide, reason, tick: g.tick, draw: winningSide === null,
-    scores: score(g, winningSide, winningSide === null) };
+    scores: score(g, winningSide, winningSide === null, reason) };
   event(g, 'finished', g.outcome);
 }
 function victory(g) {
@@ -774,7 +828,7 @@ export function observe(g, country = null, after = 0, limit = 200) {
   const p = country ? player(g, country) : null;
   return { id: g.id, name: g.name, status: g.status, tick: g.tick, speed: g.speed, rules: gameRules(g), scenario: g.scenario, travelTimes: g.travelTimes,
     eligible: g.eligible, you: country, players: g.players.map(({ profileId, orderTicks, lastChat, ...p }) => p),
-    provinces: g.provinces, armies: g.armies, battles: g.battles || [], sides: sides(g), wars: g.wars || [], economyThreshold: economyThreshold(g), projections: score(g),
+    provinces: g.provinces, armies: g.armies, battles: g.battles || [], sides: sides(g), wars: g.wars || [], economyThreshold: economyThreshold(g), projections: score(g), leaderboard: leaderboard(g),
     dominanceBreaks: g.dominanceBreaks || [],
     diplomacy: (g.diplomacy || []).filter(m=>['voting','offered'].includes(m.status) &&
       (m.fromRoster.includes(country) || m.status==='offered' && m.toRoster.includes(country))),

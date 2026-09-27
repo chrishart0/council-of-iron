@@ -28,7 +28,7 @@ test('report scores are the original scores and alliance scores sum the retained
   for(const a of review.report.alliances) assert.equal(a.prestige,total(review.report.players.filter(p=>a.members.includes(p.country)).map(p=>p.prestige)));
   const winner=review.report.alliances.find(a=>a.won);
   assert.equal(winner.economy,87);assert.deepEqual(winner.members,['britain','france','usa']);
-  assert.ok(Math.abs(review.report.unawardedPrize-93.33333333333326)<1e-9);
+  assert.ok(Math.abs(review.report.unawardedPrize-78.61042637021637)<1e-9);
   assert.equal(JSON.stringify(recorded),original,'Building a report must not mutate its source match.');
 });
 test('every historical tick matches the real simulation, including movements, recalls, industry and alliances',()=>{
@@ -126,7 +126,9 @@ test('admission forecasts expose combined territory and each full share without 
   assert.equal(f.threshold,Math.ceil(f.totalEconomy*.6));
   assert.equal(f.members.find(p=>p.country==='usa').maturityAtActivation,0);
   assert.equal(f.members.find(p=>p.country==='britain').keepsMaturity,true);
-  assert.equal(f.members[0].maximumShare,800/3);
+  assert.ok(Math.abs(total(f.members.map(p=>p.victoryShare))-1)<1e-12);
+  assert.ok(Math.abs(total(f.members.map(p=>p.maximumShare))-800)<1e-9);
+  assert.ok(f.members.every(p=>p.maximumShare>=0));
   const draw=coalitionForecast(at,at.players.map(p=>p.id),russia.side);assert.equal(draw.wouldDraw,true);assert.ok(draw.members.every(p=>p.fullMaturityPrestige===0));
 });
 test('reserve insights never pretend to forward arrivals and do not expose another player’s reservations',()=>{
@@ -159,4 +161,31 @@ test('HTTP review is read-only, private-state safe, bounded and durable across r
   const fallback=await call('/api/games/incompatible/review');assert.equal(fallback.status,200);assert.equal(fallback.data.historyAvailable,false);assert.deepEqual(fallback.data.outcome,recorded.outcome);
   assert.equal((await call('/api/games/incompatible/replay')).status,409);
   const live=fresh();live.id='live';app.games.set(live.id,live);assert.equal((await call('/api/games/live/review')).status,409);
+});
+
+test('completed review discloses only opted-in AI conversations under the send-time roster',()=>{
+  const g=createGame({id:'public-wire',name:'Public wire',hostId:'usa'},map);
+  g.rules.duration=85;g.rules.hold=1800;
+  const seats=[['usa','agent','public'],['britain','agent','public'],['france','agent','private'],['germany','agent','public'],['ottoman','human','private']];
+  for(const [country,kind,visibility] of seats)join(g,map,{profileId:country,name:country,country,kind,visibility});
+  start(g);let op=0;const send=(country,action)=>act(g,map,country,action,`wire-${++op}`);
+  send('usa',{type:'chat',channel:'world',text:'Public world dispatch'});
+  send('france',{type:'chat',channel:'world',text:'Private world dispatch'});
+  send('britain',{type:'chat',channel:'dm',to:'usa',text:'Public direct dispatch'});
+  send('germany',{type:'chat',channel:'dm',to:'france',text:'Private direct dispatch'});
+  send('ottoman',{type:'chat',channel:'world',text:'Human world dispatch'});
+  const first=send('usa',{type:'propose',country:'britain',name:'Open Accord'});
+  send('britain',{type:'accept',proposalId:first.proposalId});advance(g,30);
+  send('usa',{type:'chat',channel:'alliance',text:'Public alliance dispatch'});
+  const second=send('usa',{type:'propose',country:'france',name:'Mixed Accord'});
+  send('britain',{type:'accept',proposalId:second.proposalId});send('france',{type:'accept',proposalId:second.proposalId});advance(g,30);
+  send('usa',{type:'chat',channel:'alliance',text:'Private alliance dispatch'});
+  advance(g,25);assert.equal(g.status,'finished');
+  const archive=buildReview(g,map),texts=archive.report.messages.map(message=>message.text);
+  assert.deepEqual(texts,['Public world dispatch','Public direct dispatch','Public alliance dispatch']);
+  assert.equal(archive.report.messages.find(message=>message.channel==='dm').to,'usa');
+  assert.equal(archive.report.players.find(player=>player.country==='france').visibility,'private');
+  assert.ok(!JSON.stringify(archive).includes('Private alliance dispatch'));
+  assert.ok(!JSON.stringify(archive.replay).includes('Public direct dispatch'));
+  assert.equal(observe(g,null).events.some(event=>event.text==='Public direct dispatch'),false);
 });

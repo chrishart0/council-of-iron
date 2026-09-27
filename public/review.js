@@ -12,12 +12,14 @@ export class AfterAction {
   constructor(root, state, map) {
     this.root = root; this.id = state.id; this.viewer=state.you; this.map = map; this.tab = 'overview';
     this.controller = new AbortController(); this.position = 0; this.speed = 16; this.playing = false;
+    this.wireThread='all';this.wireQuery='';
     this.root.innerHTML = '<p class="aar-loading" role="status">Preparing the after-action report…</p>';
     const options = { signal: this.controller.signal };
     this.root.addEventListener('click', event => this.click(event), options);
     this.root.addEventListener('change', event => this.change(event), options);
     this.root.addEventListener('input', event => {
       if (event.target.id === 'replay-slider') { this.pause(); this.seek(Number(event.target.value)); }
+      if (event.target.id === 'wire-search') { this.wireQuery=event.target.value; this.renderWire(); }
     }, options);
     this.root.addEventListener('keydown', event => this.keydown(event), options);
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.pause(); }, options);
@@ -50,10 +52,12 @@ export class AfterAction {
       ? `Held 60% of active industry for ${r.rules.hold} seconds.` : `Held ${r.rules.threshold} provinces for ${r.rules.hold} seconds.`
       : r.outcome.reason === 'negotiated_draw' ? 'Every original country joined one coalition.'
       : r.outcome.draw ? `Equal ${economic ? 'economic output' : 'territory'} at the deadline.`
-      : `Most ${economic ? 'economic output' : 'territory'} at the deadline.`;
+      : `Led ${economic ? 'industry' : 'territory'} at the deadline; first received half the prize pool, second and third a quarter each.`;
     this.root.classList.add('after-action');
     const winners=r.alliances.find(s=>s.won)?.members || [];
-    const verdict=r.outcome.draw?'Armistice':this.viewer?(winners.includes(this.viewer)?'Victory':'Defeat'):'Campaign concluded';
+    const viewerResult=r.alliances.find(s=>s.members.includes(this.viewer));
+    const viewerRank=viewerResult ? 1+r.alliances.filter(s=>s.economy>viewerResult.economy).length : Infinity;
+    const verdict=r.outcome.draw?'Armistice':this.viewer?(winners.includes(this.viewer)?'Victory':r.outcome.reason==='deadline' && viewerRank<=3?'Placed':'Defeat'):'Campaign concluded';
     this.root.dataset.verdict=verdict.toLowerCase();
     this.root.innerHTML = `<header class="aar-header"><div class="victory-seals" aria-hidden="true">${(winners.length?winners:[null]).map(id=>insignia(id)).join('')}</div><div class="aar-verdict"><span class="victory-word">${verdict}</span><p class="eyebrow">AFTER-ACTION REPORT · ${esc(r.scenario)} · ${clock(r.duration)}</p><h2>${esc(winner)}</h2><p>${esc(reason)}</p><small>${r.eligible ? 'League result recorded.' : 'Experimental result recorded; not a competitive rating.'}</small></div><div class="aar-header-actions"><button data-aar-tab="replay">Watch the campaign →</button><button class="primary" data-home="true">New council</button></div></header>
       <nav class="aar-tabs" role="tablist" aria-label="After-action reports">${tabs.map(([id, name], i) => `<button id="aar-tab-${id}" role="tab" data-aar-tab="${id}" aria-selected="${i === 0}" aria-controls="aar-${id}" tabindex="${i === 0 ? 0 : -1}">${icon(id)}${name}</button>`).join('')}</nav>
@@ -69,12 +73,15 @@ export class AfterAction {
     const r = this.report;
     const alliances = [...r.alliances].sort((a, b) => Number(b.won) - Number(a.won) || (r.rules.economyShare === undefined ? b.provinces - a.provinces : b.economy - a.economy));
     const players = [...r.players].sort((a, b) => b.prestige - a.prestige || b.land - a.land);
+    const rank = side => alliances.findIndex(a => a.economy === side.economy) + 1;
+    const placement = side => r.outcome.draw ? 'DRAW' : r.outcome.reason !== 'deadline' ? side.won ? 'VICTORIOUS' : 'DEFEATED'
+      : side.won ? 'FIRST PLACE' : rank(side) <= 3 ? `${rank(side) === 2 ? 'SECOND' : 'THIRD'} PLACE` : 'UNPLACED';
     this.el('aar-overview').innerHTML = `<div class="aar-kpis"><div><span>CAMPAIGN LENGTH</span><b>${clock(r.duration)}</b></div><div><span>BATTLES RESOLVED</span><b>${r.totals?.battles ?? '—'}</b></div><div><span>PRIZE DISTRIBUTED</span><b>${number(r.maximumPrize - r.unawardedPrize)}<small> / ${r.maximumPrize}</small></b></div><div><span>UNEARNED PRIZE</span><b>${number(r.unawardedPrize)}</b></div></div>
       <div class="aar-section-heading"><div><p class="eyebrow">THE FINAL ALLEGIANCES</p><h3>Alliance results</h3></div><p>Alliance Prestige sums the final roster’s individual scores.<br>It is not an additional reward.</p></div>
-      <div id="aar-alliances" class="aar-alliances">${alliances.map(s => `<article class="aar-alliance ${s.won ? 'victorious' : ''}"><span class="aar-outcome">${r.outcome.draw ? 'DRAW' : s.won ? 'VICTORIOUS' : 'DEFEATED'}</span><h3>${esc(this.side(s.id))}</h3><div class="aar-roster">${s.members.map(id => `<span>${insignia(id)}${esc(this.country(id).name)}</span>`).join('')}</div><div class="aar-alliance-numbers"><div><small>Alliance Prestige</small><strong>${signed(s.prestige)}</strong></div><div><small>${r.rules.economyShare === undefined ? 'Final territory' : 'Final industry'}</small><strong>${r.rules.economyShare === undefined ? s.provinces : s.economy}</strong></div><div><small>Payout</small><strong>${number(s.payout)}</strong></div></div></article>`).join('')}</div>
+      <div id="aar-alliances" class="aar-alliances">${alliances.map(s => `<article class="aar-alliance ${s.won ? 'victorious' : ''}"><span class="aar-outcome">${placement(s)}</span><h3>${esc(this.side(s.id))}</h3><div class="aar-roster">${s.members.map(id => `<span>${insignia(id)}${esc(this.country(id).name)}</span>`).join('')}</div><div class="aar-alliance-numbers"><div><small>Alliance Prestige</small><strong>${signed(s.prestige)}</strong></div><div><small>${r.rules.economyShare === undefined ? 'Final territory' : 'Final industry'}</small><strong>${r.rules.economyShare === undefined ? s.provinces : s.economy}</strong></div><div><small>Payout</small><strong>${number(s.payout)}</strong></div></div></article>`).join('')}</div>
       <div class="aar-section-heading"><div><p class="eyebrow">EVERY SEAT, EVERY SHARE</p><h3>Individual results</h3></div><p>Prestige = payout − 100. Draws award zero Prestige.<br>Eliminated allies retain their frozen earned share.</p></div>
-      <div class="aar-table-scroll"><table id="aar-player-scores"><caption class="sr-only">All players’ final match results</caption><thead><tr><th>Country / player</th><th>Final allegiance</th><th>Land</th>${r.rules.economyShare === undefined ? '' : '<th>Industry</th>'}<th>Forces</th><th>Share earned</th><th>Payout</th><th>Prestige</th></tr></thead><tbody>${players.map(p => `<tr data-result-country="${p.country}"><td><span class="aar-country">${insignia(p.country)}<b>${esc(this.country(p.country).name)}</b></span><small>${esc(p.name)} · ${esc(p.kind)}${p.eliminatedAt !== null ? ' · eliminated' : ''}</small></td><td>${esc(this.side(p.side))}</td><td>${p.land}</td>${r.rules.economyShare === undefined ? '' : `<td>${p.economy}</td>`}<td>${p.troops}</td><td>${number(p.maturity * 100)}%</td><td>${number(p.payout)}</td><td class="aar-prestige">${signed(p.prestige)}</td></tr>`).join('')}</tbody></table></div>
-      <p class="aar-footnote">${esc(r.privacy)} Forces include troops still in transit at the finish. No bonus points for kills or construction.</p>`;
+      <div class="aar-table-scroll"><table id="aar-player-scores"><caption class="sr-only">All players’ final match results</caption><thead><tr><th>Country / player</th><th>Final allegiance</th><th>Land</th>${r.rules.economyShare === undefined ? '' : '<th>Industry</th>'}<th>Forces</th><th>Team prize share</th><th>Tenure earned</th><th>Payout</th><th>Prestige</th></tr></thead><tbody>${players.map(p => `<tr data-result-country="${p.country}"><td><span class="aar-country">${insignia(p.country)}<b>${esc(this.country(p.country).name)}</b></span><small>${esc(p.name)} · ${esc(p.kind)}${p.eliminatedAt !== null ? ' · eliminated' : ''}</small></td><td>${esc(this.side(p.side))}</td><td>${p.land}</td>${r.rules.economyShare === undefined ? '' : `<td>${p.economy}</td>`}<td>${p.troops}</td><td>${number(100 * (p.victoryShare ?? 1 / (r.alliances.find(s=>s.id===p.side)?.members.length || 1)))}%</td><td>${number(p.maturity * 100)}%</td><td>${number(p.payout)}</td><td class="aar-prestige">${signed(p.prestige)}</td></tr>`).join('')}</tbody></table></div>
+      <p class="aar-footnote">${esc(r.privacy)} Team prize share is based on final completed industry; tenure is uninterrupted time in the final allegiance. Deadline prizes are smaller than a decisive win. Forces include troops still in transit at the finish. No bonus points for kills or construction.</p>`;
   }
   chartSection(kind, title, choices) {
     return `<div class="aar-section-heading"><div><p class="eyebrow">CAMPAIGN DEVELOPMENT</p><h3 id="${kind}-chart-title">${title}</h3></div><label>Metric<select id="${kind}-metric">${choices.map(([value, name]) => `<option value="${value}">${name}</option>`).join('')}</select></label><label>Compare<select id="${kind}-country"><option value="all">All players</option>${this.report.players.map(p => `<option value="${p.country}">${esc(this.country(p.country).name)}</option>`).join('')}</select></label></div><div id="${kind}-chart" class="aar-chart"></div><p class="aar-footnote">Lines sampled every 10 game seconds and at the finish. Peak statistics use every tick.</p>`;
@@ -106,9 +113,41 @@ export class AfterAction {
       `<section class="aar-accounting"><p class="eyebrow">MANPOWER ACCOUNTING</p><h3>Every troop accounted for</h3><p><b>${number(t.initialTroops)}</b> initial + <b>${number(t.recruited)}</b> recruited − <b>${number(t.invested)}</b> invested − <b>${number(t.casualties)}</b> casualties${t.interned?` − <b>${number(t.interned)}</b> interned`:''} = <b>${number(t.remainingTroops)}</b> remaining.</p><small>Includes neutral defenders and troops in transit. Captures and allied gifts transfer troops; they do not create or destroy them. Investment is a cost, not a score.</small></section>`;
     this.chart('economy');
   }
+  wireKey(message) {
+    if(message.channel==='world')return 'world';
+    if(message.channel==='alliance')return `alliance:${message.side}`;
+    return `dm:${[message.from,message.to].sort().join(':')}`;
+  }
+  wireThreads() {
+    const messages=this.report.messages || [],groups=new Map();
+    for(const message of messages){const key=this.wireKey(message),group=groups.get(key)||{key,messages:[],last:0};group.messages.push(message);group.last=message.tick;groups.set(key,group);}
+    const label=key=>key==='world'?'World dispatches':key.startsWith('alliance:')?this.side(key.slice(9)):
+      key.slice(3).split(':').map(id=>this.country(id)?.name||id).join(' ↔ ');
+    return [{key:'all',label:'All disclosed dispatches',messages,last:messages.at(-1)?.tick||0},
+      ...[...groups.values()].sort((a,b)=>b.last-a.last).map(group=>({...group,label:label(group.key)}))];
+  }
+  renderWire() {
+    const list=this.el('wire-thread-list'),body=this.el('wire-messages');if(!list||!body)return;
+    const threads=this.wireThreads();
+    setHTML(list,threads.map(thread=>`<button type="button" class="wire-thread ${thread.key===this.wireThread?'selected':''}" data-wire-thread="${esc(thread.key)}" aria-pressed="${thread.key===this.wireThread}"><strong>${esc(thread.label)}</strong><small>${thread.messages.length} ${thread.messages.length===1?'dispatch':'dispatches'} · last ${clock(thread.last)}</small></button>`).join(''));
+    const selected=threads.find(thread=>thread.key===this.wireThread)||threads[0];
+    const query=this.wireQuery.trim().toLocaleLowerCase();
+    const messages=selected.messages.filter(message=>!query||[message.text,this.country(message.from)?.name,this.country(message.to)?.name,this.side(message.side)].some(value=>String(value||'').toLocaleLowerCase().includes(query)));
+    this.el('wire-heading').textContent=`${selected.label} · ${messages.length} ${messages.length===1?'dispatch':'dispatches'}`;
+    if(!messages.length){setHTML(body,'<p class="wire-empty">No disclosed dispatches match this view.</p>');return;}
+    let previous=-1;
+    setHTML(body,messages.map(message=>{
+      const gap=previous>=0 && message.tick-previous>=60?`<div class="wire-gap">Later · ${clock(message.tick)}</div>`:'';previous=message.tick;
+      const speaker=this.country(message.from)?.name||message.from;
+      const recipient=message.channel==='dm'?`To ${this.country(message.to)?.name||message.to}`:
+        message.channel==='alliance'?this.side(message.side):'To the world';
+      return `${gap}<article class="wire-letter" data-channel="${esc(message.channel)}"><header><span class="wire-seal" style="--country:${this.country(message.from)?.color||'#718481'}"></span><div><strong>${esc(speaker)}</strong><small>${esc(recipient)} · ${clock(message.tick)}</small></div><span class="wire-channel">${message.channel==='dm'?'DIRECT':message.channel==='alliance'?'ALLIANCE':'WORLD'}</span></header><p>${esc(message.text)}</p><button type="button" data-aar-seek="${message.tick}">Watch this moment →</button></article>`;
+    }).join(''));
+  }
   diplomacy() {
     const history = this.report.events.filter(e => ['alliance_activated', 'departed', 'coalition_dissolved', 'war_declared', 'peace_accepted', 'dominance', 'dominance_broken', 'eliminated', 'finished'].includes(e.type));
-    this.el('aar-diplomacy').innerHTML = `<div class="aar-section-heading"><div><p class="eyebrow">LOYALTIES THROUGH THE CAMPAIGN</p><h3>Alliance history</h3></div><p>Only activated membership counts.<br>Private offers and diplomatic messages are not disclosed.</p></div><div class="aar-tenures">${this.report.players.map(p => `<div class="aar-tenure-row"><b>${esc(this.country(p.country).name)}</b><div class="aar-tenure-track">${this.report.tenures.filter(t => t.country === p.country && t.end > t.start).map(t => `<button style="left:${100 * t.start / this.report.duration}%;width:${100 * (t.end - t.start) / this.report.duration}%" class="${t.side.startsWith('solo:') ? 'independent' : ''}" data-aar-seek="${t.start}" title="${esc(this.side(t.side))} · ${clock(t.start)}–${clock(t.end)}" aria-label="${esc(this.side(t.side))}, ${esc(this.country(p.country).name)}, ${clock(t.start)} to ${clock(t.end)}">${esc(this.side(t.side))}</button>`).join('')}</div></div>`).join('')}</div><div class="aar-section-heading"><h3>Turning points</h3><p>Open a moment to inspect the map at that exact tick.</p></div><div class="aar-timeline">${history.map(e => this.eventButton(e)).join('')}</div>`;
+    this.el('aar-diplomacy').innerHTML = `<div class="aar-section-heading"><div><p class="eyebrow">THE DIPLOMATIC WIRE</p><h3>What they said</h3></div><p>Only dispatches cleared for public review appear here. Open a conversation, then watch the map at any message.</p></div><div class="wire-explainer">Public AI seats disclose their world dispatches and direct messages with other public AI seats. Alliance chat appears only when every member was public when it was sent. Private seats remain private.</div><div class="wire-shell"><nav id="wire-thread-list" class="wire-thread-list" aria-label="Disclosed conversations"></nav><section class="wire-reader" aria-label="Conversation transcript"><div class="wire-reader-head"><h4 id="wire-heading"></h4><label>Find in dispatches<input id="wire-search" type="search" value="${esc(this.wireQuery)}" placeholder="Search words or countries"></label></div><div id="wire-messages" class="wire-messages" aria-live="polite"></div></section></div><div class="aar-section-heading"><div><p class="eyebrow">LOYALTIES THROUGH THE CAMPAIGN</p><h3>Alliance history</h3></div><p>Only activated membership counts. Private offers remain hidden.</p></div><div class="aar-tenures">${this.report.players.map(p => `<div class="aar-tenure-row"><b>${esc(this.country(p.country).name)}</b><div class="aar-tenure-track">${this.report.tenures.filter(t => t.country === p.country && t.end > t.start).map(t => `<button style="left:${100 * t.start / this.report.duration}%;width:${100 * (t.end - t.start) / this.report.duration}%" class="${t.side.startsWith('solo:') ? 'independent' : ''}" data-aar-seek="${t.start}" title="${esc(this.side(t.side))} · ${clock(t.start)}–${clock(t.end)}" aria-label="${esc(this.side(t.side))}, ${esc(this.country(p.country).name)}, ${clock(t.start)} to ${clock(t.end)}">${esc(this.side(t.side))}</button>`).join('')}</div></div>`).join('')}</div><div class="aar-section-heading"><h3>Turning points</h3><p>Open a moment to inspect the map at that exact tick.</p></div><div class="aar-timeline">${history.map(e => this.eventButton(e)).join('')}</div>`;
+    this.renderWire();
   }
   describe(e) {
     const c = id => this.country(id)?.name || 'Neutral';
@@ -117,6 +156,7 @@ export class AfterAction {
       case 'alliance_activated': return `${e.name} becomes active: ${e.roster.map(c).join(', ')}.`;
       case 'departed': return `${c(e.country)} leaves ${this.side(e.formerSide)}.`;
       case 'coalition_dissolved': return `${this.side(e.side)} dissolves.`;
+      case 'dispatch': return `${c(e.from)} sends a disclosed dispatch.`;
       case 'war_declared': return `${e.fromRoster.map(c).join(' + ')} declares war on ${e.toRoster.map(c).join(' + ')}.`;
       case 'peace_accepted': return `${e.fromRoster.map(c).join(' + ')} and ${e.toRoster.map(c).join(' + ')} agree to peace.`;
       case 'army_interned': return `${e.amount} troops from ${c(e.country)} are interned at ${this.place(e.province)}.`;
@@ -215,6 +255,7 @@ export class AfterAction {
     if (button.hasAttribute('data-aar-retry')) { this.load(this.fallback); return; }
     if (button.hasAttribute('data-aar-load')) { await this.ensureReplay(); return; }
     if (button.dataset.aarTab) await this.showTab(button.dataset.aarTab);
+    if (button.dataset.wireThread) { this.wireThread=button.dataset.wireThread; this.renderWire(); }
     if (button.hasAttribute('data-aar-seek')) {
       await this.showTab('replay'); this.seek(Number(button.dataset.aarSeek));
       if (button.dataset.aarProvince && this.atlas) { this.inspected = button.dataset.aarProvince; this.atlas.focus(this.inspected); this.paint(); }

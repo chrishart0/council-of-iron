@@ -12,6 +12,20 @@ const {proposalId}=act(draw,MAP,'usa',{type:'propose',country:'britain',name:'<i
 act(draw,MAP,'britain',{type:'accept',proposalId},'accept');
 while(draw.status==='running')tick(draw);
 app.games.set(draw.id, draw);app.store.save(draw);
+const wire=createGame({id:'wire-fixture',name:'The opened wire',hostId:'usa'},MAP);
+wire.rules.duration=55;wire.rules.hold=1800;
+for(const [country,visibility] of [['usa','public'],['britain','public'],['france','private']])
+  join(wire,MAP,{country,name:country,profileId:`wire-${country}`,kind:'agent',visibility});
+start(wire);
+act(wire,MAP,'usa',{type:'chat',channel:'world',text:'<img src=x onerror=window.REVIEW_XSS=1> Public terms'},'wire-world');
+act(wire,MAP,'britain',{type:'chat',channel:'dm',to:'usa',text:'The public pair can talk.'},'wire-dm');
+act(wire,MAP,'france',{type:'chat',channel:'world',text:'PRIVATE LINE'},'wire-private');
+const wireOffer=act(wire,MAP,'usa',{type:'propose',country:'britain',name:'Open Accord'},'wire-offer');
+act(wire,MAP,'britain',{type:'accept',proposalId:wireOffer.proposalId},'wire-accept');
+while(wire.tick<30)tick(wire);
+act(wire,MAP,'usa',{type:'chat',channel:'alliance',text:'We hold the line.'},'wire-alliance');
+while(wire.status==='running')tick(wire);
+app.games.set(wire.id,wire);app.store.save(wire);
 const incompatible=structuredClone(game);incompatible.id='old-fixture';incompatible.name='Unverifiable older record';delete incompatible.reviewOrigin;incompatible.provinces[0].troops++;
 app.games.set(incompatible.id,incompatible);app.store.save(incompatible);
 app.server.listen(0,'127.0.0.1',()=>console.log(JSON.stringify({url:`http://127.0.0.1:${app.server.address().port}`})));

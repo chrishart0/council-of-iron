@@ -28,18 +28,22 @@ export function coalitionForecast(state, roster, coalition = null, activateAt = 
   const threshold = Math.ceil(totalEconomy * state.rules.economyShare);
   const draw = ids.length === state.players.length;
   const divisor = Math.max(1, Math.min(state.rules.maturity, activateAt));
+  const strengths = ids.map(id => state.provinces.filter(p => p.owner === id).reduce((n, p) => n + p.development, 0));
+  const weights = strengths.map(value => value ** (state.rules.strengthExponent ?? .75));
+  const weightTotal = weights.reduce((n, value) => n + value, 0);
   return { roster: ids, land, economy, totalEconomy, threshold, remaining: Math.max(0, threshold - economy),
     wouldDraw: draw, wouldStartHold: !draw && economy >= threshold, activateAt,
-    members: ids.map(id => {
+    members: ids.map((id, index) => {
       const p = state.players.find(p => p.id === id);
       const keepsMaturity = Boolean(coalition && p?.side === coalition);
       const maturity = keepsMaturity ? Math.max(0, Math.min(1, ((p.eliminatedAt ?? activateAt) - p.joinedAt) / divisor)) : 0;
-      const maximumShare = pool / ids.length;
-      return { country: id, keepsMaturity, maturityAtActivation: maturity, maximumShare,
+      const victoryShare = weightTotal ? weights[index] / weightTotal : 0;
+      const maximumShare = pool * victoryShare;
+      return { country: id, keepsMaturity, maturityAtActivation: maturity, victoryShare, strengthIndustry: strengths[index], maximumShare,
         prestigeAtActivation: draw ? 0 : maximumShare * maturity - 100,
         fullMaturityPrestige: draw ? 0 : maximumShare - 100 };
     }),
-    assumption: 'Current completed industry and ownership held until activation; captures and completed upgrades can change the result.' };
+    assumption: 'Current completed industry and ownership held until activation. Shares use each member’s industry^0.75; captures, development, tenure, and roster changes can change the result.' };
 }
 export function operationalInsights(state) {
   if (!state.you) return { developments: [], routeReserves: [], admissions: [] };
