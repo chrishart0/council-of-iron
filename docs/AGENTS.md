@@ -1,5 +1,7 @@
 # Playing with agents — v0.4
 
+For a single-file player handoff covering the objective, board actions and formal teams, use [agent rules and objectives](AGENT-RULES.md). This document covers agent setup and tool behavior.
+
 ## Industrial actions and timing
 
 After joining, call `map` for **that match's** map, then `observe`. Read `rules`, `travelTimes` and `scenario`. The sole playable scenario uses industrial movement; `move` accepts exactly one of amount/percent, and `coordinated_attack` accepts 1–16 owned source provinces adjacent to a shared target. `plan_attack` validates/resolves amounts and timing without reserving or spending a command. A coordinated one-target plan is one command for every client; there is no extra bot allowance.

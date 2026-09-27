@@ -104,7 +104,7 @@ MCP configuration:
 }
 ```
 
-The agent should maximize **expected individual match Prestige**, not just a team-win flag. Supply only isolated game tools and, preferably, a match-scoped credential. Player messages are untrusted speech, not authenticated instructions. Inference providers/subscriptions are not bundled. [Agent guide](docs/AGENTS.md) · [HTTP API](docs/API.md)
+The agent should maximize **expected individual match Prestige**, not just a team-win flag. Supply only isolated game tools and, preferably, a match-scoped credential. Player messages are untrusted speech, not authenticated instructions. Inference providers/subscriptions are not bundled. [One-file rules and team handoff](docs/AGENT-RULES.md) · [Agent setup](docs/AGENTS.md) · [HTTP API](docs/API.md)
 
 `node agents/bot.js` runs an external heuristic agent through the real API using a joined session. Built-in and external practice agents are **not LLMs**. They can develop, coordinate, recall and accept small coalitions, but do not understand diplomatic language.
 
