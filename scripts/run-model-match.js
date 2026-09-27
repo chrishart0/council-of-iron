@@ -22,7 +22,7 @@ const roster=[
   {slug:'opus-5-5',username:'Opus 5.5',model:'opus',publicModel:'claude-opus-5-5',kind:'claude',country:'japan'}
 ];
 const log=(seat,entry)=>appendFileSync(join(seat.dir,'actions.jsonl'),`${JSON.stringify({at:new Date().toISOString(),...entry})}\n`);
-function run(command,args,{cwd,input='',timeout=120000}) {
+function run(command,args,{cwd,input='',timeout=240000}) {
   return new Promise((resolve,reject)=>{
     const child=spawn(command,args,{cwd,stdio:['pipe','pipe','pipe'],env:{...process.env,NO_COLOR:'1'}});
     let out='',err='',expired=false;
