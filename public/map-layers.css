@@ -74,3 +74,4 @@
 .map-effect.still *,.map-effect.still{animation:none!important}
 .map-effect.still .fx-ring.fx-late,.map-effect.still .fx-smoke{display:none}
 @media(prefers-reduced-motion:reduce){.battle-pulse,.round-loss,.battle-counter.battle-hit .battle-body{animation:none!important}.battle-pulse{opacity:.5}}
+.atlas-v6:focus{outline:none}.atlas-v6:focus-visible{outline:2px solid #e2c993;outline-offset:-2px}

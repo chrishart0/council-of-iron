@@ -21,6 +21,11 @@ const FACTORY = 'M-8 7V-1l4.5 3V-1l4.5 3V-7h3.5V7Z';
 const CRACK = 'M-2-9l3 5-3 3 4 3-2 7';
 const counterWidth = troops => Math.max(32, String(troops).length * 7 + 15);
 const networks = new WeakMap();
+/** World width in map units: the map repeats horizontally at this period. */
+export const WORLD = 1280;
+let instances = 0;
+/** Shortest horizontal offset from a to b across the wrap. */
+export const wrapDelta = dx => dx - WORLD * Math.round(dx / WORLD);
 export class Atlas {
   constructor(svg, map, onSelect) {
     this.svg = svg; this.map = map; this.onSelect = onSelect;
@@ -37,46 +42,53 @@ export class Atlas {
     this.lastOwned = new Map(); this.timers = new Set(); this.pointEffects = new Set();
     this.reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
     svg.replaceChildren(); svg.classList.add('atlas-v6');
+    if (!svg.id) svg.id = `atlas-${++instances}`;
+    // Horizontal wraparound: every world-space layer lives once in `base` (under counters) or
+    // `top` (routes, armies, effects); two <use> copies repeat each at ±WORLD. <use> shadow
+    // trees add no document IDs. Counters stay single, interactive and placed on the copy
+    // nearest the view centre.
+    this.base = node('g', { id: `${svg.id}-world-base` }); this.top = node('g', { id: `${svg.id}-world-top`, 'pointer-events': 'none' });
     const defs = node('defs');
     defs.innerHTML = '<radialGradient id="ocean-light"><stop stop-color="#284d59"/><stop offset="1" stop-color="#112833"/></radialGradient><marker id="march-head" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7" fill="#f2d59b"/></marker>';
     defs.innerHTML = defs.innerHTML.replaceAll('ocean-light', `${this.prefix}ocean-light`).replaceAll('march-head', `${this.prefix}march-head`);
     svg.append(defs, node('rect', { x: -1800, y: -1000, width: 4800, height: 3000, fill: `url(#${this.prefix}ocean-light)` }));
-    const grid = node('g', { class: 'atlas-grid', 'pointer-events': 'none' });
-    for (let x = 0; x <= 1280; x += 105) grid.append(node('path', { d: `M${x},-800V1600` }));
-    for (let y = 0; y <= 680; y += 92) grid.append(node('path', { d: `M-1500,${y}H2800` }));
-    svg.append(grid);
+    const grid = node('g', { class: 'atlas-grid', 'pointer-events': 'none' }), meridians = node('g', { class: 'atlas-grid', 'pointer-events': 'none' });
+    for (let x = 0; x < WORLD; x += WORLD / 10) meridians.append(node('path', { d: `M${x},-800V1600` }));
+    for (let y = 0; y <= 680; y += 92) grid.append(node('path', { d: `M-3000,${y}H4300` }));
+    svg.append(grid); this.base.append(meridians);
     const oceans = node('g', { class: 'ocean-names', 'pointer-events': 'none' });
     for (const [label, x, y] of [['NORTH ATLANTIC', 435, 235], ['SOUTH ATLANTIC', 525, 485], ['PACIFIC OCEAN', 105, 380], ['INDIAN OCEAN', 830, 487]]) {
       const text = node('text', { x, y }); text.textContent = label; oceans.append(text);
     }
-    svg.append(oceans); this.seas = node('g', { class: 'sea-connections', 'pointer-events': 'none' });
+    this.base.append(oceans); this.seas = node('g', { class: 'sea-connections', 'pointer-events': 'none' });
     for (const edge of map.edges.filter(e => e.sea)) this.seas.append(node('path', { d: this.path(edge.from, edge.to), 'data-edge': `${edge.from}|${edge.to}` }));
-    svg.append(this.seas);
+    this.base.append(this.seas);
     // Borders are classified once per map: shared province edges versus coastline.
     if (!networks.has(map)) networks.set(map, borderNetwork(map));
     const network = networks.get(map), coast = [...network.coast.values()].flat().join('');
-    svg.append(node('path', { d: coast, class: 'coast-shelf', 'pointer-events': 'none' }));
+    this.base.append(node('path', { d: coast, class: 'coast-shelf', 'pointer-events': 'none' }));
     this.territories = node('g');
     for (const p of map.provinces) {
       const shape = node('path', { d: p.path, id: `${this.prefix}province-${p.id}`, 'data-province': p.id, class: 'province', fill: '#b9b6a3' });
       this.territories.append(shape); this.shapes.set(p.id, shape);
     }
-    svg.append(this.territories);
+    this.base.append(this.territories);
     // Fine engraved land grain, authored once. No raster textures or per-frame filters.
     const hatch = node('pattern', { id: `${this.prefix}land-grain`, width: 5, height: 5, patternUnits: 'userSpaceOnUse' });
     hatch.append(node('circle', { cx: 1, cy: 1, r: .45, fill: '#132832', opacity: .22 })); defs.append(hatch); this.grain = hatch;
-    svg.append(node('path', { d: map.provinces.map(p => p.path).join(' '), fill: `url(#${this.prefix}land-grain)`, 'pointer-events': 'none' }));
+    this.base.append(node('path', { d: map.provinces.map(p => p.path).join(' '), fill: `url(#${this.prefix}land-grain)`, 'pointer-events': 'none' }));
     this.provinceBorders = node('g', { class: 'province-borders', 'pointer-events': 'none' });
     this.countryBorders = node('g', { class: 'country-borders', 'pointer-events': 'none' });
     this.borders = network.borders.map(b => { const el = node('path', { d: b.d, 'data-border': `${b.a}|${b.b}` }); this.provinceBorders.append(el); return { ...b, el, country: false }; });
-    svg.append(this.provinceBorders, this.countryBorders, node('path', { d: coast, class: 'coastline', 'pointer-events': 'none' }));
+    this.base.append(this.provinceBorders, this.countryBorders, node('path', { d: coast, class: 'coastline', 'pointer-events': 'none' }));
     const compass = node('g', { 'aria-hidden': 'true', 'pointer-events': 'none', transform: 'translate(110 560)', opacity: .38, stroke: '#ddc591', fill: 'none' });
     compass.append(node('circle', { r: 27, 'stroke-width': .7 }), node('circle', { r: 22, 'stroke-width': .4 }), node('path', { d: 'M0-40L6-6 40 0 6 6 0 40-6 6-40 0-6-6Z', 'stroke-width': .8 }), node('path', { d: 'M0-40V0H-40L-6-6Z', fill: '#ddc591', 'stroke-width': .4 }));
-    const north = node('text', { y: -46, 'text-anchor': 'middle', stroke: 'none', fill: '#eed9ac', 'font-size': 12, 'font-family': 'Georgia' }); north.textContent = 'N'; compass.append(north); svg.append(compass);
+    const north = node('text', { y: -46, 'text-anchor': 'middle', stroke: 'none', fill: '#eed9ac', 'font-size': 12, 'font-family': 'Georgia' }); north.textContent = 'N'; compass.append(north); this.base.append(compass);
     this.areaEffects = node('g', { class: 'map-effects map-area-effects', 'aria-hidden': 'true', 'pointer-events': 'none' });
     this.countryNames = node('g', { class: 'country-names', 'pointer-events': 'none', 'aria-hidden': 'true' });
     this.connections = node('g', { 'pointer-events': 'none' }); this.routes = node('g', { 'pointer-events': 'none' }); this.marches = node('g', { 'pointer-events': 'none' });
-    this.trails = node('g', { 'pointer-events': 'none' }); svg.append(this.areaEffects, this.countryNames, this.connections, this.routes, this.trails, this.marches);
+    this.trails = node('g', { 'pointer-events': 'none' }); this.base.append(this.areaEffects);
+    this.top.append(this.connections, this.routes, this.trails, this.marches);
     this.leaders = node('g', { class: 'counter-leaders', 'pointer-events': 'none', 'aria-hidden': 'true' });
     const markers = node('g', { class: 'map-counters' });
     for (const p of map.provinces) {
@@ -89,7 +101,9 @@ export class Atlas {
     }
     this.clusterLayer = node('g', { class: 'map-clusters' }); this.battleLayer = node('g', { class: 'map-battles' });
     this.effects = node('g', { class: 'map-effects', 'aria-hidden': 'true', 'pointer-events': 'none' });
-    svg.append(this.leaders, markers, this.clusterLayer, this.battleLayer, this.effects);
+    this.top.append(this.effects);
+    const copies = layer => [-WORLD, WORLD].map(x => node('use', { href: `#${layer.id}`, x, class: 'world-copy', 'aria-hidden': 'true', ...(layer === this.top ? { 'pointer-events': 'none' } : {}) }));
+    svg.append(...copies(this.base), this.base, ...copies(this.top), this.top, this.countryNames, this.leaders, markers, this.clusterLayer, this.battleLayer);
     this.tooltip = document.createElement('div'); this.tooltip.className = 'atlas-tooltip'; this.tooltip.hidden = true; svg.parentElement.append(this.tooltip);
     svg.addEventListener('contextmenu', event => event.preventDefault());
     svg.addEventListener('wheel', event => { event.preventDefault(); this.zoom(event.deltaY > 0 ? 1.12 : .89, event.clientX, event.clientY); }, { passive: false });
@@ -98,25 +112,26 @@ export class Atlas {
     svg.addEventListener('pointerup', event => this.up(event));
     svg.addEventListener('pointercancel', event => { this.pointers.delete(event.pointerId); this.gesture = null; this.dragged = true; });
     svg.addEventListener('pointerleave', () => { this.tooltip.hidden = true; });
+    if (!svg.hasAttribute('tabindex')) svg.setAttribute('tabindex', 0);
     svg.addEventListener('keydown', event => {
+      // Arrow keys pan (wrapping east–west); never while typing, since only map elements listen.
+      const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
+      if (step) { event.preventDefault(); this.pan(step[0] * this.view.w * .15, step[1] * this.view.h * .15); return; }
       if (!['Enter', ' '].includes(event.key)) return;
       const cluster = event.target.closest('[data-cluster]')?.dataset.cluster;
       const id = event.target.closest('[data-province]')?.dataset.province;
       if (cluster) { event.preventDefault(); this.fit(cluster.split(',')); }
       else if (id) { event.preventDefault(); onSelect(id, { shiftKey: event.shiftKey }); }
     });
-    this.resize = new ResizeObserver(() => this.requestLayout()); this.resize.observe(svg);
+    this.resize = new ResizeObserver(() => this.applyView()); this.resize.observe(svg);
     this.applyView();
   }
   path(from, to) {
     return this.pointPath(this.places.get(from), this.places.get(to));
   }
+  /** One segment, the short way round; the repeated copies show the part past the seam. */
   pointPath(a, b) {
-    if (Math.abs(a.x - b.x) > 640) {
-      const [left, right] = a.x < b.x ? [a, b] : [b, a];
-      return `M${left.x},${left.y}L${right.x - 1280},${right.y}M${right.x},${right.y}L${left.x + 1280},${left.y}`;
-    }
-    return `M${a.x},${a.y}L${b.x},${b.y}`;
+    return `M${a.x},${a.y}L${a.x + wrapDelta(b.x - a.x)},${b.y}`;
   }
   coordinates(clientX, clientY) {
     const transform = this.svg.getScreenCTM();
@@ -128,8 +143,7 @@ export class Atlas {
     this.svg.setPointerCapture(event.pointerId);
     if (this.pointers.size === 1) {
       this.gesture = { x: event.clientX, y: event.clientY, vx: this.view.x, vy: this.view.y,
-        cluster: event.target.closest('[data-cluster]')?.dataset.cluster,
-        id: event.target.closest('[data-province]')?.dataset.province, shiftKey: event.shiftKey, target: event.button === 2 }; this.dragged = false;
+        ...this.hit(event), shiftKey: event.shiftKey, target: event.button === 2 }; this.dragged = false;
     } else { this.dragged = true; this.gesture = null; this.pinchDistance = this.distance(); }
     this.tooltip.hidden = true;
   }
@@ -157,9 +171,23 @@ export class Atlas {
     else if (!this.dragged && gesture?.id) this.onSelect(gesture.id, { shiftKey: gesture.shiftKey, target: gesture.target });
     if (!this.pointers.size) this.gesture = null;
   }
+  /** What a pointer event is on. A click on a repeated world copy resolves to the same province. */
+  hit(event) {
+    const el = event.target, cluster = el.closest?.('[data-cluster]')?.dataset.cluster;
+    let id = el.closest?.('[data-province]')?.dataset.province;
+    if (!id && !cluster && el.closest?.('use.world-copy')) id = this.provinceAt(this.coordinates(event.clientX, event.clientY));
+    return { cluster, id };
+  }
+  provinceAt(point) {
+    const x = ((point.x % WORLD) + WORLD) % WORLD;
+    for (const [id, rings] of this.rings) if (insideRings([x, point.y], rings)) return id;
+    return null;
+  }
+  /** The x of the repeated copy nearest the view centre. */
+  near(x) { const cx = this.view.x + this.view.w / 2; return cx + wrapDelta(x - cx); }
+  pan(dx, dy) { this.view.x += dx; this.view.y += dy; this.applyView(); }
   hover(event) {
-    const cluster = event.target.closest('[data-cluster]')?.dataset.cluster;
-    const id = event.target.closest('[data-province]')?.dataset.province;
+    const { cluster, id } = this.hit(event);
     const p = this.byId?.get(id);
     let title, detail;
     if (cluster && this.state) {
@@ -181,7 +209,16 @@ export class Atlas {
     this.tooltip.style.top = `${Math.max(8, event.clientY - rect.top - 65)}px`;
   }
   applyView() {
-    this.view.x = clamp(this.view.x, -this.view.w * .35, 1280 - this.view.w * .65);
+    // Never more than one world width on screen, so each province and counter is seen once.
+    const rect = this.svg.getBoundingClientRect(), aspect = rect.width > 0 && rect.height > 0 ? rect.width / rect.height : 0;
+    const visible = Math.max(this.view.w, this.view.h * aspect);
+    if (visible > WORLD) {
+      const k = WORLD / visible, cx = this.view.x + this.view.w / 2, cy = this.view.y + this.view.h / 2;
+      this.view = { x: cx - this.view.w * k / 2, y: cy - this.view.h * k / 2, w: this.view.w * k, h: this.view.h * k };
+    }
+    // Wrap: keep the view centre inside [0, WORLD); an active drag follows the same shift.
+    const shift = WORLD * Math.floor((this.view.x + this.view.w / 2) / WORLD);
+    if (shift) { this.view.x -= shift; if (this.gesture) this.gesture.vx -= shift; }
     this.view.y = clamp(this.view.y, -this.view.h * .35, 680 - this.view.h * .65);
     this.svg.setAttribute('viewBox', `${this.view.x} ${this.view.y} ${this.view.w} ${this.view.h}`);
     this.requestLayout();
@@ -192,7 +229,7 @@ export class Atlas {
   zoom(factor, clientX, clientY) {
     const rect = this.svg.getBoundingClientRect();
     const anchor = this.coordinates(clientX ?? rect.left + rect.width / 2, clientY ?? rect.top + rect.height / 2);
-    const w = clamp(this.view.w * factor, 135, 1450), ratio = w / this.view.w;
+    const w = clamp(this.view.w * factor, 135, WORLD), ratio = w / this.view.w;
     this.view = { x: anchor.x - (anchor.x - this.view.x) * ratio, y: anchor.y - (anchor.y - this.view.y) * ratio, w, h: this.view.h * ratio };
     this.applyView();
   }
@@ -204,7 +241,7 @@ export class Atlas {
   fit(ids) {
     const points = ids.map(id => this.places.get(id)).filter(Boolean);
     if (!points.length) return;
-    const xs = points.map(p => p.x), ys = points.map(p => p.y), pad = Math.max(40, (Math.max(...xs) - Math.min(...xs)) * .2, (Math.max(...ys) - Math.min(...ys)) * .3);
+    const xs = points.map(p => points[0].x + wrapDelta(p.x - points[0].x)), ys = points.map(p => p.y), pad = Math.max(40, (Math.max(...xs) - Math.min(...xs)) * .2, (Math.max(...ys) - Math.min(...ys)) * .3);
     const w = clamp(Math.max(Math.max(...xs) - Math.min(...xs) + pad * 2, (Math.max(...ys) - Math.min(...ys) + pad * 2) * 1280 / 680), 135, 1450);
     // Always zoom in at least one step, so a click on a merged counter is never a dead end.
     const width = Math.min(w, this.view.w * .7), h = width * 680 / 1280;
@@ -215,7 +252,7 @@ export class Atlas {
   /** Units to draw before screen placement: single provinces, or same-owner merges. */
   units(level, px) {
     const state = this.state, locked = id => this.battleInfo.has(id) || id === this.source || id === this.destination;
-    const single = p => ({ members: [p.id], owner: p.owner || null, x: this.places.get(p.id).x, y: this.places.get(p.id).y, troops: p.troops, locked: locked(p.id) });
+    const single = p => ({ members: [p.id], owner: p.owner || null, x: this.near(this.places.get(p.id).x), y: this.places.get(p.id).y, troops: p.troops, locked: locked(p.id) });
     let units = [];
     if (level === 'far') {
       // Country aggregation: one counter per contiguous same-owner land region.
@@ -233,7 +270,7 @@ export class Atlas {
         }
         const mx = members.reduce((n, id) => n + this.places.get(id).x, 0) / members.length, my = members.reduce((n, id) => n + this.places.get(id).y, 0) / members.length;
         const anchor = members.map(id => this.places.get(id)).sort((a, b) => Math.hypot(a.x - mx, a.y - my) - Math.hypot(b.x - mx, b.y - my) || a.id.localeCompare(b.id))[0];
-        units.push({ members, owner: p.owner || null, x: anchor.x, y: anchor.y, troops: members.reduce((n, id) => n + this.byId.get(id).troops, 0), locked: false });
+        units.push({ members, owner: p.owner || null, x: this.near(anchor.x), y: anchor.y, troops: members.reduce((n, id) => n + this.byId.get(id).troops, 0), locked: false });
       }
     } else units = state.provinces.map(single);
     if (level === 'near') return units;
@@ -372,9 +409,9 @@ export class Atlas {
       const text = c.name.toUpperCase(), width = text.length * 8.4 + 8, height = 15;
       const onLand = (x, y) => best.some(id => insideRings([x, y], this.rings.get(id)));
       search: for (const { x, y } of anchors) for (const dy of [0, -24, 24, -36, 36]) {
-        const r = { x: x * px - width / 2, y: y * px + dy - height / 2, w: width, h: height };
+        const sx = this.near(x), r = { x: sx * px - width / 2, y: y * px + dy - height / 2, w: width, h: height };
         if (!onLand(x, y + dy * scale) || taken.some(q => r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.y + q.h && q.y < r.y + r.h)) continue;
-        const label = node('text', { transform: `translate(${x} ${y + dy * scale}) scale(${scale})`, class: 'country-name', 'data-country': c.id });
+        const label = node('text', { transform: `translate(${sx} ${y + dy * scale}) scale(${scale})`, class: 'country-name', 'data-country': c.id });
         label.textContent = text; this.countryNames.append(label); taken.push(r); break search;
       }
     }

@@ -54,6 +54,62 @@ def audit_zooms(page,room,label,views):
         assert all(m['attack']==m['expected'] and m['attack']>0 for m in result['battleMarks']),(where,result['battleMarks'])
     return levels
 
+def view_box(page):
+    return [float(v) for v in page.locator('#map').get_attribute('viewBox').split()]
+
+def drag_map(page,dx):
+    box=page.locator('#map').bounding_box();x,y=box['x']+box['width']/2,box['y']+box['height']*.62
+    page.mouse.move(x,y);page.mouse.down()
+    for i in range(1,11):page.mouse.move(x+dx*i/10,y)
+    page.mouse.up();page.wait_for_timeout(60)
+
+def wrap_checks(page,report,capture):
+    # Horizontal wraparound on the live map (room ui-war, 1366×768 and 390px).
+    page.set_viewport_size({'width':1366,'height':768});page.locator('#world-view').click();page.locator('#zoom-in').click();page.wait_for_timeout(150)
+    for direction in [1,-1]:
+        start=view_box(page);px=page.evaluate('document.querySelector("#map").getScreenCTM().a');travelled=0
+        while abs(travelled)<1280*1.3:
+            dx=direction*page.locator('#map').bounding_box()['width']*.8;drag_map(page,dx);travelled-=dx/px
+        x,y,w,h=view_box(page);centre=x+w/2
+        assert 0<=centre<1280,(direction,centre)
+        expected=(start[0]+start[2]/2+travelled)%1280
+        assert min(abs(centre-expected),1280-abs(centre-expected))<3,(direction,centre,expected)
+        page.locator('#map').focus()
+        for _ in range(9):page.keyboard.press('ArrowRight' if direction>0 else 'ArrowLeft')
+        vb=view_box(page);assert 0<=vb[0]+vb[2]/2<1280,vb
+    # Centre on the dateline seam: the left half of the screen is the repeated copy (x < 0).
+    page.locator('#world-view').click();page.wait_for_timeout(100)
+    drag_map(page,page.locator('#map').bounding_box()['width']/2);page.locator('#zoom-in').click();page.wait_for_timeout(150)
+    x,y,w,h=view_box(page);assert abs(((x+w/2)+640)%1280-640)<40,(x,w)
+    page.keyboard.press('Escape')
+    spot=page.evaluate('''() => {
+      const svg=document.querySelector('#map'),m=svg.getScreenCTM(),box=svg.getBoundingClientRect();
+      for(let dy=-20;dy<=30;dy+=5)for(let dx=-40;dx<=40;dx+=10){
+        const p=new DOMPoint(1105.6-1280+dx,506+dy).matrixTransform(m);
+        if(p.x<box.left+4||p.x>box.right-4||p.y<box.top+4||p.y>box.bottom-4)continue;
+        const e=document.elementFromPoint(p.x,p.y);if(e&&e.matches('use.world-copy'))return {x:p.x,y:p.y};}
+      return null;}''')
+    assert spot,'no clickable repeated-copy point over Australia'
+    page.mouse.click(spot['x'],spot['y']);expect(page.locator('#province-title')).to_have_text('Australia')
+    capture('14-dateline.png',700)
+    result=page.evaluate(MAP_AUDIT,'ui-war')
+    assert not result['badSums'] and not result['mixedOwners'] and not result['missing'] and not result['overlaps'],result
+    page.locator('#zoom-out').click();page.wait_for_timeout(150);result=page.evaluate(MAP_AUDIT,'ui-war')
+    assert not result['badSums'] and not result['missing'] and not result['overlaps'],result
+    # Pacific links take the short way across the dateline; no duplicate IDs from the copies.
+    widths=page.evaluate('''() => [...document.querySelectorAll('#map .sea-connections path')].map(p=>[p.dataset.edge,p.getBBox().width])''')
+    pacific=[wd for e,wd in widths if set(e.split('|')) in [{'west-us','south-japan'},{'alaska','far-east'},{'west-us','philippines'}]]
+    assert len(pacific)==3 and all(wd<640 for wd in pacific),widths
+    assert all(wd<640 for _,wd in widths),widths
+    ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
+    assert page.locator('#map use.world-copy').count()==4
+    page.set_viewport_size({'width':390,'height':844});page.wait_for_timeout(150)
+    page.locator('#world-view').click();drag_map(page,-page.locator('#map').bounding_box()['width']*1.5);page.wait_for_timeout(100)
+    x,y,w,h=view_box(page);assert 0<=x+w/2<1280 and w<=1280.5
+    result=page.evaluate(MAP_AUDIT,'ui-war');assert not result['badSums'] and not result['missing'] and not result['overlaps'],result
+    page.set_viewport_size({'width':1366,'height':768})
+    report['assertions'].append('World wraps east–west: drag and arrow-key pans beyond one world width in both directions normalize the view; a repeated copy selects the same province; counters stay once each, summed correctly and non-overlapping across the dateline; Pacific sea links take the short way; no duplicate IDs.')
+
 def map_checks(page,server,report,capture):
     views=[('world',0),('europe',0),('europe',1),('europe',2),('europe',3)]
     page.locator('#back').click();page.locator('[data-room="ui-fixture"][data-resume]').click()
@@ -103,6 +159,14 @@ EFFECT_CHECK='''async () => {
     leaked:document.querySelectorAll('#map .map-effect').length,
     still:effects.every(e=>e.classList.contains('still')),
     animations:[...svg.querySelectorAll('.map-effect *')].map(e=>getComputedStyle(e).animationName).filter(n=>n!=='none').length};
+  // A march across the Pacific: its trace and marker take the short way over the dateline.
+  const t=state.tick,from=map.provinces.find(p=>p.id==='west-us'),to=map.provinces.find(p=>p.id==='south-japan');
+  atlas.update({...state,you:'usa',armies:[...state.armies,{id:'wrap-test',country:'usa',from:'west-us',to:'south-japan',amount:30,departedAt:t-5,arrivesAt:t+5}]},null,'south-japan');
+  const trail=[...svg.querySelectorAll('.army-trail')].map(p=>p.getBBox().width);
+  const marker=[...svg.querySelectorAll('.moving-army')].map(g=>Number(g.getAttribute('transform').slice('translate('.length).split(' ')[0]));
+  const wrap=d=>Math.abs(d-1280*Math.round(d/1280));
+  result.pacificTrail=Math.max(...trail);result.pacificMarkerFromOrigin=Math.min(...marker.map(x=>wrap(x-from.x)));
+  result.shortWay=wrap(to.x-from.x);
   atlas.destroy();host.remove();return result;
 }'''
 
@@ -112,6 +176,7 @@ def effect_checks(page,report):
     assert all(result['accepted']),result;assert not any(result['rejected']),result;assert not result['threw']
     assert result['count']>=7 and result['hidden']=='true' and result['ids']==0 and result['leaked']==0,result
     assert result['still'] and result['animations']==0,result
+    assert result['pacificTrail']<640 and result['pacificMarkerFromOrigin']<=result['shortWay']/2+2,result
     report['assertions'].append('atlas.effect exposes the supported kinds, draws aria-hidden effects inside its own map instance only, returns false for unknown kinds/ids/malformed data without throwing, and is a static highlight under reduced motion.')
 
 def main():
@@ -267,6 +332,7 @@ def main():
             ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
             report['assertions'].append('After-action standards identify all winning members; exact map playback keeps separate SVG IDs and no live command surface.')
             map_checks(page,server,report,capture)
+            wrap_checks(page,report,capture)
             page.emulate_media(reduced_motion='reduce');assert page.evaluate('getComputedStyle(document.querySelector("#battle-signal")).animationName')=='none'
             if not args.bridge:effect_checks(page,report)  # dynamic module import needs native HTTP
             for selector in ['#declaration','#alliance-seal','.alliance-ribbon','#fallen-seal','.fallen-strike']:
