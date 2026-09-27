@@ -356,7 +356,10 @@ async function sendOrder(){
   const declare=plan.kind==='declare'?{declareWar:true}:{};
   // One order, one opId: declare war and march together, or neither (the engine validates both).
   const parts=plan.parts.filter(s=>s.amount>0),to=target;
-  const action=parts.length===1?{type:'move',from:parts[0].from,to,amount:parts[0].amount,...declare}:{type:'attack',to,sources:parts.map(s=>({from:s.from,amount:s.amount})),...declare};
+  // Optional shared arrival (game clock MM:SS) for an attack from several provinces.
+  const requested=parts.length>1?$('shared-arrival')?.value.trim():'';let arriveAt;
+  if(requested){if(!/^\d{1,2}:\d{2}$/.test(requested))throw new Error('Use game-clock MM:SS for a shared arrival, or leave it blank.');const [m,sec]=requested.split(':').map(Number);if(sec>59)throw new Error('Seconds must be 00–59.');arriveAt=m*60+sec;}
+  const action=parts.length===1?{type:'move',from:parts[0].from,to,amount:parts[0].amount,...declare}:{type:'attack',to,sources:parts.map(s=>({from:s.from,amount:s.amount})),...(arriveAt!==undefined?{arriveAt}:{}),...declare};
   const r=await command(action);if(!r)return;
   toast(`${plan.kind==='declare'?'War declared. ':''}Sent ${plan.total} → ${place(to).name}. Arrives ${time(r.arrivesAt ?? r.executeAt+plan.travel)}.`);
   closeCard();
@@ -468,7 +471,7 @@ function provinceCard(){
   if(!p){return {title:'',actions:[]};}
   const owner=p.owner,mine=owner===state.you && state.you;
   const base={flag:owner,title:place(id).name};
-  if(target && (sources.length || !mine)){
+  if(target && active() && (sources.length || !mine)){ // spectators and fallen players get the information card
     const plan=orderPlan(),waiting=[...new Set(state.provinces.filter(q=>q.owner===state.you && !sources.includes(q.id) && neighbours(q.id).includes(target) && freeTroops(q.id)>0).map(q=>place(q.id).name))];
     const hint=!active() || !sources.length || plan.kind==='vote' || plan.kind==='voting'?'':waiting.length?`Tap ${waiting.slice(0,2).join(' or ')}${waiting.length>2?' …':''} to send from there too.`:'';
     const status=el('div','card-relation');status.append(el('b',`rel rel-${plan.relation}`,plan.words[0]),el('span','',plan.words[1]));
@@ -508,7 +511,8 @@ function moreProvince(id,order){
   const scroll=body.scrollTop,openDetails=[...body.querySelectorAll('details[open]')].map(d=>d.dataset.part);
   let html='';
   if(order){
-    html+=`<p id="order-details" class="order-details">${sources.length>1?'Several sources: nearer ones wait at home so everyone arrives together.':'Checking the current garrison…'}</p>`;
+    const previous=$('order-details')?.dataset.for===`${sources[0]}>${id}`?$('order-details').innerHTML:null; // server text, escaped when written
+    html+=`<p id="order-details" class="order-details" data-for="${esc(`${sources[0]}>${id}`)}">${sources.length>1?'Several sources: nearer ones wait at home so everyone arrives together.':previous ?? 'Checking the current garrison…'}</p>`;
     if(sources.length>1)html+=`<label class="arrive-label">Shared arrival, game clock (optional)<input id="shared-arrival" placeholder="Earliest · or MM:SS" inputmode="numeric" maxlength="5"></label>`;
     const friend=p.owner && sameSide(p.owner,state.you),srcP=prov(src);
     if(active() && src && sources.length===1 && friend)html+=`<details data-part="route"><summary>Recruitment arrow ${srcP?.route?'· set':''}</summary><p class="small muted">New recruits in ${esc(place(src).name)} walk to ${esc(place(id).name)} automatically. Existing troops stay.</p><div class="button-row"><button id="set-route" data-act="route" data-arg="${esc(id)}" ${srcP?.route===id || !state.commandBudget?.remaining?'disabled':''}>Set arrow → ${esc(place(id).name)}</button><button id="clear-route" class="quiet" data-act="route" data-arg="" ${srcP?.route?'':'disabled'}>Clear</button></div><p id="route-status" class="small">${srcP?.route?`New recruits → ${esc(place(srcP.route).name)}.`:'No recruitment arrow set.'}</p></details>`;
@@ -527,7 +531,11 @@ function moreProvince(id,order){
   if(active())html+=marchesHTML();
   html+=`<details class="rules-details" data-part="rules"><summary>Rules of engagement</summary><p>Leave one troop behind. Travel time follows distance. Recall turns an army around at its actual position. Attack an occupied enemy only after war is declared. Battles take several dice rounds; ties favour defenders. Troops sent to an ally become theirs. Three commands per ten game seconds; an attack from several provinces counts as one.</p></details>`;
   if(active() && order===false && mine)html+=`<label class="keyboard-select">Keyboard: send to<select id="destination"><option value="">Choose a neighbour…</option>${neighbours(id).map(n=>`<option value="${esc(n)}">${esc(place(n).name)} · ${prov(n).troops} · ${esc(country(prov(n).owner)?.name || 'Unclaimed')}</option>`).join('')}</select></label>`;
+  // Rebuilt every tick: keep what the player typed or chose, and where focus was.
+  const kept=Object.fromEntries([...body.querySelectorAll('input[id],select[id]')].map(e=>[e.id,e.value])),focused=body.contains(document.activeElement)?document.activeElement.id:null;
   body.innerHTML=html;body.scrollTop=scroll;
+  for(const [key,value] of Object.entries(kept)){const e=body.querySelector(`#${CSS.escape(key)}`);if(e && value)e.value=value;}
+  if(focused)body.querySelector(`#${CSS.escape(focused)}`)?.focus({preventScroll:true});
   for(const d of body.querySelectorAll('details'))if(openDetails.includes(d.dataset.part))d.open=true;
   if(order)updatePreview();
 }
