@@ -1,0 +1,22 @@
+name: Refinement workbench
+on:
+  push:
+    branches: [refine-v03-workbench]
+    paths: [.github/workflows/workbench.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ed22b813465d2d4818d1ee4272e9a47ae22550f0
+          persist-credentials: false
+      - run: git archive --format=tar HEAD > /tmp/council-source.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: council-source
+          path: /tmp/council-source.tar
+          retention-days: 3
