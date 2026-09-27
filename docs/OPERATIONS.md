@@ -1,13 +1,10 @@
 # Operating the prototype
 
-## v0.3 upgrade and scenario retention
+## Current scenario and saved records
 
-Back up SQLite normally, then update the source and restart. Do **not** delete your database. A small idempotent schema migration tags existing results `classic-64`. Existing snapshots keep the original map, fixed travel/no-recall rules, tokens, private logs and results. New rooms default to `imperial-1910-v3`, with rules, coordinates and travel times frozen into their snapshots.
+The only playable scenario is `imperial-1910-v3`. New rooms freeze their rules, coordinates and travel times into snapshots. Earlier snapshots remain in SQLite. Pre-change rooms are not playable; finished industrial rooms with a materialized public review remain readable. Earlier result rows remain in personal history, while standings count matches played under the current economic victory rule. Back up SQLite normally before updating; no database reset is needed.
 
-Default standings show only the industrial scenario; old standings remain available using `/api/standings?scenario=classic-64`. Both remain in personal result history. Different scenarios are filtered **before** the last-20 window is computed. Old classic games may still be created explicitly through the API. The browser and agent map endpoint resolves each room's map, rather than repainting old provinces using the new global default.
-
-`public/map.json` is retained unchanged. `public/imperial-map.json` is checked in; runtime needs no Python/Shapely installation. The optional authoring script uses pinned Shapely2.1.2 in verification, splitting the existing public-domain geometry. Changing an already published scenario's geometry later requires a new scenario ID/retained asset, not silently overwriting it for existing saves.
-
+`public/imperial-map.json` is the runtime map. `public/map.json` remains as source geometry for the optional map-authoring script, not as a game mode. Runtime needs no Python or Shapely installation.
 
 ## Supported deployment
 
@@ -48,4 +45,4 @@ The server stores a private initial checkpoint for new matches and materializes 
 
 Public archives include the match map/rules and survive restart without replaying the original private command log. The original full snapshot remains private to the server administrator and still contains diplomatic messages; the review feature does not authorize disclosing it. Apply the existing private-data backup and retention policy. Spectators can inspect public finished reports without a credential; supplied invalid/wrong-room credentials are rejected.
 
-Replay generation is synchronous, once per match, and sparse archives increase the snapshot's size. At most four decoded readers are cached for per-tick HTTP reads. This remains a small single-process prototype, not a claim of high-concurrency archival service performance. The measured 630-tick regression fixture produces roughly 2.24 MB of uncompressed replay JSON plus its report; other games vary. A future incompatible engine can leave pre-archive legacy history unavailable; it must not invent approximate past state. Versioned public format 1 currently supports the classic and industrial scenarios tested here.
+Replay generation is synchronous, once per match, and sparse archives increase the snapshot's size. At most four decoded readers are cached for per-tick HTTP reads. This remains a small single-process prototype, not a claim of high-concurrency archival service performance. An earlier 630-tick regression fixture produced roughly 2.24 MB of uncompressed replay JSON plus its report; other games vary. An incompatible saved history may remain score-only; the server must not invent approximate past state. Public replay format 1 supports the current industrial scenario and retained materialized archives.

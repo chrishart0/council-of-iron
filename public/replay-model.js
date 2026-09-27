@@ -15,8 +15,13 @@ export function replayReader(replay) {
     const sides = [...new Set(players.map(p => p.side))].map(id => ({ id,
       name: names.get(id) || players.find(p => p.side === id).id,
       members: players.filter(p => p.side === id).map(p => p.id),
-      provinces: provinces.filter(p => p.owner && affiliations.get(p.owner) === id).length }));
-    board = { ...board, ...patch, provinces, players, sides };
+      provinces: provinces.filter(p => p.owner && affiliations.get(p.owner) === id).length,
+      economy: provinces.filter(p => p.owner && affiliations.get(p.owner) === id)
+        .reduce((n, p) => n + p.development, 0) }));
+    const economyThreshold = replay.rules.economyShare === undefined ? replay.rules.threshold
+      : Math.ceil(provinces.filter(p => p.owner)
+        .reduce((n, p) => n + p.development, 0) * replay.rules.economyShare);
+    board = { ...board, ...patch, provinces, players, sides, economyThreshold };
     return board;
   });
   return tick => {

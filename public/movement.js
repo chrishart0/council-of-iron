@@ -9,7 +9,6 @@ export function distanceKm(a, b) {
   return 6371 * 2 * Math.asin(Math.sqrt(Math.min(1, Math.max(0, h))));
 }
 export function travelTicks(a, b, rules) {
-  if (!rules.distanceMovement) return rules.travel;
   return rules.marchSetup + Math.ceil(distanceKm(a, b) / rules.kmPerTick);
 }
 export function journeyPoint(army, positions, tick) {

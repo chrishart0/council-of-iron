@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createGame, join, start, act, tick, observe, attackPlan, gameRules, reservedTroops } from '../src/engine.js';
+import { createGame, join, start, act, tick, observe, attackPlan, gameRules, reservedTroops, economyThreshold } from '../src/engine.js';
 import { journeyPoint, distanceKm } from '../public/movement.js';
 const map = JSON.parse(readFileSync(new URL('../public/imperial-map.json',import.meta.url)));
 const country = (g,id) => g.players.find(p=>p.id===id);
@@ -15,11 +15,43 @@ test('industrial map has more European provinces, colonial footholds and explici
   assert.ok(map.provinces.length>64);const g=game();assert.equal(province(g,'namibia').owner,'germany');
   assert.equal(province(g,'north-india').owner,'britain');assert.equal(province(g,'indochina').owner,'france');
   assert.ok(province(g,'ruhr').development>province(g,'namibia').development);
-  assert.equal(gameRules(g).threshold,Math.ceil(map.provinces.length*.6));
+  assert.equal(gameRules(g).economyShare,.6);
+  assert.equal(economyThreshold(g),Math.ceil(g.provinces.filter(p=>p.owner).reduce((n,p)=>n+p.development,0)*.6));
   const byId=new Map(map.provinces.map(p=>[p.id,p]));let seen=new Set(['england']);
   for(let i=0;i<map.provinces.length;i++)seen=new Set([...seen,...[...seen].flatMap(id=>byId.get(id).neighbors)]);
   assert.equal(seen.size,map.provinces.length);
   for(const p of map.provinces)for(const n of p.neighbors){assert.ok(byId.get(n).neighbors.includes(p.id));assert.equal(g.travelTimes[p.id][n],g.travelTimes[n][p.id]);}
+});
+test('completed development alone can reach 60% of active industry and start a continuous hold',()=>{
+  const g=createGame({id:'growth',name:'Growth',hostId:'usa'},map);
+  for(const id of ['usa','britain'])join(g,map,{profileId:id,name:id,country:id});
+  for(const p of g.provinces){p.owner=null;p.development=1;}
+  for(const id of ['west-us','central-us'])province(g,id).owner='usa';
+  for(const id of ['england','scotland'])province(g,id).owner='britain';
+  province(g,'west-us').troops=40;start(g);
+  assert.equal(economyThreshold(g),3);
+  action(g,'usa',{type:'develop',from:'west-us'});
+  advance(g,60);assert.equal(g.dominance[country(g,'usa').side],undefined);
+  tick(g);assert.equal(province(g,'west-us').development,2);
+  assert.equal(economyThreshold(g),3);assert.equal(g.dominance[country(g,'usa').side],61);
+  advance(g,89);assert.equal(g.status,'running');tick(g);
+  assert.equal(g.outcome.winningSide,country(g,'usa').side);
+});
+test('opponent growth can break an economic hold without changing any province owner',()=>{
+  const g=game();for(const p of g.provinces){p.owner=null;p.development=1;}
+  for(const id of ['west-us','central-us'])province(g,id).owner='usa';
+  province(g,'west-us').development=2;
+  for(const id of ['england','scotland'])province(g,id).owner='britain';
+  tick(g);assert.equal(g.dominance[country(g,'usa').side],1);
+  province(g,'england').development=2;tick(g);
+  assert.equal(g.dominance[country(g,'usa').side],undefined);
+});
+test('deadline ranks economic output, even when the winner owns fewer provinces',()=>{
+  const g=game();for(const p of g.provinces){p.owner=null;p.development=1;}
+  for(const id of ['west-us','central-us'])province(g,id).owner='usa';
+  province(g,'england').owner='britain';province(g,'england').development=3;
+  g.tick=1799;tick(g);
+  assert.equal(g.outcome.reason,'deadline');assert.equal(g.outcome.winningSide,country(g,'britain').side);
 });
 test('distance movement takes longer overseas and crosses the antimeridian by the short direction',()=>{
   const g=game();assert.ok(g.travelTimes.england['east-us']>g.travelTimes.england['north-france']);

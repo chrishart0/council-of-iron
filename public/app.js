@@ -145,9 +145,9 @@ function pushMessageBubbles(events,epoch){
 }
 function renderOrders(){
   const scroll=$('orders-tab').scrollTop;
-  const mode=state.rules.distanceMovement?orderMode:'march';
+  const mode=orderMode;
   $('orders-tab').dataset.orderMode=mode;
-  $('order-modes').hidden=!state.rules.distanceMovement;
+  $('order-modes').hidden=false;
   for(const button of document.querySelectorAll('[data-order-mode]'))button.setAttribute('aria-pressed',String(button.dataset.orderMode===mode));
   const owned=state.provinces.filter(p=>p.owner===state.you && state.you);
   if(source && !owned.some(p=>p.id===source)){source=null;destination=null;}
@@ -191,7 +191,7 @@ function freeTroops(id) {
   return Math.max(0,(p?.troops || 0)-reserved-1);
 }
 function renderDevelopment(p,canCommand) {
-  const panel=$('development-panel');panel.hidden=!state.rules.distanceMovement || orderMode!=='develop' || !p;
+  const panel=$('development-panel');panel.hidden=orderMode!=='develop' || !p;
   if(panel.hidden)return;
   const level=p.development,cost=state.rules.developmentCosts[level],duration=state.rules.developmentTicks[level];
   $('industry-level').textContent=`Industry ${'ⅠⅡⅢ'[level-1]} · ${level*60/state.rules.recruit} recruits / min`;
@@ -207,7 +207,7 @@ function renderDevelopment(p,canCommand) {
   $('develop-province').textContent=`Develop · ${cost ?? 0} manpower`;
 }
 function renderCoordination(owned,active) {
-  const panel=$('coordination-panel');panel.hidden=!state.rules.distanceMovement || orderMode!=='coordinate';
+  const panel=$('coordination-panel');panel.hidden=orderMode!=='coordinate';
   if(panel.hidden)return;
   if(plannedDestination!==destination){$('attack-plan').textContent='';attackSelections.clear();plannedDestination=destination;if(source)attackSelections.set(source,{percent:Number($('group-percent').value)});}
   const donors=destination?owned.filter(p=>place(p.id).neighbors.includes(destination)):[];
@@ -239,14 +239,14 @@ function attackAction() {
   return {type:'attack',to:destination,sources,...(arriveAt!==undefined?{arriveAt}:{})};
 }
 function renderMarches(active) {
-  const canRecall=active && state.rules.distanceMovement && !pendingCommand && state.commandBudget?.remaining;
+  const canRecall=active && !pendingCommand && state.commandBudget?.remaining;
   const moving=state.armies.filter(a=>a.country===state.you).sort((a,b)=>a.arrivesAt-b.arrivesAt);
   const reserved=state.commandBudget?.reserved || [];
   const recallButton=(id,label)=>`<button type="button" data-recall="${id}" ${canRecall?'':'disabled'}>${label}</button>`;
-  const queued=reserved.map(o=>`<div class="march-row"><span>${o.type==='recall'?'Recall queued':o.type==='develop'?'Construction queued':`${o.amount || ''} · ${esc(place(o.from)?.name || '')}`}<small>${o.executeAt-state.tick}s until ${o.type==='move'?'departure':'execution'}</small></span>${o.type==='move'&&state.rules.distanceMovement?recallButton(o.id,'Cancel'):''}</div>`).join('');
+  const queued=reserved.map(o=>`<div class="march-row"><span>${o.type==='recall'?'Recall queued':o.type==='develop'?'Construction queued':`${o.amount || ''} · ${esc(place(o.from)?.name || '')}`}<small>${o.executeAt-state.tick}s until ${o.type==='move'?'departure':'execution'}</small></span>${o.type==='move'?recallButton(o.id,'Cancel'):''}</div>`).join('');
   const groups=[...new Set([...moving,...reserved].filter(a=>a.groupId&&!a.returning).map(a=>a.groupId))];
-  const groupControls=state.rules.distanceMovement?groups.filter(id=>[...moving,...reserved].filter(a=>a.groupId===id&&!a.returning).length>1).map(id=>`<div class="march-row"><span>Coordinated attack<small>${esc(id)}</small></span>${recallButton(id,'Recall group')}</div>`).join(''):'';
-  const marches=moving.map(a=>`<div class="march-row ${a.returning?'returning':''}"><button class="march-focus" data-focus="${a.to}"><b>${a.amount}</b> ${a.returning?'↶':'→'} ${esc(place(a.to).name)}<small>${a.returning?'Returning · ':''}arrives ${time(a.arrivesAt)} · ${Math.max(0,a.arrivesAt-state.tick)}s</small></button>${!a.returning&&state.rules.distanceMovement?recallButton(a.id,'Recall'):''}</div>`).join('');
+  const groupControls=groups.filter(id=>[...moving,...reserved].filter(a=>a.groupId===id&&!a.returning).length>1).map(id=>`<div class="march-row"><span>Coordinated attack<small>${esc(id)}</small></span>${recallButton(id,'Recall group')}</div>`).join('');
+  const marches=moving.map(a=>`<div class="march-row ${a.returning?'returning':''}"><button class="march-focus" data-focus="${a.to}"><b>${a.amount}</b> ${a.returning?'↶':'→'} ${esc(place(a.to).name)}<small>${a.returning?'Returning · ':''}arrives ${time(a.arrivesAt)} · ${Math.max(0,a.arrivesAt-state.tick)}s</small></button>${!a.returning?recallButton(a.id,'Recall'):''}</div>`).join('');
   setHTML($('march-list'),queued || marches?`<h3>Committed orders <span>${moving.length+reserved.length}</span></h3><div class="march-scroll">${groupControls}${queued}${marches}</div><p class="small muted">Recall turns an army around next tick. The return trip is not instant; a captured home must be retaken.</p>`:'');
 }
 async function updatePreview(){
@@ -260,7 +260,7 @@ async function updatePreview(){
   }catch(e){if(key===previewKey && version===previewVersion && epoch===generation)$('preview').textContent=e.message;}
 }
 function forecastHTML(f) {
-  return `<div class="coalition-forecast"><strong>${f.land}/${f.threshold} provinces after admission</strong><br>${f.wouldDraw?'Every starting player: negotiated draw, not a win.':f.wouldStartHold?`Already above the threshold. Activation would start a fresh ${state.rules.hold}s victory hold.`:`${f.remaining} more provinces needed to start the victory hold.`}<table><caption class="sr-only">Each member’s new prize share</caption><tbody>${f.members.map(p=>`<tr><td>${esc(country(p.country).name)}<br>${p.keepsMaturity?'Keeps earned tenure':'Maturity resets'}</td><td>${p.maximumShare.toFixed(1)} maximum points<br>${signed(p.fullMaturityPrestige)} Prestige at full maturity</td></tr>`).join('')}</tbody></table><small>${esc(f.assumption)}</small></div>`;
+  return `<div class="coalition-forecast"><strong>${f.economy}/${f.totalEconomy} industry (${f.threshold} for victory) after admission</strong><br>${f.wouldDraw?'Every starting player: negotiated draw, not a win.':f.wouldStartHold?`Already above the threshold. Activation would start a fresh ${state.rules.hold}s victory hold.`:`${f.remaining} more industry needed to start the victory hold.`}<table><caption class="sr-only">Each member’s new prize share</caption><tbody>${f.members.map(p=>`<tr><td>${esc(country(p.country).name)}<br>${p.keepsMaturity?'Keeps earned tenure':'Maturity resets'}</td><td>${p.maximumShare.toFixed(1)} maximum points<br>${signed(p.fullMaturityPrestige)} Prestige at full maturity</td></tr>`).join('')}</tbody></table><small>${esc(f.assumption)}</small></div>`;
 }
 function renderCouncil(){
   const me=myPlayer(),team=state.sides.find(s=>s.id===me?.side),projection=state.projections.find(p=>p.country===state.you);
@@ -327,12 +327,12 @@ function renderResult(){
 }
 function renderOperations(){
   const me=myPlayer(),team=state.sides.find(s=>s.id===me?.side),projection=state.projections.find(p=>p.country===state.you);
-  const land=state.provinces.filter(p=>p.owner===state.you && state.you),leader=[...state.sides].sort((a,b)=>b.provinces-a.provinces)[0];
+  const land=state.provinces.filter(p=>p.owner===state.you && state.you),leader=[...state.sides].sort((a,b)=>b.economy-a.economy)[0];
   const troops=land.reduce((n,p)=>n+p.troops,0)+state.armies.filter(a=>a.country===state.you).reduce((n,a)=>n+a.amount,0);
-  setHTML($('operations'),`<div class="operation"><span>${state.you?'YOUR HOLDINGS':'PROVINCES'}</span><strong>${state.you?land.length:state.provinces.filter(p=>p.owner).length}<small> / ${state.provinces.length}</small></strong></div><div class="operation"><span>${state.you?'YOUR FORCES':'LEADING SIDE'}</span><strong>${state.you?troops:leader?.provinces || 0}<small> ${state.you?'troops':'provinces'}</small></strong></div><div class="operation operation-wide"><span>${team?'YOUR ALLEGIANCE':'TERRITORIAL LEAD'}</span><strong>${esc(namedSide(team?.id || leader?.id) || 'No allegiance')}<small>${team?` · ${team.provinces}/${state.rules.threshold} provinces`:''}</small></strong><div class="land-progress"><i style="width:${Math.min(100,100*(team?.provinces || leader?.provinces || 0)/state.rules.threshold)}%"></i></div></div><div class="operation"><span>${projection?'PRESTIGE IF VICTORIOUS':'MATCH FORMAT'}</span><strong>${projection?signed(projection.projectedPrestige):'Open diplomacy'}</strong><small>${projection?`${Math.round(projection.maturity*100)}% of your share earned`:'Humans & agents · same rules'}</small></div>`);
+  setHTML($('operations'),`<div class="operation"><span>${state.you?'YOUR HOLDINGS':'PROVINCES'}</span><strong>${state.you?land.length:state.provinces.filter(p=>p.owner).length}<small> / ${state.provinces.length}</small></strong></div><div class="operation"><span>${state.you?'YOUR FORCES':'LEADING SIDE'}</span><strong>${state.you?troops:leader?.economy || 0}<small> ${state.you?'troops':'industry'}</small></strong></div><div class="operation operation-wide"><span>${team?'YOUR ALLEGIANCE':'ECONOMIC LEAD'}</span><strong>${esc(namedSide(team?.id || leader?.id) || 'No allegiance')}<small>${team?` · ${team.economy}/${state.economyThreshold} industry`:''}</small></strong><div class="land-progress"><i style="width:${Math.min(100,100*(team?.economy || leader?.economy || 0)/Math.max(1,state.economyThreshold))}%"></i></div></div><div class="operation"><span>${projection?'PRESTIGE IF VICTORIOUS':'MATCH FORMAT'}</span><strong>${projection?signed(projection.projectedPrestige):'Open diplomacy'}</strong><small>${projection?`${Math.round(projection.maturity*100)}% of your share earned`:'Humans & agents · same rules'}</small></div>`);
   const stopped=state.dominanceBreaks?.at(-1);
   $('countdown-break').hidden=!stopped || state.tick-stopped.tick>60 || state.status!=='running';
-  if(stopped)$('countdown-break').textContent=`${time(stopped.tick)} · ${namedSide(stopped.side)}’s victory countdown stopped. ${stopped.reason} ${stopped.provinces}/${state.rules.threshold} provinces afterward.`;
+  if(stopped)$('countdown-break').textContent=`${time(stopped.tick)} · ${namedSide(stopped.side)}’s victory countdown stopped. ${stopped.reason} ${stopped.economy}/${stopped.threshold} industry afterward.`;
   const hostile=state.armies.filter(a=>me && state.players.find(p=>p.id===a.country)?.side!==me.side && land.some(p=>p.id===a.to)).sort((a,b)=>a.arrivesAt-b.arrivesAt);
   $('threats').hidden=!hostile.length || state.status!=='running';
   if(hostile.length)setHTML($('threats'),`<span>↘ ${hostile.length} incoming ${hostile.length===1?'army':'armies'}</span>${hostile.slice(0,2).map(a=>`<button data-focus="${a.to}">${a.amount} → ${esc(place(a.to).name)} <b>${a.arrivesAt-state.tick}s</b></button>`).join('')}`);
@@ -365,7 +365,7 @@ function render(){
   $('phase').textContent=state.status==='lobby'?'ASSEMBLING':state.status==='finished'?'CONCLUDED':state.you?'IN SESSION':'SPECTATING';
   $('clock').textContent=`${time(state.tick)} / 30:00`;$('pace-badge').textContent=state.speed===1?'STANDARD · 1×':`QUICK · ${state.speed}×`;
   const dominant=Object.entries(state.dominance)[0];
-  $('victory-status').textContent=dominant && state.status==='running'?`${namedSide(dominant[0])} wins in ${state.rules.hold-(state.tick-dominant[1])}s unless stopped`:`${state.rules.threshold} provinces · hold ${state.rules.hold} game seconds`;
+  $('victory-status').textContent=dominant && state.status==='running'?`${namedSide(dominant[0])} wins in ${state.rules.hold-(state.tick-dominant[1])}s unless stopped`:`60% of active industry (${state.economyThreshold}) · hold ${state.rules.hold} game seconds`;
   renderOrders();paintMap();renderCouncil();renderChat();renderScoreboard();renderResult();renderOperations();
   renderMessageBubbles();
   $('events').innerHTML=history.map(e=>({e,description:describe(e)})).filter(x=>x.description).slice(-30).reverse().map(({e,description})=>`<div class="event"><time>${time(e.tick)}</time>${esc(description)}</div>`).join('');
@@ -441,7 +441,7 @@ document.addEventListener('click',safely(async event=>{
   if(button.dataset.accept){
     const offer=state.proposals.find(q=>q.id===button.dataset.accept);if(!offer)return;
     const f=coalitionForecast(state,offer.roster,offer.coalition),mine=f.members.find(p=>p.country===state.you);
-    if(!await confirmAction({title:`Join ${offer.name}?`,message:`${f.land}/${f.threshold} provinces combined. ${f.wouldDraw?'This would end in a negotiated draw.':f.wouldStartHold?'This would start a fresh victory hold after activation.':`${f.remaining} more provinces needed for a victory hold.`} Your maximum slice becomes ${mine.maximumShare.toFixed(1)} points (${signed(mine.fullMaturityPrestige)} Prestige at full maturity). ${mine.keepsMaturity?'Your existing tenure remains.':'Your maturity restarts at zero.'} Territory may change before approval and the 30-second notice complete.`,accept:'Accept these terms'}))return;
+    if(!await confirmAction({title:`Join ${offer.name}?`,message:`${f.economy}/${f.totalEconomy} industry combined; ${f.threshold} needed. ${f.wouldDraw?'This would end in a negotiated draw.':f.wouldStartHold?'This would start a fresh victory hold after activation.':`${f.remaining} more industry needed for a victory hold.`} Your maximum slice becomes ${mine.maximumShare.toFixed(1)} points (${signed(mine.fullMaturityPrestige)} Prestige at full maturity). ${mine.keepsMaturity?'Your existing tenure remains.':'Your maturity restarts at zero.'} Industry and ownership may change before approval and the 30-second notice complete.`,accept:'Accept these terms'}))return;
     await command({type:'accept',proposalId:offer.id});toast('Terms accepted.');
   }
   if(button.dataset.tab)showTab(button.dataset.tab);

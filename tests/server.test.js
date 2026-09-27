@@ -18,7 +18,7 @@ async function fixture(t,{disk=false,...options}={}) {
     return {status:response.status,data:await response.json()};
   }
   async function register(name){return (await call('/api/players','POST',{name})).data;}
-  async function room(host,name='Test chamber'){return (await call('/api/games','POST',{name,scenario:'classic-64'},host.token)).data.id;}
+  async function room(host,name='Test chamber'){return (await call('/api/games','POST',{name},host.token)).data.id;}
   async function seat(id,profile,country,kind='human'){return (await call(`/api/games/${id}/join`,'POST',{country,kind},profile.token)).data;}
   async function boot(){const a=await register('Human'),b=await register('Agent');const id=await room(a);const sa=await seat(id,a,'usa'),sb=await seat(id,b,'britain','agent');return {a,b,id,sa,sb};}
   return {dir,call,register,room,seat,boot,get app(){return app;},get url(){return url;},async restart(){
@@ -36,6 +36,7 @@ function subprocess(file,args,env,input='') {
 }
 test('HTTP lobby: human and agent identities, occupied countries, host controls, closed seats',async t=>{
   const f=await fixture(t),{a,b,id,sa,sb}=await f.boot();
+  assert.equal((await f.call('/api/games','POST',{name:'Obsolete',scenario:'classic-64'},a.token)).status,400);
   assert.equal((await f.call(`/api/games/${id}`)).data.players.length,2);
   assert.equal((await f.call(`/api/games/${id}/join`,'POST',{country:'usa'},b.token)).status,409);
   assert.equal((await f.call(`/api/games/${id}/start`,'POST',{},sb.token)).status,403);
@@ -87,10 +88,13 @@ test('HTTP action replay, reservations, privacy, projected score, preview parity
   const publicState=(await f.call(`/api/games/${id}`)).data;
   assert.equal(own.events.filter(e=>e.type==='message').length,1);assert.equal(agent.events.filter(e=>e.type==='message').length,1);
   assert.equal(publicState.events.filter(e=>e.type==='message').length,0);assert.equal(agent.commandBudget.reserved.length,0);assert.equal(own.commandBudget.reserved.length,1);
+  assert.equal(own.economyThreshold,Math.ceil(own.sides.reduce((n,s)=>n+s.economy,0)*.6));
+  assert.equal(own.sides.find(s=>s.members.includes('usa')).economy,
+    own.provinces.filter(p=>p.owner==='usa').reduce((n,p)=>n+p.development,0));
   for(const field of ['hostId','receipts','actionLog'])assert.equal(Object.hasOwn(publicState,field),false);
   assert.equal(JSON.stringify(publicState).includes(sa.token),false);
   const preview=(await f.call(`/api/games/${id}/preview?from=west-us&to=mexico&amount=5`)).data;assert.match(preview.summary,/3 surviving troops/);
-  f.app.step(f.app.games.get(id),46);const done=(await f.call(`/api/games/${id}`)).data;
+  f.app.step(f.app.games.get(id),first.data.arrivesAt);const done=(await f.call(`/api/games/${id}`)).data;
   assert.equal(done.provinces.find(p=>p.id==='mexico').owner,'usa');
 });
 test('SQLite restart preserves credentials, committed armies, inboxes, idempotency and exactly-once results',async t=>{
@@ -101,10 +105,10 @@ test('SQLite restart preserves credentials, committed armies, inboxes, idempoten
   const state=(await f.call(`/api/games/${id}`,'GET',undefined,sa.token)).data;assert.equal(state.tick,1);assert.equal(state.armies.length,1);
   assert.deepEqual(await f.call(`/api/games/${id}/actions`,'POST',payload,sa.token),accepted);
   f.app.step(f.app.games.get(id),1799);assert.equal(f.app.games.get(id).status,'finished');
-  let history=(await f.call('/api/me','GET',undefined,a.token)).data.history;assert.equal(history.length,1);assert.equal(history[0].prestige,100);
+  let history=(await f.call('/api/me','GET',undefined,a.token)).data.history;assert.equal(history.length,1);assert.equal(history[0].prestige,f.app.games.get(id).outcome.scores.find(s=>s.country==='usa').prestige);
   await f.restart();history=(await f.call('/api/me','GET',undefined,a.token)).data.history;assert.equal(history.length,1);
-  const standings=(await f.call('/api/standings?scenario=classic-64')).data.standings;assert.equal(standings.find(s=>s.id===a.id).matches,1);
-  assert.equal((await f.call('/api/standings?eligible=true&scenario=classic-64')).data.standings.length,0);
+  const standings=(await f.call('/api/standings')).data.standings;assert.equal(standings.find(s=>s.id===a.id).matches,1);
+  assert.equal((await f.call('/api/standings?eligible=true')).data.standings.length,0);
   const onDisk=readFileSync(pathJoin(f.dir,'state.db'));assert.equal(onDisk.includes(Buffer.from(sa.token)),false);
 });
 test('built-in practice bots invalidate league eligibility and use the common game engine to completion',async t=>{
@@ -195,10 +199,10 @@ test('MCP exposes structured multi-source plans, validates nested schemas and re
   assert.equal(responses[4].error.code,-32602);assert.equal(responses[5].error.code,-32602);
 });
 
-test('classic and industrial results have separate standing windows; all history remains available',async t=>{
+test('the active scenario contributes to standings and player history',async t=>{
   const f=await fixture(t),{a,id,sa}=await f.boot();await f.call(`/api/games/${id}/start`,'POST',{},sa.token);
   const g=f.app.games.get(id);g.provinces.find(p=>p.id==='mexico').owner='usa';g.provinces.find(p=>p.id==='mexico').nextRecruit=20;f.app.step(g,1800);
-  assert.equal((await f.call('/api/standings')).data.standings.length,0);
-  assert.equal((await f.call('/api/standings?scenario=classic-64')).data.standings.length,2);
-  assert.equal((await f.call('/api/me','GET',undefined,a.token)).data.history[0].scenario,'classic-64');
+  assert.equal((await f.call('/api/standings')).data.standings.length,2);
+  assert.equal((await f.call('/api/standings?scenario=classic-64')).status,400);
+  assert.equal((await f.call('/api/me','GET',undefined,a.token)).data.history[0].scenario,'imperial-1910-v3');
 });

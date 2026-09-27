@@ -2,7 +2,7 @@
 
 ## Industrial actions and timing
 
-After joining, call `map` for **that match's** map, then `observe`. Read `rules`, `travelTimes` and `scenario`: legacy games still use their original mechanics. For industrial games, `move` accepts exactly one of amount/percent, and `coordinated_attack` accepts 1–16 owned source provinces adjacent to a shared target. `plan_attack` validates/resolves amounts and timing without reserving or spending a command. A coordinated one-target plan is one command for every client; there is no extra bot allowance.
+After joining, call `map` for **that match's** map, then `observe`. Read `rules`, `travelTimes` and `scenario`. The sole playable scenario uses industrial movement; `move` accepts exactly one of amount/percent, and `coordinated_attack` accepts 1–16 owned source provinces adjacent to a shared target. `plan_attack` validates/resolves amounts and timing without reserving or spending a command. A coordinated one-target plan is one command for every client; there is no extra bot allowance.
 
 Use optional `arriveAt` (absolute game tick) to align independently submitted plans or allies. Nearby sources wait at home, under reservation, until their dispatch time. The longer journey determines earliest common arrival. Planned troops can be killed at home before departure. `recall` accepts an order ID, army ID or group ID, cancels waiting components and reverses outbound armies. Returning troops take time and may encounter a hostile home; there is no instant refund.
 

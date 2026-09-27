@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join as pathJoin } from 'node:path';
 import { createGame, join, start, act, tick, observe, preview } from '../src/engine.js';
 import { CouncilClient } from '../agents/client.js';
-const map=JSON.parse(readFileSync(new URL('../public/map.json',import.meta.url)));
+const map=JSON.parse(readFileSync(new URL('../public/imperial-map.json',import.meta.url)));
 function game() { const g=createGame({id:'regression',name:'Regression',hostId:'usa'},map);
   for(const c of map.countries)join(g,map,{profileId:c.id,name:c.id,country:c.id});start(g);return g; }
 const advance=(g,n)=>{for(let i=0;i<n;i++)tick(g);};
@@ -48,9 +48,9 @@ test('declining an offer is private and does not change allegiance or create a n
 });
 test('an owner’s preview accounts for reservations without exposing them to spectators',()=>{
   const g=game();action(g,'usa',{type:'move',from:'west-us',to:'mexico',amount:6});
-  assert.throws(()=>preview(g,map,'west-us','mexico',4,'usa'),/uncommitted/);
-  const own=preview(g,map,'west-us','mexico',3,'usa');assert.equal(own.remaining,1);assert.equal(own.reserved,6);
-  const spectator=preview(g,map,'west-us','mexico',4);assert.equal(spectator.remaining,6);assert.equal(spectator.reserved,0);
+  assert.throws(()=>preview(g,map,'west-us','mexico',6,'usa'),/uncommitted/);
+  const own=preview(g,map,'west-us','mexico',5,'usa');assert.equal(own.remaining,1);assert.equal(own.reserved,6);
+  const spectator=preview(g,map,'west-us','mexico',6);assert.equal(spectator.remaining,6);assert.equal(spectator.reserved,0);
 });
 test('command recovery time is authoritative and only visible to its owner',()=>{
   const g=game();for(let i=0;i<3;i++)action(g,'usa',{type:'route',from:'west-us',to:null});

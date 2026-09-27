@@ -3,7 +3,7 @@
  * The materialized public record is persisted: later patches need not rerun old rules.
  */
 import { isDeepStrictEqual } from 'node:util';
-import { act, createGame, gameRules, join, requireRule, sides, start, tick } from './engine.js';
+import { act, createGame, economyThreshold, gameRules, join, requireRule, sides, start, tick } from './engine.js';
 
 const clone = value => structuredClone(value);
 const sum = values => values.reduce((n, v) => n + v, 0);
@@ -32,12 +32,13 @@ function summary(game) {
   const players = game.players.map(p => ({ country: p.id, name: p.name, kind: p.kind,
     model: p.model, persona: p.persona, side: p.side, eliminatedAt: p.eliminatedAt,
     land: game.provinces.filter(v => v.owner === p.id).length,
+    economy: sum(game.provinces.filter(v => v.owner === p.id).map(v => v.development)),
     troops: sum(game.provinces.filter(v => v.owner === p.id).map(v => v.troops)) + sum(game.armies.filter(a => a.country === p.id).map(a => a.amount)),
     ...game.outcome.scores.find(s => s.country === p.id) }));
   const alliances = sides(game).map(s => ({ ...s, won: s.id === game.outcome.winningSide,
     payout: sum(players.filter(p => s.members.includes(p.country)).map(p => p.payout)),
     prestige: sum(players.filter(p => s.members.includes(p.country)).map(p => p.prestige)) }));
-  return { id: game.id, name: game.name, scenario: game.scenario || 'classic-64', eligible: game.eligible,
+  return { id: game.id, name: game.name, scenario: game.scenario, eligible: game.eligible,
     duration: game.tick, rules: clone(gameRules(game)), outcome: clone(game.outcome), players, alliances,
     maximumPrize: 100 * game.players.length,
     unawardedPrize: Math.max(0, 100 * game.players.length - sum(players.map(p => p.payout))),
@@ -71,7 +72,7 @@ export function buildReview(game, map) {
       const troops = sum(land.map(p => p.troops)) + sum(g.armies.filter(a => a.country === id).map(a => a.amount));
       m.peakLand = Math.max(m.peakLand, land.length); m.peakTroops = Math.max(m.peakTroops, troops);
       sample.countries.push({ country: id, land: land.length, troops,
-        production: sum(land.map(p => rules.distanceMovement ? p.development : 1)) * 60 / rules.recruit,
+        production: sum(land.map(p => p.development)) * 60 / rules.recruit,
         recruited: m.recruited, invested: m.invested });
       const current = tenures.get(id), side = g.players.find(p => p.id === id).side;
       if (side !== current.side) { report.tenures.push({ ...current, end: g.tick }); tenures.set(id, { country: id, side, start: g.tick }); }
@@ -89,7 +90,7 @@ export function buildReview(game, map) {
     const events = g.events.slice(eventIndex); eventIndex = g.events.length;
     const captured = new Set(events.filter(e => e.type === 'battle' && e.owner !== e.previousOwner).map(e => e.province));
     for (const p of g.provinces) if (p.owner && !captured.has(p.id) && beforeNext.get(p.id) !== null && beforeNext.get(p.id) <= g.tick && p.nextRecruit === g.tick + rules.recruit) {
-      const born = rules.distanceMovement ? p.development : 1;
+      const born = p.development;
       metrics.get(p.owner).recruited += born; report.totals.recruited += born;
     }
     for (const e of events) {
@@ -128,9 +129,10 @@ export function buildReview(game, map) {
     }
     for (const [side, since] of Object.entries(beforeDominance)) if (g.dominance[side] !== since) {
       const team = sides(g).find(s => s.id === side);
-      addEvent({ tick: g.tick, type: 'dominance_broken', side, provinces: team?.provinces ?? 0,
+      addEvent({ tick: g.tick, type: 'dominance_broken', side, provinces: team?.provinces ?? 0, economy: team?.economy ?? 0,
+        threshold: economyThreshold(g),
         reason: g.players.some(p => (affiliations.get(p.id) === side) !== (p.side === side))
-          ? 'Membership changed; the hold restarts.' : 'Territory fell below the victory threshold.' });
+          ? 'Membership changed; the hold restarts.' : 'Economy fell below 60%.' });
     }
     record();
   }

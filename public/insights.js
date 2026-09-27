@@ -3,7 +3,7 @@
  */
 export function developmentForecast(state, provinceId) {
   const p = state.provinces.find(p => p.id === provinceId), r = state.rules;
-  if (!p || !p.owner || !r.distanceMovement || p.development >= r.maxDevelopment) return null;
+  if (!p || !p.owner || p.development >= r.maxDevelopment) return null;
   const level = p.development, queued = state.commandBudget?.reserved.find(o => o.type === 'develop' && o.from === p.id);
   const cost = r.developmentCosts[level];
   const completesAt = p.developing?.completesAt ?? (queued?.executeAt ?? state.tick + 1) + r.developmentTicks[level];
@@ -23,10 +23,13 @@ export function developmentForecast(state, provinceId) {
 export function coalitionForecast(state, roster, coalition = null, activateAt = state.tick + state.rules.notice) {
   const ids = [...new Set(roster)], pool = state.players.length * 100;
   const land = state.provinces.filter(p => ids.includes(p.owner)).length;
+  const economy = state.provinces.filter(p => ids.includes(p.owner)).reduce((n, p) => n + p.development, 0);
+  const totalEconomy = state.provinces.filter(p => p.owner).reduce((n, p) => n + p.development, 0);
+  const threshold = Math.ceil(totalEconomy * state.rules.economyShare);
   const draw = ids.length === state.players.length;
   const divisor = Math.max(1, Math.min(state.rules.maturity, activateAt));
-  return { roster: ids, land, threshold: state.rules.threshold, remaining: Math.max(0, state.rules.threshold - land),
-    wouldDraw: draw, wouldStartHold: !draw && land >= state.rules.threshold, activateAt,
+  return { roster: ids, land, economy, totalEconomy, threshold, remaining: Math.max(0, threshold - economy),
+    wouldDraw: draw, wouldStartHold: !draw && economy >= threshold, activateAt,
     members: ids.map(id => {
       const p = state.players.find(p => p.id === id);
       const keepsMaturity = Boolean(coalition && p?.side === coalition);
@@ -36,7 +39,7 @@ export function coalitionForecast(state, roster, coalition = null, activateAt = 
         prestigeAtActivation: draw ? 0 : maximumShare * maturity - 100,
         fullMaturityPrestige: draw ? 0 : maximumShare - 100 };
     }),
-    assumption: 'Current territory held until activation; existing orders, captures and later recruitment can change the result.' };
+    assumption: 'Current completed industry and ownership held until activation; captures and completed upgrades can change the result.' };
 }
 export function operationalInsights(state) {
   if (!state.you) return { developments: [], routeReserves: [], admissions: [] };

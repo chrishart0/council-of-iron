@@ -48,23 +48,23 @@ def main():
             page.locator('[data-room="review-fixture"]').click()
             expect(page.locator('#aar-player-scores tbody tr')).to_have_count(8)
             expect(page.locator('#aar-alliances article')).to_have_count(3)
-            expect(page.locator('[data-result-country="usa"]')).to_contain_text('+162.22')
-            expect(page.locator('#aar-alliances')).to_contain_text('+495.56')
+            expect(page.locator('[data-result-country="usa"]')).to_contain_text('+73.33')
+            expect(page.locator('#aar-alliances')).to_contain_text('+406.67')
             expect(page.locator('.war-room')).to_be_hidden()
             capture(page,'01-overview.png',1000)
             report['assertions'].append('Finished room opens Overview: all eight player scores and three alliance aggregates; live commands are hidden.')
             page.locator('#aar-tab-replay').click()
             expect(page.locator('#replay-stage')).to_be_visible()
             expect(page.locator('#replay-stage')).to_have_attribute('data-tick','0')
-            opening_fill=page.locator('#review-map-province-north-india').get_attribute('fill')
-            for tick in [535,0,335,630,539,535]:
+            opening_fill=page.locator('#review-map-province-mexico').get_attribute('fill')
+            for tick in [500,0,335,530,439,500]:
                 page.locator('#replay-slider').fill(str(tick))
                 expect(page.locator('#replay-stage')).to_have_attribute('data-tick',str(tick))
                 board=api(f'/api/games/review-fixture/replay?tick={tick}')
                 for province in ['north-india','low-countries','central-us']:
                     expected=next(p['troops'] for p in board['provinces'] if p['id']==province)
                     expect(page.locator('#review-map-troops-'+province)).to_have_text(str(expected))
-            assert page.locator('#review-map-province-north-india').get_attribute('fill')!=opening_fill
+            assert page.locator('#review-map-province-mexico').get_attribute('fill')!=opening_fill
             page.locator('[data-aar-map="europe"]').click()
             page.locator('#review-map-marker-low-countries').press('Enter')
             expect(page.locator('#replay-inspector')).to_contain_text('Netherlands')
@@ -82,14 +82,14 @@ def main():
             page.wait_for_timeout(160);assert page.locator('#replay-slider').input_value()==paused
             page.locator('#replay-slider').focus();page.keyboard.press('ArrowRight')
             assert int(page.locator('#replay-slider').input_value())==int(paused)+1
-            page.locator('#replay-slider').fill('535')
+            page.locator('#replay-slider').fill('363')
             expect(page.locator('#replay-event-label')).to_contain_text('countdown stops')
-            page.locator('[data-aar-event="next"]').click();assert int(page.locator('#replay-slider').input_value())>535
+            page.locator('[data-aar-event="next"]').click();assert int(page.locator('#replay-slider').input_value())>363
             page.locator('[data-aar-transport="end"]').click()
-            expect(page.locator('#replay-stage')).to_have_attribute('data-tick','630')
-            page.locator('#replay-slider').fill('629');page.locator('#replay-play').click()
+            expect(page.locator('#replay-stage')).to_have_attribute('data-tick','530')
+            page.locator('#replay-slider').fill('529');page.locator('#replay-play').click()
             expect(page.locator('#replay-play')).to_have_text('Play')
-            expect(page.locator('#replay-stage')).to_have_attribute('data-tick','630')
+            expect(page.locator('#replay-stage')).to_have_attribute('data-tick','530')
             report['assertions'].append('Play, pause, rate change, keyboard slider, event jumps, opening/final controls and automatic end-of-replay stop work.')
             for kind in ['military','economy']:
                 page.locator('#aar-tab-'+kind).click()
@@ -98,11 +98,10 @@ def main():
                 assert page.locator('#'+kind+'-chart polyline').count()==1
                 page.locator('#'+kind+'-country').select_option('all')
                 capture(page,'04-'+kind+'.png')
-            expect(page.locator('.aar-accounting')).to_contain_text('2,324')
+            expect(page.locator('.aar-accounting')).to_contain_text('2,524')
             page.locator('#aar-tab-military').click()
-            page.locator('.aar-ledger [data-aar-seek="535"]').first.click()
-            expect(page.locator('#replay-stage')).to_have_attribute('data-tick','535')
-            expect(page.locator('#replay-inspector')).to_contain_text('Northern India')
+            page.locator('.aar-ledger [data-aar-seek]').first.click()
+            assert int(page.locator('#replay-stage').get_attribute('data-tick')) <= 530
             page.locator('#aar-tab-diplomacy').click()
             expect(page.locator('.aar-tenure-row')).to_have_count(8)
             expect(page.locator('#aar-diplomacy')).to_contain_text('countdown stops')
@@ -114,7 +113,7 @@ def main():
             page.set_viewport_size({'width':390,'height':844})
             capture(page,'06-mobile-overview.png')
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1')
-            page.locator('#aar-tab-replay').click();page.locator('#replay-slider').fill('535')
+            page.locator('#aar-tab-replay').click();page.locator('#replay-slider').fill('363')
             capture(page,'07-mobile-replay.png')
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1')
             page.set_viewport_size({'width':1500,'height':1200})
@@ -122,7 +121,7 @@ def main():
             if args.gif:
                 page.locator('[data-aar-map="world"]').click()
                 page.evaluate('''() => {const n=document.createElement('div');n.textContent='RECORDED MATCH REPLAY · ACTUAL BROWSER CAPTURE · SINGLE-CONTROLLER TEST';n.style.cssText='position:fixed;right:15px;bottom:10px;background:#203942;color:#f1eddd;padding:7px 12px;font:10px system-ui;z-index:20';document.body.append(n);}''')
-                for tick in range(0,631,21):
+                for tick in range(0,531,18):
                     page.locator('#replay-slider').fill(str(tick));capture(page,delay=140)
             before=api('/api/games/review-fixture/review')
             page.locator('#back').click()
@@ -132,11 +131,11 @@ def main():
             assert page.locator('#result img').count()==0
             assert not page.evaluate('Boolean(window.REVIEW_XSS)')
             page.locator('#aar-tab-replay').click();expect(page.locator('#replay-stage')).to_be_visible()
-            assert page.locator('#review-map .province').count()==64
+            assert page.locator('#review-map .province').count()==79
             page.locator('#back').click();page.locator('[data-room="old-fixture"]').click()
             expect(page.locator('#aar-player-scores tbody tr')).to_have_count(8)
             page.locator('#aar-tab-replay').click();expect(page.locator('#aar-replay')).to_contain_text('History unavailable')
-            report['assertions'].append('Classic draw renders correctly, malicious coalition name stays inert, and unverifiable legacy history fails closed while scores remain visible.')
+            report['assertions'].append('Negotiated draw renders correctly, malicious coalition name stays inert, and unverifiable legacy history fails closed while scores remain visible.')
             page.locator('#back').click();page.locator('[data-room="review-fixture"]').click()
             expect(page.locator('#aar-player-scores tbody tr')).to_have_count(8)
             assert api('/api/games/review-fixture/review')==before

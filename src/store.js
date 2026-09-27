@@ -41,7 +41,7 @@ export class Store {
       if (g.outcome) for (const s of g.outcome.scores) {
         const p = g.players.find(p => p.id === s.country);
         this.db.prepare('INSERT OR IGNORE INTO results (game_id,profile_id,country,prestige,eligible,draw,finished_at,scenario) VALUES (?,?,?,?,?,?,?,?)').run(
-          g.id, p.profileId, p.id, s.prestige, Number(g.eligible), Number(g.outcome.draw), Date.now(), g.scenario || 'classic-64');
+          g.id, p.profileId, p.id, s.prestige, Number(g.eligible), Number(g.outcome.draw), Date.now(), g.scenario);
       }
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
@@ -49,7 +49,8 @@ export class Store {
   standings(eligible = false, scenario = 'imperial-1910-v3') {
     return this.db.prepare(`WITH recent AS (
       SELECT *, ROW_NUMBER() OVER (PARTITION BY profile_id ORDER BY finished_at DESC,game_id) AS n
-      FROM results WHERE eligible=? AND scenario=? AND draw=0)
+      FROM results WHERE eligible=? AND scenario=? AND draw=0
+        AND game_id IN (SELECT id FROM games WHERE json_extract(snapshot,'$.rules.economyShare')=0.6))
       SELECT p.id,p.name,AVG(r.prestige) AS prestige,COUNT(*) AS matches
       FROM recent r JOIN profiles p ON p.id=r.profile_id WHERE r.n<=20
       GROUP BY p.id ORDER BY prestige DESC`).all(Number(eligible),scenario).map(p => ({ ...p, provisional: p.matches < 10 }));

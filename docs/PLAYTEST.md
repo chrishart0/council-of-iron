@@ -1,3 +1,9 @@
+# Economic victory verification — 27 September 2026
+
+After changing victory to 60% of active industry, `npm test` passed 62/62 Node tests and `npm run check` passed. Focused rules tests covered victory through a completed upgrade without conquest, a countdown broken by an opponent upgrade, and a deadline decided by industry despite fewer provinces. The 32-round diplomacy balance run completed with zero invariant failures; it is an automated heuristic sample, not evidence of human balance or enjoyment.
+
+The native `python tests/browser.py --gif docs/media/gameplay.gif` run passed its live browser, CLI/external agent, and recorded-match review suites with no captured page errors. The final rerun recorded 84 frames of actual gameplay. Its live match ended with an Ottoman solo victory by economic output; a prior successful run recorded 85 frames and ended with a German solo victory. The earlier recorded handplay input now ends at tick 530 under the new rule; all 295 accepted actions before that finish replayed exactly, the public review reconstructed every tick, and private messages remained excluded from the review.
+
 # Full-screen spectator verification — 27 September 2026
 
 The native `python tests/browser.py` run passed with no page errors. Its spectator check expanded the live map to the desktop and 390-pixel mobile viewports, exited with Escape, displayed a newly sent world dispatch as an escaped bubble, and found no private dispatch in the spectator view. The full live match, agent interaction and recorded-match review suites also passed. All 81 Node tests, `npm run check`, and the 32-round diplomacy balance run passed; the balance run reported zero invariant failures. These are automated checks, not a human playtest.

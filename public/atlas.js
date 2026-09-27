@@ -115,7 +115,7 @@ export class Atlas {
     if(!p){this.tooltip.hidden=true;return;}
     this.tooltip.replaceChildren();
     const title=document.createElement('strong');title.textContent=this.places.get(id).name;
-    const detail=document.createElement('span');detail.textContent=`${this.countries.get(p.owner)?.name || 'Uncontrolled'} · ${p.troops} troops${this.state.rules.distanceMovement?` · industry ${p.development}`:''}`;
+    const detail=document.createElement('span');detail.textContent=`${this.countries.get(p.owner)?.name || 'Uncontrolled'} · ${p.troops} troops · industry ${p.development}`;
     this.tooltip.append(title,detail);this.tooltip.hidden=false;
     const rect=this.svg.parentElement.getBoundingClientRect();
     this.tooltip.style.left=`${clamp(event.clientX-rect.left+14,8,rect.width-260)}px`;
@@ -175,7 +175,7 @@ export class Atlas {
       marker.group.setAttribute('class',`map-counter ${role}${p.owner===state.you && state.you?' owned':''}`);
       marker.disc.setAttribute('stroke',this.countries.get(p.owner)?.color || '#a5a28c');
       marker.text.textContent=p.troops;
-      marker.industry.textContent=state.rules.distanceMovement && p.owner ? `${'ⅠⅡⅢ'[(p.development || 1)-1]}${p.developing?' ↑':''}`:'';
+      marker.industry.textContent=p.owner ? `${'ⅠⅡⅢ'[(p.development || 1)-1]}${p.developing?' ↑':''}`:'';
       marker.group.setAttribute('aria-label',`${this.places.get(p.id).name}, ${p.troops} troops, ${this.countries.get(p.owner)?.name || 'uncontrolled'}`);
     }
     for(const edge of this.seas.children)edge.classList.toggle('selected-connection',edge.dataset.edge.split('|').includes(source));

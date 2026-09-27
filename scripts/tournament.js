@@ -11,7 +11,7 @@ import { random, controller, STYLES } from '../tests/simulation.js';
 const args = process.argv.slice(2);
 const option = (key, fallback) => args.includes(key) ? args[args.indexOf(key) + 1] : fallback;
 if (args.includes('--help')) {
-  console.log('node scripts/tournament.js --rounds 128 --seed 1000 --map public/map.json --mode solo|diplomacy --out artifacts/tournament.json [--variant v01|CASE_NAME] [--engine src/engine.js] [--policy mixed|no-build|no-sync|no-recall]');
+  console.log('node scripts/tournament.js --rounds 128 --seed 1000 --map public/imperial-map.json --mode solo|diplomacy --out artifacts/tournament.json [--variant v01|CASE_NAME] [--engine src/engine.js] [--policy mixed|no-build|no-sync|no-recall]');
   process.exit(0);
 }
 const rounds = Number(option('--rounds', 64)), seedStart = Number(option('--seed', 1000));
@@ -99,7 +99,7 @@ function run(seed) {
       if (e.type === 'alliance_activated') alliances++;
       if (e.type === 'departed') departures++;
     }
-    const born = dueRecruits.filter(id=>!captured.has(id)).reduce((n,id)=>n+(g.rules?.distanceMovement?expectedLevels.get(id):1),0); recruited += born; casualties += lost;
+    const born = dueRecruits.filter(id=>!captured.has(id)).reduce((n,id)=>n+expectedLevels.get(id),0); recruited += born; casualties += lost;
     invariant(total(g) === oldTotal + born - lost - ((g.economy?.invested || 0) - oldInvested), 'troop conservation', g);
     invariant(g.provinces.every(p=>Number.isSafeInteger(p.troops) && p.troops>=0), 'negative or noninteger garrison',g);
     invariant(g.armies.every(a=>Number.isSafeInteger(a.amount) && a.amount>0 && a.arrivesAt>g.tick), 'invalid moving army',g);

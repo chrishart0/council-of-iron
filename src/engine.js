@@ -2,20 +2,16 @@ import { travelTicks, journeyPoint } from '../public/movement.js';
 /** Authoritative, deterministic rules. Time is an integer simulation second.
  * No HTTP, random numbers, timers, credentials, or persistence in this module.
  */
-export const RULES = Object.freeze({ duration: 1800, travel: 45, recruit: 20,
-  notice: 30, hold: 90, threshold: 39, maturity: 300, orderWindow: 10,
-  orderLimit: 3, chatWindow: 10, messageLength: 500, proposalLife: 120 });
-
-// Scenario rules are frozen into each new match; old saved games retain v0.2 rules.
-export const INDUSTRIAL_RULES = Object.freeze({ distanceMovement: true, marchSetup: 15,
-  kmPerTick: 35, maxScheduleDelay: 300, maxAttackSources: 16,
+export const RULES = Object.freeze({ duration: 1800, recruit: 20,
+  notice: 30, hold: 90, economyShare: .6, maturity: 300, orderWindow: 10,
+  orderLimit: 3, chatWindow: 10, messageLength: 500, proposalLife: 120,
+  marchSetup: 15, kmPerTick: 35, maxScheduleDelay: 300, maxAttackSources: 16,
   maxDevelopment: 3, developmentCosts: [0, 12, 24], developmentTicks: [0, 60, 90] });
-export const gameRules = g => g.rules || RULES;
-const modern = g => Boolean(g.rules?.distanceMovement);
+export const gameRules = g => g.rules;
 export const reservedTroops = (g, country, from) => g.orders
   .filter(o => o.country === country && o.from === from && ['move', 'develop'].includes(o.type))
   .reduce((n, o) => n + o.amount, 0);
-const journeyTicks = (g, from, to) => g.travelTimes?.[from]?.[to] ?? RULES.travel;
+const journeyTicks = (g, from, to) => g.travelTimes[from][to];
 
 export class RuleError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
@@ -51,13 +47,12 @@ function alive(g, id) {
   const p = player(g, id); requireRule(p.eliminatedAt === null, 'Eliminated countries cannot do that.'); return p;
 }
 export function createGame({ id, name, hostId, speed = 1, eligible = false }, map) {
-  const rules = map.rulesVersion ? { ...RULES, ...INDUSTRIAL_RULES, ...map.rules,
-    threshold: Math.ceil(map.provinces.length * .6) } : undefined;
-  const positions = rules ? Object.fromEntries(map.provinces.map(p => [p.id, { x: p.x, y: p.y }])) : undefined;
+  const rules = { ...RULES, ...map.rules, economyShare: .6 };
+  const positions = Object.fromEntries(map.provinces.map(p => [p.id, { x: p.x, y: p.y }]));
   const byId = new Map(map.provinces.map(p => [p.id, p]));
-  const travelTimes = rules ? Object.fromEntries(map.provinces.map(p => [p.id,
-    Object.fromEntries(p.neighbors.map(id => [id, travelTicks(p, byId.get(id), rules)]))])) : undefined;
-  return { version: map.rulesVersion || 1, scenario: map.id || 'classic-64', rules, positions, travelTimes,
+  const travelTimes = Object.fromEntries(map.provinces.map(p => [p.id,
+    Object.fromEntries(p.neighbors.map(id => [id, travelTicks(p, byId.get(id), rules)]))]));
+  return { version: map.rulesVersion, scenario: map.id, rules, positions, travelTimes,
     economy: { recruited: 0, invested: 0 }, id, name: text(name, 'Room name'), hostId, speed, eligible,
     status: 'lobby', tick: 0, sequence: 0, serial: 0, players: [],
     provinces: map.provinces.map(p => ({ id: p.id, owner: null, troops: 2, nextRecruit: null, route: null, development: 1, developing: null })),
@@ -93,18 +88,14 @@ function running(g) { requireRule(g.status === 'running', 'The match is not runn
 function mapProvince(map, id) { return map.provinces.find(p => p.id === id); }
 function military(g, map, p, action) {
   alive(g, p.id);
-  if (modern(g) && action.type === 'move') return coordinated(g, map, p, { ...action, sources: [{ from: action.from, ...(action.amount !== undefined ? { amount: action.amount } : {}), ...(action.percent !== undefined ? { percent: action.percent } : {}) }] });
+  if (action.type === 'move') return coordinated(g, map, p, { ...action, sources: [{ from: action.from, ...(action.amount !== undefined ? { amount: action.amount } : {}), ...(action.percent !== undefined ? { percent: action.percent } : {}) }] });
   const source = province(g, action.from);
   requireRule(source.owner === p.id, 'You do not own the source province.', 403);
   requireRule(action.to === null && action.type === 'route' || mapProvince(map, source.id).neighbors.includes(action.to),
     'Destination must be connected to the source.');
   p.orderTicks = p.orderTicks.filter(t => t > g.tick - gameRules(g).orderWindow);
   requireRule(p.orderTicks.length < gameRules(g).orderLimit, 'Military command cooldown: three per ten game seconds.', 429);
-  if (action.type === 'move') {
-    requireRule(Number.isSafeInteger(action.amount) && action.amount > 0, 'Troop amount must be a positive integer.');
-    const reserved = reservedTroops(g, p.id, source.id);
-    requireRule(action.amount <= source.troops - reserved - 1, 'Not enough uncommitted troops; leave one at home.');
-  } else if (action.to !== null) {
+  if (action.to !== null) {
     requireRule(allied(g, p.id, province(g, action.to).owner), 'Recruitment routes need a friendly destination.');
   }
   const order = { id: identifier(g, 'order-'), country: p.id, type: action.type,
@@ -124,7 +115,6 @@ function useBudget(g, p) {
 }
 /** Validate an entire synchronized attack without mutating state or consuming budget. */
 export function attackPlan(g, map, country, action) {
-  requireRule(modern(g), 'Coordinated attacks require the industrial scenario.');
   alive(g, country); const r = gameRules(g);
   province(g, action.to);
   requireRule(Array.isArray(action.sources) && action.sources.length > 0 && action.sources.length <= r.maxAttackSources,
@@ -165,7 +155,7 @@ function coordinated(g, map, p, action) {
   return { groupId, orderId: orders[0].id, executeAt: orders[0].executeAt, arrivesAt: plan.arrivesAt, orders };
 }
 function develop(g, p, action) {
-  requireRule(modern(g), 'Development requires the industrial scenario.'); alive(g, p.id);
+  alive(g, p.id);
   const source = province(g, action.from), r = gameRules(g);
   requireRule(source.owner === p.id, 'You do not own this province.', 403);
   requireRule(source.development < r.maxDevelopment, 'Province is fully developed.');
@@ -181,7 +171,7 @@ function develop(g, p, action) {
 }
 const matchesRecall = (item, id) => item.id === id || item.groupId === id || item.orderId === id;
 function recall(g, p, action) {
-  requireRule(modern(g), 'Recalls require the industrial scenario.'); alive(g, p.id);
+  alive(g, p.id);
   requireRule(typeof action.id === 'string' && action.id.length <= 80, 'Specify an army, queued order, or attack group ID.');
   const items = [...g.orders.filter(o => o.type === 'move'), ...g.armies.filter(a => !a.returning)]
     .filter(item => matchesRecall(item, action.id));
@@ -427,7 +417,7 @@ function recruit(g) {
     }
     if (p.route && !allied(g, p.owner, province(g, p.route).owner)) p.route = null;
     if (!p.owner || p.nextRecruit > g.tick) continue;
-    const born = modern(g) ? p.development : 1;
+    const born = p.development;
     p.troops += born; p.nextRecruit = g.tick + gameRules(g).recruit;
     if (g.economy) g.economy.recruited += born;
     const send = Math.min(born, p.troops - 1);
@@ -438,8 +428,12 @@ export function sides(g) {
   return [...new Set(g.players.map(p => p.side))].map(id => ({ id,
     name: g.coalitions.find(c => c.id === id)?.name || members(g, id)[0]?.id,
     members: members(g, id).map(p => p.id),
-    provinces: g.provinces.filter(v => v.owner && player(g, v.owner).side === id).length }));
+    provinces: g.provinces.filter(v => v.owner && player(g, v.owner).side === id).length,
+    economy: g.provinces.filter(v => v.owner && player(g, v.owner).side === id)
+      .reduce((n, v) => n + v.development, 0) }));
 }
+export const economyThreshold = g => Math.ceil(g.provinces.filter(p => p.owner)
+  .reduce((n, p) => n + p.development, 0) * (gameRules(g).economyShare ?? .6));
 export function score(g, winningSide = null, draw = false) {
   const duration = Math.max(1, Math.min(gameRules(g).maturity, g.tick));
   return g.players.map(p => {
@@ -458,19 +452,20 @@ function finish(g, winningSide, reason) {
 }
 function victory(g) {
   const teams = sides(g);
+  const threshold = economyThreshold(g);
   if (teams.some(t => t.members.length === g.players.length)) { finish(g, null, 'negotiated_draw'); return; }
   for (const p of g.players) if (p.eliminatedAt === null &&
     !g.provinces.some(v => v.owner === p.id) && !g.armies.some(a => a.country === p.id)) {
     p.eliminatedAt = g.tick; event(g, 'eliminated', { country: p.id });
   }
   for (const t of teams) {
-    if (t.provinces < gameRules(g).threshold) { delete g.dominance[t.id]; continue; }
+    if (t.economy < threshold) { delete g.dominance[t.id]; continue; }
     if (g.dominance[t.id] === undefined) { g.dominance[t.id] = g.tick; event(g, 'dominance', { side: t.id, winsAt: g.tick + gameRules(g).hold }); }
     if (g.tick - g.dominance[t.id] >= gameRules(g).hold) { finish(g, t.id, 'domination'); return; }
   }
   if (g.tick >= gameRules(g).duration) {
-    const ranked = teams.sort((a,b) => b.provinces-a.provinces);
-    finish(g, ranked[0].provinces > ranked[1].provinces ? ranked[0].id : null, 'deadline');
+    const ranked = teams.sort((a,b) => b.economy-a.economy);
+    finish(g, ranked[0].economy > ranked[1].economy ? ranked[0].id : null, 'deadline');
   }
 }
 export function tick(g) {
@@ -481,7 +476,8 @@ export function tick(g) {
   for (const [side, since] of Object.entries(before)) if (g.dominance[side] !== since) {
     const changed = g.players.some(p => (affiliations.get(p.id) === side) !== (p.side === side));
     (g.dominanceBreaks ||= []).push({ tick: g.tick, side, provinces: sides(g).find(s => s.id === side)?.provinces ?? 0,
-      reason: changed ? 'Membership changed; the hold restarts.' : 'Territory fell below the victory threshold.' });
+      economy: sides(g).find(s => s.id === side)?.economy ?? 0, threshold: economyThreshold(g),
+      reason: changed ? 'Membership changed; the hold restarts.' : 'Economy fell below 60%.' });
     g.dominanceBreaks = g.dominanceBreaks.slice(-20);
   }
 }
@@ -501,9 +497,9 @@ export function observe(g, country = null, after = 0, limit = 200) {
   const hasMore = visible.length > limit;
   const events = visible.slice(0, limit).map(({ recipients, ...e }) => e);
   const p = country ? player(g, country) : null;
-  return { id: g.id, name: g.name, status: g.status, tick: g.tick, speed: g.speed, rules: gameRules(g), scenario: g.scenario || 'classic-64', travelTimes: g.travelTimes,
+  return { id: g.id, name: g.name, status: g.status, tick: g.tick, speed: g.speed, rules: gameRules(g), scenario: g.scenario, travelTimes: g.travelTimes,
     eligible: g.eligible, you: country, players: g.players.map(({ profileId, orderTicks, lastChat, ...p }) => p),
-    provinces: g.provinces, armies: g.armies, sides: sides(g), projections: score(g),
+    provinces: g.provinces, armies: g.armies, sides: sides(g), economyThreshold: economyThreshold(g), projections: score(g),
     dominanceBreaks: g.dominanceBreaks || [],
     proposals: g.proposals.filter(q => q.status === 'pending' || q.status === 'open' && q.roster.includes(country))
       .map(({ signature, ...q }) => q), departures: g.departures, dominance: g.dominance,

@@ -12,9 +12,7 @@ import { operationalInsights } from '../public/insights.js';
 import { choose } from '../agents/policy.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-export const LEGACY_MAP = JSON.parse(readFileSync(resolve(root, 'public/map.json'), 'utf8'));
 export const MAP = JSON.parse(readFileSync(resolve(root, 'public/imperial-map.json'), 'utf8'));
-const mapFor = g => g.scenario === MAP.id ? MAP : LEGACY_MAP;
 const PRESETS = { standard: 1, quick: 6 };
 const staticFiles = new Map([
   ['/', ['public/index.html', 'text/html; charset=utf-8']],
@@ -42,14 +40,16 @@ function json(res, status, data) { res.writeHead(status, { 'Content-Type': 'appl
 /** `clockScale` accelerates ALL game timing in local tests; no HTTP endpoint can advance time. */
 export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScale = 1,
   publicOrigin = process.env.PUBLIC_ORIGIN || '', league = process.env.LEAGUE_MODE === '1', automatic = true } = {}) {
-  const store = new Store(dbPath), games = new Map(store.load().map(g=>[g.id,g]));
+  const store = new Store(dbPath), games = new Map(store.load()
+    .filter(g=>g.scenario===MAP.id && (g.rules?.economyShare===.6 || g.status==='finished' && g.afterAction))
+    .map(g=>[g.id,g]));
   const fractions = new Map(), ipBudgets = new Map();
   let previous = performance.now();
   const replayReaders = new Map(); // At most four decoded public records in memory.
   function afterAction(g) {
     requireRule(g.status === 'finished' && g.outcome, 'After-action review is available only when the match is finished.', 409);
     if (!g.afterAction) {
-      try { g.afterAction = buildReview(g, mapFor(g)); }
+      try { g.afterAction = buildReview(g, MAP); }
       catch (error) {
         console.error('Review reconstruction withheld:', g.id, error.message);
         g.afterAction = unavailableReview(g, 'This match could not be reconstructed exactly. Final scores are intact; no approximate replay is shown.');
@@ -62,8 +62,8 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
   function runBots(g) {
     if (g.tick % 5 !== 0) return;
     for (const p of g.players.filter(p=>p.kind==='bot')) {
-      const action=choose(observe(g,p.id,g.sequence),mapFor(g),p.id);
-      if (action) try { act(g,mapFor(g),p.id,action,`bot-${g.tick}-${p.id}`); }
+      const action=choose(observe(g,p.id,g.sequence),MAP,p.id);
+      if (action) try { act(g,MAP,p.id,action,`bot-${g.tick}-${p.id}`); }
       catch (e) { if (!(e instanceof RuleError)) throw e; }
     }
   }
@@ -109,7 +109,8 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         const me=auth(); return json(res,200,{id:me.id,name:me.name,history:store.history(me.id)});
       }
       if(path==='/api/standings' && req.method==='GET') {
-        const eligible=url.searchParams.get('eligible')==='true'; return json(res,200,{eligible,standings:store.standings(eligible,url.searchParams.get('scenario') || MAP.id)});
+        requireRule(!url.searchParams.has('scenario') || url.searchParams.get('scenario')===MAP.id,'Unknown scenario.');
+        const eligible=url.searchParams.get('eligible')==='true'; return json(res,200,{eligible,standings:store.standings(eligible,MAP.id)});
       }
       if(path==='/api/games' && req.method==='GET') {
         const all=[...games.values()],active=all.filter(g=>g.status!=='finished').reverse();
@@ -122,16 +123,15 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         const me=auth(), data=await body(req);
         requireRule(Object.hasOwn(PRESETS,data.preset || 'standard'),'Unknown time preset.');
         requireRule([...games.values()].filter(g=>g.status!=='finished').length<32,'This prototype supports 32 active rooms.',429);
-        requireRule(data.scenario===undefined || [MAP.id,'classic-64'].includes(data.scenario),'Unknown scenario.');
-        const scenario=data.scenario==='classic-64'?LEGACY_MAP:MAP;
+        requireRule(data.scenario===undefined || data.scenario===MAP.id,'Unknown scenario.');
         const g=createGame({id:randomUUID().slice(0,8),name:data.name || 'Council chamber',hostId:me.id,
-          speed:PRESETS[data.preset || 'standard'],eligible:league},scenario);
+          speed:PRESETS[data.preset || 'standard'],eligible:league},MAP);
         games.set(g.id,g);save(g);return json(res,201,{id:g.id});
       }
       const match=path.match(/^\/api\/games\/([a-zA-Z0-9-]+)(?:\/(join|start|bots|actions|preview|plan|map|review|replay))?$/);
       if(match) {
         const g=games.get(match[1]);requireRule(g,'Room not found.',404);
-        const endpoint=match[2], gameMap=mapFor(g);
+        const endpoint=match[2], gameMap=MAP;
         function seat() { const me=auth(g.id),p=g.players.find(p=>p.profileId===me.id);requireRule(p,'Join a country first.',403);return p; }
         function host() { const me=auth(g.id);requireRule(me.id===g.hostId,'Only the host can do that.',403); }
         if(!endpoint && req.method==='GET') {
@@ -182,7 +182,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
           host();await body(req);requireRule(g.status==='lobby','Cannot add seats during play.',409);
           for(const c of gameMap.countries.filter(c=>!g.players.some(p=>p.id===c.id))) {
             const profile=store.register(`${c.name.split(' ')[0]} automaton`);
-            join(g,gameMap,{profileId:profile.id,name:profile.name,country:c.id,kind:'bot',model:gameMap.rulesVersion?'heuristic-industrial-v3':'heuristic-v1',persona:'expansion-first'});
+            join(g,gameMap,{profileId:profile.id,name:profile.name,country:c.id,kind:'bot',model:'heuristic-industrial-v3',persona:'expansion-first'});
           }
           save(g);return json(res,200,{ok:true,players:g.players.length});
         }
