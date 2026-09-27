@@ -1,114 +1,22 @@
-name: Verify and publish command-table UI
+name: Spectator integration source
 on:
   push:
     branches: [command-table-v05-workbench]
     paths: [.github/workflows/ui-workbench.yml]
-  workflow_dispatch:
 permissions:
-  contents: write
-concurrency:
-  group: council-v05-publication
-  cancel-in-progress: false
+  contents: read
 jobs:
-  publish:
+  source:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-      - name: Reconstruct the locally tested patch against its exact base
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import hashlib, lzma
-          data=b''.join(Path(f'.github/v05-payload/{i:02}.part').read_bytes() for i in range(1,6))
-          assert hashlib.sha256(data).hexdigest()=='abaa8265fceaea0434fbb398cb3f8e3de44c0ffd8433317356c215f0565795bf'
-          patch=lzma.decompress(data)
-          assert hashlib.sha256(patch).hexdigest()=='6118b7fe790917a0dab4576e4fddd599d5d9981be7282e366e8a0dfead1f2755'
-          Path('/tmp/v05.patch').write_bytes(patch)
-          PY
-          git checkout --detach fe2ebd4957afad81965f9531a88dfacd8321cc26
-          git apply --unidiff-zero --check /tmp/v05.patch
-          git apply --unidiff-zero /tmp/v05.patch
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Syntax, interface logic and gameplay regression tests
-        run: |
-          set -o pipefail
-          mkdir -p artifacts
-          npm run check
-          npm test | tee artifacts/node-tests.log
-          grep -q '# pass 84' artifacts/node-tests.log
-          grep -q '# fail 0' artifacts/node-tests.log
-          python - <<'PY'
-          import hashlib, json
-          from pathlib import Path
-          expected=json.loads(Path('docs/testing/v05-local.json').read_text())
-          for path,digest in expected['unchangedFiles'].items():
-              assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest,path
-          PY
-      - name: Reproduce unchanged-rules seeded smoke games
-        run: |
-          node scripts/tournament.js --rounds 32 --seed 950000 --mode solo --out artifacts/smoke-solo.json
-          node scripts/tournament.js --rounds 32 --seed 960000 --mode diplomacy --out artifacts/smoke-diplomacy.json
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          expected=json.loads(Path('docs/testing/v05-local.json').read_text())['smoke']
-          for mode in ['solo','diplomacy']:
-              actual=json.loads(Path(f'artifacts/smoke-{mode}.json').read_text())['summary']
-              assert actual['rounds']==32 and actual['invariantFailures']==0
-              for field in ['countryWins','draws','meanDuration','meanPrestige']:
-                  assert actual[field]==expected[mode][field],(mode,field)
-          PY
-      - run: python -m pip install -r tests/requirements.txt
-      - run: python -m playwright install --with-deps chromium
-      - name: Native gameplay, after-action and command-HUD suites; record real GIFs
-        run: python tests/browser.py --gif docs/media/gameplay.gif --review-gif docs/media/after-action.gif --ui-gif docs/media/interface.gif
-      - name: Record native verification and publish tested application files
-        env:
-          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          import_dummy=unused
-          python - <<'PY'
-          import json, hashlib, os, shutil
-          from pathlib import Path
-          from PIL import Image
-          reports={key:json.loads(Path(path).read_text()) for key,path in {'gameplay':'artifacts/browser-report.json','review':'artifacts/review/review-browser-report.json','interface':'artifacts/ui/ui-browser-report.json'}.items()}
-          for key,report in reports.items():
-              assert report['status']=='passed' and report['transport']=='native-browser-http',key
-              assert not report['pageErrors'],key
-          gifs={}
-          for name,minimum in [('gameplay',20),('after-action',20),('interface',10)]:
-              p=Path(f'docs/media/{name}.gif');image=Image.open(p)
-              assert image.n_frames>=minimum and p.stat().st_size<8_000_000,name
-              gifs[name]={'path':str(p),'frames':image.n_frames,'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()}
-          shutil.copyfile('artifacts/ui/01-command-europe.png','docs/media/command-table.png')
-          local=json.loads(Path('docs/testing/v05-local.json').read_text())
-          receipt={'date':'2026-09-27','workflow':os.environ['RUN_URL'],'baseCommit':local['baseCommit'],'status':'passed','transport':'native-browser-http','nodeTestsPassed':84,'repeatedSmokeGames':64,'gameplayRulesChanged':False,'unchangedFiles':local['unchangedFiles'],'browser':reports,'gifs':gifs,'limitations':'Automated controls and heuristic/recorded opponents. The focused interface tour resumes a recorded test position; it is not a new live match or independent human usability study.'}
-          Path('docs/testing/v05-native-ci.json').write_text(json.dumps(receipt,indent=2)+'\n')
-          p=Path('docs/PLAYTEST.md')
-          note='## Native v0.5 verification\n\nThe [native publication run]('+os.environ['RUN_URL']+') passed 84 Node tests and reproduced all 64 seeded smoke games. All three actual-browser suites passed: complete gameplay with an external agent, exact after-action review, and focused command-table interactions including battle signals, docked controls, roster focus and responsive layouts. No captured page errors occurred. README screenshots and GIFs were recorded by that native run. [Machine-readable receipt](testing/v05-native-ci.json).\n\n'
-          p.write_text(p.read_text().replace('## Earlier verification records',note+'## Earlier verification records',1))
-          PY
-          test "$(git ls-remote origin refs/heads/master | cut -f1)" = fe2ebd4957afad81965f9531a88dfacd8321cc26
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          if git diff --cached --name-only | grep -q '^.github/'; then echo 'Refusing to publish transport or workflow files'; exit 1; fi
-          git diff --cached --check
-          git diff --cached --stat
-          git commit -m 'Ship v0.5: command-table HUD, faction standards, military counters and battle signals'
-          git push origin HEAD:master
+          ref: 125cf3ce070a6e9275d13353a6b401de8935ef6b
+          persist-credentials: false
+      - run: git archive --format=tar HEAD > /tmp/spectator-source.tar
       - uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: v05-native-playtest
-          path: artifacts/
-          if-no-files-found: ignore
-          retention-days: 14
+          name: spectator-source
+          path: /tmp/spectator-source.tar
+          retention-days: 3
