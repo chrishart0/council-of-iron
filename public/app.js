@@ -5,6 +5,7 @@ import { faction, insignia, icon, battleSignal } from './presentation.js';
 import { Atlas } from './atlas.js';
 import { escapeHTML as esc, syncOptions, setHTML, operationId, confirmAction } from './ui.js';
 import { WorldFeed, Herald, presentHeadline } from './feed.js';
+import { LeaderboardPanel } from './leaderboard-panel.js';
 const time = n => `${Math.floor(Math.max(0,n)/60).toString().padStart(2,'0')}:${Math.floor(Math.max(0,n)%60).toString().padStart(2,'0')}`;
 const signed = n => `${n>=0?'+':''}${n.toFixed(1)}`;
 let identity;try{identity=JSON.parse(localStorage.getItem('coi.identity'));}catch{identity=null;}
@@ -16,7 +17,7 @@ const attackSelections = new Map();
 let plannedDestination=null, mapReadyFor=null, orderMode='march';
 let spectating=false;
 let messageCatchupComplete=false;
-let worldFeed, herald;
+let worldFeed, herald, standings;
 const country = id => map.countries.find(c=>c.id===id);
 const place = id => map.provinces.find(p=>p.id===id);
 const sideName = id => state?.sides.find(s=>s.id===id)?.name || id;
@@ -27,6 +28,7 @@ const mayEnter = (a,b) => !b || state.players.find(p=>p.id===a)?.side===state.pl
 function toast(message,error=false){$('toast').textContent=message;$('toast').className=error?'error':'';$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,6500);}
 const feedNames={
   country:id=>country(id)?.name || id || 'Nobody',
+  short:id=>faction(id).short,
   province:id=>place(id)?.name || id,
   // Alliance names are player text; callers render them with textContent only.
   side:id=>history.find(e=>e.type==='alliance_activated' && e.side===id)?.name || namedSide(id),
@@ -40,6 +42,10 @@ function announce(events){
     if(banner)herald.push(banner);
     for(const [kind,data] of effects){try{atlas?.effect?.(kind,data);}catch(error){console.error(error);}}
   }
+}
+function renderLeaderboard(){
+  const box=$('leaderboard');box.hidden=!state || state.status==='lobby';
+  if(!box.hidden)standings.update(state,5);
 }
 function renderFeed(live){
   const box=$('world-feed');box.hidden=!state || state.status==='lobby';
@@ -473,7 +479,7 @@ function render(){
   $('clock').textContent=`${time(state.tick)} / 30:00`;$('pace-badge').textContent=state.speed===1?'STANDARD · 1×':`QUICK · ${state.speed}×`;
   const dominant=Object.entries(state.dominance)[0];
   $('victory-status').textContent=dominant && state.status==='running'?`${namedSide(dominant[0])} wins in ${state.rules.hold-(state.tick-dominant[1])}s unless stopped`:`60% of active industry (${state.economyThreshold}) · hold ${state.rules.hold} game seconds`;
-  renderOrders();paintMap();renderCouncil();renderChat();renderScoreboard();renderResult();renderOperations();
+  renderOrders();paintMap();renderCouncil();renderChat();renderScoreboard();renderResult();renderOperations();renderLeaderboard();
   $('events').innerHTML=history.map(e=>({e,description:describe(e)})).filter(x=>x.description).slice(-30).reverse().map(({e,description})=>`<div class="event"><time>${time(e.tick)}</time>${esc(description)}</div>`).join('');
 }
 async function home(){resetPresentation();review?.destroy();review=null;setMapFullscreen(false);document.body.classList.remove('reviewing','spectating');generation++;pollController?.abort();document.body.classList.remove('in-game');matchId=null;state=null;spectating=false;herald.reset();worldFeed.reset();messageCatchupComplete=false;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');await rooms();}
@@ -536,6 +542,11 @@ $('feed-toggle').addEventListener('click',()=>{
   const open=!worldFeed.open;worldFeed.setOpen(open);
   try{localStorage.setItem('coi.feed',open?'open':'collapsed');}catch{}
 });
+$('lb-toggle').addEventListener('click',()=>{
+  const open=!standings.open;standings.setOpen(open);
+  try{localStorage.setItem('coi.leaderboard',open?'open':'collapsed');}catch{}
+});
+for(const button of document.querySelectorAll('[data-lb-mode]'))button.addEventListener('click',()=>{standings.setMode(button.dataset.lbMode);if(state)renderLeaderboard();});
 $('back').addEventListener('click',safely(home));$('refresh-rooms').addEventListener('click',safely(rooms));
 $('share').addEventListener('click',safely(async()=>{try{await navigator.clipboard.writeText(location.href);toast('Room link copied. It contains no credentials.');}catch{prompt('Copy this room link. It contains no credentials:',location.href);}}));
 $('account-button').addEventListener('click',safely(async()=>{const name=prompt('Create a separate local player identity. Existing results stay with the old identity. Enter a new display name:');if(name?.trim()){await ensureIdentity(name,true);if(matchId)await poll();}}));
@@ -587,6 +598,9 @@ document.addEventListener('click',safely(async event=>{
 }));
 for(const element of document.querySelectorAll('[data-icon]'))element.innerHTML=icon(element.dataset.icon);
 worldFeed=new WorldFeed({list:$('feed-list'),unread:$('feed-unread'),toggle:$('feed-toggle'),body:$('feed-body')},feedNames);
+standings=new LeaderboardPanel({root:$('leaderboard'),rows:$('lb-rows'),toggle:$('lb-toggle'),summary:$('lb-summary'),modes:[...document.querySelectorAll('[data-lb-mode]')]},feedNames);
+{let saved=null;try{saved=localStorage.getItem('coi.leaderboard');}catch{}
+  standings.setOpen(saved?saved==='open':!matchMedia('(max-width:760px)').matches);}
 herald=new Herald({declaration:$('declaration'),alliance:$('alliance-seal'),fallen:$('fallen-seal')});
 {let saved=null;try{saved=localStorage.getItem('coi.feed');}catch{}
   worldFeed.setOpen(saved?saved==='open':!matchMedia('(max-width:760px)').matches);}

@@ -59,6 +59,10 @@ World messages are public. DMs, open alliance offers and coalition messages are 
 
 Casualties are one shared total; no per-country kills are attributed. Private events are never headlines. Events from before v0.6 have no `headline`. Headlines are kept beside the event log, so historic event IDs and replays are unchanged.
 
+## Leaderboard
+
+There is no separate endpoint: the ranking is the pure function `leaderboard(observation, { mode, you, limit })` in `public/leaderboard.js`, shared by the browser, CLI (`leaderboard [players|alliances]`) and MCP (`leaderboard`). It uses only public observation fields, and every army is already public. Rows: `rank`, `id`, `kind` (`country` or `alliance`), `name` (alliances only; player text), `countries`, `provinces`, `share` (of all provinces), `troops` (garrisons + all own armies on the map, including engaged and returning), `eliminated`, and `you` on the viewer's row. Rank by provinces, then troops, then ID. With `limit`, the viewer's row is appended with its real rank when it is outside the top rows. Territory is not the victory condition; industry is.
+
 ## Plan without committing
 
 `POST /api/games/ROOM/plan` requires your seat token:

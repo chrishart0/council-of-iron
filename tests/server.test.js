@@ -151,7 +151,7 @@ test('stdio MCP negotiates, validates schemas, joins an agent, calls real HTTP, 
   ].map(x=>JSON.stringify(x)).join('\n')+'\n';
   const result=await subprocess('agents/mcp.js',[],env,input);assert.equal(result.code,0,result.stderr);
   const output=result.stdout.trim().split('\n').map(x=>JSON.parse(x));assert.equal(output.length,7);
-  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,28);
+  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,29);
   assert.equal(JSON.parse(output[2].result.content[0].text).country,'britain');
   assert.equal(JSON.parse(output[3].result.content[0].text).you,'britain');
   assert.equal(output[4].error.code,-32602);assert.equal(output[5].error.code,-32602);assert.deepEqual(output[6].result,{});
@@ -256,4 +256,13 @@ test('World feed is one public, cursor-based stream for HTTP, CLI and MCP with e
   const page=JSON.parse(out[1].result.content[0].text);
   assert.equal(page.hasMore,true);assert.deepEqual(page.items,pub.items.slice(0,1));assert.equal(page.cursor,pub.items[0].seq);
   assert.equal(out[2].error.code,-32602);
+  // Leaderboard: one shared function over the public observation, same for CLI and MCP.
+  const {leaderboard}=await import('../public/leaderboard.js');
+  const expected=leaderboard((await f.call(`/api/games/${id}`)).data,{you:'britain',limit:8}).rows;
+  const board=await subprocess('agents/cli.js',['leaderboard'],env);assert.equal(board.code,0,board.stderr);
+  assert.deepEqual(JSON.parse(board.stdout).rows,expected);assert.ok(expected.find(r=>r.id==='britain').you);
+  const lb=await subprocess('agents/mcp.js',[],env,[input.split('\n')[0],input.split('\n')[1],
+    JSON.stringify({jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'leaderboard',arguments:{mode:'alliances'}}})].join('\n')+'\n');
+  const alliances=JSON.parse(JSON.parse(lb.stdout.trim().split('\n')[1]).result.content[0].text);
+  assert.equal(alliances.mode,'alliances');assert.equal(alliances.rows.length,2);
 });

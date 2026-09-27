@@ -79,3 +79,40 @@
 @media(prefers-reduced-motion:reduce){
  .world-feed *,.alliance-seal,.alliance-seal *,.fallen-seal,.fallen-seal *,.declaration{animation:none!important;transition:none!important}
 }
+
+/* Leaderboard: pinned top-right of the map; the feed owns bottom-left, notices own top-left. */
+.leaderboard{position:absolute;z-index:5;top:54px;right:12px;width:min(316px,calc(100% - 24px));background:#10242bf2;border:1px solid #a88e5c8c;box-shadow:0 10px 28px #04141ab3;color:var(--ink);font-size:11px}
+.leaderboard[hidden]{display:none}
+.lb-head{display:flex;align-items:stretch;border-bottom:1px solid #a88e5c40}
+.lb-toggle{flex:1;min-width:0;display:flex;align-items:center;gap:7px;min-height:30px;padding:4px 9px;background:#152d35;border:0;border-radius:0;text-align:left;font-size:10px}
+.lb-toggle b{letter-spacing:1.4px;text-transform:uppercase;color:#f1d59c;font-size:10px}.lb-toggle::after{content:'▾';margin-left:auto;color:#c8b58a}
+.lb-summary{display:none;color:#d8d2c0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.lb-modes{display:flex}.lb-modes button{min-height:30px;padding:3px 8px;font-size:10px;border:0;border-left:1px solid #a88e5c40;border-radius:0;background:#12262d;color:#b7c0b3}
+.lb-modes button[aria-pressed=true]{background:#2a3f45;color:#f4d396;box-shadow:inset 0 -2px var(--gold)}
+.lb-columns,.lb-row{display:grid;grid-template-columns:18px 11px 44px minmax(0,1fr) 64px 42px;align-items:center;column-gap:4px;padding:0 9px}
+.lb-columns{font-size:8px;letter-spacing:1px;text-transform:uppercase;color:#8f9d95;padding-top:4px;padding-bottom:2px}.lb-columns span:nth-child(2){grid-column:3/5}.lb-columns span:nth-child(3),.lb-columns span:nth-child(4){text-align:right}
+.lb-rows{list-style:none;margin:0;padding:2px 0 5px}
+.lb-row{height:24px;font-variant-numeric:tabular-nums}
+.lb-row.you{background:#d2ab622b;box-shadow:inset 2px 0 var(--gold)}.lb-row.you .lb-name{color:#f6dca6;font-weight:700}
+.lb-row.detached{border-top:1px dashed #a88e5c66;margin-top:2px}
+.lb-row.eliminated{opacity:.55}.lb-row.eliminated .lb-name{text-decoration:line-through}
+.lb-rank{color:#c8b58a;font-weight:700;text-align:right}
+.lb-move{font-size:8px;text-align:center}.lb-move.up{color:#9fd49a;animation:lb-nudge-up .6s ease-out}.lb-move.down{color:#e39a82;animation:lb-nudge-down .6s ease-out}
+@keyframes lb-nudge-up{from{transform:translateY(5px);opacity:0}}@keyframes lb-nudge-down{from{transform:translateY(-5px);opacity:0}}
+.lb-flags{display:flex;gap:1px;overflow:hidden}.lb-flags .insignia{width:13px;height:15px;flex:none}
+.lb-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#ebe5d4}
+.lb-land,.lb-troops{text-align:right;color:#d8d6c8}.lb-troops{color:#f0e3c2}
+.leaderboard.collapsed{width:auto;max-width:min(360px,calc(100% - 24px))}
+.leaderboard.collapsed .lb-modes,.leaderboard.collapsed .lb-columns,.leaderboard.collapsed .lb-rows{display:none}
+.leaderboard.collapsed .lb-head{border-bottom:0}.leaderboard.collapsed .lb-summary{display:block}.leaderboard.collapsed .lb-toggle::after{content:'▸'}
+/* Keep the incoming-army strip and battle notice clear of the leaderboard. */
+.board-panel:has(.leaderboard:not([hidden])) .threat-strip{max-width:calc(100% - min(316px,100% - 24px) - 40px)}
+@media(max-width:760px){
+ .leaderboard{position:static;width:auto;max-width:none;border-left:0;border-right:0;box-shadow:none}
+ .leaderboard.collapsed{width:auto;max-width:none}
+ .lb-toggle{min-height:40px}.lb-modes button{min-height:40px;padding:3px 11px}
+ .board-panel:has(.leaderboard:not([hidden])) .threat-strip{max-width:calc(100% - 28px)}
+ /* Flow order under the map: leaderboard strip, then World feed, then the caption. */
+ .leaderboard,.world-feed{order:1}.map-caption,.scenario-note{order:2}
+}
+@media(prefers-reduced-motion:reduce){.lb-move{animation:none!important}}
