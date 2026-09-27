@@ -33,6 +33,8 @@ const pact=room=>{const q=act(room,MAP,'usa',{type:'propose',country:'japan',nam
 const stepRoom=(room,to)=>{while(room.tick<to){for(const [country,action] of warOrders[room.tick]||[])act(room,MAP,country,action,`${room.id}-${room.tick}-${country}-${action.type}`);if(room.tick===50)pact(room);tick(room);}};
 const stepWar=to=>stepRoom(w,to);
 for(const room of [w,...Object.values(taskRooms)]){stepRoom(room,55);app.games.set(room.id,room);app.store.save(room);}
+// The phone map suite needs the column that has just left Scotland (tick 58), independent of later war-room steps.
+const mobileRoom=warRoom('ui-mobile','The Rhine front · phone');stepRoom(mobileRoom,58);app.games.set(mobileRoom.id,mobileRoom);app.store.save(mobileRoom);
 app.server.listen(0,'127.0.0.1',()=>console.log(JSON.stringify({url:`http://127.0.0.1:${app.server.address().port}`,identity:profiles.britain})));
 for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>app.close().then(()=>process.exit(0)));
 

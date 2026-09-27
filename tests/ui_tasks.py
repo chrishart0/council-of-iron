@@ -85,6 +85,8 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     page.goto(f'{url}/?match={room}'); expect(page.locator('#commander-title')).to_have_text('British Empire')
     w = Walk(page, server, room, touch, folder, report)
     page.locator('#home-view').click(); page.wait_for_timeout(300)
+    # A private row shown in the open desktop history counts as read; start collapsed so the badge path is what gets measured.
+    if page.locator('#feed-toggle').get_attribute('aria-expanded') == 'true': page.locator('#feed-toggle').click()
     primary = page.locator('#primary')
 
     # (b) Declare war on a neutral country and march: France (neutral), from the best-placed province.

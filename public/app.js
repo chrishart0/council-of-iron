@@ -70,7 +70,7 @@ function announce(events){
 }
 function renderLeaderboard(){
   const box=$('leaderboard');box.hidden=!state || state.status==='lobby';
-  if(!box.hidden)standings.update(state,5);
+  if(!box.hidden)standings.update(state,8); // v0.8: every power (≤8 seats) is one click from its country card
 }
 
 /* ── Read state: per item (a set of seqs per match and seat), never a single cursor. ── */
@@ -919,6 +919,10 @@ notifier=new Notifier($('notice'));
 const sounds=new SoundBoard($('sound-control'));
 {let saved=null;try{saved=localStorage.getItem('coi.feed');}catch{}
   worldFeed.setOpen(saved?saved==='open':!compact.matches);}
-compact.addEventListener('change',event=>{if(event.matches){standings.setOpen(false);if(card)worldFeed.setOpen(false);}});
+compact.addEventListener('change',event=>{
+  if(event.matches){standings.setOpen(false);if(card)worldFeed.setOpen(false);return;}
+  // Back to a wide screen: the rail returns (the leaderboard and history are side panels again).
+  let saved=null;try{saved=localStorage.getItem('coi.leaderboard');}catch{}standings.setOpen(saved!=='collapsed');
+});
 try{map=await request('/map.json','GET',undefined,null);initMap();showIdentity();const params=new URL(location).searchParams,initial=params.get('match');if(initial)await openRoom(initial,params.get('spectate')==='1');else await rooms();setConnection(state?.status==='finished'?'Review':'Live');}catch(e){toast(e.message,true);}
 setInterval(()=>{if(matchId)poll();},750);

@@ -148,7 +148,11 @@ def wrap_checks(page,report,capture):
         vb=view_box(page);assert 0<=vb[0]+vb[2]/2<1280,vb
     # Centre on the dateline seam: the left half of the screen is the repeated copy (x < 0).
     camera(page,'world');page.wait_for_timeout(100)
-    drag_map(page,page.locator('#map').bounding_box()['width']/2);page.locator('#zoom-in').click();page.wait_for_timeout(150)
+    page.locator('#zoom-in').click();page.wait_for_timeout(150)
+    for _ in range(4):  # drag east until the dateline (x = 0 ≡ 1280) is in the centre, whatever the world-view fit
+        x,y,w,h=view_box(page);off=((x+w/2)-10+640)%1280-640  # aim just east of the seam: Australia is then on the western copy
+        if abs(off)<15:break
+        drag_map(page,off*page.evaluate('document.querySelector("#map").getScreenCTM().a'))
     x,y,w,h=view_box(page);assert abs(((x+w/2)+640)%1280-640)<40,(x,w)
     page.keyboard.press('Escape')
     spot=page.evaluate('''() => {
@@ -682,7 +686,7 @@ def sound_settings_checks(page,context,url,report,bridge):
     if bridge:load_bridge(fresh,url,{})
     else:fresh.goto(url)
     expect(fresh.locator('#sound-control')).to_have_attribute('data-music','0.6')
-    menu(fresh);fresh.locator('.sound-toggle').click()
+    fresh.locator('.sound-toggle').click()  # the home page keeps it in the masthead
     assert fresh.locator('#sound-music').input_value()=='60' and fresh.locator('#sound-effects').input_value()=='40'
     assert not fresh.locator('#sound-mute').is_checked()
     fresh.close()
@@ -695,7 +699,7 @@ def mobile_checks(browser,url,identity,report,out):
     for w,h in [(390,844),(844,390)]:
         context=browser.new_context(viewport={'width':w,'height':h},is_mobile=True,has_touch=True,device_scale_factor=2)
         context.add_init_script('localStorage.setItem("coi.identity",'+json.dumps(json.dumps(identity))+');'+COACH_DONE)
-        page=context.new_page();page.goto(url);page.locator('[data-room="ui-war"][data-resume]').click()
+        page=context.new_page();page.goto(url);page.locator('[data-room="ui-mobile"][data-resume]').click()
         expect(page.locator('#commander-title')).to_have_text('British Empire');page.locator('#map').scroll_into_view_if_needed()
         # The viewBox takes the element's aspect: no letterboxing.
         box=page.locator('#map').bounding_box();vb=[float(v) for v in page.locator('#map').get_attribute('viewBox').split()]
@@ -729,7 +733,7 @@ def mobile_checks(browser,url,identity,report,out):
         sizes=page.evaluate('''()=>['belgium','low-countries','ruhr','rhineland','saxony','serbia'].map(id=>{const r=document.querySelector('#province-'+id).getBoundingClientRect();return [id,Math.min(r.width,r.height)];})''')
         assert all(s>=32 for _,s in sizes),sizes
         camera(page,'europe');page.keyboard.press('e');page.keyboard.press('e');page.keyboard.press('e');page.wait_for_timeout(200)
-        result=page.evaluate(MAP_AUDIT,'ui-war');assert not result['overlaps'] and not result['missing'] and not result['badSums'],result
+        result=page.evaluate(MAP_AUDIT,'ui-mobile');assert not result['overlaps'] and not result['missing'] and not result['badSums'],result
         if w==390:page.screenshot(path=str(out/'19-mobile-max-zoom.png'))
         if w==390:
             # A column that has just left Scotland sits on the Scotland counter: a tap must still select Scotland.
@@ -775,7 +779,7 @@ def coach_and_drag_checks(browser,url,identity,report,out):
     assert re.fullmatch(r'\d+ · \d+s',page.locator('#map .draft-label text').text_content()),page.locator('#map .draft-label text').text_content()  # troops · ETA
     page.screenshot(path=str(out/'22-touch-drag.png'))
     cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
-    expect(page.locator('#card')).to_have_attribute('data-kind','province');expect(page.locator('#card-title')).to_have_text('Low Countries')
+    expect(page.locator('#card')).to_have_attribute('data-kind','province');expect(page.locator('#card-title')).to_have_text('Netherlands')  # low-countries is named Netherlands on this map
     expect(page.locator('#card-sub')).to_contain_text('from Southern England');check_commit(page,'390 after drag')
     assert page.locator('#map .draft-arrow').count()==1  # the order arrow stays while the card is open
     page.screenshot(path=str(out/'23-after-drag.png'))
