@@ -5,11 +5,13 @@ import { travelTicks, journeyPoint } from '../public/movement.js';
 export const RULES = Object.freeze({ duration: 1800, recruit: 20,
   notice: 30, hold: 90, economyShare: .6, maturity: 300, orderWindow: 10,
   orderLimit: 3, chatWindow: 10, messageLength: 500, proposalLife: 120,
+  diplomacyLife: 60, warRequired: true,
   marchSetup: 15, kmPerTick: 35, maxScheduleDelay: 300, maxAttackSources: 16,
+  maxTransitHops: 8,
   maxDevelopment: 3, developmentCosts: [0, 12, 24], developmentTicks: [0, 60, 90] });
 export const gameRules = g => g.rules;
 export const reservedTroops = (g, country, from) => g.orders
-  .filter(o => o.country === country && o.from === from && ['move', 'develop'].includes(o.type))
+  .filter(o => o.country === country && o.from === from && ['move', 'transit', 'develop'].includes(o.type))
   .reduce((n, o) => n + o.amount, 0);
 const journeyTicks = (g, from, to) => g.travelTimes[from][to];
 
@@ -29,6 +31,13 @@ const sorted = values => [...values].sort();
 const same = (a, b) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
 const members = (g, side) => g.players.filter(p => p.side === side);
 export const allied = (g, a, b) => Boolean(a && b && player(g, a).side === player(g, b).side);
+const warKey = (a, b) => [a, b].sort().join(':');
+export const atWar = (g, a, b) => Boolean(a && b && !allied(g, a, b) &&
+  (!gameRules(g).warRequired || (g.wars || []).includes(warKey(a, b))));
+function mayEnter(g, country, owner) { return !owner || allied(g, country, owner) || atWar(g, country, owner); }
+function sideRoster(g, side) { return members(g, side).map(p => p.id); }
+function majority(g, roster) { const active=roster.filter(id=>player(g,id).eliminatedAt===null).length;return Math.floor(active/2)+1; }
+function votes(g, roster, approvals) { return roster.filter(id=>player(g,id).eliminatedAt===null && approvals.includes(id)).length; }
 export function player(g, id) {
   const p = g.players.find(p => p.id === id);
   requireRule(p, 'Country has no player.', 404); return p;
@@ -56,7 +65,7 @@ export function createGame({ id, name, hostId, speed = 1, eligible = false }, ma
     economy: { recruited: 0, invested: 0 }, id, name: text(name, 'Room name'), hostId, speed, eligible,
     status: 'lobby', tick: 0, sequence: 0, serial: 0, players: [],
     provinces: map.provinces.map(p => ({ id: p.id, owner: null, troops: 2, nextRecruit: null, route: null, development: 1, developing: null })),
-    armies: [], orders: [], proposals: [], departures: [], coalitions: [], events: [], receipts: {},
+    armies: [], battles: [], orders: [], proposals: [], departures: [], coalitions: [], wars: [], diplomacy: [], events: [], receipts: {},
     dominance: {}, outcome: null, actionLog: [] };
 }
 export function join(g, map, { profileId, name, country, kind = 'human', model = '', persona = '' }) {
@@ -116,7 +125,8 @@ function useBudget(g, p) {
 /** Validate an entire synchronized attack without mutating state or consuming budget. */
 export function attackPlan(g, map, country, action) {
   alive(g, country); const r = gameRules(g);
-  province(g, action.to);
+  const target=province(g, action.to);
+  requireRule(mayEnter(g, country, target.owner), 'Declare war before attacking another country.', 409);
   requireRule(Array.isArray(action.sources) && action.sources.length > 0 && action.sources.length <= r.maxAttackSources,
     `Choose 1–${r.maxAttackSources} connected source provinces.`);
   const unique = new Set();
@@ -154,6 +164,32 @@ function coordinated(g, map, p, action) {
   event(g, 'attack_accepted', { country: p.id, groupId, arrivesAt: plan.arrivesAt, orders }, [p.id]);
   return { groupId, orderId: orders[0].id, executeAt: orders[0].executeAt, arrivesAt: plan.arrivesAt, orders };
 }
+function transit(g,map,p,action) {
+  alive(g,p.id);const source=province(g,action.from),r=gameRules(g);
+  requireRule(source.owner===p.id,'You do not own the source province.',403);
+  requireRule(Array.isArray(action.path) && action.path.length>=2 && action.path.length<=r.maxTransitHops,
+    `Choose 2–${r.maxTransitHops} connected destinations, including an allied province.`);
+  let previous=source.id,travel=0,throughAlly=false;
+  for(let i=0;i<action.path.length;i++){
+    const id=action.path[i],dest=province(g,id);
+    requireRule(mapProvince(map,previous).neighbors.includes(id),'Every transit leg must follow a map connection.');
+    if(i<action.path.length-1){requireRule(allied(g,p.id,dest.owner),'Intermediate provinces must belong to your alliance.');
+      if(dest.owner!==p.id)throughAlly=true;}
+    else requireRule(mayEnter(g,p.id,dest.owner),'Declare war before attacking another country.',409);
+    travel+=journeyTicks(g,previous,id);previous=id;
+  }
+  requireRule(throughAlly,'Transit must pass through another alliance member’s province.');
+  const available=source.troops-reservedTroops(g,p.id,source.id)-1;
+  requireRule(Number.isSafeInteger(action.amount) && action.amount>0 && action.amount<=available,
+    'Not enough uncommitted troops; leave one at home.');
+  requireRule(g.tick+1+travel<=r.duration,'The transit would arrive after the deadline.');
+  checkBudget(g,p);useBudget(g,p);
+  const order={id:identifier(g,'order-'),groupId:identifier(g,'transit-'),type:'transit',country:p.id,
+    from:source.id,to:action.path[0],path:[...action.path],amount:action.amount,
+    executeAt:g.tick+1,ultimateArrivesAt:g.tick+1+travel};
+  g.orders.push(order);event(g,'order_accepted',{country:p.id,orderId:order.id,executeAt:order.executeAt},[p.id]);
+  return {orderId:order.id,groupId:order.groupId,executeAt:order.executeAt,arrivesAt:order.ultimateArrivesAt};
+}
 function develop(g, p, action) {
   alive(g, p.id);
   const source = province(g, action.from), r = gameRules(g);
@@ -173,7 +209,7 @@ const matchesRecall = (item, id) => item.id === id || item.groupId === id || ite
 function recall(g, p, action) {
   alive(g, p.id);
   requireRule(typeof action.id === 'string' && action.id.length <= 80, 'Specify an army, queued order, or attack group ID.');
-  const items = [...g.orders.filter(o => o.type === 'move'), ...g.armies.filter(a => !a.returning)]
+  const items = [...g.orders.filter(o => ['move','transit'].includes(o.type)), ...g.armies.filter(a => !a.returning)]
     .filter(item => matchesRecall(item, action.id));
   requireRule(items.length > 0, 'This order has already arrived, been cancelled, or is returning.', 409);
   requireRule(items.every(item => item.country === p.id), 'You cannot recall another country’s troops.', 403);
@@ -186,21 +222,27 @@ function recall(g, p, action) {
 }
 function executeRecall(g, order) {
   const selected = item => item.country === order.country && matchesRecall(item, order.target);
-  const waiting = g.orders.filter(o => o.type === 'move' && selected(o));
-  g.orders = g.orders.filter(o => o.type !== 'move' || !selected(o));
+  const waiting = g.orders.filter(o => ['move','transit'].includes(o.type) && selected(o));
+  g.orders = g.orders.filter(o => !['move','transit'].includes(o.type) || !selected(o));
   let returned = 0;
   for (const a of g.armies.filter(a => !a.returning && selected(a))) {
-    const startPoint = journeyPoint(a, g.positions, g.tick);
-    const travelBack = Math.max(1, Math.min(a.arrivesAt - a.departedAt, g.tick - a.departedAt));
-    const originalFrom = a.from;
-    Object.assign(a, { from: a.to, to: originalFrom, startPoint, returning: true,
-      departedAt: g.tick, arrivesAt: g.tick + travelBack });
-    event(g, 'army_recalled', { country: a.country, armyId: a.id, to: a.to, amount: a.amount, arrivesAt: a.arrivesAt });
+    turnArmy(g,a,'manual');
     returned++;
   }
   event(g, waiting.length || returned ? 'recall_executed' : 'order_failed', {
     country: order.country, orderId: order.id, cancelled: waiting.length, returning: returned,
     ...(!waiting.length && !returned ? { reason: 'The selected troops are no longer recallable.' } : {}) }, [order.country]);
+}
+function turnArmy(g,a,reason) {
+  const battle=(g.battles || []).find(b=>b.province===a.to && a.engaged);
+  if(battle)battle.withdrawn+=a.amount;
+  const startPoint=journeyPoint(a,g.positions,g.tick);
+  const travelBack=a.transit?Math.max(1,g.tick-a.originDepartedAt):
+    Math.max(1,Math.min(a.arrivesAt-a.departedAt,g.tick-a.departedAt));
+  const originalFrom=a.transit?a.origin:a.from;
+  Object.assign(a,{from:a.to,to:originalFrom,startPoint,returning:true,engaged:false,departedAt:g.tick,arrivesAt:g.tick+travelBack});
+  event(g,'army_recalled',{country:a.country,armyId:a.id,to:a.to,amount:a.amount,arrivesAt:a.arrivesAt,
+    ...(reason==='manual'?{}:{reason})});
 }
 function locked(g, id) {
   return g.departures.some(d => d.country === id) ||
@@ -261,12 +303,97 @@ function decline(g, p, a) {
 function leave(g, p) {
   alive(g, p.id); requireRule(!p.side.startsWith('solo:'), 'You are already independent.');
   requireRule(!g.departures.some(d => d.country === p.id), 'Your departure is already pending.', 409);
+  requireRule(!troopsInsideAlly(g,p.side),'An alliance cannot break while a member’s troops are inside an ally’s borders.',409);
   // Departure is unilateral, including during an admission notice. Invalidate that consent.
   for (const q of g.proposals) if (['open', 'pending'].includes(q.status) && q.roster.includes(p.id))
     cancel(g, q, 'A participant filed a departure.');
   const departure = { country: p.id, side: p.side, activateAt: g.tick + gameRules(g).notice };
   g.departures.push(departure); event(g, 'departure_notice', departure);
   return departure;
+}
+function troopsInsideAlly(g,side) {
+  return g.armies.some(a=>a.transit && !a.returning && !a.engaged && player(g,a.country).side===side &&
+    [a.from,a.to].some(id=>{const owner=province(g,id).owner;return owner && owner!==a.country && allied(g,a.country,owner);}));
+}
+function normalizeWars(g) {
+  if (!gameRules(g).warRequired) return;
+  const pairs=new Set(g.wars || []), teams=[...new Set(g.players.map(p=>p.side))];
+  const expanded=new Set();
+  for(let i=0;i<teams.length;i++)for(let j=i+1;j<teams.length;j++) {
+    const left=sideRoster(g,teams[i]),right=sideRoster(g,teams[j]);
+    if(left.some(a=>right.some(b=>pairs.has(warKey(a,b)))))
+      for(const a of left)for(const b of right)expanded.add(warKey(a,b));
+  }
+  g.wars=[...expanded].sort();
+}
+function sameMotionRoster(g, motion) {
+  return same(sideRoster(g,motion.fromSide),motion.fromRoster) &&
+    same(sideRoster(g,motion.toSide),motion.toRoster);
+}
+function activeMotion(g, kind, fromSide, toSide) {
+  return (g.diplomacy || []).find(m=>m.kind===kind && ['voting','offered'].includes(m.status) &&
+    (m.fromSide===fromSide && m.toSide===toSide || m.fromSide===toSide && m.toSide===fromSide));
+}
+function declareWar(g, motion) {
+  for(const a of motion.fromRoster)for(const b of motion.toRoster)g.wars.push(warKey(a,b));
+  g.wars=[...new Set(g.wars)].sort();motion.status='enacted';
+  event(g,'war_declared',{from:motion.fromSide,to:motion.toSide,fromRoster:motion.fromRoster,toRoster:motion.toRoster});
+}
+function peaceAccepted(g, motion) {
+  const left=new Set(motion.fromRoster),right=new Set(motion.toRoster);
+  g.wars=g.wars.filter(pair=>{const [a,b]=pair.split(':');return !(left.has(a)&&right.has(b) || left.has(b)&&right.has(a));});
+  motion.status='enacted';
+  const cancelled=g.orders.filter(o=>['move','transit'].includes(o.type) &&
+    ((left.has(o.country)&&right.has(province(g,o.path?.at(-1)||o.to).owner)) ||
+      (right.has(o.country)&&left.has(province(g,o.path?.at(-1)||o.to).owner))));
+  const cancelledIds=new Set(cancelled.map(o=>o.id));g.orders=g.orders.filter(o=>!cancelledIds.has(o.id));
+  for(const o of cancelled)event(g,'order_cancelled',{country:o.country,orderId:o.id,reason:'Peace treaty.'},[o.country]);
+  let recalled=0;
+  for(const army of g.armies)if(!army.returning &&
+    ((left.has(army.country)&&right.has(province(g,army.path?.at(-1)||army.to).owner)) ||
+      (right.has(army.country)&&left.has(province(g,army.path?.at(-1)||army.to).owner)))) {
+    turnArmy(g,army,'peace');recalled++;
+  }
+  event(g,'peace_accepted',{from:motion.fromSide,to:motion.toSide,fromRoster:motion.fromRoster,toRoster:motion.toRoster,
+    cancelled:cancelled.length,recalled});
+}
+function advanceMotion(g,motion) {
+  if(motion.kind==='war' && votes(g,motion.fromRoster,motion.fromYes)>=majority(g,motion.fromRoster))declareWar(g,motion);
+  if(motion.kind==='peace' && motion.status==='voting' && votes(g,motion.fromRoster,motion.fromYes)>=majority(g,motion.fromRoster)) {
+    motion.status='offered';motion.expiresAt=g.tick+gameRules(g).diplomacyLife;
+    event(g,'peace_offered',{motionId:motion.id,from:motion.fromSide,to:motion.toSide,
+      fromRoster:motion.fromRoster,toRoster:motion.toRoster,expiresAt:motion.expiresAt},motion.toRoster);
+  }
+  if(motion.kind==='peace' && motion.status==='offered' && votes(g,motion.toRoster,motion.toYes)>=majority(g,motion.toRoster))peaceAccepted(g,motion);
+}
+function beginDiplomacy(g,p,a,kind) {
+  alive(g,p.id);const target=alive(g,a.country);
+  requireRule(!allied(g,p.id,target.id),'Choose a country outside your alliance.');
+  requireRule(kind==='war' ? !atWar(g,p.id,target.id) : atWar(g,p.id,target.id),
+    kind==='war'?'These sides are already at war.':'These sides are not at war.',409);
+  requireRule(!activeMotion(g,kind,p.side,target.side),'A vote or offer between these sides is already open.',409);
+  const motion={id:identifier(g,kind==='war'?'war-vote-':'peace-offer-'),kind,status:'voting',
+    fromSide:p.side,toSide:target.side,fromRoster:sideRoster(g,p.side),toRoster:sideRoster(g,target.side),
+    fromYes:[p.id],toYes:[],expiresAt:g.tick+gameRules(g).diplomacyLife};
+  g.diplomacy.push(motion);
+  if(motion.fromRoster.length>1)event(g,kind==='war'?'war_vote':'peace_vote',{
+    motionId:motion.id,from:motion.fromSide,to:motion.toSide,expiresAt:motion.expiresAt},motion.fromRoster);
+  advanceMotion(g,motion);
+  return {motionId:motion.id,status:motion.status,expiresAt:motion.expiresAt};
+}
+function approveDiplomacy(g,p,a,kind) {
+  alive(g,p.id);const motion=(g.diplomacy || []).find(m=>m.id===a.motionId && m.kind===kind);
+  requireRule(motion && ['voting','offered'].includes(motion.status) && g.tick<motion.expiresAt,'Vote or offer is no longer open.',409);
+  requireRule(sameMotionRoster(g,motion),'Alliance membership changed; start a new vote.',409);
+  const source=motion.status==='voting' && p.side===motion.fromSide;
+  const target=motion.kind==='peace' && motion.status==='offered' && p.side===motion.toSide;
+  requireRule(source || target,'Your side cannot vote on this motion.',403);
+  const approvals=source?motion.fromYes:motion.toYes;
+  requireRule(!approvals.includes(p.id),'You have already approved this motion.',409);
+  approvals.push(p.id);
+  event(g,'diplomacy_approved',{motionId:motion.id,country:p.id},source?motion.fromRoster:motion.toRoster);
+  advanceMotion(g,motion);
+  return {motionId:motion.id,status:motion.status,expiresAt:motion.expiresAt};
 }
 function chat(g, p, a) {
   const message = text(a.text, 'Message', gameRules(g).messageLength);
@@ -298,12 +425,17 @@ export function act(g, map, country, action, opId) {
   switch (action.type) {
     case 'move': case 'route': result = military(g, map, p, action); break;
     case 'attack': result = coordinated(g, map, p, action); break;
+    case 'transit': result = transit(g,map,p,action); break;
     case 'recall': result = recall(g, p, action); break;
     case 'develop': result = develop(g, p, action); break;
     case 'propose': result = propose(g, p, action); break;
     case 'accept': result = accept(g, p, action); break;
     case 'decline': result = decline(g, p, action); break;
     case 'leave': result = leave(g, p); break;
+    case 'declare_war': result = beginDiplomacy(g,p,action,'war'); break;
+    case 'offer_peace': result = beginDiplomacy(g,p,action,'peace'); break;
+    case 'vote_war': result = approveDiplomacy(g,p,action,'war'); break;
+    case 'vote_peace': result = approveDiplomacy(g,p,action,'peace'); break;
     case 'chat': result = chat(g, p, action); break;
     default: throw new RuleError('Unknown action type.');
   }
@@ -317,6 +449,7 @@ function independent(g, p) {
 }
 function applyMembership(g) {
   for (const d of g.departures.filter(d => d.activateAt <= g.tick)) {
+    if(troopsInsideAlly(g,d.side)){d.activateAt=g.tick+1;continue;}
     const p = player(g, d.country);
     if (p.eliminatedAt !== null || p.side !== d.side) continue;
     independent(g, p); delete g.dominance[d.side];
@@ -346,11 +479,21 @@ function applyMembership(g) {
     delete g.dominance[side]; q.status = 'activated';
     event(g, 'alliance_activated', { side, name: q.name, roster: q.roster });
   }
+  normalizeWars(g);
+}
+function expireDiplomacy(g) {
+  for(const motion of g.diplomacy || [])if(['voting','offered'].includes(motion.status)) {
+    const reason=!sameMotionRoster(g,motion)?'Alliance membership changed.':
+      g.tick>=motion.expiresAt?'The 60-second vote or offer expired.':null;
+    if(reason){const recipients=motion.status==='offered'?[...new Set([...motion.fromRoster,...motion.toRoster])]:motion.fromRoster;
+      motion.status='expired';event(g,'diplomacy_expired',{motionId:motion.id,kind:motion.kind,reason},recipients);}
+  }
 }
 function departArmy(g, country, from, to, amount, automatic = false, order = null) {
-  const arrivesAt = order?.arrivesAt ?? g.tick + journeyTicks(g, from, to);
+  const arrivesAt = order?.transit ? g.tick+journeyTicks(g,from,to) : order?.arrivesAt ?? g.tick + journeyTicks(g, from, to);
   g.armies.push({ id: identifier(g, 'army-'), country, from, to, amount, departedAt: g.tick,
-    arrivesAt, ...(order ? { orderId: order.id, groupId: order.groupId } : {}) });
+    arrivesAt, ...(order ? { orderId: order.id, groupId: order.groupId } : {}),
+    ...(order?.transit?{transit:true,path:[...order.path],pathIndex:0,origin:from,originDepartedAt:g.tick}:{}) });
   if (!automatic) event(g, 'army_departed', { country, from, to, amount, arrivesAt });
 }
 function executeOrders(g) {
@@ -360,8 +503,11 @@ function executeOrders(g) {
   for (const o of g.orders.filter(o => o.type !== 'recall' && o.executeAt <= g.tick)) {
     const source = province(g, o.from);
     let error = source.owner !== o.country ? 'Source is no longer yours.' : null;
-    if (['move', 'develop'].includes(o.type) && o.amount >= source.troops) error = 'Not enough troops remain.';
+    if (['move', 'transit', 'develop'].includes(o.type) && o.amount >= source.troops) error = 'Not enough troops remain.';
     if (o.type === 'route' && o.to !== null && !allied(g, o.country, province(g, o.to).owner)) error = 'Destination is no longer friendly.';
+    if (o.type === 'move' && !mayEnter(g,o.country,province(g,o.to).owner)) error = 'War ended before departure.';
+    if(o.type==='transit' && (o.path.slice(0,-1).some(id=>!allied(g,o.country,province(g,id).owner)) ||
+      !mayEnter(g,o.country,province(g,o.path.at(-1)).owner)))error='Transit route or war status changed.';
     if (o.type === 'develop' && (source.developing || source.development !== o.level - 1)) error = 'Development state changed.';
     if (error) { event(g, 'order_failed', { country: o.country, orderId: o.id, reason: error }, [o.country]); continue; }
     if (o.type === 'route') source.route = o.to;
@@ -369,19 +515,47 @@ function executeOrders(g) {
       source.troops -= o.amount; g.economy.invested += o.amount;
       source.developing = { level: o.level, completesAt: g.tick + gameRules(g).developmentTicks[source.development] };
       event(g, 'development_started', { country: o.country, province: source.id, cost: o.amount, ...source.developing });
-    } else { source.troops -= o.amount; departArmy(g, o.country, o.from, o.to, o.amount, false, o); }
+    } else { source.troops -= o.amount; departArmy(g, o.country, o.from, o.to, o.amount, false,
+      o.type==='transit'?{...o,transit:true}:o); }
     event(g, 'order_executed', { country: o.country, orderId: o.id }, [o.country]);
   }
   g.orders = g.orders.filter(o => o.executeAt > g.tick);
 }
-function resolveArrivals(g) {
+function resolveArrivalsOld(g) {
   const due = g.armies.filter(a => a.arrivesAt <= g.tick);
   g.armies = g.armies.filter(a => a.arrivesAt > g.tick);
+  const dueByTarget=new Map();
+  for(const army of due){const list=dueByTarget.get(army.to) || [];list.push(army);dueByTarget.set(army.to,list);}
   const ids = g.players.map(p => p.id).sort();
   const rotated = [...ids.slice(g.tick % ids.length), ...ids.slice(0, g.tick % ids.length)];
   for (const target of g.provinces) {
-    const arrivals = due.filter(a => a.to === target.id);
+    let arrivals = dueByTarget.get(target.id) || [];
     if (!arrivals.length) continue;
+    if(gameRules(g).warRequired) {
+      const rejected=[];
+      arrivals=arrivals.filter(a=>{
+        if(mayEnter(g,a.country,target.owner))return true;
+        rejected.push(a);return false;
+      });
+      // Independent armies reaching vacant land together do not acquire a
+      // license to fight one another. Give the stronger arrival first claim.
+      const rivalSides=[...new Set(arrivals.filter(a=>!allied(g,a.country,target.owner)).map(a=>player(g,a.country).side))];
+      rivalSides.sort((a,b)=>{
+        const strength=s=>arrivals.filter(x=>player(g,x.country).side===s).reduce((n,x)=>n+x.amount,0);
+        return strength(b)-strength(a) || a.localeCompare(b);
+      });
+      const admitted=[];
+      for(const side of rivalSides) {
+        if(admitted.every(other=>atWar(g,sideRoster(g,side)[0],sideRoster(g,other)[0])))admitted.push(side);
+        else {const separated=arrivals.filter(a=>player(g,a.country).side===side);rejected.push(...separated);
+          arrivals=arrivals.filter(a=>player(g,a.country).side!==side);}
+      }
+      for(const a of rejected) {
+        if(a.returning)event(g,'army_interned',{country:a.country,armyId:a.id,province:target.id,amount:a.amount});
+        else {turnArmy(g,a,'no_war');g.armies.push(a);}
+      }
+      if(!arrivals.length)continue;
+    }
     const defender = target.owner ? player(g, target.owner).side : 'neutral';
     const strengths = new Map([[defender, target.troops]]);
     for (const a of arrivals) {
@@ -409,6 +583,105 @@ function resolveArrivals(g) {
       strengths: Object.fromEntries(strengths) });
   }
 }
+function hashChance(value) {
+  let hash=2166136261;
+  for(let i=0;i<value.length;i++){hash^=value.charCodeAt(i);hash=Math.imul(hash,16777619);}
+  hash^=hash>>>16;hash=Math.imul(hash,0x7feb352d);
+  hash^=hash>>>15;hash=Math.imul(hash,0x846ca68b);
+  hash^=hash>>>16;
+  return (hash>>>0)/4294967296;
+}
+function die(g,battle,index) { return 1+Math.floor(hashChance(`${g.id}:${battle.id}:${g.tick}:${index}`)*6); }
+function resolveArrivals(g) {
+  if(!gameRules(g).warRequired){resolveArrivalsOld(g);return;}
+  const due=g.armies.filter(a=>!a.engaged && a.arrivesAt<=g.tick);
+  g.armies=g.armies.filter(a=>a.engaged || a.arrivesAt>g.tick);
+  const byTarget=new Map();
+  for(const army of due){const list=byTarget.get(army.to)||[];list.push(army);byTarget.set(army.to,list);}
+  for(const target of g.provinces) {
+    const arriving=[];
+    for(const army of byTarget.get(target.id)||[]) {
+      if(army.transit && !army.returning && army.pathIndex<army.path.length-1) {
+        if(allied(g,army.country,target.owner) && !(g.battles||[]).some(b=>b.province===target.id)) {
+          army.from=target.id;army.pathIndex++;army.to=army.path[army.pathIndex];
+          army.departedAt=g.tick;army.arrivesAt=g.tick+journeyTicks(g,army.from,army.to);
+          g.armies.push(army);event(g,'army_transited',{country:army.country,province:target.id,to:army.to,amount:army.amount});
+        } else {turnArmy(g,army,'transit_blocked');g.armies.push(army);}
+      } else arriving.push(army);
+    }
+    if(!arriving.length)continue;
+    let battle=g.battles.find(b=>b.province===target.id);
+    const defenderSide=target.owner?player(g,target.owner).side:null;
+    const groups=new Map();
+    for(const army of arriving)if(!target.owner || !allied(g,army.country,target.owner)) {
+      const side=player(g,army.country).side,list=groups.get(side)||[];list.push(army);groups.set(side,list);
+    }
+    const chosen=battle?.attackerSide || [...groups].sort((a,b)=>
+      b[1].reduce((n,x)=>n+x.amount,0)-a[1].reduce((n,x)=>n+x.amount,0) || a[0].localeCompare(b[0]))[0]?.[0];
+    let reinforced=0;
+    for(const army of arriving) {
+      if(target.owner && allied(g,army.country,target.owner)) {
+        target.troops+=army.amount;reinforced+=army.amount;
+        if(battle)battle.arrivals.push({country:army.country,amount:army.amount});
+      } else if(player(g,army.country).side===chosen && mayEnter(g,army.country,target.owner)) {
+        if(!battle){battle={id:identifier(g,'battle-'),province:target.id,startedAt:g.tick,
+          attackerSide:chosen,previousOwner:target.owner,before:target.troops,arrivals:[],
+          defenderRecruited:0,defenderRouted:0,withdrawn:0,engaged:0,casualties:0,lastRound:null};
+          g.battles.push(battle);event(g,'battle_started',{battleId:battle.id,province:target.id,
+            attackerSide:chosen,defenderSide,startedAt:g.tick});}
+        army.engaged=true;g.armies.push(army);battle.arrivals.push({country:army.country,amount:army.amount});battle.engaged+=army.amount;
+      } else if(army.returning)event(g,'army_interned',{country:army.country,armyId:army.id,province:target.id,amount:army.amount});
+      else {turnArmy(g,army,'no_war');g.armies.push(army);}
+    }
+    if(reinforced)event(g,'reinforced',{province:target.id,owner:target.owner,troops:target.troops,amount:reinforced});
+  }
+}
+function resolveBattleRounds(g) {
+  if(!gameRules(g).warRequired)return;
+  for(const battle of [...g.battles]) {
+    if(battle.startedAt>=g.tick)continue;
+    const target=province(g,battle.province);
+    const attackers=g.armies.filter(a=>a.engaged && a.to===target.id);
+    for(const army of attackers)if(target.owner && !atWar(g,army.country,target.owner))turnArmy(g,army,'no_war');
+    const fighting=attackers.filter(a=>a.engaged),strength=()=>fighting.reduce((n,a)=>n+a.amount,0);
+    let attackerLoss=0,defenderLoss=0,attackDice=[],defendDice=[];
+    if(strength()>0 && target.troops>0) {
+      attackDice=Array.from({length:Math.min(3,strength())},(_,i)=>die(g,battle,i)).sort((a,b)=>b-a);
+      defendDice=Array.from({length:Math.min(2,target.troops)},(_,i)=>die(g,battle,3+i)).sort((a,b)=>b-a);
+      for(let i=0;i<Math.min(attackDice.length,defendDice.length);i++){
+        if(attackDice[i]>defendDice[i])defenderLoss++;else attackerLoss++;
+      }
+      target.troops-=defenderLoss;
+      for(const army of fighting.sort((a,b)=>b.amount-a.amount || a.id.localeCompare(b.id))){
+        const lost=Math.min(army.amount,attackerLoss);army.amount-=lost;attackerLoss-=lost;if(!attackerLoss)break;
+      }
+      const casualties=defenderLoss+Math.min(attackDice.length,defendDice.length)-defenderLoss;
+      battle.casualties+=casualties;g.economy.casualties=(g.economy.casualties||0)+casualties;
+      g.armies=g.armies.filter(a=>a.amount>0);
+    }
+    battle.lastRound={tick:g.tick,attackDice,defendDice,attackerLoss:Math.min(attackDice.length,defendDice.length)-defenderLoss,defenderLoss};
+    const survivors=g.armies.filter(a=>a.engaged && a.to===target.id);
+    if(survivors.length && target.troops>0)continue;
+    let industryLost=0;
+    if(survivors.length && target.troops===0) {
+      const rotated=g.players.map(p=>p.id).sort(),n=g.tick%rotated.length;
+      const priority=[...rotated.slice(n),...rotated.slice(0,n)];
+      const byCountry=new Map();for(const a of survivors)byCountry.set(a.country,(byCountry.get(a.country)||0)+a.amount);
+      target.owner=[...byCountry].sort((a,b)=>b[1]-a[1] || priority.indexOf(a[0])-priority.indexOf(b[0]))[0][0];
+      target.troops=survivors.reduce((n,a)=>n+a.amount,0);
+      g.armies=g.armies.filter(a=>!survivors.includes(a));
+      target.nextRecruit=g.tick+gameRules(g).recruit;target.route=null;
+      if(target.developing){event(g,'development_cancelled',{province:target.id,reason:'Captured; unfinished investment is lost.'});target.developing=null;}
+      const chance=Math.min(.95,Math.max(0,(battle.engaged+battle.before-24)/90));
+      if(target.development>1 && hashChance(`${g.id}:${battle.id}:industry`)<chance){target.development--;industryLost=1;
+        event(g,'industry_damaged',{province:target.id,owner:target.owner,level:target.development,chance});}
+    }
+    g.battles=g.battles.filter(b=>b!==battle);
+    event(g,'battle',{province:target.id,previousOwner:battle.previousOwner,owner:target.owner,before:battle.before,
+      defenderRecruited:battle.defenderRecruited,defenderRouted:battle.defenderRouted,withdrawn:battle.withdrawn,troops:target.troops,
+      arrivals:battle.arrivals,duration:g.tick-battle.startedAt,industryLost,casualties:battle.casualties});
+  }
+}
 function recruit(g) {
   for (const p of g.provinces) {
     if (p.developing?.completesAt <= g.tick) {
@@ -419,9 +692,11 @@ function recruit(g) {
     if (!p.owner || p.nextRecruit > g.tick) continue;
     const born = p.development;
     p.troops += born; p.nextRecruit = g.tick + gameRules(g).recruit;
+    const battle=(g.battles || []).find(b=>b.province===p.id);
+    if(battle)battle.defenderRecruited+=born;
     if (g.economy) g.economy.recruited += born;
     const send = Math.min(born, p.troops - 1);
-    if (p.route && send > 0) { p.troops -= send; departArmy(g, p.owner, p.id, p.route, send, true); }
+    if (p.route && send > 0) { p.troops -= send; if(battle)battle.defenderRouted+=send; departArmy(g, p.owner, p.id, p.route, send, true); }
   }
 }
 export function sides(g) {
@@ -471,7 +746,7 @@ function victory(g) {
 export function tick(g) {
   if (g.status !== 'running') return;
   const before = { ...g.dominance }, affiliations = new Map(g.players.map(p => [p.id, p.side]));
-  g.tick++; applyMembership(g); executeOrders(g); resolveArrivals(g); recruit(g); victory(g);
+  g.tick++; applyMembership(g); expireDiplomacy(g); executeOrders(g); resolveArrivals(g); resolveBattleRounds(g); recruit(g); victory(g);
   // Public feedback, separate from adjudication/event IDs so existing replays stay exact.
   for (const [side, since] of Object.entries(before)) if (g.dominance[side] !== since) {
     const changed = g.players.some(p => (affiliations.get(p.id) === side) !== (p.side === side));
@@ -499,8 +774,10 @@ export function observe(g, country = null, after = 0, limit = 200) {
   const p = country ? player(g, country) : null;
   return { id: g.id, name: g.name, status: g.status, tick: g.tick, speed: g.speed, rules: gameRules(g), scenario: g.scenario, travelTimes: g.travelTimes,
     eligible: g.eligible, you: country, players: g.players.map(({ profileId, orderTicks, lastChat, ...p }) => p),
-    provinces: g.provinces, armies: g.armies, sides: sides(g), economyThreshold: economyThreshold(g), projections: score(g),
+    provinces: g.provinces, armies: g.armies, battles: g.battles || [], sides: sides(g), wars: g.wars || [], economyThreshold: economyThreshold(g), projections: score(g),
     dominanceBreaks: g.dominanceBreaks || [],
+    diplomacy: (g.diplomacy || []).filter(m=>['voting','offered'].includes(m.status) &&
+      (m.fromRoster.includes(country) || m.status==='offered' && m.toRoster.includes(country))),
     proposals: g.proposals.filter(q => q.status === 'pending' || q.status === 'open' && q.roster.includes(country))
       .map(({ signature, ...q }) => q), departures: g.departures, dominance: g.dominance,
     commandBudget: p ? { remaining: gameRules(g).orderLimit - p.orderTicks.filter(t => t > g.tick-gameRules(g).orderWindow).length,
@@ -519,10 +796,12 @@ export function preview(g, map, from, to, amount, viewer = null) {
   const reserved = a.owner && a.owner === viewer ? reservedTroops(g, viewer, from) : 0;
   requireRule(Number.isSafeInteger(amount) && amount>0 && amount<a.troops-reserved,'Choose a positive amount of uncommitted troops and leave at least one behind.');
   let summary;
-  if(a.owner && allied(g,a.owner,b.owner)) summary=`Reinforce ${mapProvince(map,to).name} with ${amount} troops${a.owner!==b.owner?'; ownership of these troops passes to your ally':''}.`;
+  if(a.owner && !mayEnter(g,a.owner,b.owner)) summary=`Declare war on ${player(g,b.owner).name} before attacking ${mapProvince(map,to).name}.`;
+  else if(a.owner && allied(g,a.owner,b.owner)) summary=`Reinforce ${mapProvince(map,to).name} with ${amount} troops${a.owner!==b.owner?'; ownership of these troops passes to your ally':''}.`;
+  else if(gameRules(g).warRequired) summary=`${amount} attackers against ${b.troops} current defenders. Battle begins on arrival and resolves in Risk-style rounds; the winner and losses are uncertain.`;
   else if(amount>b.troops) summary=`Against the current garrison: capture with ${amount-b.troops} surviving troops.`;
   else if(amount===b.troops) summary='Both forces are destroyed; the previous owner keeps the empty province.';
   else summary=`The current defenders survive with ${b.troops-amount} troops.`;
-  return {from,to,amount,reserved,travelTicks:journeyTicks(g,from,to),arrivesAt:g.tick+1+journeyTicks(g,from,to),available:a.troops-reserved-1,remaining:a.troops-reserved-amount,summary,
-    incoming:g.armies.filter(a=>a.to===to),warning:'Current garrison only; not a prediction of future orders, recruitment, or diplomatic changes.'};
+  return {from,to,amount,reserved,warRequired:Boolean(a.owner && !mayEnter(g,a.owner,b.owner)),travelTicks:journeyTicks(g,from,to),arrivesAt:g.tick+1+journeyTicks(g,from,to),available:a.troops-reserved-1,remaining:a.troops-reserved-amount,summary,
+    incoming:g.armies.filter(a=>a.to===to),warning:'Current garrison only; not a prediction of dice, future orders, recruitment, or diplomatic changes.'};
 }

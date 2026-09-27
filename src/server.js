@@ -216,7 +216,9 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
     await new Promise(resolve=>server.close(resolve));store.close();} };
 }
 if(process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
-  const app=makeServer(),port=Number(process.env.PORT || 3000),host=process.env.HOST || '127.0.0.1';
-  app.server.listen(port,host,()=>console.log(`Council of Iron: ${process.env.PUBLIC_ORIGIN || `http://${host}:${port}`} (SQLite; single process)`));
+  const port=Number(process.env.PORT || 3107),host=process.env.HOST || '0.0.0.0';
+  const publicOrigin=process.env.PUBLIC_ORIGIN || `http://192.168.1.216:${port}`;
+  const app=makeServer({publicOrigin});
+  app.server.listen(port,host,()=>console.log(`Council of Iron: ${publicOrigin} (SQLite; single process)`));
   for(const signal of ['SIGTERM','SIGINT']) process.once(signal,()=>app.close().then(()=>process.exit(0)));
 }

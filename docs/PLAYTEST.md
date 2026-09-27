@@ -1,3 +1,9 @@
+# War, peace, multi-round combat and transit verification — 27 September 2026
+
+After integrating the v0.5 command-table UI, 72 Node tests passed and `npm run check` passed. Focused new tests exercised peaceful attack rejection without reservation, coalition majority war and peace votes, 60-tick expiry, automatic treaty recall, delayed Risk-style battle rounds, small-battle industry protection, large-battle damage, and allied transit without ownership transfer. The 32-round diplomacy heuristic balance run completed with zero invariant failures; that is a regression sample, not evidence of human balance or enjoyment.
+
+The native browser gameplay playthrough, recorded-match review suite, and focused command-table suite passed after adapting their recorded fixtures to the new war and economic victory rules. The final gameplay run recorded 62 real browser frames in `docs/media/gameplay.gif`. Browser and CLI actions, alliance consent, private/public chat filtering, spectator view, coordinated orders and recalls, responsive layout, and exact review playback were exercised. The focused UI suite reported no page errors. A large-battle probe exposed correlated seeded dice that made the defender effectively unbeatable; an avalanche mixing step corrected the dice, and the focused large-capture test passed afterward. The final native browser run passed after the dice change, including gameplay, recorded-match review, and focused command-table checks.
+
 # Economic victory verification — 27 September 2026
 
 After changing victory to 60% of active industry, `npm test` passed 62/62 Node tests and `npm run check` passed. Focused rules tests covered victory through a completed upgrade without conquest, a countdown broken by an opponent upgrade, and a deadline decided by industry despite fewer provinces. The 32-round diplomacy balance run completed with zero invariant failures; it is an automated heuristic sample, not evidence of human balance or enjoyment.
@@ -33,6 +39,12 @@ The native `python tests/browser.py` run passed with no page errors. Its spectat
 # Spectator mode verification — 27 September 2026
 
 Local verification passed: 81 Node tests, `npm run check`, and a 32-round diplomacy balance run with zero invariant failures. The native `python tests/browser.py` run passed with no page errors. Its new browser check found a running match in the lobby, opened its read-only live view, saw all eight standings, and confirmed that a private dispatch visible to a seated player was absent for the spectator. The same run completed its live match, after-action review, and second-room industrial checks. This is automated browser and heuristic-agent evidence, not a human playtest.
+
+# Local four-agent and LAN playtest — 27 September 2026
+
+On a local Node 22.22.2 server, four separate `gpt-6-luna` high-effort controllers joined a quick experimental industrial room (`895f000d`) as USA, Britain, Germany and Ottoman. Each used its own match session and the regular client/API. The room ran to its tick-1800 deadline. The authoritative outcome and public review agreed: Germany won solo with 25 provinces, a 400 payout and 300 Prestige; Britain had 23 provinces, USA 19 and Ottoman 12, each with −100 Prestige. The public review reported `historyAvailable:true`, and its exact-tick replay was available at tick 1800. This was one same-operator test match, not a balance estimate or an independent competitive trial.
+
+`npm test` passed 80/80 tests initially and 81/81 after the UI additions in this workspace; `npm run check` passed. `npm run test:balance -- --rounds 32 --mode diplomacy` completed with zero invariant failures. The native `python tests/browser.py` run passed before and after the LAN defaults, including its complete browser/CLI/external-agent playthrough and focused after-action suite, with no captured page errors. After setting LAN defaults, the server listened on `0.0.0.0:3107`; HTTP health and the saved review returned successfully through `192.168.1.216:3107`, and Chromium opened that address in Review state without page errors. A separate Docker bridge container also received HTTP 200 from the LAN IP. UFW was active, but its rule set required administrator access and an independent physical device connection was not verified.
 
 # v0.4 review and feedback verification — 27 September 2026
 

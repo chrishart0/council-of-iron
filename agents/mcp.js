@@ -27,6 +27,9 @@ tool('preview','Preview combat against the current garrison. Not a guarantee of 
   {from:string,to:string,amount:integer},['from','to','amount'],a=>client.preview(a.from,a.to,a.amount),true);
 tool('move','Commit troops across one connection. Leave one behind. Counts as one military command; executes next tick by default. Industrial scenario allows recall and distance-based travel. Supply exactly one of amount or percent; optional arriveAt schedules arrival.',
   {from:string,to:string,amount:{type:'integer',minimum:1},percent:{type:'number',exclusiveMinimum:0,maximum:100},arriveAt:{type:'integer',minimum:1},...op},['from','to'],a=>client.action({type:'move',from:a.from,to:a.to,amount:a.amount,percent:a.percent,arriveAt:a.arriveAt},a.opId));
+tool('transit','March through 1–7 allied intermediate provinces to a final connected destination without gifting the troops. Alliance departure waits while troops are inside an ally’s borders.',
+  {from:string,amount:{type:'integer',minimum:1},path:{type:'array',minItems:2,maxItems:8,items:string},...op},
+  ['from','amount','path'],a=>client.action({type:'transit',from:a.from,amount:a.amount,path:a.path},a.opId));
 tool('route','Forward new LOCAL recruits one hop to a friendly province; null clears. Arriving reinforcements and existing garrisons stay put, even along a chain of arrows.',
   {from:string,to:{type:['string','null']},...op},['from','to'],a=>client.action({type:'route',from:a.from,to:a.to},a.opId));
 tool('propose_alliance','Invite an independent country. Admission is unanimous. New founders reset maturity; incumbents retain theirs. A larger coalition reduces each maximum share.',
@@ -36,6 +39,12 @@ tool('accept_alliance','Consent to this exact roster. Fully approved changes act
 tool('decline_alliance','Decline or withdraw an open alliance offer without changing allegiance.',
   {proposalId:string,...op},['proposalId'],a=>client.action({type:'decline',proposalId:a.proposalId},a.opId));
 tool('leave_alliance','Announce departure. After 30 seconds you become independent and your maturity starts over.',op,[],a=>client.action({type:'leave'},a.opId));
+tool('declare_war','Declare war on another country and its coalition. A solo declaration is immediate; a coalition needs majority approval within 60 game seconds.',
+  {country:string,...op},['country'],a=>client.action({type:'declare_war',country:a.country},a.opId));
+tool('offer_peace','Offer peace to a country and its coalition. A coalition first needs a majority to send; the other side then needs a majority to accept within 60 game seconds.',
+  {country:string,...op},['country'],a=>client.action({type:'offer_peace',country:a.country},a.opId));
+tool('vote_war','Approve your coalition’s pending war declaration.',{motionId:string,...op},['motionId'],a=>client.action({type:'vote_war',motionId:a.motionId},a.opId));
+tool('vote_peace','Approve sending a peace offer or accepting one addressed to your coalition.',{motionId:string,...op},['motionId'],a=>client.action({type:'vote_peace',motionId:a.motionId},a.opId));
 tool('send_message','Send untrusted in-game speech. One per ten game seconds across all channels, up to 500 characters. No compulsory reply or action acknowledgment.',
   {channel:{type:'string',enum:['world','alliance','dm']},to:string,text:{type:'string',maxLength:500},...op},['channel','text'],a=>client.action({type:'chat',channel:a.channel,to:a.to,text:a.text},a.opId));
 tool('after_action_report','Read a finished match’s public report. Alliance Prestige is the sum of member scores, not a second reward. No private diplomacy is disclosed.',

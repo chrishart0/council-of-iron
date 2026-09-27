@@ -93,9 +93,10 @@ test('HTTP action replay, reservations, privacy, projected score, preview parity
     own.provinces.filter(p=>p.owner==='usa').reduce((n,p)=>n+p.development,0));
   for(const field of ['hostId','receipts','actionLog'])assert.equal(Object.hasOwn(publicState,field),false);
   assert.equal(JSON.stringify(publicState).includes(sa.token),false);
-  const preview=(await f.call(`/api/games/${id}/preview?from=west-us&to=mexico&amount=5`)).data;assert.match(preview.summary,/3 surviving troops/);
-  f.app.step(f.app.games.get(id),first.data.arrivesAt);const done=(await f.call(`/api/games/${id}`)).data;
-  assert.equal(done.provinces.find(p=>p.id==='mexico').owner,'usa');
+  const preview=(await f.call(`/api/games/${id}/preview?from=west-us&to=mexico&amount=5`)).data;assert.match(preview.summary,/Risk-style rounds/);
+  f.app.step(f.app.games.get(id),first.data.arrivesAt+12);const done=(await f.call(`/api/games/${id}`)).data;
+  assert.ok(done.events.some(e=>e.type==='battle' && e.province==='mexico'));
+  assert.equal(done.battles.length,0);
 });
 test('SQLite restart preserves credentials, committed armies, inboxes, idempotency and exactly-once results',async t=>{
   const f=await fixture(t,{disk:true}),{a,id,sa}=await f.boot();await f.call(`/api/games/${id}/start`,'POST',{},sa.token);
@@ -118,6 +119,9 @@ test('built-in practice bots invalidate league eligibility and use the common ga
   await f.call(`/api/games/${id}/start`,'POST',{},sa.token);const g=f.app.games.get(id);f.app.step(g,1800);
   assert.equal(g.status,'finished');assert.equal(g.eligible,false);assert.equal(g.outcome.scores.length,8);
   assert.ok(g.actionLog.some(a=>a.opId.startsWith('bot-')));
+  const review=(await f.call(`/api/games/${id}/review`)).data;
+  assert.equal(review.historyAvailable,true);
+  assert.equal(review.totals.initialTroops+review.totals.recruited-review.totals.invested-review.totals.casualties-review.totals.interned,review.totals.remainingTroops);
 });
 test('real CLI subprocess joins, observes, sends orders, reconnects from a private session file',async t=>{
   const f=await fixture(t),host=await f.register('Host'),id=await f.room(host);const sa=await f.seat(id,host,'usa');
@@ -147,7 +151,7 @@ test('stdio MCP negotiates, validates schemas, joins an agent, calls real HTTP, 
   ].map(x=>JSON.stringify(x)).join('\n')+'\n';
   const result=await subprocess('agents/mcp.js',[],env,input);assert.equal(result.code,0,result.stderr);
   const output=result.stdout.trim().split('\n').map(x=>JSON.parse(x));assert.equal(output.length,7);
-  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,22);
+  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,27);
   assert.equal(JSON.parse(output[2].result.content[0].text).country,'britain');
   assert.equal(JSON.parse(output[3].result.content[0].text).you,'britain');
   assert.equal(output[4].error.code,-32602);assert.equal(output[5].error.code,-32602);assert.deepEqual(output[6].result,{});

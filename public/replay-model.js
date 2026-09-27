@@ -4,7 +4,7 @@
 export function replayReader(replay) {
   if (replay.version !== 1 || !Array.isArray(replay.frames) || !replay.frames.length)
     throw new Error('Unsupported or empty replay.');
-  let board = { provinces: [], armies: [], players: [], dominance: {}, sides: [] };
+  let board = { provinces: [], armies: [], battles: [], players: [], dominance: {}, sides: [], wars: [] };
   const frames = replay.frames.map(patch => {
     const replacements = new Map((patch.provinces || []).map(p => [p.id, p]));
     const provinces = !board.provinces.length ? patch.provinces : patch.provinces

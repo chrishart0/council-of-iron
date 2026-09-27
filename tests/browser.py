@@ -94,9 +94,10 @@ def main():
                 page.locator('#source').select_option('west-us')
                 page.locator('#destination').select_option('mexico')
                 page.locator('#amount').fill('7')
-                expect(page.locator('#preview')).to_contain_text('5 surviving troops')
+                expect(page.locator('#preview')).to_contain_text('Risk-style rounds')
                 page.locator('#send-army').click()
                 expect(page.locator('#toast')).to_contain_text('Army committed')
+                cli('war','france')
                 cli('move','england','north-france','6')
                 page.locator('#source').select_option('central-us')
                 page.locator('#destination').select_option('west-us')
@@ -182,14 +183,14 @@ def main():
                 deadline=time.monotonic()+15
                 while time.monotonic()<deadline:
                     state=http(f'/api/games/{room}')
-                    if next(p for p in state['provinces'] if p['id']=='mexico')['owner']=='usa':break
+                    if any(e['type']=='battle' and e.get('province')=='mexico' for e in state['events']):break
                     page.wait_for_timeout(300)
-                assert next(p for p in state['provinces'] if p['id']=='mexico')['owner']=='usa'
+                assert any(e['type']=='battle' and e.get('province')=='mexico' for e in state['events'])
                 page.screenshot(path=str(artifacts/'02-campaign.png'),full_page=True)
                 capture(page,800)
                 page.locator('#europe-view').click();capture(page,900);page.screenshot(path=str(artifacts/'03-europe.png'),full_page=True)
                 page.locator('#world-view').click()
-                report['assertions'].append('Browser-issued attack captured Mexico after travel and combat; world and Europe zoom rendered.')
+                report['assertions'].append('Browser-issued attack fought for Mexico after travel and multiple combat rounds; world and Europe zoom rendered.')
                 # Reconnect a second page with the same browser identity, not another join.
                 if args.bridge:saved=page.evaluate('window.__testStorage')
                 else:saved=None

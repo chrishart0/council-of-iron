@@ -10,7 +10,8 @@ const sum = values => values.reduce((n, v) => n + v, 0);
 export function publicBoard(g) {
   return { provinces: clone(g.provinces), armies: clone(g.armies),
     players: g.players.map(p => ({ id: p.id, side: p.side, joinedAt: p.joinedAt, eliminatedAt: p.eliminatedAt })),
-    sideNames: sides(g).map(s => ({ id: s.id, name: s.name })), dominance: { ...g.dominance } };
+    sideNames: sides(g).map(s => ({ id: s.id, name: s.name })), dominance: { ...g.dominance },
+    ...(gameRules(g).warRequired?{wars:[...g.wars],battles:clone(g.battles)}:{}) };
 }
 function freshGame(game, map) {
   if (game.reviewOrigin) return clone(game.reviewOrigin);
@@ -26,7 +27,8 @@ function freshGame(game, map) {
 function terminalProjection(g) {
   return { tick: g.tick, status: g.status, provinces: g.provinces, armies: g.armies,
     affiliations: g.players.map(p => [p.id, p.side, p.joinedAt, p.eliminatedAt]),
-    sides: sides(g), dominance: g.dominance, outcome: g.outcome };
+    sides: sides(g), dominance: g.dominance, outcome: g.outcome,
+    ...(gameRules(g).warRequired?{wars:g.wars,battles:g.battles}:{}) };
 }
 function summary(game) {
   const players = game.players.map(p => ({ country: p.id, name: p.name, kind: p.kind,
@@ -51,7 +53,7 @@ export function unavailableReview(game, reason) {
 export function buildReview(game, map) {
   requireRule(game.status === 'finished' && game.outcome, 'After-action review is available only when the match is finished.', 409);
   const report = { ...summary(game), historyAvailable: true, series: [], events: [], battles: [], tenures: [],
-    totals: { battles: 0, casualties: 0, recruited: 0, invested: 0, upgrades: 0 } };
+    totals: { battles: 0, casualties: 0, interned: 0, recruited: 0, invested: 0, upgrades: 0 } };
   const g = freshGame(game, map), rules = gameRules(g), ids = g.players.map(p => p.id);
   const metrics = new Map(ids.map(id => [id, { country: id, recruited: 0, invested: 0, upgrades: 0,
     captures: 0, provincesLost: 0, battles: 0, peakLand: 0, peakTroops: 0 }]));
@@ -62,7 +64,7 @@ export function buildReview(game, map) {
     const board = publicBoard(g), patch = { tick: g.tick };
     patch.provinces = board.provinces.filter((p, i) => !previousBoard || !isDeepStrictEqual(p, previousBoard.provinces[i]));
     if (!patch.provinces.length) delete patch.provinces;
-    for (const key of ['armies', 'players', 'dominance', 'sideNames'])
+    for (const key of ['armies', 'players', 'dominance', 'sideNames', 'wars', 'battles'])
       if (!previousBoard || !isDeepStrictEqual(board[key], previousBoard[key])) patch[key] = board[key];
     if (Object.keys(patch).length > 1 || !replay.frames.length) replay.frames.push(patch);
     previousBoard = board;
@@ -97,9 +99,10 @@ export function buildReview(game, map) {
       // Explicit allowlist: new engine events are NOT automatically made public here.
       if (e.recipients) continue;
       if (e.type === 'battle') {
-        const casualties = e.before + sum(e.arrivals.map(a => a.amount)) - e.troops;
+        const casualties = e.casualties ?? (e.before + (e.defenderRecruited||0) + sum(e.arrivals.map(a => a.amount)) - e.troops - (e.withdrawn||0) - (e.defenderRouted||0));
         const battle = { tick: e.tick, type: e.type, province: e.province, previousOwner: e.previousOwner,
-          owner: e.owner, before: e.before, troops: e.troops, arrivals: clone(e.arrivals), casualties };
+          owner: e.owner, before: e.before, troops: e.troops, arrivals: clone(e.arrivals), casualties,
+          duration:e.duration||0,industryLost:e.industryLost||0 };
         report.battles.push(battle); report.totals.battles++; report.totals.casualties += casualties;
         const participants = new Set(e.arrivals.filter(a => a.amount > 0).map(a => a.country));
         if (e.previousOwner && e.before > 0) participants.add(e.previousOwner);
@@ -115,8 +118,15 @@ export function buildReview(game, map) {
       } else if (e.type === 'development_completed') {
         metrics.get(e.country).upgrades++; report.totals.upgrades++;
         addEvent({ tick: e.tick, type: e.type, country: e.country, province: e.province, level: e.level });
+      } else if (e.type === 'industry_damaged') {
+        addEvent({tick:e.tick,type:e.type,province:e.province,owner:e.owner,level:e.level});
       } else if (e.type === 'alliance_activated') {
         addEvent({ tick: e.tick, type: e.type, side: e.side, name: e.name, roster: [...e.roster] });
+      } else if (e.type === 'coalition_dissolved') {
+        addEvent({ tick: e.tick, type: e.type, side: e.side });
+      } else if (e.type === 'war_declared' || e.type === 'peace_accepted') {
+        addEvent({ tick: e.tick, type: e.type, from: e.from, to: e.to,
+          fromRoster: [...e.fromRoster], toRoster: [...e.toRoster] });
       } else if (e.type === 'departed') {
         addEvent({ tick: e.tick, type: e.type, country: e.country, side: e.side, formerSide: e.formerSide });
       } else if (e.type === 'dominance') {
@@ -124,7 +134,11 @@ export function buildReview(game, map) {
       } else if (e.type === 'eliminated') {
         addEvent({ tick: e.tick, type: e.type, country: e.country });
       } else if (e.type === 'army_recalled') {
-        addEvent({ tick: e.tick, type: e.type, country: e.country, to: e.to, amount: e.amount, arrivesAt: e.arrivesAt });
+        addEvent({ tick: e.tick, type: e.type, country: e.country, to: e.to, amount: e.amount, arrivesAt: e.arrivesAt,
+          ...(e.reason?{reason:e.reason}:{}) });
+      } else if (e.type === 'army_interned') {
+        report.totals.interned += e.amount;
+        addEvent({ tick: e.tick, type: e.type, country: e.country, province: e.province, amount: e.amount });
       }
     }
     for (const [side, since] of Object.entries(beforeDominance)) if (g.dominance[side] !== since) {
@@ -142,9 +156,10 @@ export function buildReview(game, map) {
   report.tenures.push(...[...tenures.values()].map(t => ({ ...t, end: game.tick })));
   report.sideNames = [...new Map([...g.coalitions.map(c => [c.id, c.name]), ...ids.map(id => [`solo:${id}:0`, id])])]
     .map(([id, name]) => ({ id, name }));
+  if(rules.warRequired)report.totals.casualties=g.economy.casualties||0;
   report.totals.initialTroops = sum(replay.frames[0].provinces.map(p => p.troops)) + sum((replay.frames[0].armies || []).map(a => a.amount));
   report.totals.remainingTroops = sum(g.provinces.map(p => p.troops)) + sum(g.armies.map(a => a.amount));
-  requireRule(report.totals.initialTroops + report.totals.recruited - report.totals.invested - report.totals.casualties === report.totals.remainingTroops,
+  requireRule(report.totals.initialTroops + report.totals.recruited - report.totals.invested - report.totals.casualties - report.totals.interned === report.totals.remainingTroops,
     'The review troop ledger did not reconcile; replay is withheld.', 409);
   report.events.sort((a, b) => a.tick - b.tick);
   report.events.push({ tick: game.tick, type: 'finished', winningSide: game.outcome.winningSide, reason: game.outcome.reason });

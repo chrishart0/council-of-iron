@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
 export class CouncilClient {
-  constructor({ url = process.env.COUNCIL_URL || 'http://127.0.0.1:3000', token = process.env.COUNCIL_TOKEN || '',
+  constructor({ url = process.env.COUNCIL_URL || 'http://127.0.0.1:3107', token = process.env.COUNCIL_TOKEN || '',
     match = process.env.COUNCIL_MATCH || '', sessionPath = process.env.COUNCIL_SESSION || '.council.session.json' } = {}) {
     this.url=url.replace(/\/$/,'');this.sessionPath=resolve(sessionPath);this.session={};
     try { this.session=JSON.parse(readFileSync(this.sessionPath,'utf8')); }

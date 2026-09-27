@@ -102,7 +102,7 @@ def main():
             expect(page.locator('.victory-seals .insignia')).to_have_count(3)
             capture('09-victory-review.png');page.locator('#aar-tab-replay').click()
             expect(page.locator('#replay-stage')).to_be_visible()
-            page.locator('#replay-slider').fill('535');page.locator('[data-aar-map="europe"]').click();capture('10-replay.png')
+            page.locator('#replay-slider').fill('530');page.locator('[data-aar-map="europe"]').click();capture('10-replay.png')
             ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
             report['assertions'].append('After-action standards identify all winning members; exact map playback keeps separate SVG IDs and no live command surface.')
             page.emulate_media(reduced_motion='reduce');assert page.evaluate('getComputedStyle(document.querySelector("#battle-signal")).animationName')=='none'

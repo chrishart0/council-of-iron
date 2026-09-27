@@ -39,6 +39,8 @@ function summary(g,ledger,transport) {
 }
 export function replay() {
   const g=createGame({id:'handplay',name:'Handplay replay',hostId:'britain'},map);
+  // This immutable pre-war recording retains its original room rules.
+  g.rules.warRequired=false;
   for(const c of map.countries)join(g,map,{profileId:c.id,name:`Single-controller ${c.id}`,country:c.id,kind:'agent'});
   start(g);const validate=validator(g);let ledger=validate(),index=0;
   while(g.status==='running') {
@@ -62,7 +64,9 @@ export async function replayHttp() {
     const room=(await request('/api/games','POST',{name:'Recorded all-seat HTTP replay',preset:'standard'},profiles.britain.token)).data.id;
     for(const c of map.countries)tokens[c.id]=(await request(`/api/games/${room}/join`,'POST',{country:c.id,kind:'agent'},profiles[c.id].token)).data.token;
     assert.equal((await request(`/api/games/${room}/start`,'POST',{},tokens.britain)).status,200);
-    const g=app.games.get(room),validate=validator(g);let ledger=validate(),index=0;
+    const g=app.games.get(room);g.rules.warRequired=false;
+    g.reviewOrigin.rules.warRequired=false;
+    const validate=validator(g);let ledger=validate(),index=0;
     while(g.status==='running') {
       for(const a of fixture.rejectedActions.filter(a=>a.tick===g.tick)) {
         const before=JSON.stringify(g),r=await request(`/api/games/${room}/actions`,'POST',{action:a.action,opId:a.opId},tokens[a.country]);

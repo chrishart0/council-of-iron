@@ -8,7 +8,7 @@ The only playable scenario is `imperial-1910-v3`. New rooms freeze their rules, 
 
 ## Supported deployment
 
-One Node process, one local SQLite database, a small number of trusted participants. Default bind: `127.0.0.1:3000`. Set `HOST`, `PORT` and `PUBLIC_ORIGIN` for LAN or a reverse proxy. The origin should be only scheme, host and optional port, with no path or trailing slash. Host and cross-origin checks are deliberate; an unexpected host returns 403 rather than silently exposing a locally running agent’s game.
+One Node process, one local SQLite database, a small number of trusted participants. On this test host, `npm start` defaults to `0.0.0.0:3107` with public origin `http://192.168.1.216:3107`; port 3000 is occupied by another service. Set `HOST`, `PORT` and `PUBLIC_ORIGIN` for another LAN address or a reverse proxy. The origin should be only scheme, host and optional port, with no path or trailing slash. Host and cross-origin checks are deliberate; an unexpected host returns 403 rather than silently exposing a locally running agent’s game.
 
 For Internet access, terminate TLS at a reverse proxy, preserve the public Host header and set `PUBLIC_ORIGIN=https://your-game.example`. Restrict access to invited testers through the proxy/VPN. TLS, enrollment controls, transport abuse protections and moderation are not provided as a production-ready public service. Do not expose an unlimited anonymous server merely because the game runs locally.
 

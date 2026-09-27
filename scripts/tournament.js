@@ -84,25 +84,23 @@ function run(seed) {
         if (action) command(p.id, action);
       }
     }
-    const oldTotal = total(g), oldEvents = g.events.length, oldInvested = g.economy?.invested || 0;
-    const expectedLevels = new Map(g.provinces.map(p=>[p.id,p.developing?.completesAt<=g.tick+1 ? p.developing.level : p.development || 1]));
-    const dueRecruits = g.provinces.filter(p => p.owner && p.nextRecruit <= g.tick+1).map(p=>p.id);
+    const oldTotal = total(g), oldEvents = g.events.length, oldEconomy = {...g.economy};
     tick(g);
-    const events = g.events.slice(oldEvents), captured = new Set(); let lost = 0;
+    const events = g.events.slice(oldEvents);
     for (const e of events) {
       if (e.type === 'battle') {
         battles++; if (firstBattle === null) firstBattle = g.tick;
-        lost += Object.values(e.strengths).reduce((n,v)=>n+v,0) - e.troops;
-        if (e.owner !== e.previousOwner) captured.add(e.province);
       }
       if (e.type === 'eliminated' && firstElimination === null) firstElimination = g.tick;
       if (e.type === 'alliance_activated') alliances++;
       if (e.type === 'departed') departures++;
     }
-    const born = dueRecruits.filter(id=>!captured.has(id)).reduce((n,id)=>n+expectedLevels.get(id),0); recruited += born; casualties += lost;
-    invariant(total(g) === oldTotal + born - lost - ((g.economy?.invested || 0) - oldInvested), 'troop conservation', g);
+    const born=g.economy.recruited-oldEconomy.recruited,lost=(g.economy.casualties||0)-(oldEconomy.casualties||0);
+    const interned=events.filter(e=>e.type==='army_interned').reduce((n,e)=>n+e.amount,0);
+    recruited += born; casualties += lost;
+    invariant(total(g) === oldTotal + born - lost - interned - (g.economy.invested-oldEconomy.invested), 'troop conservation', g);
     invariant(g.provinces.every(p=>Number.isSafeInteger(p.troops) && p.troops>=0), 'negative or noninteger garrison',g);
-    invariant(g.armies.every(a=>Number.isSafeInteger(a.amount) && a.amount>0 && a.arrivesAt>g.tick), 'invalid moving army',g);
+    invariant(g.armies.every(a=>Number.isSafeInteger(a.amount) && a.amount>0 && (a.engaged || a.arrivesAt>g.tick)), 'invalid moving army',g);
     invariant(g.tick<=1800, 'deadline overrun',g);
     if ([300,600,1200].includes(g.tick)) checkpoints[g.tick] = Object.fromEntries(g.players.map(p=>[p.id,g.provinces.filter(v=>v.owner===p.id).length]));
   }

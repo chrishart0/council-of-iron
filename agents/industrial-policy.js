@@ -3,11 +3,18 @@
  */
 export function chooseIndustrial(state, map, country, options = {}) {
   const me = state.players.find(p => p.id === country);
-  if (state.status !== 'running' || !me || me.eliminatedAt !== null || !state.commandBudget?.remaining) return null;
+  if (state.status !== 'running' || !me || me.eliminatedAt !== null) return null;
+  const motion=(state.diplomacy || []).find(m=>m.kind==='war' && m.status==='voting' && m.fromRoster.includes(country) && !m.fromYes.includes(country) ||
+    m.kind==='peace' && (m.status==='voting' && m.fromRoster.includes(country) && !m.fromYes.includes(country) ||
+      m.status==='offered' && m.toRoster.includes(country) && !m.toYes.includes(country)));
+  if(motion)return {type:motion.kind==='war'?'vote_war':'vote_peace',motionId:motion.id};
+  if(!state.commandBudget?.remaining)return null;
   const style = { neutral: 15, fraction: .8, reserve: 2, develop: true, coordinated: true, recall: true, ...options };
   const rng = style.rng || (() => .5), board = new Map(state.provinces.map(p => [p.id, p]));
   const places = new Map(map.provinces.map(p => [p.id, p])), sides = new Map(state.players.map(p => [p.id, p.side]));
   const friend = p => p.owner && sides.get(p.owner) === me.side;
+  const canEnter=p=>!p.owner || friend(p) || !state.rules.warRequired ||
+    (state.wars || []).includes([country,p.owner].sort().join(':'));
   const own = state.provinces.filter(p => p.owner === country);
   const reservations = new Map();
   for (const o of state.commandBudget.reserved) if (['move', 'develop'].includes(o.type))
@@ -30,7 +37,7 @@ export function chooseIndustrial(state, map, country, options = {}) {
   }
   // Compare one-target attack plans, not an unlimited series of privileged army moves.
   const attacks = [];
-  for (const target of state.provinces.filter(p=>!friend(p))) {
+  for (const target of state.provinces.filter(p=>!friend(p) && canEnter(p))) {
     const donors = own.filter(p=>places.get(p.id).neighbors.includes(target.id) && safeSpare(p)>0)
       .sort((a,b)=>travel(a.id,target.id)-travel(b.id,target.id));
     if (!donors.length) continue;
@@ -56,6 +63,12 @@ export function chooseIndustrial(state, map, country, options = {}) {
     }
   }
   attacks.sort((a,b)=>b.value-a.value);
+  if(!attacks.length && state.rules.warRequired) {
+    const enemy=state.provinces.find(p=>p.owner && !friend(p) && !canEnter(p) &&
+      own.some(q=>places.get(q.id).neighbors.includes(p.id) && safeSpare(q)>p.troops+2));
+    if(enemy && !(state.diplomacy || []).some(m=>m.kind==='war' && [m.fromSide,m.toSide].includes(me.side) &&
+      [m.fromSide,m.toSide].includes(sides.get(enemy.owner))))return {type:'declare_war',country:enemy.owner};
+  }
   // Infrastructure is useful only when there is enough match left to repay its cost.
   // A builder can invest before expansion, while an expander prefers a good open target.
   if (style.develop && (!attacks.length || style.investFirst)) {

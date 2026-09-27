@@ -30,16 +30,16 @@ cd council-of-iron
 npm start
 ```
 
-Open **http://127.0.0.1:3000**. Create a room, choose a country, invite humans or attach agents, then start. Add external players **before** filling empty seats with practice bots. Two to eight occupied countries can start; balance tests use eight. Unclaimed countries' territories remain neutral.
+Open **http://192.168.1.216:3107** from this machine or another device on the same network. The default `npm start` binds all interfaces and accepts this LAN origin; `HOST`, `PORT`, and `PUBLIC_ORIGIN` can override it. Create a room, choose a country, invite humans or attach agents, then start. Add external players **before** filling empty seats with practice bots. Two to eight occupied countries can start; balance tests use eight. Unclaimed countries' territories remain neutral.
 
 The lobby lists running games first. **Spectate** opens the public view with world-chat bubbles and a full-screen map; a separate **Resume** button restores your own playing seat. Private messages never enter spectator bubbles.
 
 Standard lasts at most **30 real minutes**. Quick runs all game timers at 6× and finishes within five real minutes. The displayed clock always shows game time. Use Standard for actual LLM negotiation; accelerating the world does not accelerate model inference.
 
-For trusted LAN players:
+For another trusted LAN address or port:
 
 ```sh
-HOST=0.0.0.0 PUBLIC_ORIGIN=http://YOUR-LAN-IP:3000 npm start
+HOST=0.0.0.0 PORT=3107 PUBLIC_ORIGIN=http://YOUR-LAN-IP:3107 npm start
 ```
 
 Use that exact origin in browsers and agent configuration. Internet hosting requires an HTTPS reverse proxy and invited-access controls; [operations and security limits](docs/OPERATIONS.md). This is not a hardened anonymous public game service.
@@ -54,7 +54,9 @@ The Orders panel separates **March**, **Coordinate**, and **Develop**. The curre
 
 **Recall.** Committed orders list individual and group recall controls. Waiting components cancel; marching troops turn around next tick and take their elapsed outbound travel time to return. They do not teleport or refund instantly. A captured home must be fought for on return. Arrived or already-returning troops cannot be recalled again.
 
-**Develop.** Manpower remains the only resource. Each province has industry I, II or III and produces that many troops every 20 ticks. I→II costs 12 local troops and takes 60 ticks; II→III costs 24 and takes 90. Construction leaves one garrison, is destroyed by capture without a refund, and cannot stack. Finished industry is captured intact. Reinforcement arrows forward the newly recruited batch automatically; existing troops stay home.
+**War, peace, and transit.** Declare war before attacking an occupied enemy province. Alliances enter war together and need majority approval to declare or send/accept peace. Votes and treaty offers expire after 60 game seconds. An accepted treaty turns attackers home. Battles resolve across multiple Risk-style dice rounds, with ties favoring defenders, so both sides can reinforce or pull back. A transit order carries your troops through an ally’s province without transferring ownership; alliance departure waits until allied-border transits have cleared. War, peace, alliance formation, and alliance breakup appear as animated notices.
+
+**Develop.** Manpower remains the only resource. Each province has industry I, II or III and produces that many troops every 20 ticks. I→II costs 12 local troops and takes 60 ticks; II→III costs 24 and takes 90. Construction leaves one garrison, is destroyed by capture without a refund, and cannot stack. A capture can damage completed industry, with a chance that rises with battle size. Reinforcement arrows forward the newly recruited batch automatically; existing troops stay home.
 
 **Negotiate.** World chat, coalition chat and DMs share a cooldown. Formal coalition formation/admission needs consent and 30 ticks' notice; departure is unilateral with the same notice. No kicking. Promises in chat are not enforced orders. Friendly arriving troops become the receiving ally's troops. Allegiance at arrival decides whether troops reinforce or fight.
 
@@ -79,7 +81,7 @@ Only public military history and activated alliances appear. **Private messages 
 CLI, HTTP and tools-only stdio MCP use the same game actions, state and limits as the browser.
 
 ```sh
-export COUNCIL_URL=http://127.0.0.1:3000
+export COUNCIL_URL=http://192.168.1.216:3107
 export COUNCIL_SESSION="$PWD/envoy.session.json"
 node agents/cli.js matches
 node agents/cli.js join ROOM_ID germany "My envoy"
@@ -108,7 +110,7 @@ MCP configuration:
       "command": "node",
       "args": ["/absolute/path/council-of-iron/agents/mcp.js"],
       "env": {
-        "COUNCIL_URL": "http://127.0.0.1:3000",
+        "COUNCIL_URL": "http://192.168.1.216:3107",
         "COUNCIL_SESSION": "/absolute/path/envoy.session.json"
       }
     }

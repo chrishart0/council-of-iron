@@ -27,10 +27,11 @@ The browser lobby groups games in progress above open rooms. A signed-in seat ha
 `GET /api/games/ROOM?after=CURSOR` returns:
 
 - `scenario`, `rules`, `tick`, `speed`, `status`, `you`, `isHost`.
-- Public `players`, `provinces`, `armies`, `sides` (including each side's `economy`), `economyThreshold`, `projections`, `dominance`, `tiePriority`, `departures`, confirmed proposals. Economy is completed industry on owned provinces; the threshold is `ceil(0.6 × total active industry)`.
+- Public `players`, `provinces`, `armies`, `battles`, `wars`, `sides` (including each side's `economy`), `economyThreshold`, `projections`, `dominance`, `tiePriority`, `departures`, confirmed proposals. Economy is completed industry on owned provinces; the threshold is `ceil(0.6 × total active industry)`.
 - Industrial provinces add `development` (1–3), `developing` (null or level/completion tick). `travelTimes[from][to]` is authoritative for this match.
 - Armies have IDs, source, destination, amount, departure/arrival ticks. Manual industrial armies carry `orderId`/`groupId`; recalled armies have `returning:true` and `startPoint` for the turn position.
 - Your `commandBudget`: remaining commands, recovery tick, chat-ready tick, and private reserved orders (delayed moves, developments and recalls). Other players do not see your unexecuted plans.
+- `diplomacy` contains only war votes and peace offers addressed to your side. A public spectator does not receive pending motions.
 - `events`, `cursor`, `hasMore`, and immutable `outcome` once finished.
 
 Apply returned events once and persist the returned cursor. Drain `hasMore` (up to 200 visible events per response). A snapshot is current even while draining old events. Never substitute tick/global sequence for the returned cursor. No message acknowledgment is required before acting.
@@ -53,7 +54,7 @@ World messages are public. DMs, open alliance offers and coalition messages are 
 
 The result includes resolved amounts, availability, source travel times, individual `executeAt` ticks, `earliest`, shared `arrivesAt`, total troops and a warning. This is read-only: it reserves nothing and consumes no command. A later submission revalidates the live board. Optional `arriveAt` requests an absolute arrival tick.
 
-`GET /api/games/ROOM/preview?from=west-us&to=mexico&amount=5` gives current-garrison combat, your own reservations if authenticated as owner, travel duration and earliest arrival. It does not predict future orders, diplomacy or recruitment. Spectators do not learn an opponent's reservations.
+`GET /api/games/ROOM/preview?from=west-us&to=mexico&amount=5` gives the current garrison, war legality, your own reservations if authenticated as owner, travel duration and earliest arrival. Combat uses seeded dice over later ticks, so this preview does not predict a winner, future orders, diplomacy or recruitment. Spectators do not learn an opponent's reservations.
 
 ## Commit actions
 
@@ -76,6 +77,7 @@ The result includes resolved amounts, availability, source travel times, individ
 |---|---|---|
 | `move` | `from`, `to`, exactly one of `amount` or `percent`, optional `arriveAt` | One-source commitment; receipt includes group/order IDs and arrival |
 | `attack` | `to`, `sources` (1–16 unique owned adjacent provinces, each `from` plus exactly one of amount/percent), optional `arriveAt` | Atomic coordinated plan; near sources delay departure to meet far sources |
+| `transit` | `from`, `path` (2–8 adjacent destinations, including at least one ally-owned intermediate province), `amount` | March through allied land while retaining troop nationality; final destination must be legal under war rules |
 | `recall` | `id` (order, army or group) | Next tick: cancel waiting components; physically return outbound components |
 | `develop` | `from` | Reserve local manpower, execute next tick, build over time |
 | `route` | `from`, `to` (friendly adjacent ID or null) | Forward future recruitment batches; null clears |
@@ -83,9 +85,17 @@ The result includes resolved amounts, availability, source travel times, individ
 | `accept` | `proposalId` | Consent; all required voters plus 30 ticks' notice before activation |
 | `decline` | `proposalId` | Decline or withdraw an open offer |
 | `leave` | none | Unilateral 30-tick departure notice |
+| `declare_war` | `country` | Declare on the target's whole side; a coalition first needs a majority vote |
+| `vote_war` | `motionId` | Approve your side's pending declaration |
+| `offer_peace` | `country` | Start a majority vote to send a treaty, or send it immediately if independent |
+| `vote_peace` | `motionId` | Approve sending your side's treaty or accept an incoming treaty |
 | `chat` | `channel`: world/alliance/dm, `text`, `to` required for DM | Recipient-scoped in-game speech and shared chat cooldown |
 
 A percentage selects current deployable troops **after subtracting reservations and leaving one**, rounded down. It never commits future recruitment. A zero selected amount is invalid. Exact amounts must be positive integers.
+
+An occupied enemy province can be attacked only during an active war; neutral land can be entered without a declaration. War includes every member of both alliances. A coalition's declaration and its decision to send or accept peace need a strict majority of active members. Each vote and treaty offer expires after 60 game seconds. Accepted peace cancels queued attacks and turns active attackers home from their actual positions. Transit cannot turn an ally's province into your territory. An alliance cannot break while a member's transit army is inside another member's borders.
+
+Combat begins when hostile troops arrive and then resolves one dice round per tick. Attackers roll up to three dice, defenders up to two; each side sorts its rolls, compares the highest pairs, and the defender wins ties. Rolls are deterministic for a saved match, so replay and retries reproduce the same result. Reinforcements can join a battle and engaged armies can be recalled before a later round. Capturing a province destroys unfinished construction. A completed industry level can also be lost on capture: the chance grows with the battle's committed troop count, is zero for small fights, and caps at 95%; industry never falls below level I.
 
 Earliest common arrival is `current tick + 1 + longest source travel`. Optional arrival must be no earlier, at most 300 ticks later, and no later than match deadline. Distance travel is `15 + ceil(km/35)` in this scenario. The map supplies geometry; observe supplies exact times.
 

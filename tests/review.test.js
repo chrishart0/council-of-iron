@@ -15,6 +15,7 @@ const review = buildReview(recorded, map), read = replayReader(review.replay);
 const total = xs => xs.reduce((n,x) => n+x,0);
 function fresh(board=map) {
   const g = createGame({id:'test', name:'Review test', hostId:'usa'}, board);
+  g.rules.warRequired=false;
   for(const c of board.countries) join(g,board,{country:c.id,name:c.id,profileId:c.id,kind:'human'});
   return g;
 }
@@ -50,7 +51,7 @@ test('review excludes all private conversations, offers, waiting orders, credent
   assert.equal(review.report.events.some(e=>e.type==='message'),false);
 });
 test('military and economic report reconciles neutral forces, shared battles and investments',()=>{
-  assert.deepEqual(review.report.totals,{battles:78,casualties:1230,recruited:3287,invested:192,upgrades:14,initialTroops:659,remainingTroops:2524});
+  assert.deepEqual(review.report.totals,{battles:78,casualties:1230,interned:0,recruited:3287,invested:192,upgrades:14,initialTroops:659,remainingTroops:2524});
   assert.equal(total(review.report.metrics.map(p=>p.recruited)),3287);
   assert.equal(total(review.report.metrics.map(p=>p.invested)),192);
   assert.equal(total(review.report.metrics.map(p=>p.upgrades)),14);

@@ -7,7 +7,10 @@ const map = JSON.parse(readFileSync(new URL('../public/imperial-map.json',import
 const country = (g,id) => g.players.find(p=>p.id===id);
 const province = (g,id) => g.provinces.find(p=>p.id===id);
 function game(){const g=createGame({id:'industrial',name:'Industrial',hostId:'usa'},map);
-  for(const c of map.countries)join(g,map,{profileId:c.id,name:c.id,country:c.id});start(g);return g;}
+  for(const c of map.countries)join(g,map,{profileId:c.id,name:c.id,country:c.id});
+  // These cases verify the established movement and development contract.
+  g.rules.warRequired=false;
+  start(g);return g;}
 let id=0;const action=(g,p,a,opId=`n-${++id}`)=>act(g,map,p,a,opId);
 const advance=(g,n)=>{for(let i=0;i<n;i++)tick(g);};
 const total=g=>g.provinces.reduce((n,p)=>n+p.troops,0)+g.armies.reduce((n,a)=>n+a.amount,0);
