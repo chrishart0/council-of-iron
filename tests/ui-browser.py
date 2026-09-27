@@ -703,6 +703,66 @@ def sound_settings_checks(page,context,url,report,bridge):
     assert not fresh.locator('#sound-mute').is_checked()
     fresh.close()
     report['assertions'].append('Sound control: mute suspends audio, music/effects sliders and mute persist in localStorage across pages; Shift+M toggles mute but not while typing in the feed reply.')
+def mobile_checks(browser,url,identity,report,out):
+    # Real mobile emulation: the zoom limit is in screen px per map unit, so phones reach the same
+    # maximum as desktop (the old fixed minimum view width gave a 390px phone ~2.9 px/unit).
+    DESKTOP_OLD_MAX=1552/135  # what a 1920×1080 desktop map reached before this change
+    px=lambda page:page.evaluate('document.querySelector("#map").getScreenCTM().a')
+    for w,h in [(390,844),(844,390)]:
+        context=browser.new_context(viewport={'width':w,'height':h},is_mobile=True,has_touch=True,device_scale_factor=2)
+        context.add_init_script('localStorage.setItem("coi.identity",'+json.dumps(json.dumps(identity))+');')
+        page=context.new_page();page.goto(url);page.locator('[data-room="ui-war"][data-resume]').click()
+        expect(page.locator('#commander-title')).to_have_text('British Empire');page.locator('#map').scroll_into_view_if_needed()
+        # The viewBox takes the element's aspect: no letterboxing.
+        box=page.locator('#map').bounding_box();vb=[float(v) for v in page.locator('#map').get_attribute('viewBox').split()]
+        assert abs(vb[2]/vb[3]-box['width']/box['height'])<.01,(vb,box)
+        page.locator('#world-view').click();page.wait_for_timeout(150);start=vb_w=float(page.locator('#map').get_attribute('viewBox').split()[2])
+        # Pinch (two real touch points through CDP) zooms in.
+        cdp=context.new_cdp_session(page);page.locator('#map').scroll_into_view_if_needed();box=page.locator('#map').bounding_box()
+        top,bottom=max(box['y'],0),min(box['y']+box['height'],h);cx,cy=box['x']+box['width']/2,(top+bottom)/2
+        def pinch(spread):
+            cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':cx-10,'y':cy,'id':1},{'x':cx+10,'y':cy,'id':2}]})
+            for i in range(1,9):cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':cx-10-spread*i/8,'y':cy,'id':1},{'x':cx+10+spread*i/8,'y':cy,'id':2}]})
+            cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]});page.wait_for_timeout(80)
+        spread=min(box['width'],bottom-top)*.4;pinch(spread)
+        after=float(page.locator('#map').get_attribute('viewBox').split()[2]);assert after<start*.5,(start,after)
+        for _ in range(6):pinch(spread)
+        assert px(page)>=MAX_PX-.05,('pinch max',w,px(page))
+        # Double tap zooms 2× at the tap point.
+        page.locator('#world-view').click();page.locator('#map').scroll_into_view_if_needed();page.wait_for_timeout(100)
+        box=page.locator('#map').bounding_box()
+        # Tap a spot with no counter under it (a tap on a merged counter would zoom to fit it instead).
+        tx,ty=page.evaluate('''([x0,y0,x1,y1])=>{for(let y=y0+20;y<y1-20;y+=17)for(let x=x0+20;x<x1-20;x+=17){const e=document.elementFromPoint(x,y);
+          if(e&&!e.closest('.map-counter,.battle-counter,.moving-army,.atlas-modes')&&e.closest('#map'))return [x,y];}return null;}''',[box['x'],max(box['y'],0),box['x']+box['width'],min(box['y']+box['height'],h)])
+        before=float(page.locator('#map').get_attribute('viewBox').split()[2])
+        page.touchscreen.tap(tx,ty);page.wait_for_timeout(60);page.touchscreen.tap(tx,ty);page.wait_for_timeout(120)
+        now=float(page.locator('#map').get_attribute('viewBox').split()[2]);assert abs(now-before/2)<1,('double tap',before,now)
+        # Europe at maximum zoom via the + button: near LOD, desktop-or-better px/unit, tappable provinces.
+        page.locator('#europe-view').click()
+        for _ in range(12):page.locator('#zoom-in').click()
+        page.wait_for_timeout(200);level=page.locator('#map').get_attribute('data-lod')
+        assert px(page)>=DESKTOP_OLD_MAX and px(page)>=MAX_PX-.05 and level=='near',(w,px(page),level)
+        sizes=page.evaluate('''()=>['belgium','low-countries','ruhr','rhineland','saxony','serbia'].map(id=>{const r=document.querySelector('#province-'+id).getBoundingClientRect();return [id,Math.min(r.width,r.height)];})''')
+        assert all(s>=32 for _,s in sizes),sizes
+        page.locator('#europe-view').click();page.locator('#zoom-in').click();page.locator('#zoom-in').click();page.wait_for_timeout(200)
+        result=page.evaluate(MAP_AUDIT,'ui-war');assert not result['overlaps'] and not result['missing'] and not result['badSums'],result
+        if w==390:page.screenshot(path=str(out/'19-mobile-max-zoom.png'))
+        if w==390:
+            # A column that has just left Scotland sits on the Scotland counter: a tap must still select Scotland.
+            page.locator('#world-view').click();page.locator('#home-view').click()
+            for _ in range(4):page.locator('#zoom-in').click()
+            page.locator('#map').scroll_into_view_if_needed();page.wait_for_timeout(250)
+            departing=page.evaluate('''()=>{const c=document.querySelector('#marker-scotland .counter-body').getBoundingClientRect();
+              return [...document.querySelectorAll('#map .moving-army:not(.engaged)')].map(g=>{const r=g.querySelector('.army-arrow').getBoundingClientRect();
+                return {blocked:g.classList.contains('tap-blocked'),hit:g.querySelector('.army-hit').getBoundingClientRect().width,over:r.left<c.right&&c.left<r.right&&r.top<c.bottom&&c.top<r.bottom};}).filter(a=>a.over);}''')
+            assert departing and all(a['blocked'] for a in departing) and all(a['hit']<=18 for a in departing),departing
+            body=page.locator('#marker-scotland .counter-body').bounding_box()
+            page.touchscreen.tap(body['x']+body['width']/2,body['y']+body['height']/2)
+            expect(page.locator('#source')).to_have_value('scotland')
+        context.close()
+    report['assertions'].append(f'Phones (390×844 and 844×390, touch emulation) reach {MAX_PX} px per map unit (desktop previously {DESKTOP_OLD_MAX:.1f}) by + button and by a real two-finger pinch; double tap zooms 2×; near LOD with names is reachable; small Europe provinces are ≥32 CSS px; a tap on a counter under a just-departed army selects the province; the viewBox fills the element (no letterboxing); counters stay non-overlapping.')
+
+MAX_PX=14
 
 def main():
     parser=argparse.ArgumentParser()
@@ -960,6 +1020,7 @@ def main():
                 assert page.evaluate(f'getComputedStyle(document.querySelector("{selector}")).animationName')=='none',selector
             if not args.bridge:expand_checks(browser,url,identity,report,out)  # real navigation and an init script
             assert spy(page,'csp')==[],spy(page,'csp')
+            if not args.bridge:mobile_checks(browser,url,identity,report,out)
             assert not report['pageErrors'],report['pageErrors'];report['status']='passed'
             browser.close()
         if args.gif:
