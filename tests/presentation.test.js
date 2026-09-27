@@ -11,7 +11,7 @@ test('eight original insignia are distinct constants, decorative SVG never accep
   }
 });
 test('shared icons contain no external URLs, duplicate IDs or execution hooks',()=>{
-  for(const key of ['march','coordinate','develop','council','dispatches','land','troops','prestige','replay','constructor']){
+  for(const key of ['march','coordinate','develop','council','dispatches','land','troops','prestige','replay','war','treaty','ribbon','gear','fallen','constructor']){
     const svg=icon(key);assert.match(svg,/viewBox="0 0 24 24"/);
     assert.doesNotMatch(svg,/(?:https?:|href=|<script|\sid=|onerror=|function Object)/);
   }

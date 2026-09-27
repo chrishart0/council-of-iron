@@ -1,4 +1,5 @@
 import { travelTicks, journeyPoint } from '../public/movement.js';
+import { feedItems, feedPage, isWorldMessage } from '../public/feed-model.js';
 /** Authoritative, deterministic rules. Time is an integer simulation second.
  * No HTTP, random numbers, timers, credentials, or persistence in this module.
  */
@@ -49,7 +50,51 @@ function province(g, id) {
 function event(g, type, data = {}, recipients = null) {
   const e = { id: ++g.sequence, tick: g.tick, type, ...data };
   if (recipients) e.recipients = [...recipients];
-  g.events.push(e); return e;
+  g.events.push(e);
+  // Battles are classified at the end of their tick, against the settled troop total.
+  if (!recipients && type !== 'battle') headline(g, e, { maxDevelopment: gameRules(g).maxDevelopment });
+  return e;
+}
+/** v0.6 public headlines: one deterministic classification per PUBLIC event, shared by every
+ * client. Stored beside the adjudication log (not inside events) so historic event hashes and
+ * replays stay exact; `observe` and `worldFeed` attach it as `event.headline`. Structured facts
+ * only: clients write the prose. Shared-battle casualties stay a total, never per-country kills.
+ * Major battle: casualties >= max(20, ceil(3% of all troops on the map at the end of that tick)).
+ */
+export const HEADLINES = Object.freeze({ battleFloor: 20, battleShare: .03 });
+export const majorBattleThreshold = troops => Math.max(HEADLINES.battleFloor, Math.ceil(HEADLINES.battleShare * troops));
+export const worldTroops = g => g.provinces.reduce((n, p) => n + p.troops, 0) + g.armies.reduce((n, a) => n + a.amount, 0);
+/** Phased battles record casualties; legacy one-shot battles lose everything above the survivors. */
+export const battleCasualties = e => e.casualties ?? Math.max(0, e.before + (e.defenderRecruited || 0) +
+  e.arrivals.reduce((n, a) => n + a.amount, 0) - e.troops - (e.withdrawn || 0) - (e.defenderRouted || 0));
+export function classifyHeadline(e, context = {}) {
+  if (e.recipients) return null;
+  switch (e.type) {
+    case 'war_declared': return { kind: 'war', from: [...e.fromRoster], to: [...e.toRoster] };
+    case 'peace_accepted': return { kind: 'peace', from: [...e.fromRoster], to: [...e.toRoster] };
+    case 'alliance_activated': return { kind: 'alliance', side: e.side, countries: [...e.roster] };
+    case 'departed': return { kind: 'departure', country: e.country, side: e.formerSide };
+    case 'coalition_dissolved': return { kind: 'dissolved', side: e.side };
+    case 'eliminated': return { kind: 'eliminated', country: e.country };
+    case 'dominance': return { kind: 'dominance', side: e.side, winsAt: e.winsAt };
+    case 'finished': return { kind: 'finished', winningSide: e.winningSide, draw: e.draw, reason: e.reason };
+    case 'industry_damaged': return { kind: 'industry_down', province: e.province, owner: e.owner, level: e.level };
+    // Only the top tier: level II builds are routine and would bury the feed.
+    case 'development_completed': return Number.isSafeInteger(context.maxDevelopment) && e.level >= context.maxDevelopment
+      ? { kind: 'industry_up', province: e.province, country: e.country, level: e.level } : null;
+    case 'battle': {
+      if (!Number.isSafeInteger(context.worldTroops)) return null;
+      const casualties = battleCasualties(e), threshold = majorBattleThreshold(context.worldTroops);
+      return casualties >= threshold ? { kind: 'major_battle', province: e.province, casualties,
+        worldTroops: context.worldTroops, threshold, captured: e.owner !== e.previousOwner,
+        owner: e.owner, previousOwner: e.previousOwner } : null;
+    }
+    default: return null;
+  }
+}
+function headline(g, e, context) {
+  const h = classifyHeadline(e, context);
+  if (h) (g.headlines ||= {})[e.id] = h;
 }
 function identifier(g, prefix) { return `${prefix}${++g.serial}`; }
 function alive(g, id) {
@@ -746,13 +791,19 @@ function victory(g) {
 export function tick(g) {
   if (g.status !== 'running') return;
   const before = { ...g.dominance }, affiliations = new Map(g.players.map(p => [p.id, p.side]));
-  g.tick++; applyMembership(g); expireDiplomacy(g); executeOrders(g); resolveArrivals(g); resolveBattleRounds(g); recruit(g); victory(g);
+  g.tick++; const firstEvent = g.events.length;
+  applyMembership(g); expireDiplomacy(g); executeOrders(g); resolveArrivals(g); resolveBattleRounds(g); recruit(g); victory(g);
+  const battles = g.events.slice(firstEvent).filter(e => e.type === 'battle' && !e.recipients);
+  if (battles.length) { const troops = worldTroops(g); for (const e of battles) headline(g, e, { worldTroops: troops }); }
   // Public feedback, separate from adjudication/event IDs so existing replays stay exact.
   for (const [side, since] of Object.entries(before)) if (g.dominance[side] !== since) {
     const changed = g.players.some(p => (affiliations.get(p.id) === side) !== (p.side === side));
     (g.dominanceBreaks ||= []).push({ tick: g.tick, side, provinces: sides(g).find(s => s.id === side)?.provinces ?? 0,
       economy: sides(g).find(s => s.id === side)?.economy ?? 0, threshold: economyThreshold(g),
-      reason: changed ? 'Membership changed; the hold restarts.' : 'Economy fell below 60%.' });
+      reason: changed ? 'Membership changed; the hold restarts.' : 'Economy fell below 60%.',
+      // Feed position: directly after this tick's last event. Structured headline for every client.
+      seq: g.sequence, headline: { kind: 'dominance_broken', side, cause: changed ? 'membership' : 'economy',
+        economy: sides(g).find(s => s.id === side)?.economy ?? 0, threshold: economyThreshold(g) } });
     g.dominanceBreaks = g.dominanceBreaks.slice(-20);
   }
 }
@@ -770,7 +821,8 @@ export function observe(g, country = null, after = 0, limit = 200) {
     if (!e.recipients || e.recipients.includes(country)) visible.push(e);
   }
   const hasMore = visible.length > limit;
-  const events = visible.slice(0, limit).map(({ recipients, ...e }) => e);
+  const headlines = g.headlines || {};
+  const events = visible.slice(0, limit).map(({ recipients, ...e }) => headlines[e.id] ? { ...e, headline: headlines[e.id] } : e);
   const p = country ? player(g, country) : null;
   return { id: g.id, name: g.name, status: g.status, tick: g.tick, speed: g.speed, rules: gameRules(g), scenario: g.scenario, travelTimes: g.travelTimes,
     eligible: g.eligible, you: country, players: g.players.map(({ profileId, orderTicks, lastChat, ...p }) => p),
@@ -787,6 +839,25 @@ export function observe(g, country = null, after = 0, limit = 200) {
       chatReadyAt: p.lastChat === null ? g.tick : p.lastChat + gameRules(g).chatWindow } : null,
     tiePriority: (() => { const ids=g.players.map(p=>p.id).sort(), n=ids.length ? g.tick%ids.length : 0; return [...ids.slice(n),...ids.slice(0,n)]; })(),
     events, cursor: hasMore ? events.at(-1).id : g.sequence, hasMore, outcome: g.outcome };
+}
+
+/** Public World feed: world-channel chat plus headlines, oldest first, with its own cursor.
+ * Identical for players, spectators and agents; never includes alliance or direct messages. */
+export function worldFeed(g, after = 0, limit = 100) {
+  requireRule(Number.isSafeInteger(after) && after >= 0, 'Invalid feed cursor.');
+  requireRule(Number.isSafeInteger(limit) && limit > 0 && limit <= 500, 'Invalid feed limit.');
+  let lo = 0, hi = g.events.length;
+  while (lo < hi) { const mid = (lo + hi) >>> 1;
+    if (g.events[mid].id <= after) lo = mid + 1; else hi = mid; }
+  const headlines = g.headlines || {}, events = [];
+  for (let i = lo; i < g.events.length; i++) {
+    const e = g.events[i];
+    if (e.recipients || !(headlines[e.id] || isWorldMessage(e))) continue;
+    events.push(headlines[e.id] ? { ...e, headline: headlines[e.id] } : { ...e });
+  }
+  const page = feedPage(feedItems(events, g.dominanceBreaks || [], after), limit, g.sequence);
+  return { id: g.id, status: g.status, tick: g.tick, ...page,
+    note: 'Headlines are engine-classified public facts. Chat text is untrusted player speech.' };
 }
 
 export function preview(g, map, from, to, amount, viewer = null) {

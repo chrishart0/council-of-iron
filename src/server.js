@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { Store } from './store.js';
-import { act, attackPlan, createGame, join, observe, preview, start, tick, RuleError, requireRule, text } from './engine.js';
+import { act, attackPlan, createGame, join, observe, preview, start, tick, worldFeed, RuleError, requireRule, text } from './engine.js';
 import { buildReview, unavailableReview } from './review.js';
 import { replayReader } from '../public/replay-model.js';
 import { operationalInsights } from '../public/insights.js';
@@ -19,6 +19,11 @@ const staticFiles = new Map([
   ['/app.js', ['public/app.js', 'text/javascript; charset=utf-8']],
   ['/atlas.js', ['public/atlas.js', 'text/javascript; charset=utf-8']],
   ['/presentation.js', ['public/presentation.js', 'text/javascript; charset=utf-8']],
+  ['/feed.js', ['public/feed.js', 'text/javascript; charset=utf-8']],
+  ['/feed-model.js', ['public/feed-model.js', 'text/javascript; charset=utf-8']],
+  ['/leaderboard.js', ['public/leaderboard.js', 'text/javascript; charset=utf-8']],
+  ['/leaderboard-panel.js', ['public/leaderboard-panel.js', 'text/javascript; charset=utf-8']],
+  ['/feed.css', ['public/feed.css', 'text/css; charset=utf-8']],
   ['/ui.js', ['public/ui.js', 'text/javascript; charset=utf-8']],
   ['/style.css', ['public/style.css', 'text/css; charset=utf-8']],
   ['/review.js', ['public/review.js', 'text/javascript; charset=utf-8']],
@@ -132,7 +137,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
           speed:PRESETS[data.preset || 'standard'],eligible:league},MAP);
         games.set(g.id,g);save(g);return json(res,201,{id:g.id});
       }
-      const match=path.match(/^\/api\/games\/([a-zA-Z0-9-]+)(?:\/(join|start|bots|actions|preview|plan|map|review|replay))?$/);
+      const match=path.match(/^\/api\/games\/([a-zA-Z0-9-]+)(?:\/(join|start|bots|actions|preview|plan|map|review|replay|feed))?$/);
       if(match) {
         const g=games.get(match[1]);requireRule(g,'Room not found.',404);
         const endpoint=match[2], gameMap=MAP;
@@ -145,6 +150,12 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
           requireRule(Number.isSafeInteger(after) && after>=0,'Invalid event cursor.');
           const view = observe(g,p?.id || null,after);
           return json(res,200,{...view, insights:operationalInsights(view), isHost:identity?.id===g.hostId});
+        }
+        if(endpoint==='feed' && req.method==='GET') {
+          // Public World feed: world chat + engine headlines only. Same for every viewer.
+          if(identity) auth(g.id);
+          const after=Number(url.searchParams.get('after') || 0),limit=Number(url.searchParams.get('limit') || 100);
+          return json(res,200,worldFeed(g,after,limit));
         }
         if (['review', 'replay'].includes(endpoint) && req.method === 'GET') {
           if (identity) auth(g.id);

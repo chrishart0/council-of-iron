@@ -151,7 +151,7 @@ test('stdio MCP negotiates, validates schemas, joins an agent, calls real HTTP, 
   ].map(x=>JSON.stringify(x)).join('\n')+'\n';
   const result=await subprocess('agents/mcp.js',[],env,input);assert.equal(result.code,0,result.stderr);
   const output=result.stdout.trim().split('\n').map(x=>JSON.parse(x));assert.equal(output.length,7);
-  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,27);
+  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,29);
   assert.equal(JSON.parse(output[2].result.content[0].text).country,'britain');
   assert.equal(JSON.parse(output[3].result.content[0].text).you,'britain');
   assert.equal(output[4].error.code,-32602);assert.equal(output[5].error.code,-32602);assert.deepEqual(output[6].result,{});
@@ -221,4 +221,48 @@ test('room resume hints identify only the authenticated seat and respect match-s
   assert.equal((await hints(b.token)).data.games.find(g=>g.id===id).you,'britain');
   assert.equal((await hints(sa.token)).data.games.find(g=>g.id===id).you,'usa');
   assert.equal((await hints(sa.token)).data.games.find(g=>g.id===other).you,null);
+});
+
+test('World feed is one public, cursor-based stream for HTTP, CLI and MCP with engine headlines',async t=>{
+  const f=await fixture(t),host=await f.register('Host'),other=await f.register('Envoy');
+  const id=await f.room(host),usa=await f.seat(id,host,'usa'),britain=await f.seat(id,other,'britain','agent');
+  await f.call(`/api/games/${id}/start`,'POST',{},usa.token);
+  const act=(token,opId,action)=>f.call(`/api/games/${id}/actions`,'POST',{opId,action},token);
+  assert.equal((await act(usa.token,'w1',{type:'chat',channel:'world',text:'<img src=x onerror=alert(1)> to all'})).status,200);
+  f.app.step(f.app.games.get(id),10);
+  assert.equal((await act(britain.token,'d1',{type:'chat',channel:'dm',to:'usa',text:'private terms'})).status,200);
+  assert.equal((await act(britain.token,'war',{type:'declare_war',country:'usa'})).status,200);
+  const pub=(await f.call(`/api/games/${id}/feed`)).data;
+  // Two seats: one side may also have started a public victory hold (a `dominance` headline).
+  assert.deepEqual(pub.items.map(i=>i.type).filter(t=>t!=='dominance'),['message','war_declared']);
+  assert.deepEqual(pub.items.at(-1).headline,{kind:'war',from:['britain'],to:['usa']});
+  assert.equal(pub.items[0].untrusted,true);assert.ok(!JSON.stringify(pub).includes('private terms'));
+  const seat=(await f.call(`/api/games/${id}/feed`,'GET',undefined,usa.token)).data;
+  assert.deepEqual(seat.items,pub.items,'players and spectators receive the identical feed');
+  assert.equal((await f.call(`/api/games/${id}/feed?after=-1`)).status,400);
+  assert.equal((await f.call(`/api/games/${id}/feed?limit=0`)).status,400);
+  assert.deepEqual((await f.call(`/api/games/${id}/feed?after=${pub.items.at(-2).seq}`)).data.items.map(i=>i.type),['war_declared']);
+  const env={COUNCIL_URL:f.url,COUNCIL_SESSION:pathJoin(f.dir,'feed.session.json'),COUNCIL_TOKEN:britain.token,COUNCIL_MATCH:id};
+  const cli=await subprocess('agents/cli.js',['feed'],env);assert.equal(cli.code,0,cli.stderr);
+  assert.deepEqual(JSON.parse(cli.stdout).items,pub.items);
+  const input=[
+    {jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-06-18'}},
+    {jsonrpc:'2.0',method:'notifications/initialized'},
+    {jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'world_feed',arguments:{after:0,limit:1}}},
+    {jsonrpc:'2.0',id:3,method:'tools/call',params:{name:'world_feed',arguments:{limit:501}}},
+  ].map(x=>JSON.stringify(x)).join('\n')+'\n';
+  const mcp=await subprocess('agents/mcp.js',[],env,input);assert.equal(mcp.code,0,mcp.stderr);
+  const out=mcp.stdout.trim().split('\n').map(x=>JSON.parse(x));
+  const page=JSON.parse(out[1].result.content[0].text);
+  assert.equal(page.hasMore,true);assert.deepEqual(page.items,pub.items.slice(0,1));assert.equal(page.cursor,pub.items[0].seq);
+  assert.equal(out[2].error.code,-32602);
+  // Leaderboard: one shared function over the public observation, same for CLI and MCP.
+  const {leaderboard}=await import('../public/leaderboard.js');
+  const expected=leaderboard((await f.call(`/api/games/${id}`)).data,{you:'britain',limit:8}).rows;
+  const board=await subprocess('agents/cli.js',['leaderboard'],env);assert.equal(board.code,0,board.stderr);
+  assert.deepEqual(JSON.parse(board.stdout).rows,expected);assert.ok(expected.find(r=>r.id==='britain').you);
+  const lb=await subprocess('agents/mcp.js',[],env,[input.split('\n')[0],input.split('\n')[1],
+    JSON.stringify({jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'leaderboard',arguments:{mode:'alliances'}}})].join('\n')+'\n');
+  const alliances=JSON.parse(JSON.parse(lb.stdout.trim().split('\n')[1]).result.content[0].text);
+  assert.equal(alliances.mode,'alliances');assert.equal(alliances.rows.length,2);
 });

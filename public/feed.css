@@ -1,0 +1,118 @@
+/* v0.6 event clarity: World feed overlay and headline banners. Loaded after style.css. */
+:root{--feed-war:#c9544f;--feed-peace:#f3efe4;--feed-alliance:#d2ab62;--feed-battle:#e39a62;--feed-industry:#9fc3a0;--feed-broken:#a39fb0;--feed-victory:#efd08b}
+
+/* Feed: a compact overlay in the map's lower-left corner. It never enters the command dock. */
+.world-feed{position:absolute;z-index:5;left:12px;bottom:42px;width:min(310px,calc(100% - 24px));display:flex;flex-direction:column;background:#10242bf2;border:1px solid #a88e5c8c;box-shadow:0 10px 28px #04141ab3;color:var(--ink);font-size:12px}
+.world-feed.collapsed{width:auto;max-width:calc(100% - 24px)}
+.feed-toggle{display:flex;align-items:center;gap:7px;min-height:34px;padding:5px 10px;background:#152d35;border:0;border-bottom:1px solid #a88e5c40;border-radius:0;text-align:left;font-size:11px}
+.world-feed.collapsed .feed-toggle{border-bottom:0}
+.feed-toggle .ui-icon{width:15px;height:15px;color:var(--gold)}.feed-toggle b{letter-spacing:1.4px;text-transform:uppercase;font-size:10px;color:#f1d59c}.feed-toggle small{color:#aab5a8;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.feed-toggle::after{content:'▾';margin-left:auto;color:#c8b58a}.world-feed.collapsed .feed-toggle::after{content:'▸'}
+.feed-unread:not(:empty){background:#ad4f3d;color:#fff6e3;font-size:10px;font-weight:700;padding:0 5px;border-radius:8px;min-width:18px;text-align:center}
+.feed-body{display:flex;flex-direction:column;min-height:0}.feed-body[hidden]{display:none}
+.feed-list{list-style:none;margin:0;padding:4px 0;max-height:min(220px,30vh);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.feed-row{padding:5px 10px;border-left:3px solid transparent;overflow-wrap:anywhere;line-height:1.4}
+.feed-row+.feed-row{border-top:1px solid #ffffff0d}
+.feed-chat header{display:flex;align-items:center;gap:6px;font-size:10px;color:#dfc28a}.feed-chat header b{font-weight:700}.feed-chat time,.feed-headline time{margin-left:auto;color:#8f9d95;font-size:9px;font-variant-numeric:tabular-nums}
+.feed-flag .insignia{width:13px;height:15px;display:block}
+.feed-text{margin:2px 0 0;color:#ebe5d4}
+.feed-headline{--tone:var(--feed-broken);border-left-color:var(--tone);background:linear-gradient(90deg,color-mix(in srgb,var(--tone) 16%,transparent),transparent 70%)}
+.feed-headline>button,.feed-headline>div{display:flex;align-items:flex-start;gap:8px;width:100%;min-height:0;padding:0;background:none;border:0;text-align:left;color:inherit;font-size:inherit}
+.feed-headline>button:hover .feed-words b{text-decoration:underline}
+.feed-icon{flex:none;width:22px;height:22px;display:grid;place-items:center;border-radius:50%;background:color-mix(in srgb,var(--tone) 28%,#0c1d23);color:var(--tone);margin-top:1px}.feed-icon .ui-icon{width:14px;height:14px}
+.feed-words{display:flex;flex-wrap:wrap;column-gap:6px;min-width:0;flex:1}.feed-words b{font-size:11px;color:var(--tone);letter-spacing:.3px}.feed-detail{flex-basis:100%;color:#d8d6c8;font-size:11px}
+.feed-headline[data-tone=war]{--tone:var(--feed-war)}.feed-headline[data-tone=peace]{--tone:var(--feed-peace)}.feed-headline[data-tone=alliance]{--tone:var(--feed-alliance)}.feed-headline[data-tone=battle]{--tone:var(--feed-battle)}
+.feed-headline[data-tone=industry]{--tone:var(--feed-industry)}.feed-headline[data-tone=industry-lost]{--tone:#d69a78}.feed-headline[data-tone=victory]{--tone:var(--feed-victory)}.feed-headline[data-tone=fallen]{--tone:#d77f76}
+.feed-row.fresh{animation:feed-fresh 2.4s ease-out}
+@keyframes feed-fresh{from{background-color:#d2ab6240}to{background-color:transparent}}
+.feed-empty{padding:8px 10px;color:#9aa89f;font-style:italic}
+.feed-form{display:flex;flex-wrap:wrap;gap:5px;padding:6px 8px 8px;border-top:1px solid #a88e5c40}.feed-form[hidden]{display:none}
+.feed-form input{flex:1;min-width:0;min-height:32px;padding:4px 8px;background:#0b1b21;color:var(--ink);border:1px solid #5b6b66;border-radius:2px;font-size:12px}
+.feed-form button{min-height:32px;padding:4px 12px;font-size:11px}
+.feed-cooldown:empty{display:none}.feed-cooldown{flex-basis:100%;color:#c9b88f;font-size:10px}
+/* Keep the stopped-hold strip clear of an open feed. */
+.board-panel:has(.world-feed:not(.collapsed):not([hidden])) .countdown-break{left:calc(min(310px,100% - 24px) + 24px)}
+.spectator-map-fullscreen .world-feed{bottom:14px}
+
+/* Banners share one queue (feed.js). Never interactive, never take focus. */
+.declaration{animation-duration:var(--banner-duration,4.4s)}
+.declaration.war{--seal:#8e2a2e;border-top-width:7px}.declaration.war strong{color:#6f1e22}
+.declaration.peace{--seal:#3d6f74;background:#fbf9f2}.declaration.peace strong{border-bottom:3px double #3d6f7488;padding-bottom:4px;display:inline-block}
+.declaration.battle{--seal:#a4552c;background:#f4ead8}.declaration.dominance{--seal:#9b773a}
+
+.alliance-seal{position:fixed;z-index:24;top:74px;left:50%;width:min(620px,calc(100vw - 24px));transform:translateX(-50%);pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:0;padding:18px 18px 20px;background:radial-gradient(ellipse at 50% 30%,#1d3a44f7,#10252df7);border:1px solid #d2ab62;box-shadow:0 18px 50px #030f14c0;color:#f4e8c8;animation:alliance-frame var(--banner-duration,4.8s) both}
+.alliance-standards{display:flex;justify-content:center;gap:clamp(8px,4vw,30px);flex-wrap:wrap}
+.alliance-standard{margin:0;display:flex;flex-direction:column;align-items:center;gap:5px;animation:standard-join 1.1s cubic-bezier(.2,.8,.2,1) both}
+.alliance-standard .insignia{width:54px;height:63px;filter:drop-shadow(0 4px 6px #0008)}
+.alliance-standard figcaption{font:600 11px var(--sans);letter-spacing:.6px;color:#f1dfb4;max-width:110px;text-align:center}
+.alliance-ribbon{position:relative;margin-top:12px;padding:8px 26px 10px;min-width:min(420px,100%);text-align:center;background:linear-gradient(#d9b56e,#b38b45);color:#1d2a2c;clip-path:polygon(0 0,100% 0,96% 50%,100% 100%,0 100%,4% 50%);animation:ribbon-stamp .5s .95s cubic-bezier(.3,1.6,.5,1) both}
+.alliance-stamp{display:block;font:800 10px var(--sans);letter-spacing:3px}
+.alliance-ribbon strong{display:block;font:26px var(--serif);line-height:1.15;overflow-wrap:anywhere}
+.alliance-ribbon p{margin:2px 0 0;font-size:11px}
+@keyframes standard-join{from{opacity:0;transform:translateX(var(--from,0px)) scale(.9)}to{opacity:1;transform:none}}
+@keyframes ribbon-stamp{from{opacity:0;transform:scale(1.7) rotate(-4deg)}to{opacity:1;transform:none}}
+@keyframes alliance-frame{0%{opacity:0}6%,86%{opacity:1}100%{opacity:0}}
+
+.fallen-seal{position:fixed;z-index:24;top:82px;left:50%;width:min(560px,calc(100vw - 24px));transform:translateX(-50%);pointer-events:none;display:flex;align-items:center;gap:18px;padding:18px 22px;background:#2a2527f5;border:1px solid #8d7b7a;border-top:5px solid #7b3a3a;box-shadow:0 18px 45px #050d10c0;color:#eee4d6;animation:alliance-frame var(--banner-duration,4.8s) both}
+.fallen-seal.own{background:#3d1f22f7;border-color:#c77b6f;border-top-color:#c04a3d}
+.fallen-standard{position:relative;margin:0;flex:none;display:flex;flex-direction:column;align-items:center;gap:4px}
+.fallen-standard .insignia{width:58px;height:68px;filter:grayscale(1) brightness(.62);animation:standard-fall 1.4s .2s ease-in both}
+.fallen-standard figcaption{font:600 11px var(--sans);color:#d9cbb9}
+.fallen-strike{position:absolute;left:-4px;right:-4px;top:31px;height:4px;background:#c24b40;transform:rotate(-38deg);transform-origin:left center;box-shadow:0 0 0 1px #2a1414;animation:strike 0.45s 1.1s ease-out both}
+.fallen-seal span{display:block;font:800 10px var(--sans);letter-spacing:2.6px;color:#e09b8d}
+.fallen-seal strong{display:block;font:28px var(--serif);line-height:1.15}
+.fallen-seal p{margin:6px 0 0;font-size:12px;line-height:1.45;color:#dccfbf}
+@keyframes standard-fall{from{filter:none;transform:none}to{filter:grayscale(1) brightness(.62);transform:translateY(3px) rotate(-3deg)}}
+@keyframes strike{from{transform:rotate(-38deg) scaleX(0)}to{transform:rotate(-38deg) scaleX(1)}}
+.fallen-seal[hidden],.alliance-seal[hidden],.world-feed[hidden]{display:none}
+
+@media(max-width:760px){
+ /* Narrow screens: the feed flows under the map instead of covering it. */
+ .world-feed{position:static;width:auto;max-width:none;border-left:0;border-right:0;box-shadow:none}
+ .world-feed.collapsed{width:auto}
+ .feed-list{max-height:210px}
+ .board-panel:has(.world-feed:not(.collapsed):not([hidden])) .countdown-break{left:16px}
+ .spectator-map-fullscreen .world-feed{position:absolute;left:8px;right:8px;bottom:8px;width:auto}
+ .alliance-standard .insignia{width:40px;height:47px}.alliance-ribbon strong{font-size:21px}.alliance-ribbon{padding:7px 18px 9px}
+ .fallen-seal{gap:12px;padding:14px}.fallen-seal strong{font-size:22px}.fallen-standard .insignia{width:44px;height:52px}.fallen-strike{top:23px}
+}
+@media(prefers-reduced-motion:reduce){
+ .world-feed *,.alliance-seal,.alliance-seal *,.fallen-seal,.fallen-seal *,.declaration{animation:none!important;transition:none!important}
+}
+
+/* Leaderboard: pinned top-right of the map; the feed owns bottom-left, notices own top-left. */
+.leaderboard{position:absolute;z-index:5;top:54px;right:12px;width:min(316px,calc(100% - 24px));background:#10242bf2;border:1px solid #a88e5c8c;box-shadow:0 10px 28px #04141ab3;color:var(--ink);font-size:11px}
+.leaderboard[hidden]{display:none}
+.lb-head{display:flex;align-items:stretch;border-bottom:1px solid #a88e5c40}
+.lb-toggle{flex:1;min-width:0;display:flex;align-items:center;gap:7px;min-height:30px;padding:4px 9px;background:#152d35;border:0;border-radius:0;text-align:left;font-size:10px}
+.lb-toggle b{letter-spacing:1.4px;text-transform:uppercase;color:#f1d59c;font-size:10px}.lb-toggle::after{content:'▾';margin-left:auto;color:#c8b58a}
+.lb-summary{display:none;color:#d8d2c0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.lb-modes{display:flex}.lb-modes button{min-height:30px;padding:3px 8px;font-size:10px;border:0;border-left:1px solid #a88e5c40;border-radius:0;background:#12262d;color:#b7c0b3}
+.lb-modes button[aria-pressed=true]{background:#2a3f45;color:#f4d396;box-shadow:inset 0 -2px var(--gold)}
+.lb-columns,.lb-row{display:grid;grid-template-columns:18px 11px 44px minmax(0,1fr) 64px 42px;align-items:center;column-gap:4px;padding:0 9px}
+.lb-columns{font-size:8px;letter-spacing:1px;text-transform:uppercase;color:#8f9d95;padding-top:4px;padding-bottom:2px}.lb-columns span:nth-child(2){grid-column:3/5}.lb-columns span:nth-child(3),.lb-columns span:nth-child(4){text-align:right}
+.lb-rows{list-style:none;margin:0;padding:2px 0 5px}
+.lb-row{height:24px;font-variant-numeric:tabular-nums}
+.lb-row.you{background:#d2ab622b;box-shadow:inset 2px 0 var(--gold)}.lb-row.you .lb-name{color:#f6dca6;font-weight:700}
+.lb-row.detached{border-top:1px dashed #a88e5c66;margin-top:2px}
+.lb-row.eliminated{opacity:.55}.lb-row.eliminated .lb-name{text-decoration:line-through}
+.lb-rank{color:#c8b58a;font-weight:700;text-align:right}
+.lb-move{font-size:8px;text-align:center}.lb-move.up{color:#9fd49a;animation:lb-nudge-up .6s ease-out}.lb-move.down{color:#e39a82;animation:lb-nudge-down .6s ease-out}
+@keyframes lb-nudge-up{from{transform:translateY(5px);opacity:0}}@keyframes lb-nudge-down{from{transform:translateY(-5px);opacity:0}}
+.lb-flags{display:flex;gap:1px;overflow:hidden}.lb-flags .insignia{width:13px;height:15px;flex:none}
+.lb-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#ebe5d4}
+.lb-land,.lb-troops{text-align:right;color:#d8d6c8}.lb-troops{color:#f0e3c2}
+.leaderboard.collapsed{width:auto;max-width:min(360px,calc(100% - 24px))}
+.leaderboard.collapsed .lb-modes,.leaderboard.collapsed .lb-columns,.leaderboard.collapsed .lb-rows{display:none}
+.leaderboard.collapsed .lb-head{border-bottom:0}.leaderboard.collapsed .lb-summary{display:block}.leaderboard.collapsed .lb-toggle::after{content:'▸'}
+/* Keep the incoming-army strip and battle notice clear of the leaderboard. */
+.board-panel:has(.leaderboard:not([hidden])) .threat-strip{max-width:calc(100% - min(316px,100% - 24px) - 40px)}
+@media(max-width:760px){
+ .leaderboard{position:static;width:auto;max-width:none;border-left:0;border-right:0;box-shadow:none}
+ .leaderboard.collapsed{width:auto;max-width:none}
+ .lb-toggle{min-height:40px}.lb-modes button{min-height:40px;padding:3px 11px}
+ .board-panel:has(.leaderboard:not([hidden])) .threat-strip{max-width:calc(100% - 28px)}
+ /* Flow order under the map: leaderboard strip, then World feed, then the caption. */
+ .leaderboard,.world-feed{order:1}.map-caption,.scenario-note{order:2}
+}
+@media(prefers-reduced-motion:reduce){.lb-move{animation:none!important}}

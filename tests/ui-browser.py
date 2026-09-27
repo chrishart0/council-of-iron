@@ -1,7 +1,7 @@
 """Focused v0.5 checks against a recorded position and the real HTTP server.
 Not a new strategic match. Native navigation by default; explicit bridge optional.
 """
-import argparse,io,json,os,subprocess
+import argparse,io,json,os,re,subprocess
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
 from browser_helpers import load_bridge
@@ -140,6 +140,12 @@ def main():
             page.locator('[data-room="ui-fixture"][data-resume]').click()
             expect(page.locator('#commander-title')).to_have_text('British Empire')
             expect(page.locator('.country-card')).to_have_count(8)
+            # Catch-up: the World feed shows history but nothing flashes or announces itself.
+            expect(page.locator('#world-feed')).to_be_visible()
+            expect(page.locator('#feed-list [data-kind="major_battle"]').first).to_be_visible()
+            assert page.locator('#feed-list .feed-headline').count()>=10
+            assert page.locator('#feed-list .fresh').count()==0
+            for banner in ['#declaration','#alliance-seal','#fallen-seal']:expect(page.locator(banner)).to_be_hidden()
             def capture(name,hold=900):
                 # Clean real DOM capture: not a mockup, no credentials or local player storage.
                 page.screenshot(path=str(out/name),full_page=True)
@@ -157,6 +163,31 @@ def main():
                 for selector in ['#map','#scoreboard','#send-army']:
                     box=page.locator(selector).bounding_box();assert box['height']>20 and box['y']+box['height']<=h+1,(selector,w,h,box)
             report['assertions'].append('Live HUD fits 1366×768, 1600×1000 and 1920×1080 without document scrolling; map, roster and commit control stay visible.')
+            def overlaps(a,b):
+                return not (a['x']+a['width']<=b['x'] or b['x']+b['width']<=a['x'] or a['y']+a['height']<=b['y'] or b['y']+b['height']<=a['y'])
+            observed=page.evaluate("fetch('/api/games/ui-fixture').then(r=>r.json())")
+            def expected_troops(country):
+                return sum(p['troops'] for p in observed['provinces'] if p['owner']==country)+sum(a['amount'] for a in observed['armies'] if a['country']==country)
+            for w,h in [(1366,768),(1920,1080)]:
+                page.set_viewport_size({'width':w,'height':h});page.wait_for_timeout(150)
+                expect(page.locator('#leaderboard')).to_be_visible()
+                board=page.locator('#leaderboard').bounding_box();map_box=page.locator('#map').bounding_box()
+                assert board['x']>=map_box['x'] and board['x']+board['width']<=map_box['x']+map_box['width']+1,(board,map_box)
+                for other in ['#world-feed','.command-panel','#command-footer','#threats']:
+                    if page.locator(other).is_visible():assert not overlaps(board,page.locator(other).bounding_box()),(other,w,h)
+                rows=page.locator('#lb-rows .lb-row')
+                assert rows.count()>=5
+                for i in range(rows.count()):
+                    row=rows.nth(i);country=row.get_attribute('data-id')
+                    assert int(row.get_attribute('data-troops'))==expected_troops(country),country
+                    assert int(row.get_attribute('data-provinces'))==sum(1 for p in observed['provinces'] if p['owner']==country)
+            expect(page.locator('#lb-rows .lb-row.you')).to_contain_text('Britain')
+            page.locator('[data-lb-mode="alliances"]').click()
+            expect(page.locator('#lb-rows .lb-row').first).to_contain_text('Atlantic Accord')
+            page.screenshot(path=str(out/'14-leaderboard-alliances.png'))
+            page.locator('[data-lb-mode="players"]').click()
+            page.screenshot(path=str(out/'15-leaderboard-1920.png'))
+            report['assertions'].append('Leaderboard stays inside the map at 1366×768 and 1920×1080, clear of the feed, notices and dock; each row matches garrisons + armies from the public observation; Players/Alliances toggle works.')
             page.locator('[data-country-focus="germany"]').focus();page.wait_for_timeout(850)
             expect(page.locator('[data-country-focus="germany"]')).to_be_focused()
             page.keyboard.press('Enter');assert page.locator('#map').get_attribute('viewBox')!='0 0 1280 680'
@@ -178,11 +209,29 @@ def main():
             page.locator('.standing-order summary').click();expect(page.locator('#set-route')).to_be_visible()
             page.wait_for_timeout(850);assert page.locator('.standing-order').get_attribute('open') is not None
             report['assertions'].append('March/Coordinate/Develop and Council render in the same shell; recruitment disclosure remains open through refresh; SVG IDs are unique.')
+            narrow=context.new_page();narrow.set_viewport_size({'width':390,'height':844})
+            if args.bridge:load_bridge(narrow,url,{'coi.identity':json.dumps(identity)})
+            else:narrow.goto(url)
+            narrow.locator('[data-room="ui-fixture"][data-resume]').click()
+            expect(narrow.locator('#leaderboard')).to_have_class(re.compile('collapsed'))
+            expect(narrow.locator('#lb-summary')).to_contain_text('You #')
+            assert narrow.locator('#leaderboard').bounding_box()['height']<=44
+            assert narrow.evaluate('document.documentElement.scrollWidth<=innerWidth+1')
+            narrow.screenshot(path=str(out/'16-leaderboard-390-collapsed.png'),full_page=True)
+            narrow.locator('#lb-toggle').click();expect(narrow.locator('#lb-rows')).to_be_visible()
+            assert narrow.evaluate('document.documentElement.scrollWidth<=innerWidth+1')
+            narrow.close()
+            report['assertions'].append('At 390px the leaderboard starts as a one-line tappable strip under the map and expands without horizontal overflow.')
             for w,h in [(1024,768),(390,844),(844,390)]:
                 page.set_viewport_size({'width':w,'height':h});page.wait_for_timeout(120);no_overflow()
                 if w==390:capture('07-mobile-command.png')
             page.set_viewport_size({'width':1600,'height':1000});page.locator('#world-view').click()
             server.stdin.write('535\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==535
+            expect(page.locator('#declaration')).to_contain_text('Major battle at Northern India',timeout=5000)
+            expect(page.locator('#declaration')).to_contain_text('troops lost')
+            expect(page.locator('#feed-list .fresh[data-kind="major_battle"]').last).to_contain_text('Northern India')
+            page.screenshot(path=str(out/'13-major-battle-banner.png'))
+            report['assertions'].append('A live recorded major battle (casualties above max(20, 3% of all troops)) raised one banner and a fresh feed row.')
             expect(page.locator('#battle-signal')).to_have_attribute('data-tone','lost')
             expect(page.locator('#battle-signal')).to_contain_text('Northern India')
             expect(page.locator('#countdown-break')).to_be_visible()
@@ -195,6 +244,11 @@ def main():
             page.locator('#back').click();page.locator('[data-room="ui-fixture"][data-resume]').click()
             expect(page.locator('#commander-title')).to_have_text('British Empire')
             expect(page.locator('#battle-signal')).to_be_hidden()
+            page.wait_for_timeout(900)
+            for banner in ['#declaration','#alliance-seal','#fallen-seal']:expect(page.locator(banner)).to_be_hidden()
+            assert page.locator('#feed-list .fresh').count()==0
+            expect(page.locator('#feed-list [data-kind="major_battle"]').last).to_contain_text('Netherlands')
+            report['assertions'].append('Reopening the room rebuilt the World feed without replaying banners or fresh-row flashes.')
             report['assertions'].append('Actual recorded losses and defense trigger factual, dismissible notices; broken hold explains itself; reopening suppresses old battle popups.')
             page.set_viewport_size({'width':1500,'height':1150});page.locator('#back').click()
             page.locator('#room-name').fill('Choose your standard');page.locator('#create-form button').click()
@@ -215,6 +269,8 @@ def main():
             map_checks(page,server,report,capture)
             page.emulate_media(reduced_motion='reduce');assert page.evaluate('getComputedStyle(document.querySelector("#battle-signal")).animationName')=='none'
             if not args.bridge:effect_checks(page,report)  # dynamic module import needs native HTTP
+            for selector in ['#declaration','#alliance-seal','.alliance-ribbon','#fallen-seal','.fallen-strike']:
+                assert page.evaluate(f'getComputedStyle(document.querySelector("{selector}")).animationName')=='none',selector
             assert not report['pageErrors'],report['pageErrors'];report['status']='passed'
             browser.close()
         if args.gif:

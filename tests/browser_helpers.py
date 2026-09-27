@@ -29,9 +29,9 @@ def load_bridge(page, url, saved=None):
     page.expose_function('__localHttp', local_http)
     html = (ROOT / 'public/index.html').read_text()
     html = re.sub(r'<script[^>]+src="/app.js"[^>]*></script>', '', html)
-    html = re.sub(r'<link[^>]+href="/(?:style|review|map-layers).css"[^>]*>', '', html)
+    html = re.sub(r'<link[^>]+href="/(?:style|review|map-layers|feed).css"[^>]*>', '', html)
     page.set_content(html)
-    for name in ['style.css', 'review.css', 'map-layers.css']:
+    for name in ['style.css', 'review.css', 'map-layers.css', 'feed.css']:
         page.add_style_tag(content=(ROOT / 'public' / name).read_text())
     page.evaluate('''saved => {
         const storage = saved || {};
