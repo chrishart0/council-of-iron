@@ -19,7 +19,7 @@ export class Atlas {
     this.reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
     svg.replaceChildren();
     const defs = node('defs');
-    defs.innerHTML = '<radialGradient id="ocean-light"><stop stop-color="#25434b"/><stop offset="1" stop-color="#102932"/></radialGradient><marker id="march-head" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7" fill="#f2d59b"/></marker>';
+    defs.innerHTML = '<radialGradient id="ocean-light"><stop stop-color="#284d59"/><stop offset="1" stop-color="#112833"/></radialGradient><marker id="march-head" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7" fill="#f2d59b"/></marker>';
     defs.innerHTML = defs.innerHTML.replaceAll('ocean-light', `${this.prefix}ocean-light`).replaceAll('march-head', `${this.prefix}march-head`);
     svg.append(defs, node('rect', { x: -1800, y: -1000, width: 4800, height: 3000, fill: `url(#${this.prefix}ocean-light)` }));
     const grid = node('g', { class: 'atlas-grid', 'pointer-events': 'none' });
@@ -38,15 +38,23 @@ export class Atlas {
       this.territories.append(shape);this.shapes.set(p.id,shape);
     }
     svg.append(this.territories);
+    // Fine engraved land grain, authored once. No raster textures or per-frame filters.
+    const hatch=node('pattern',{id:`${this.prefix}land-grain`,width:5,height:5,patternUnits:'userSpaceOnUse'});
+    hatch.append(node('circle',{cx:1,cy:1,r:.45,fill:'#132832',opacity:.22}));defs.append(hatch);this.grain=hatch;
+    svg.append(node('path',{d:map.provinces.map(p=>p.path).join(' '),fill:`url(#${this.prefix}land-grain)`,'pointer-events':'none'}));
+    const compass=node('g',{'aria-hidden':'true','pointer-events':'none',transform:'translate(110 560)',opacity:.38,stroke:'#ddc591',fill:'none'});
+    compass.append(node('circle',{r:27,'stroke-width':.7}),node('circle',{r:22,'stroke-width':.4}),node('path',{d:'M0-40L6-6 40 0 6 6 0 40-6 6-40 0-6-6Z','stroke-width':.8}),node('path',{d:'M0-40V0H-40L-6-6Z',fill:'#ddc591','stroke-width':.4}));
+    const north=node('text',{y:-46,'text-anchor':'middle',stroke:'none',fill:'#eed9ac','font-size':12,'font-family':'Georgia'});north.textContent='N';compass.append(north);svg.append(compass);
     this.connections=node('g',{'pointer-events':'none'});this.routes=node('g',{'pointer-events':'none'});this.marches=node('g',{'pointer-events':'none'});
-    svg.append(this.connections,this.routes,this.marches);
+    this.trails=node('g',{'pointer-events':'none'});svg.append(this.connections,this.routes,this.trails,this.marches);
     const markers=node('g');
     for(const p of map.provinces) {
       const group=node('g',{id:`${this.prefix}marker-${p.id}`,'data-province':p.id,tabindex:0,role:'button',class:'map-counter'});
-      const disc=node('circle',{r:10});const text=node('text',{y:.5,class:'counter-value',id:`${this.prefix}troops-${p.id}`});
+      const disc=node('rect',{x:-16,y:-10,width:32,height:21,rx:1,class:'counter-body'});const text=node('text',{x:2,y:.5,class:'counter-value',id:`${this.prefix}troops-${p.id}`});
+      const stripe=node('rect',{x:-16,y:-10,width:4,height:21,class:'counter-stripe'});
       const label=node('text',{y:-17,class:'province-name'});label.textContent=p.name;
       const industry=node('text',{y:21,class:'industry-label'});group.append(industry);
-      group.append(disc,text,label);markers.append(group);this.markers.set(p.id,{group,disc,text,label,industry});
+      group.append(disc,stripe,text,label);markers.append(group);this.markers.set(p.id,{group,disc,stripe,text,label,industry});
     }
     svg.append(markers);
     this.tooltip=document.createElement('div');this.tooltip.className='atlas-tooltip';this.tooltip.hidden=true;svg.parentElement.append(this.tooltip);
@@ -65,7 +73,9 @@ export class Atlas {
     this.applyView();
   }
   path(from,to) {
-    const a=this.places.get(from),b=this.places.get(to);
+    return this.pointPath(this.places.get(from),this.places.get(to));
+  }
+  pointPath(a,b){
     if(Math.abs(a.x-b.x)>640) {
       const [left,right]=a.x<b.x?[a,b]:[b,a];
       return `M${left.x},${left.y}L${right.x-1280},${right.y}M${right.x},${right.y}L${left.x+1280},${left.y}`;
@@ -135,23 +145,27 @@ export class Atlas {
     this.applyView();
   }
   world(){this.view={x:0,y:0,w:1280,h:680};this.applyView();}
-  europe(){this.view={x:588,y:70,w:230,h:122.2};this.applyView();}
+  europe(){this.view={x:595,y:105,w:210,h:111.6};this.applyView();}
   focus(id){const p=this.places.get(id);if(!p)return;this.view={x:p.x-195,y:p.y-104,w:390,h:208};this.applyView();}
   home(country){const c=this.countries.get(country);if(c)this.focus(c.start[0]);}
   layout() {
     const matrix=this.svg.getScreenCTM();if(!matrix || matrix.a<=0)return;
-    const scale=1/matrix.a,zoom=1280/this.view.w,shown=[];
+    const scale=1/matrix.a,zoom=1280/this.view.w,shown=[],labels=[];
+    this.grain.setAttribute('patternTransform',`scale(${scale})`);
     // Keep counters readable at a constant screen size; declutter crowded neutral
     // markers first. Province paths and the inspector remain selectable at all zooms.
     const order=[...this.map.provinces].sort((a,b)=>this.priority(b.id)-this.priority(a.id));
     for(const p of order) {
       const marker=this.markers.get(p.id),priority=this.priority(p.id);
-      const crowded=shown.some(s=>Math.hypot(s.x-p.x,s.y-p.y)<21*scale);
-      const visible=priority>=4 || !crowded || zoom>4;
+      const crowded=shown.some(s=>Math.abs(s.x-p.x)<38*scale && Math.abs(s.y-p.y)<27*scale);
+      const visible=priority>=5 || !crowded || zoom>5;
       marker.group.setAttribute('transform',`translate(${p.x} ${p.y}) scale(${scale})`);
       marker.group.classList.toggle('counter-hidden',!visible);
-      marker.label.style.display=zoom>=2.1?'':'none';
-      marker.disc.setAttribute('r',priority>=4?11:9);
+      const labelWidth=p.name.length*5.8;
+      const labelCrowded=labels.some(s=>Math.abs(s.x-p.x)<(s.width+labelWidth)*scale/2 && Math.abs(s.y-p.y)<15*scale);
+      const labelVisible=visible && zoom>=3 && (priority>=5 || !labelCrowded);
+      marker.label.style.display=labelVisible?'':'none';
+      if(labelVisible)labels.push({...p,width:labelWidth});
       if(visible)shown.push(p);
     }
     this.svg.classList.toggle('atlas-zoomed',zoom>=2.1);
@@ -174,6 +188,8 @@ export class Atlas {
       shape.setAttribute('class',`province ${role}${p.owner?' occupied':''}`);
       marker.group.setAttribute('class',`map-counter ${role}${p.owner===state.you && state.you?' owned':''}`);
       marker.disc.setAttribute('stroke',this.countries.get(p.owner)?.color || '#a5a28c');
+      marker.stripe.setAttribute('fill',this.countries.get(p.owner)?.color || '#a5a28c');
+      const width=Math.max(32,String(p.troops).length*7+15);marker.disc.setAttribute('width',width);marker.disc.setAttribute('x',-width/2);marker.stripe.setAttribute('x',-width/2);
       marker.text.textContent=p.troops;
       marker.industry.textContent=state.rules.distanceMovement && p.owner ? `${'ⅠⅡⅢ'[(p.development || 1)-1]}${p.developing?' ↑':''}`:'';
       marker.group.setAttribute('aria-label',`${this.places.get(p.id).name}, ${p.troops} troops, ${this.countries.get(p.owner)?.name || 'uncontrolled'}`);
@@ -183,14 +199,20 @@ export class Atlas {
     for(const id of neighbors)this.connections.append(node('path',{d:this.path(source,id),class:id===destination?'target-connection':'adjacent-connection',...(id===destination?{'marker-end':`url(#${this.prefix}march-head)`}:{})}));
     this.routes.replaceChildren();
     for(const p of state.provinces)if(p.route && (p.owner===state.you || p.id===source))this.routes.append(node('path',{d:this.path(p.id,p.route),class:'recruit-connection','marker-end':`url(#${this.prefix}march-head)`}));
+    this.trails.replaceChildren();
+    for(const a of state.armies)if(a.amount>=5 && (a.country===state.you || a.to===destination || a.from===source)){
+      this.trails.append(node('path',{d:this.pointPath(a.startPoint || this.places.get(a.from),this.places.get(a.to)),class:`army-trail${a.returning?' returning':''}`}));
+    }
     const ids=new Set(state.armies.map(a=>a.id));
     for(const [id,entry] of this.armies)if(!ids.has(id)){entry.group.remove();this.armies.delete(id);}
     for(const army of state.armies) {
       if(!this.armies.has(army.id)) {
-        const group=node('g',{class:'moving-army'}),disc=node('circle',{r:4.5}),label=node('text',{y:-10});
+        const group=node('g',{class:'moving-army'}),disc=node('path',{d:'M-5-4L6 0-5 4-2 0Z'}),label=node('text',{y:-10});
         group.append(disc,label);this.marches.append(group);this.armies.set(army.id,{group,disc,label});
       }
       const entry=this.armies.get(army.id),hostile=me && sides.get(army.country)!==me.side && state.provinces.some(p=>p.id===army.to && p.owner===state.you);
+      const origin=army.startPoint || this.places.get(army.from),target=this.places.get(army.to);let dx=target.x-origin.x;if(dx>640)dx-=1280;if(dx< -640)dx+=1280;
+      entry.disc.setAttribute('transform',`rotate(${Math.atan2(target.y-origin.y,dx)*180/Math.PI})`);
       entry.disc.setAttribute('fill',hostile?'#ee987a':this.countries.get(army.country).color);
       entry.group.classList.toggle('hostile',Boolean(hostile));entry.label.textContent=army.amount>=3?army.amount:'';
     }

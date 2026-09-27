@@ -6,7 +6,17 @@ Command an industrial homeland and colonial footholds. Invest in recruitment, co
 
 ![Actual browser gameplay, with an accelerated test clock and heuristic agents](docs/media/gameplay.gif)
 
-**v0.4: After-action review.** Finished rooms now open a score-first review with player and alliance results, exact map history, military/economy charts and a public diplomatic timeline. Live recruitment, industry and admission controls explain their consequences before you commit. No balance values changed.
+**v0.5: The command table.** A viewport-filling battle map, original faction standards, readable military counters, a docked primary order button, and a compact country roster replace the tall dashboard layout. Click a country to inspect its position. **War log / J** opens the event drawer; Escape closes it. Captures, losses and held lines produce dismissible notices from completed battles—not predicted outcomes. No map, economy, scoring or agent-command rules changed.
+
+![Actual command interface displaying a recorded test position](docs/media/command-table.png)
+
+<details><summary>Tour the interface (actual captures of a recorded test position)</summary>
+
+![Recorded-position UI tour, not a live match](docs/media/interface.gif)
+
+</details>
+
+After-action review still shows every player's and alliance's score, exact map replay, military/economy charts and the public diplomatic timeline. Winning standards and Victory/Defeat/Armistice headings identify the result without granting new rewards. Local insignia are original game artwork, not historically exact coats of arms.
 
 **Industry & Empire** remains the scenario. The map has 79 authored provinces, denser European fronts, visible starting industry and overseas possessions. It is inspired by 1910, not an exact historical political or economic reconstruction. Countries deliberately have different strengths. [Rules](docs/design-v0.3.md) · [Balance results](docs/BALANCE.md) · [Test record](docs/PLAYTEST.md)
 
@@ -22,6 +32,8 @@ npm start
 
 Open **http://127.0.0.1:3000**. Create a room, choose a country, invite humans or attach agents, then start. Add external players **before** filling empty seats with practice bots. Two to eight occupied countries can start; balance tests use eight. Unclaimed countries' territories remain neutral.
 
+The lobby lists running games first. **Spectate** opens the public view with world-chat bubbles and a full-screen map; a separate **Resume** button restores your own playing seat. Private messages never enter spectator bubbles.
+
 Standard lasts at most **30 real minutes**. Quick runs all game timers at 6× and finishes within five real minutes. The displayed clock always shows game time. Use Standard for actual LLM negotiation; accelerating the world does not accelerate model inference.
 
 For trusted LAN players:
@@ -34,7 +46,7 @@ Use that exact origin in browsers and agent configuration. Internet hosting requ
 
 ## Play
 
-The Orders panel separates **March**, **Coordinate**, and **Develop**.
+The Orders panel separates **March**, **Coordinate**, and **Develop**. The current primary action stays docked below its scrolling controls. Local recruitment arrows are an expandable section; they remain explicitly **new local recruits only**, not a forwarding chain.
 
 **March.** Choose a source and connected target. Commit an exact number or use the percentage presets. Leave one garrison troop. Travel is `15 + ceil(distance_km / 35)` game ticks, with one tick per game second. Every printed connection has its own displayed duration; ocean crossings take longer than nearby borders. These are game timings, not realistic historical troop speeds.
 
