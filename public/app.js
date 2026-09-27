@@ -6,6 +6,7 @@ import { Atlas } from './atlas.js';
 import { escapeHTML as esc, syncOptions, setHTML, operationId, confirmAction } from './ui.js';
 import { WorldFeed, Herald, presentHeadline } from './feed.js';
 import { LeaderboardPanel } from './leaderboard-panel.js';
+import { ExpandableMap } from './expand.js';
 // Relations and alliance colours: the same DOM-free helpers the atlas and agent tools use.
 import { relationsOf, allianceColors } from './relations.js';
 import { warsOf } from './leaderboard.js';
@@ -23,7 +24,7 @@ let spectating=false;
 let panelOpen=false, panelOpener=null;
 const narrow=matchMedia('(max-width:759px)');
 let messageCatchupComplete=false;
-let worldFeed, herald, standings;
+let worldFeed, herald, standings, expander;
 const country = id => map.countries.find(c=>c.id===id);
 const place = id => map.provinces.find(p=>p.id===id);
 const sideName = id => state?.sides.find(s=>s.id===id)?.name || id;
@@ -185,11 +186,6 @@ function availableTroops(){
 }
 function paintMap(){
   if(!state)return;atlas.update(state,source,destination);
-}
-/** Browser full screen (the page is already full-viewport). Hidden where the API is absent. */
-function syncFullscreen(){
-  const on=Boolean(document.fullscreenElement),button=$('fullscreen-toggle');
-  button.hidden=!document.fullscreenEnabled;button.setAttribute('aria-pressed',String(on));button.textContent=on?'Exit full screen':'Full screen';
 }
 function closeMenu(focus=false){
   if($('hud-menu').hidden)return;
@@ -621,7 +617,7 @@ function render(){
   renderOrders();paintMap();renderCouncil();renderWars();renderRelations();renderChat();renderScoreboard();renderResult();renderOperations();renderLeaderboard();
   $('events').innerHTML=history.map(e=>({e,description:describe(e)})).filter(x=>x.description).slice(-30).reverse().map(({e,description})=>`<div class="event"><time>${time(e.tick)}</time>${esc(description)}</div>`).join('');
 }
-async function home(){resetPresentation();review?.destroy();review=null;closePanel();closeMenu();document.body.classList.remove('reviewing','spectating');generation++;pollController?.abort();document.body.classList.remove('in-game');matchId=null;state=null;spectating=false;herald.reset();worldFeed.reset();messageCatchupComplete=false;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');await rooms();}
+async function home(){resetPresentation();review?.destroy();review=null;closePanel();closeMenu();expander.set(false,{fromBrowser:true});document.body.classList.remove('reviewing','spectating');generation++;pollController?.abort();document.body.classList.remove('in-game');matchId=null;state=null;spectating=false;herald.reset();worldFeed.reset();messageCatchupComplete=false;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');await rooms();}
 $('create-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('display-name').value);const g=await request('/api/games','POST',{name:$('room-name').value,preset:$('preset').value});await openRoom(g.id);}));
 $('join-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('join-name').value);await request(`/api/games/${matchId}/join`,'POST',{country:$('country-choice').value,kind:'human'});await poll();toast('Your seat is reserved.');}));
 $('fill-bots').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/bots`,'POST',{});await poll();}));
@@ -692,10 +688,13 @@ const changeIdentity=safely(async()=>{closeMenu();const name=prompt('Create a se
 $('account-button').addEventListener('click',changeIdentity);$('menu-identity').addEventListener('click',changeIdentity);
 $('zoom-in').onclick=()=>atlas.zoom(.7);$('zoom-out').onclick=()=>atlas.zoom(1.4);
 $('world-view').onclick=()=>atlas.world();$('europe-view').onclick=()=>atlas.europe();$('home-view').onclick=focusCountry;
-$('fullscreen-toggle').addEventListener('click',safely(async()=>{
-  if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();
-}));
-document.addEventListener('fullscreenchange',syncFullscreen);
+// Expand map: an immersive live map (HUD strip and nav hidden) that also works where the Fullscreen API does
+// not (iPhone Safari); real fullscreen of the whole page is requested where available.
+expander=new ExpandableMap($('stage'),$('map-expand'),{label:'map',target:document.documentElement,escape:false,onChange:on=>{
+  $('fullscreen-toggle').setAttribute('aria-pressed',String(on));$('fullscreen-toggle').textContent=on?'Exit expanded map':'Expand map (full screen)';
+  requestAnimationFrame(()=>{atlas?.layout();measureStack();});
+}});
+$('fullscreen-toggle').addEventListener('click',()=>{closeMenu();expander.toggle();});
 $('menu-button').addEventListener('click',()=>{if($('hud-menu').hidden)openMenu();else closeMenu(true);});
 $('panel-close').addEventListener('click',()=>closePanel({restoreFocus:true}));
 // Bottom sheet (narrow screens): the handle cycles peek → half → full; arrows resize; drag snaps.
@@ -734,6 +733,7 @@ document.addEventListener('keydown',event=>{
     if(!$('hud-menu').hidden)closeMenu(true);
     else if(!$('war-journal').hidden){toggleJournal(false);$('journal-toggle').focus();}
     else if(panelOpen)closePanel({restoreFocus:true});
+    else if(expander.on)expander.set(false);
     else{source=null;destination=null;inspected=null;renderOrders();paintMap();}
     return;
   }
@@ -793,7 +793,6 @@ herald=new Herald({declaration:$('declaration'),alliance:$('alliance-seal'),fall
 {let saved=null;try{saved=localStorage.getItem('coi.feed');}catch{}
   worldFeed.setOpen(saved?saved==='open':!narrow.matches);}
 try{map=await request('/map.json','GET',undefined,null);initMap();showIdentity();const params=new URL(location).searchParams,initial=params.get('match');if(initial)await openRoom(initial,params.get('spectate')==='1');else await rooms();setConnection(state?.status==='finished'?'Review':'Live');}catch(e){toast(e.message,true);}
-syncFullscreen();
 // Overlays size themselves around the leaderboard and the top alert stack (e.g. the order card's max height).
 // Overlays size themselves around the alert stack and leaderboard (e.g. the order card's max height).
 function measureStack(){

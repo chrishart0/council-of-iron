@@ -64,7 +64,8 @@ COMMIT='''() => {
 layout_log=[]
 # Share of the viewport where the map is not under any HTML overlay (4 px grid sample).
 UNCOVERED='''() => {
-  const rects=[];for(const s of ['.hud-bar','#hud-rail','#alerts>*','#leaderboard','#world-feed','#map-controls','#command-panel'])
+  // Camera buttons and the atlas key are measured part by part: the cluster's bounding box includes empty map.
+  const rects=[];for(const s of ['.hud-bar','#hud-rail','#alerts>*','#leaderboard','#world-feed','.camera-buttons>button','#map-key .atlas-modes>*','#command-panel'])
     for(const e of document.querySelectorAll(s)){if(!e.checkVisibility())continue;const r=e.getBoundingClientRect();if(r.width && r.height)rects.push(r);}
   let free=0,all=0;for(let y=2;y<innerHeight;y+=4)for(let x=2;x<innerWidth;x+=4){all++;if(!rects.some(r=>x>=r.left && x<r.right && y>=r.top && y<r.bottom))free++;}
   return free/all;
@@ -422,6 +423,60 @@ def relation_checks(page,server,report,capture):
     expect(page.locator('#map .map-effect')).to_have_count(0,timeout=6000)  # the live alliance effect ends before the effect-scope check
     report['assertions'].append('Alliances: a new coalition shows as forming (dashed) in the HUD chip and leaderboard during its notice, then active with the ally’s standard; leaderboard bands and the alliance feed row use the same colour as the shared allianceColors helper (relations.js, also used by the map blocs); a hostile alliance name renders only as text.')
 
+# iPhone Safari has no element Fullscreen API: simulate it, so only the CSS pseudo-fullscreen can work.
+NO_FULLSCREEN_API='Object.defineProperty(Document.prototype,"fullscreenEnabled",{get:()=>false,configurable:true});'
+VIEW_CENTRE='()=>{const [x,y,w,h]=document.querySelector("#review-map").getAttribute("viewBox").split(" ").map(Number);return [x+w/2,y+h/2];}'
+def expand_checks(browser,url,identity,report,out):
+    for w,h in [(390,844),(844,390)]:
+        context=browser.new_context(viewport={'width':w,'height':h},is_mobile=True,has_touch=True,device_scale_factor=2)
+        context.add_init_script(NO_FULLSCREEN_API);context.add_init_script('localStorage.setItem("coi.identity",'+json.dumps(json.dumps(identity))+');')
+        page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+        # Replay map (after-action review).
+        page.goto(url+'/?match=ui-review');expect(page.locator('#aar-player-scores tbody tr')).to_have_count(8)
+        assert page.evaluate('document.fullscreenEnabled') is False
+        page.locator('#aar-tab-replay').click();expect(page.locator('#replay-stage')).to_be_visible()
+        button=page.locator('#replay-expand');expect(button).to_be_visible()
+        board,corner=page.locator('#review-map').bounding_box(),button.bounding_box()
+        assert corner['x']>=board['x'] and corner['x']+corner['width']<=board['x']+board['width']+1 and corner['y']+corner['height']<=board['y']+board['height']+1 and corner['height']>=44,(board,corner)
+        page.locator('#replay-slider').fill('300');centre=page.evaluate(VIEW_CENTRE)
+        button.click();theatre=page.locator('#replay-theatre');expect(theatre).to_have_class(re.compile('map-expanded'))
+        assert theatre.bounding_box()=={'x':0,'y':0,'width':w,'height':h},theatre.bounding_box()
+        scroll=page.evaluate('scrollY');page.mouse.wheel(0,600);page.wait_for_timeout(150);assert page.evaluate('scrollY')==scroll,'page scrolled behind the expanded map'
+        assert page.locator('#review-map').bounding_box()['height']>=h*.45
+        for control in ['#replay-play','#replay-slider','#replay-speed','#replay-expand']:
+            box=page.locator(control).bounding_box();assert box and box['y']>=0 and box['y']+box['height']<=h+.5 and box['x']+box['width']<=w+.5,(control,box)
+        page.locator('#replay-play').click();expect(page.locator('#replay-play')).to_have_text('Pause');page.locator('#replay-play').click()
+        page.locator('#replay-slider').fill('420');expect(page.locator('#replay-stage')).to_have_attribute('data-tick','420')
+        page.screenshot(path=str(out/f'19-expanded-replay-{w}x{h}.png'))
+        # Rotation keeps the camera centre and refits the expanded map.
+        centre=page.evaluate(VIEW_CENTRE);page.set_viewport_size({'width':h,'height':w});page.wait_for_timeout(250)
+        assert theatre.bounding_box()=={'x':0,'y':0,'width':h,'height':w},theatre.bounding_box()
+        after=page.evaluate(VIEW_CENTRE);assert abs(after[0]-centre[0])<1 and abs(after[1]-centre[1])<1,(centre,after)
+        page.set_viewport_size({'width':w,'height':h});page.wait_for_timeout(150)
+        page.keyboard.press('Escape');expect(theatre).not_to_have_class(re.compile('map-expanded'));expect(button).to_be_focused()
+        expect(button).to_have_attribute('aria-pressed','false');assert theatre.bounding_box()['height']!=h or theatre.bounding_box()['y']!=0
+        button.click();page.locator('#replay-expand').click();expect(theatre).not_to_have_class(re.compile('map-expanded'))  # ✕ Exit
+        ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
+        assert page.locator('#review-map [id]').evaluate_all('(n)=>n.every(e=>e.id.startsWith("review-map"))')
+        # Live map.
+        page.goto(url+'/?match=ui-fixture');expect(page.locator('#commander-title')).to_have_text('British Empire')
+        live=page.locator('#map-expand');expect(live).to_be_visible()
+        live.click();expect(page.locator('#stage')).to_have_class(re.compile('map-expanded'));expect(page.locator('.hud-bar')).to_be_hidden()
+        assert page.locator('#map').bounding_box()=={'x':0,'y':0,'width':w,'height':h}
+        expect(page.locator('#leaderboard')).to_be_visible();check_layout(page,f'{w}x{h} expanded live map')
+        page.screenshot(path=str(out/f'20-expanded-live-{w}x{h}.png'))
+        page.keyboard.press('Escape');expect(page.locator('#stage')).not_to_have_class(re.compile('map-expanded'))
+        expect(page.locator('.hud-bar')).to_be_visible();expect(live).to_be_focused()
+        page.locator('#menu-button').click();expect(page.locator('#fullscreen-toggle')).to_be_visible()  # never hidden without the Fullscreen API
+        page.locator('#fullscreen-toggle').click();expect(page.locator('#stage')).to_have_class(re.compile('map-expanded'));live.click()
+        manifest=page.evaluate("fetch('/manifest.webmanifest').then(async r=>({type:r.headers.get('content-type'),body:await r.json()}))")
+        assert manifest['type']=='application/manifest+json' and manifest['body']['display']=='fullscreen' and 'standalone' in manifest['body']['display_override'],manifest
+        for icon in manifest['body']['icons']:assert page.evaluate(f"fetch('{icon['src']}').then(r=>r.ok)"),icon
+        assert page.locator('link[rel=manifest]').count()==1 and page.locator('meta[name=apple-mobile-web-app-capable][content=yes]').count()==1
+        assert not errors,errors
+        context.close()
+    report['assertions'].append('Expand map without the Fullscreen API (iPhone emulation, 390×844 and 844×390): the replay and live maps each show a thumb-reachable Expand control; expanded, the map covers the viewport, the page does not scroll, replay play/slider/speed stay on screen and work, rotation refits without moving the camera centre, and Escape or ✕ Exit restores the layout and focus; the menu entry is never hidden; the web app manifest (display fullscreen → standalone) and its icons are served; replay and live SVG IDs stay scoped.')
+
 LONG_MESSAGE=('The Atlantic Accord proposes a longer public statement to check the history column: '+'we will hold the Channel, the Low Countries and the sea lanes to the Americas together. '*4).strip()
 def feed_checks(page,report):
     """World history: whole-match scrollback, pinned reply, no yank while reading, expanded-then-compact rows."""
@@ -711,6 +766,7 @@ def main():
             if not args.bridge:effect_checks(page,report);hostile_name_check(page,report)  # dynamic module import needs native HTTP
             for selector in ['#declaration','#alliance-seal','.alliance-ribbon','#fallen-seal','.fallen-strike']:
                 assert page.evaluate(f'getComputedStyle(document.querySelector("{selector}")).animationName')=='none',selector
+            if not args.bridge:expand_checks(browser,url,identity,report,out)  # real navigation and an init script
             assert not report['pageErrors'],report['pageErrors'];report['status']='passed'
             browser.close()
         if args.gif:

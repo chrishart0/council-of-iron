@@ -257,3 +257,10 @@ body[data-status=lobby] .hud-rail{display:none}
  .war-room:has(#command-panel:not([hidden]):not([data-tab=orders])) .right-rail{display:flex}
 
 }
+/* Expand map (expand.js): pseudo-fullscreen that needs no Fullscreen API (iPhone Safari). */
+html.map-expanded-lock,html.map-expanded-lock body{overflow:hidden;overscroll-behavior:none}
+.expand-button{font-weight:700;color:#ffe0a4;border-color:#c8a773}
+/* Live: an immersive map; the HUD strip and bottom navigation step away, overlays stay. */
+.war-room.map-expanded{--hud-h:0px;--nav-h:0px;--top:var(--safe-t);--bottom:var(--safe-b)}
+.war-room.map-expanded .hud-bar{display:none}
+.war-room.map-expanded .expand-button{background:#394343}

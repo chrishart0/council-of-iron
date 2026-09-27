@@ -35,6 +35,13 @@ const staticFiles = new Map([
   ['/insights.js', ['public/insights.js', 'text/javascript; charset=utf-8']],
   ['/movement.js', ['public/movement.js', 'text/javascript; charset=utf-8']],
   ['/map.json', ['public/imperial-map.json', 'application/json']],
+  ['/expand.js', ['public/expand.js', 'text/javascript; charset=utf-8']],
+  // Installable web app: "Add to Home Screen" opens a chrome-free full-screen game (manifest-src falls under default-src 'self').
+  ['/manifest.webmanifest', ['public/manifest.webmanifest', 'application/manifest+json']],
+  ['/icon.svg', ['public/icon.svg', 'image/svg+xml']],
+  ['/icon-192.png', ['public/icon-192.png', 'image/png']],
+  ['/icon-512.png', ['public/icon-512.png', 'image/png']],
+  ['/apple-touch-icon.png', ['public/apple-touch-icon.png', 'image/png']],
 ]);
 async function body(req) {
   requireRule((req.headers['content-type'] || '').startsWith('application/json'), 'Use application/json.', 415);

@@ -39,3 +39,24 @@
 .aar-accounting{background:#e6ddc8}.aar-alliance.victorious{background:#e5dbbf;border-top-color:#987242}.aar-alliance{background:#ebe5d4}.aar-kpis{border-bottom-color:#c8bda0}.aar-replay-controls{background:#e2d8bf}.aar-replay-stage aside{background:#e9e1ce}.aar-replay-map>.aar-legend{background:#e3dcc7}.after-action .aar-tenure-track button{background:#bac3ad}.after-action .aar-tenure-track button.independent{background:#d6d1b9}
 @media(max-width:1100px){.victory-seals{padding-right:14px}.victory-seals .insignia{width:38px;height:48px}.victory-seals .insignia:nth-child(2){width:47px;height:58px}.aar-header{gap:18px}.aar-header h2{font-size:29px}}
 @media(max-width:760px){.victory-seals{border:0;padding:0 0 18px}.victory-seals .insignia{width:37px;height:44px}.victory-seals .insignia:nth-child(2){width:43px;height:53px}.aar-tabs .ui-icon{width:14px;height:14px;margin-right:4px}.victory-word{font-size:11px;letter-spacing:3px}}
+/* Expand replay map (expand.js): map, "at this moment" and playback controls fill the screen. */
+.aar-map-frame{position:relative}
+.map-expand-corner{position:absolute;z-index:4;right:10px;bottom:10px;min-height:44px;padding:6px 12px;font-size:12px;background:#10242bf0;box-shadow:0 4px 14px #0007}
+.after-action .map-expand-corner{color:#ffe0a4;background:#10242bf0;border-color:#c8a773}
+.aar-theatre.map-expanded{position:fixed;inset:0;z-index:80;display:flex;flex-direction:column;background:#0d1b22;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+.aar-theatre.map-expanded>.aar-replay-toolbar{position:absolute;z-index:3;top:calc(env(safe-area-inset-top,0px) + 8px);right:calc(env(safe-area-inset-right,0px) + 8px);margin:0;padding:4px;background:#10242bee;border:1px solid #c8a77366}
+.aar-theatre.map-expanded>.aar-replay-toolbar>div:first-child,.aar-theatre.map-expanded>#replay-loading,.aar-theatre.map-expanded .aar-replay-map>.aar-legend{display:none}
+.aar-theatre.map-expanded>.aar-replay-toolbar button{min-height:40px;color:#f1edde;background:#243a42;border-color:#768375}
+.aar-theatre.map-expanded .aar-replay-stage{position:relative;display:block;flex:1;min-height:0;border:0;border-radius:0}
+.aar-theatre.map-expanded .aar-replay-map,.aar-theatre.map-expanded .aar-map-frame{position:absolute;inset:0}
+.aar-theatre.map-expanded .replay-map{height:100%}
+.aar-theatre.map-expanded .aar-replay-stage aside{position:absolute;z-index:2;top:8px;left:8px;width:min(270px,48%);max-height:38%;overflow:auto;padding:10px 12px;background:#e9e1cef0;border:1px solid var(--line);box-shadow:0 8px 24px #0007}
+.aar-theatre.map-expanded .aar-replay-controls{flex:none;margin:0;border-radius:0;border-left:0;border-right:0;border-bottom:0;padding:8px 12px}
+.aar-theatre.map-expanded #replay-slider{margin:8px 0}
+@media(max-width:760px){.aar-theatre.map-expanded .aar-replay-jumps p{display:none}.aar-theatre.map-expanded .aar-replay-stage aside{display:block;grid-template-columns:none}}
+@media(max-height:500px){
+ .aar-theatre.map-expanded .aar-replay-jumps{display:none}.aar-theatre.map-expanded #replay-slider{margin:4px 0 0}
+ .aar-theatre.map-expanded .aar-transport button{min-height:40px;padding:4px 10px}.aar-theatre.map-expanded .aar-transport select{min-height:40px}
+ .aar-theatre.map-expanded .aar-replay-stage aside{max-height:30%;padding:6px 10px;font-size:11px}.aar-theatre.map-expanded .aar-replay-side{padding:4px 0}
+ .aar-theatre.map-expanded .atlas-legend{max-height:34vh;overflow:auto}
+}

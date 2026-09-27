@@ -42,6 +42,13 @@ compact strip, narrower rail, order card up to full height on the left.
 - **Map controls**: bottom-left, beside the card; +/− hidden on coarse pointers (pinch), World/Europe/Home stay. The atlas key (legend and Political/Diplomacy toggle) sits beside them; M toggles the mode.
 - **Camera insets**: `focus`/`home`/`fit` calls pass `{insets:{top,right,bottom,left}}` as an optional trailing argument describing the covered edges; the current atlas ignores it.
 
+## Expand map and installable app (user report: "I don't see how to put the replay map into fullscreen")
+
+- Every map has a thumb-reachable **⤢ Expand** control: live and spectator maps at the top of the camera cluster, the replay map in its bottom-right corner (a menu entry, "Expand map (full screen)", is never hidden). `public/expand.js` toggles a CSS pseudo-fullscreen (`position:fixed; inset:0`, safe-area padding, page scroll locked) that needs no Fullscreen API, which iPhone Safari lacks for non-video elements. Where the API exists it also requests real fullscreen (errors ignored) and leaving it through the browser leaves the pseudo state.
+- Live expanded: the HUD strip and bottom navigation step away; alerts, leaderboard, history, camera buttons and the order card remain. Escape (after menu, war log and panel) or ✕ Exit returns and restores focus.
+- Replay expanded: the map fills the screen with "At this moment" as a small top-left overlay, the zoom buttons top-right and the playback controls (play, ±10 s, speed, slider) pinned at the bottom. Rotation re-fits without moving the camera centre (the viewBox is kept).
+- `manifest.webmanifest` (display `fullscreen`, `display_override` fullscreen → standalone, original compass icons as SVG and PNG) plus `apple-mobile-web-app-capable`/status-bar meta: **Add to Home Screen** opens the game without browser chrome.
+
 ## Deviations from the first proposal, and why
 
 - World feed moved from bottom-left to a **persistent right rail** under the leaderboard (user feedback: history must stay visible and scrollable). The context card and camera buttons moved to the **bottom-left** so nothing overlaps the rail.
