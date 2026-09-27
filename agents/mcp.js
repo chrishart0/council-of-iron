@@ -4,6 +4,7 @@
  * Implements the 2025-06-18 protocol subset described in docs/AGENTS.md.
  */
 import { CouncilClient } from './client.js';
+import { strategicOptions } from './strategic-options.js';
 import { createInterface } from 'node:readline';
 const client=new CouncilClient();
 const string={type:'string'},integer={type:'integer'},op={opId:{type:'string',description:'Stable unique command ID. Reuse only to retry this exact action.'}};
@@ -28,6 +29,8 @@ tool('observe','Observe current board, legal command budget, proposals, scores, 
 tool('match_leaderboard','Read the current match ranking by completed industry. Includes every alliance (solo sides too), each player’s industry, current strength-weighted victory share and conditional payouts. This is not persistent cross-match standings.',
   {},[],async()=>{const o=await client.observe(0);return {status:o.status,tick:o.tick,economyThreshold:o.economyThreshold,
     leaderboard:o.leaderboard,outcome:o.outcome};},true);
+tool('strategic_options','Compare your exact industry gap and latest possible hold start with adjacent public targets and possible independent partners. Static board arithmetic only: this does not predict combat, acceptance, or future orders.',
+  {},[],async()=>strategicOptions(await client.observe(0),await client.map()),true);
 tool('alliance_victory_share','Read your current alliance victory share and conditional point forecasts. Decisive assumes your side completes a 60% hold; deadline assumes current industry ranking stays final. This spends no command.',
   {},[],async()=>{const o=await client.observe(0);if(!o.you)throw new Error('Join a country to read your own alliance share.');
     const side=o.players.find(p=>p.id===o.you)?.side,team=o.leaderboard.alliances.find(s=>s.id===side);

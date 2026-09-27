@@ -1,0 +1,42 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { createGame, join, start, observe } from '../src/engine.js';
+import { strategicOptions } from '../agents/strategic-options.js';
+
+const map = JSON.parse(readFileSync(new URL('../public/imperial-map.json', import.meta.url)));
+
+test('strategic options distinguish taking rival industry from taking neutral industry', () => {
+  const game = createGame({id:'options',name:'Options',hostId:'test'},map);
+  join(game,map,{profileId:'usa',name:'USA',country:'usa'});
+  join(game,map,{profileId:'britain',name:'Britain',country:'britain'});
+  start(game);
+  const before = structuredClone(game);
+  const result = strategicOptions(observe(game,'usa'),map);
+  assert.equal(result.ownIndustry,11);
+  assert.equal(result.totalIndustry,33);
+  assert.equal(result.decisiveThreshold,20);
+  assert.equal(result.industryGap,9);
+  assert.equal(result.latestHoldStart,1710);
+  const england = result.nearbyTargets.find(p=>p.province==='england');
+  assert.equal(england.owner,'britain');
+  assert.equal(england.gapReduction,3);
+  assert.equal(england.industryGapAfterCapture,6);
+  assert.equal(england.requiresWar,true);
+  assert.ok(england.adjacentSources.some(p=>p.from==='east-us'));
+  const mexico = result.nearbyTargets.find(p=>p.province==='mexico');
+  assert.equal(mexico.owner,null);
+  assert.equal(mexico.gapReduction,0);
+  assert.equal(mexico.industryGapAfterCapture,9);
+  assert.equal(result.possibleIndependentPartners[0].country,'britain');
+  assert.equal(result.possibleIndependentPartners[0].industryGapTogether,0);
+  assert.deepEqual(game,before);
+});
+
+test('strategic options require a player seat', () => {
+  const game = createGame({id:'options',name:'Options',hostId:'test'},map);
+  join(game,map,{profileId:'usa',name:'USA',country:'usa'});
+  join(game,map,{profileId:'britain',name:'Britain',country:'britain'});
+  start(game);
+  assert.throws(()=>strategicOptions(observe(game),map),/Join a country/);
+});

@@ -202,10 +202,11 @@ test('stdio MCP negotiates, validates schemas, joins an agent, calls real HTTP, 
     {jsonrpc:'2.0',id:7,method:'ping'},
     {jsonrpc:'2.0',id:8,method:'tools/call',params:{name:'match_leaderboard',arguments:{}}},
     {jsonrpc:'2.0',id:9,method:'tools/call',params:{name:'alliance_victory_share',arguments:{}}},
+    {jsonrpc:'2.0',id:10,method:'tools/call',params:{name:'strategic_options',arguments:{}}},
   ].map(x=>JSON.stringify(x)).join('\n')+'\n';
   const result=await subprocess('agents/mcp.js',[],env,input);assert.equal(result.code,0,result.stderr);
-  const output=result.stdout.trim().split('\n').map(x=>JSON.parse(x));assert.equal(output.length,9);
-  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,30);
+  const output=result.stdout.trim().split('\n').map(x=>JSON.parse(x));assert.equal(output.length,10);
+  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,31);
   assert.equal(JSON.parse(output[2].result.content[0].text).country,'britain');
   assert.equal(JSON.parse(output[3].result.content[0].text).you,'britain');
   assert.equal(output[4].error.code,-32602);assert.equal(output[5].error.code,-32602);assert.deepEqual(output[6].result,{});
@@ -214,6 +215,9 @@ test('stdio MCP negotiates, validates schemas, joins an agent, calls real HTTP, 
   assert.equal(board.leaderboard.players.length,2);
   assert.equal(share.country,'britain');assert.equal(share.sharePercent,100);
   assert.equal(share.industryBrought,board.leaderboard.players.find(p=>p.country==='britain').strengthIndustry);
+  const options=JSON.parse(output[9].result.content[0].text);
+  assert.equal(options.country,'britain');assert.equal(options.ownIndustry,22);
+  assert.equal(options.totalIndustry,33);
 });
 
 test('industrial HTTP plans are private, atomic, synchronized, recallable and persistent',async t=>{
