@@ -13,6 +13,7 @@ const node = (tag, className) => { const e = document.createElement(tag); e.clas
 const setText = (element, value) => { if (element.textContent !== value) element.textContent = value; };
 const RELATION = { enemy: ['⚔', 'at war with you'], ally: ['⛓', 'allied with you'] };
 const percent = n => `${Math.round(n * 100)}%`;
+const seatType = player => player?.kind === 'bot' || player?.model?.startsWith('heuristic-') ? 'BOT' : player?.kind === 'agent' ? 'AI' : 'HUMAN';
 
 export class LeaderboardPanel {
   /** `fronts` lists bloc-vs-bloc wars in the teams view; `onFocus(country|null)` fires when a row is
@@ -108,7 +109,9 @@ export class LeaderboardPanel {
     const shown = type === 'group' ? [] : type === 'member' ? [row.id] : row.countries.slice(0, 3);
     const key = shown.join(',');
     if (standards.dataset.key !== key) { standards.dataset.key = key; standards.innerHTML = shown.map(insignia).join(''); } // authored SVG only
-    setText(label, this.label(row) + (row.eliminated ? ' · fallen' : '') + (type === 'group' && row.forming ? ' · forming' : '')); // alliance name: text
+    const player = type === 'group' ? null : state.players.find(p => p.id === row.id);
+    const role = player ? seatType(player) : '';
+    setText(label, `${role ? `${role} · ` : ''}${this.label(row)}${row.eliminated ? ' · fallen' : ''}${type === 'group' && row.forming ? ' · forming' : ''}`); // alliance name: text
     bar.hidden = pct.hidden = type !== 'member';
     if (type === 'member') { bar.firstChild.style.width = percent(row.shareOfAlliance); setText(pct, percent(row.shareOfAlliance)); }
     const [mark, words] = RELATION[row.relation] || ['', ''];
@@ -116,7 +119,7 @@ export class LeaderboardPanel {
     const membership = type === 'group' ? `${row.forming ? 'Forming alliance' : 'Alliance'} of ${row.countries.map(this.names.country).join(', ')}`
       : type === 'member' ? `${percent(row.shareOfAlliance)} of ${group.name}'s troops` : active ? `Member of ${active.name}` : pending ? `Forming ${pending.name}` : row.kind === 'alliance' ? '' : 'Independent';
     const enemies = row.atWarWith.map(this.names.country).join(', ');
-    const summary = [type === 'group' ? '' : row.countries.map(this.names.country).join(' + '), membership, words, enemies ? `at war with ${enemies}` : ''].filter(Boolean).join(' · ');
+    const summary = [type === 'group' ? '' : row.countries.map(this.names.country).join(' + '), role, player?.displayName || player?.name, membership, words, enemies ? `at war with ${enemies}` : ''].filter(Boolean).join(' · ');
     if (li.title !== summary) { li.title = summary; li.setAttribute('aria-label', `${type === 'member' ? '' : `#${row.rank} `}${this.label(row)} · ${summary} · ${(row.share * 100).toFixed(1)}% land · ${row.troops} troops`); }
     setText(land, `${(row.share * 100).toFixed(1)}%`); land.title = `${row.provinces} of ${board.provinces} provinces`;
     setText(troops, String(row.troops));

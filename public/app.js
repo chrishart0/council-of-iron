@@ -34,6 +34,7 @@ const place = id => map.provinces.find(p=>p.id===id);
 const sideName = id => state?.sides.find(s=>s.id===id)?.name || id;
 const namedSide = id => country(sideName(id))?.name || sideName(id);
 const myPlayer = () => state?.players.find(p=>p.id===state.you);
+const seatType = p => !p ? 'Unclaimed' : p.kind==='bot' || p.model?.startsWith('heuristic-') ? 'BOT' : p.kind==='agent' ? 'AI' : 'HUMAN';
 const atWar = (a,b) => Boolean(a && b && a!==b && (state?.wars || []).includes([a,b].sort().join(':')));
 const mayEnter = (a,b) => !b || state.players.find(p=>p.id===a)?.side===state.players.find(p=>p.id===b)?.side || !state.rules.warRequired || atWar(a,b);
 function toast(message,error=false){$('toast').textContent=message;$('toast').className=error?'error':'';$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,6500);}
@@ -505,9 +506,9 @@ function renderScoreboard(){
     const button=$('scoreboard').querySelector(`[data-country-focus="${c.id}"]`);
     button.classList.toggle('mine',c.id===state.you);
     const alliance=p?allianceOf(c.id):null;button.dataset.band=alliance?'active':'';if(alliance)button.style.setProperty('--band',allianceColors(state)[alliance.id]);else button.style.removeProperty('--band');
-    button.title=`${c.name} · ${p?.name || 'Unclaimed'} · ${p?namedSide(p.side):'Neutral'} · ${land.length} provinces · ${troops} troops${projection?` · ${signed(projection.projectedPrestige)} Prestige if victorious`:''}`;
+    button.title=`${c.name} · ${seatType(p)} · ${p?.displayName || p?.name || 'Unclaimed'} · ${p?namedSide(p.side):'Neutral'} · ${land.length} provinces · ${troops} troops${projection?` · ${signed(projection.projectedPrestige)} Prestige if victorious`:''}`;
     button.setAttribute('aria-label',`Inspect ${button.title}`);
-    setHTML(button,`${insignia(c.id)}<span class="country-summary"><b>${esc(faction(c.id).short)}</b><span class="country-metrics">${icon('land')}${land.length} ${icon('troops')}${troops}</span><small>${p?esc(p.eliminatedAt!==null?'Eliminated':p.side.startsWith('solo:')?'Independent':namedSide(p.side)):'Unclaimed'}</small></span>`);
+    setHTML(button,`${insignia(c.id)}<span class="country-summary"><b>${esc(faction(c.id).short)}</b><span class="country-metrics">${icon('land')}${land.length} ${icon('troops')}${troops}</span><small>${p?`${seatType(p)} · ${esc(p.eliminatedAt!==null?'Eliminated':p.side.startsWith('solo:')?'Independent':namedSide(p.side))}`:'Unclaimed'}</small></span>`);
   }
 }
 function describe(e){
@@ -579,7 +580,8 @@ function renderPresentation(){
   for(const button of $('faction-choices').querySelectorAll('button')){
     const id=button.dataset.countrySeat,occupied=state.players.some(p=>p.id===id);
     button.disabled=occupied;button.setAttribute('aria-pressed',String($('country-choice').value===id));
-    button.title=occupied?'Seat occupied':startingSummary(country(id));
+    const occupant=state.players.find(p=>p.id===id);button.title=occupant?`${seatType(occupant)} · ${occupant.displayName || occupant.name}`:startingSummary(country(id));
+    button.querySelector('small').textContent=occupant?`${seatType(occupant)} · ${occupant.displayName || occupant.name}`:`${country(id).start.length} holdings`;
   }
   const signal=signalCursor===null?null:battleSignal(state,history.filter(e=>e.id>signalCursor));
   signalCursor=cursor;
@@ -647,7 +649,14 @@ $('country-choice').addEventListener('change',()=>{const c=country($('country-ch
 $('set-route').addEventListener('click',safely(async()=>{await command({type:'route',from:source,to:destination});toast('Recruitment arrow queued.');}));
 $('clear-route').addEventListener('click',safely(async()=>{await command({type:'route',from:source,to:null});toast('Arrow removal queued.');}));
 $('ally-choice').addEventListener('change',()=>{if(state)renderCouncil();});
-$('alliance-form').addEventListener('submit',safely(async()=>{await command({type:'propose',country:$('ally-choice').value,name:$('coalition-name').value});toast('Offer delivered. Membership changes only after unanimous consent and notice.');}));
+$('alliance-form').querySelector('button').textContent='Offer & approve alliance';
+$('alliance-form').addEventListener('submit',safely(async()=>{
+  const target=$('ally-choice').value,name=$('coalition-name').value;if(!target)return;
+  const candidate=country(target).name,joining=myPlayer()?.side.startsWith('solo:');
+  const message=joining?`Sending this offer is your approval to join ${candidate} in ${name}. If they accept, the alliance activates after ${state.rules.notice} game seconds; you will not receive a second approval prompt.`:`Sending this offer is your approval for ${candidate} to join your coalition. Other members and the candidate must also accept. Membership activates after ${state.rules.notice} game seconds; you will not receive a second approval prompt.`;
+  if(!await confirmAction({title:`Approve alliance offer to ${candidate}?`,message,accept:'Approve & send offer'}))return;
+  await command({type:'propose',country:target,name});toast('Offer delivered. You have approved it; membership changes after all parties accept and the notice expires.');
+}));
 $('diplomacy-target').addEventListener('change',renderCouncil);
 $('declare-war').addEventListener('click',safely(async()=>{
   const target=$('diplomacy-target').value;if(!target)return;
