@@ -28,7 +28,10 @@ export class AfterAction {
   country(id) { return this.map.countries.find(c => c.id === id); }
   playerName(id) {
     const player = this.report?.players.find(p => p.country === id);
-    return player?.displayName || player?.name || player?.model || 'Unknown player';
+    if (!player) return 'Unknown player';
+    if (player.kind === 'bot' || player.model?.startsWith('heuristic-')) return `Bot: ${player.name}`;
+    if (player.kind === 'human') return `Human: ${player.name}`;
+    return player.displayName || player.name || player.model || 'Unknown agent';
   }
   place(id) { return this.map.provinces.find(p => p.id === id)?.name || id; }
   side(id) {
