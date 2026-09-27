@@ -345,9 +345,9 @@ def sound_settings_checks(page,context,url,report,bridge):
     saved=json.loads(page.evaluate("localStorage.getItem('coi.sound')"))
     assert saved=={'muted':True,'music':.6,'effects':.4,'reduced':False},saved
     page.keyboard.press('Escape');expect(page.locator('#sound-panel')).to_be_hidden()
-    if page.locator('#feed-text').is_visible():
-        page.locator('#feed-text').focus();page.keyboard.press('Shift+M');expect(control).to_have_attribute('data-muted','true')
-        assert page.locator('#feed-text').input_value().endswith('M');page.locator('#feed-text').fill('')
+    expect(page.locator('#feed-text')).to_be_visible()
+    page.locator('#feed-text').focus();page.keyboard.press('Shift+M');expect(control).to_have_attribute('data-muted','true')
+    assert page.locator('#feed-text').input_value().endswith('M');page.locator('#feed-text').fill('')
     page.locator('#game-name').click();page.keyboard.press('Shift+M')
     expect(control).to_have_attribute('data-muted','false');expect(control).to_have_attribute('data-audio','running')
     fresh=context.new_page()
