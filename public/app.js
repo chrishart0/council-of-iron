@@ -6,6 +6,7 @@ import { Atlas } from './atlas.js';
 import { escapeHTML as esc, syncOptions, setHTML, operationId, confirmAction } from './ui.js';
 import { WorldFeed, Herald, presentHeadline } from './feed.js';
 import { LeaderboardPanel } from './leaderboard-panel.js';
+import { SoundBoard } from './sound.js';
 const time = n => `${Math.floor(Math.max(0,n)/60).toString().padStart(2,'0')}:${Math.floor(Math.max(0,n)%60).toString().padStart(2,'0')}`;
 const signed = n => `${n>=0?'+':''}${n.toFixed(1)}`;
 let identity;try{identity=JSON.parse(localStorage.getItem('coi.identity'));}catch{identity=null;}
@@ -113,7 +114,7 @@ async function poll(){
       if(!next.hasMore)break;
     }
     if(!state.hasMore)messageCatchupComplete=true;
-    announce(liveDeclarations);
+    announce(liveDeclarations);sounds.update(state,liveDeclarations,live);
     $('connection').textContent=state.status==='finished'?'Review':'Live';render();renderFeed(live);
   }catch(e){if(e.name!=='AbortError' && epoch===generation){$('connection').textContent='Reconnecting';toast(e.message,true);}}
   finally{if(polling===epoch)polling=false;}
@@ -130,7 +131,7 @@ async function command(action){
     try{result=await request(`/api/games/${room}/actions`,'POST',payload);}
     catch(error){if(error.status || epoch!==generation)throw error;result=await request(`/api/games/${room}/actions`,'POST',payload);}
     if(epoch!==generation)return null;
-    await poll();return result;
+    sounds.order(action);await poll();return result;
   }finally{pendingCommand=false;if(epoch===generation && state)renderOrders();}
 }
 const safely=fn=>async event=>{if(event?.type==='submit')event.preventDefault();try{await fn(event);}catch(e){toast(e.message,true);}};
@@ -482,7 +483,7 @@ function render(){
   renderOrders();paintMap();renderCouncil();renderChat();renderScoreboard();renderResult();renderOperations();renderLeaderboard();
   $('events').innerHTML=history.map(e=>({e,description:describe(e)})).filter(x=>x.description).slice(-30).reverse().map(({e,description})=>`<div class="event"><time>${time(e.tick)}</time>${esc(description)}</div>`).join('');
 }
-async function home(){resetPresentation();review?.destroy();review=null;setMapFullscreen(false);document.body.classList.remove('reviewing','spectating');generation++;pollController?.abort();document.body.classList.remove('in-game');matchId=null;state=null;spectating=false;herald.reset();worldFeed.reset();messageCatchupComplete=false;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');await rooms();}
+async function home(){resetPresentation();sounds.leave();review?.destroy();review=null;setMapFullscreen(false);document.body.classList.remove('reviewing','spectating');generation++;pollController?.abort();document.body.classList.remove('in-game');matchId=null;state=null;spectating=false;herald.reset();worldFeed.reset();messageCatchupComplete=false;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');await rooms();}
 $('create-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('display-name').value);const g=await request('/api/games','POST',{name:$('room-name').value,preset:$('preset').value});await openRoom(g.id);}));
 $('join-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('join-name').value);await request(`/api/games/${matchId}/join`,'POST',{country:$('country-choice').value,kind:'human'});await poll();toast('Your seat is reserved.');}));
 $('fill-bots').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/bots`,'POST',{});await poll();}));
@@ -602,6 +603,7 @@ standings=new LeaderboardPanel({root:$('leaderboard'),rows:$('lb-rows'),toggle:$
 {let saved=null;try{saved=localStorage.getItem('coi.leaderboard');}catch{}
   standings.setOpen(saved?saved==='open':!matchMedia('(max-width:760px)').matches);}
 herald=new Herald({declaration:$('declaration'),alliance:$('alliance-seal'),fallen:$('fallen-seal')});
+const sounds=new SoundBoard($('sound-control'));
 {let saved=null;try{saved=localStorage.getItem('coi.feed');}catch{}
   worldFeed.setOpen(saved?saved==='open':!matchMedia('(max-width:760px)').matches);}
 try{map=await request('/map.json','GET',undefined,null);initMap();showIdentity();const params=new URL(location).searchParams,initial=params.get('match');if(initial)await openRoom(initial,params.get('spectate')==='1');else await rooms();$('connection').textContent=state?.status==='finished'?'Review':'Live';}catch(e){toast(e.message,true);}

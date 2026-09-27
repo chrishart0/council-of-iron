@@ -34,6 +34,12 @@ const staticFiles = new Map([
   ['/replay-model.js', ['public/replay-model.js', 'text/javascript; charset=utf-8']],
   ['/insights.js', ['public/insights.js', 'text/javascript; charset=utf-8']],
   ['/movement.js', ['public/movement.js', 'text/javascript; charset=utf-8']],
+  ['/sound.js', ['public/sound.js', 'text/javascript; charset=utf-8']],
+  ['/sound-model.js', ['public/sound-model.js', 'text/javascript; charset=utf-8']],
+  ['/sound.css', ['public/sound.css', 'text/css; charset=utf-8']],
+  ['/audio/manifest.json', ['public/audio/manifest.json', 'application/json']],
+  ...['theme', 'tension', 'effects'].flatMap(stem => [['ogg', 'audio/ogg'], ['mp3', 'audio/mpeg']]
+    .map(([ext, type]) => [`/audio/${stem}.${ext}`, [`public/audio/${stem}.${ext}`, type]])),
   ['/map.json', ['public/imperial-map.json', 'application/json']],
 ]);
 async function body(req) {
@@ -93,7 +99,10 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
       if(req.headers.origin) requireRule(req.headers.origin===`http://${req.headers.host}` || req.headers.origin===publicOrigin,'Cross-origin request rejected.',403);
       const url=new URL(req.url,`http://${req.headers.host}`), path=url.pathname;
       if(req.method==='GET' && staticFiles.has(path)) {
-        const [file,type]=staticFiles.get(path); res.writeHead(200,{'Content-Type':type}); res.end(readFileSync(resolve(root,file))); return;
+        const [file,type]=staticFiles.get(path);
+        // Audio is large and versioned by ?v=<manifest hash>; let browsers keep it for a day.
+        if(type.startsWith('audio/'))res.setHeader('Cache-Control','public, max-age=86400');
+        res.writeHead(200,{'Content-Type':type}); res.end(readFileSync(resolve(root,file))); return;
       }
       if(req.method==='GET' && path==='/favicon.ico') {res.writeHead(204);res.end();return;}
       const rawToken=req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null;
