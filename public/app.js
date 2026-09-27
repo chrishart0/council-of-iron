@@ -492,7 +492,7 @@ function renderChat(){
   const signature=`${matchId}:${state.you}:`+messages.map(e=>e.id).join(',');
   if(box.dataset.signature!==signature){box.dataset.signature=signature;box.innerHTML=messages.length?messages.map(m=>`<article class="message"><header><b>${esc(country(m.from)?.name)}</b> · ${time(m.tick)} · ${m.channel==='dm'?`PRIVATE → ${esc(country(m.to)?.name)}`:esc(m.channel.toUpperCase())}</header><p>${esc(m.text)}</p></article>`).join(''):'<p class="muted small">The diplomatic wire is open. Make the first approach.</p>';if(atBottom)box.scrollTop=box.scrollHeight;}
   options('recipient',state.players.filter(p=>p.id!==state.you).map(p=>({value:p.id,label:country(p.id).name})),$('recipient').value);
-  const delay=Math.max(0,(state.commandBudget?.chatReadyAt || 0)-state.tick),button=$('chat-form').querySelector('button');
+  const delay=Math.max(0,(state.commandBudget?.chatReadyAt || 0)-state.tick),button=$('chat-form').querySelector('button[type=submit]');
   button.disabled=!state.you || state.status!=='running' || delay>0;button.textContent=delay?`Send in ${delay} game seconds`:'Send dispatch';
   // World speech is counted by the World feed; this badge covers coalition and private wire.
   const unread=messages.filter(m=>m.id>readMessageId && m.channel!=='world').length;

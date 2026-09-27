@@ -38,6 +38,8 @@ The lobby lists running games first. **Spectate** opens the same full-screen map
 
 **Sound** starts after your first click or key press: a quiet looping theme plus short cues for live headlines (war, alliances, peace, battles, falls, countdowns), incoming armies and your own orders. Every cue repeats a visible banner or row. The header **♪ Sound** button has mute, music and effects volume and a reduced mode; **Shift+M** mutes. [Sound design and regeneration](docs/UI-DESIGN.md)
 
+**Voice chat input.** Every chat box has a mic: tap (or hold) to talk, then review the text and press Send. It uses an optional local GPU speech-to-text sidecar (`npm run stt`, then start the game with `STT_URL=http://127.0.0.1:3190`) or, failing that, the browser's own speech recognition. Phones need HTTPS for the microphone: `scripts/dev-cert.sh` plus `TLS_CERT`/`TLS_KEY`, or Tailscale Serve. [Setup, latency and privacy](docs/OPERATIONS.md)
+
 Standard lasts at most **30 real minutes**. Quick runs all game timers at 6× and finishes within five real minutes. The displayed clock always shows game time. Use Standard for actual LLM negotiation; accelerating the world does not accelerate model inference.
 
 For another trusted LAN address or port:

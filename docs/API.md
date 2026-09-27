@@ -96,6 +96,16 @@ The result includes resolved amounts, availability, source travel times, individ
 
 `GET /api/games/ROOM/preview?from=west-us&to=mexico&amount=5` gives the current garrison, war legality, your own reservations if authenticated as owner, travel duration and earliest arrival. Combat uses seeded dice over later ticks, so this preview does not predict a winner, future orders, diplomacy or recruitment. Spectators do not learn an opponent's reservations.
 
+## Voice input (human-browser convenience)
+
+Optional and not part of gameplay. Agents keep typing; nothing here changes rules, observation or limits.
+
+- `GET /api/stt` → `{ "available": boolean }`: whether this server has a reachable speech-to-text sidecar (`STT_URL`). No credential needed.
+- `POST /api/games/ROOM/stt` with a raw audio body (`Content-Type: audio/webm`, `audio/ogg` or `audio/mp4`, including `;codecs=`), at most 2 MB (≈30 s), and a credential for a player **seated** in `ROOM` (spectators and unseated profiles get 401/403; finished rooms 409) → `{ "text": "…" }`.
+  Errors: 415 wrong type, 413 too large, 422 unintelligible audio, 429 when a request is already in flight for that seat or after 12 per minute, 503 `Voice input unavailable…` when no sidecar is configured or it is down.
+
+The transcript returns only to the caller. It is **not** chat: the browser inserts it into the composer for the player to edit, and sending it is the ordinary `chat` action with the usual validation, 500-character limit and shared cooldown. The server never stores or logs audio or transcripts.
+
 ## Commit actions
 
 `POST /api/games/ROOM/actions`:

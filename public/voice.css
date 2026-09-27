@@ -13,11 +13,12 @@
 .voice[data-state=recording] .voice-mic::after{content:'';position:absolute;top:3px;right:3px;width:7px;height:7px;border-radius:50%;background:#ff4b3a;animation:voice-pulse 1s ease-in-out infinite}
 .voice[data-state=transcribing] .voice-glyph,.voice[data-state=starting] .voice-glyph{opacity:.25}
 .voice[data-state=transcribing] .voice-mic::after,.voice[data-state=starting] .voice-mic::after{content:'';position:absolute;inset:7px;border:2px solid var(--gold,#c8a773);border-right-color:transparent;border-radius:50%;animation:voice-spin .8s linear infinite}
-.voice-meter{display:none;align-items:center;gap:5px;flex:none;font:600 11px/1 var(--sans,system-ui);color:#ffb3a6;font-variant-numeric:tabular-nums}
+.voice-meter{display:none;order:3;align-items:center;gap:5px;flex:none;font:600 11px/1 var(--sans,system-ui);color:#ffb3a6;font-variant-numeric:tabular-nums}
 .voice-meter i{display:block;width:44px;height:6px;background:#ff6b57;border-radius:3px;transform:scaleX(0);transform-origin:left;transition:transform 60ms linear;box-shadow:0 0 0 1px #ff6b5740}
 .voice-meter::after{content:attr(data-elapsed)}
 .voice[data-state=recording] .voice-meter{display:inline-flex}
-.voice-status{flex-basis:100%;display:block;margin-top:3px;font-size:11px;line-height:1.35;font-weight:400;color:var(--muted,#b5b8ac)}
+/* In a flex composer the meter and status wrap onto their own line after Send (order:3). */
+.voice-status{order:3;flex:1 1 60%;display:block;margin-top:3px;font-size:11px;line-height:1.35;font-weight:400;color:var(--muted,#b5b8ac)}
 .voice-status:empty{display:none}
 .voice[data-state=error] .voice-status{color:#ffc5ad}
 #chat-form .voice-mic{margin-top:6px;vertical-align:middle}#chat-form .voice-meter{margin:6px 0 0 8px;vertical-align:middle}

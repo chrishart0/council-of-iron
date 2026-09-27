@@ -49,12 +49,19 @@ def game_vocabulary(map_path: Path) -> str:
     """Country/province names plus diplomacy terms, as Whisper hotwords (a biasing prompt)."""
     terms = ["alliance", "coalition", "declare war", "peace", "ceasefire", "truce", "betray",
              "garrison", "troops", "industry", "factory", "Prestige", "Council of Iron"]
+    common = {"northern", "southern", "eastern", "western", "central", "east", "west", "north", "south",
+              "great", "new", "the", "of", "and", "empire", "republic", "united", "states", "de", "far",
+              # Well-known names Whisper already spells; the budget goes to rarer ones.
+              "british", "french", "german", "russian", "japan", "america", "canada", "mexico", "england",
+              "france", "italy", "africa", "egypt", "asia", "india", "china", "brazil", "poland", "moscow"}
     try:
         data = json.loads(map_path.read_text(encoding="utf-8"))
-        terms += [c["name"] for c in data.get("countries", [])]
-        terms += [p["name"] for p in data.get("provinces", [])]
+        names = [c["name"] for c in data.get("countries", [])] + [p["name"] for p in data.get("provinces", [])]
     except (OSError, ValueError, KeyError):
-        pass
+        names = []
+    # Whisper keeps at most ~223 prompt tokens, so list each distinctive word once.
+    for name in names:
+        terms += [w for w in re.split(r"[\s-]+", name) if w and w.lower() not in common]
     return ", ".join(dict.fromkeys(terms))
 
 

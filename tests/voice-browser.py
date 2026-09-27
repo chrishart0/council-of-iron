@@ -105,6 +105,11 @@ def main():
                 expect(mic).to_be_visible()
                 expect(mic).to_have_attribute('aria-label', 'Voice input (local GPU speech-to-text)')
                 expect(page.locator('#chat-form .voice-mic')).to_have_count(1)
+                page.locator('#dispatches-label').click()
+                expect(page.locator('#chat-form .voice-mic')).to_be_visible()
+                expect(page.locator('#chat-form .voice-mic')).to_have_text('')
+                expect(page.locator('#chat-form button[type=submit]')).to_contain_text('Send')
+                page.locator('#dispatches-label').click()
                 ok('mic attached to the world composer and the dispatches composer')
 
                 # Tap to start, tap to stop.

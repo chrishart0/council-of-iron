@@ -162,7 +162,7 @@ def main():
                 page.locator('#channel').select_option('dm')
                 page.locator('#recipient').select_option('britain')
                 page.locator('#chat-text').fill('Hold the Atlantic. This dispatch is private.')
-                page.locator('#chat-form button').click()
+                page.locator('#chat-form button[type=submit]').click()
                 expect(page.locator('#messages')).to_contain_text('This dispatch is private.')
                 # Drain the agent's cursor: the added banner waits let more events accumulate than one page.
                 agent_events,agent_cursor=[],0
@@ -205,7 +205,7 @@ def main():
                 assert spectator.locator('#map').bounding_box()=={'x':0,'y':0,'width':1600,'height':1050}
                 expect(spectator.locator('#world-feed #feed-list')).to_be_visible()
                 page.locator('#channel').select_option('world')
-                expect(page.locator('#chat-form button')).to_be_enabled(timeout=10000)
+                expect(page.locator('#chat-form button[type=submit]')).to_be_enabled(timeout=10000)
                 # Reply from the World feed itself: the shared chat action on channel world.
                 expect(page.locator('#feed-send')).to_be_enabled(timeout=10000)
                 page.locator('#feed-text').fill('<img src=x onerror="window.INJECTED=true"> Public call to the council.')
