@@ -103,7 +103,8 @@ function validProposal(g, q) {
   return q.roster.every(id => player(g, id).side.startsWith('solo:') && player(g, id).eliminatedAt === null);
 }
 function cancel(g, q, reason) {
-  q.status = 'cancelled'; event(g, 'proposal_cancelled', { proposalId: q.id, reason });
+  const recipients = q.status === 'open' ? q.roster : null;
+  q.status = 'cancelled'; event(g, 'proposal_cancelled', { proposalId: q.id, reason }, recipients);
 }
 function confirm(g, q) {
   const voters = q.roster.filter(id => player(g, id).eliminatedAt === null);
@@ -138,6 +139,14 @@ function accept(g, p, a) {
   confirm(g, q);
   event(g, 'offer_accepted', { proposalId: q.id, country: p.id }, q.roster);
   return { proposalId: q.id, status: q.status, activateAt: q.activateAt ?? null };
+}
+function decline(g, p, a) {
+  alive(g, p.id);
+  const q = g.proposals.find(q => q.id === a.proposalId);
+  requireRule(q && q.status === 'open', 'Offer is no longer open.', 409);
+  requireRule(q.roster.includes(p.id), 'You are not a party to this offer.', 403);
+  cancel(g, q, 'A participant declined or withdrew the offer.');
+  return { proposalId: q.id, status: q.status };
 }
 function leave(g, p) {
   alive(g, p.id); requireRule(!p.side.startsWith('solo:'), 'You are already independent.');
@@ -180,6 +189,7 @@ export function act(g, map, country, action, opId) {
     case 'move': case 'route': result = military(g, map, p, action); break;
     case 'propose': result = propose(g, p, action); break;
     case 'accept': result = accept(g, p, action); break;
+    case 'decline': result = decline(g, p, action); break;
     case 'leave': result = leave(g, p); break;
     case 'chat': result = chat(g, p, action); break;
     default: throw new RuleError('Unknown action type.');
@@ -209,6 +219,9 @@ function applyMembership(g) {
     if (!validProposal(g, q)) { cancel(g, q, 'Roster or eligibility changed.'); continue; }
     if (q.status === 'open') {
       if (g.tick >= q.expiresAt) cancel(g, q, 'Offer expired.');
+      // A retained eliminated member has no vote. Re-evaluate without requiring
+      // an already-consenting survivor to find and press Accept again.
+      else if (q.roster.every(id => !locked(g, id))) confirm(g, q);
       continue;
     }
     if (q.activateAt > g.tick) continue;
@@ -323,9 +336,19 @@ export function tick(g) {
 }
 /** A viewer gets only public events and inbox messages addressed to that seat at SEND time. */
 export function observe(g, country = null, after = 0, limit = 200) {
-  const eligibleEvents = g.events.filter(e => e.id > after && (!e.recipients || e.recipients.includes(country)));
-  const events = eligibleEvents.slice(0, limit).map(({ recipients, ...e }) => e);
-  const hasMore = eligibleEvents.length > events.length;
+  requireRule(Number.isSafeInteger(after) && after >= 0, 'Invalid event cursor.');
+  requireRule(Number.isSafeInteger(limit) && limit > 0 && limit <= 10000, 'Invalid event limit.');
+  // Cursor lookup is logarithmic; a quiet poll must not rescan a whole match.
+  let lo = 0, hi = g.events.length;
+  while (lo < hi) { const mid = (lo + hi) >>> 1;
+    if (g.events[mid].id <= after) lo = mid + 1; else hi = mid; }
+  const visible = [];
+  for (let i = lo; i < g.events.length && visible.length <= limit; i++) {
+    const e = g.events[i];
+    if (!e.recipients || e.recipients.includes(country)) visible.push(e);
+  }
+  const hasMore = visible.length > limit;
+  const events = visible.slice(0, limit).map(({ recipients, ...e }) => e);
   const p = country ? player(g, country) : null;
   return { id: g.id, name: g.name, status: g.status, tick: g.tick, speed: g.speed, rules: RULES,
     eligible: g.eligible, you: country, players: g.players.map(({ profileId, orderTicks, lastChat, ...p }) => p),
@@ -334,20 +357,24 @@ export function observe(g, country = null, after = 0, limit = 200) {
       .map(({ signature, ...q }) => q), departures: g.departures, dominance: g.dominance,
     commandBudget: p ? { remaining: RULES.orderLimit - p.orderTicks.filter(t => t > g.tick-RULES.orderWindow).length,
       reserved: g.orders.filter(o => o.country === country),
+      nextRecoveryAt: p.orderTicks.find(t => t > g.tick-RULES.orderWindow) === undefined ? null :
+        p.orderTicks.find(t => t > g.tick-RULES.orderWindow) + RULES.orderWindow,
       chatReadyAt: p.lastChat === null ? g.tick : p.lastChat + RULES.chatWindow } : null,
     tiePriority: (() => { const ids=g.players.map(p=>p.id).sort(), n=ids.length ? g.tick%ids.length : 0; return [...ids.slice(n),...ids.slice(0,n)]; })(),
     events, cursor: hasMore ? events.at(-1).id : g.sequence, hasMore, outcome: g.outcome };
 }
 
-export function preview(g, map, from, to, amount) {
+export function preview(g, map, from, to, amount, viewer = null) {
   const a=province(g,from),b=province(g,to);
   requireRule(mapProvince(map,from).neighbors.includes(to),'Destination is not adjacent.');
-  requireRule(Number.isSafeInteger(amount) && amount>0 && amount<a.troops,'Choose a positive troop amount and leave at least one behind.');
+  // Only the owner can inspect unexecuted reservations; spectators see the public garrison.
+  const reserved = a.owner && a.owner === viewer ? g.orders.filter(o=>o.country===viewer && o.from===from && o.type==='move').reduce((n,o)=>n+o.amount,0) : 0;
+  requireRule(Number.isSafeInteger(amount) && amount>0 && amount<a.troops-reserved,'Choose a positive amount of uncommitted troops and leave at least one behind.');
   let summary;
   if(a.owner && allied(g,a.owner,b.owner)) summary=`Reinforce ${mapProvince(map,to).name} with ${amount} troops${a.owner!==b.owner?'; ownership of these troops passes to your ally':''}.`;
   else if(amount>b.troops) summary=`Against the current garrison: capture with ${amount-b.troops} surviving troops.`;
   else if(amount===b.troops) summary='Both forces are destroyed; the previous owner keeps the empty province.';
   else summary=`The current defenders survive with ${b.troops-amount} troops.`;
-  return {from,to,amount,remaining:a.troops-amount,summary,
+  return {from,to,amount,reserved,available:a.troops-reserved-1,remaining:a.troops-reserved-amount,summary,
     incoming:g.armies.filter(a=>a.to===to),warning:'Current garrison only; not a prediction of future orders, recruitment, or diplomatic changes.'};
 }

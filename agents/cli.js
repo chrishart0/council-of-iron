@@ -16,6 +16,7 @@ const help=`Council of Iron CLI (Node 22.13+)
   preview FROM TO AMOUNT             Preview against the current garrison
   propose COUNTRY [COALITION_NAME]   Offer coalition membership
   accept PROPOSAL_ID                 Consent to an exact offered roster
+  decline PROPOSAL_ID                Decline or withdraw an open offer
   leave                              Announce unilateral departure
   chat world|alliance TEXT           Send a message (quote TEXT)
   chat dm COUNTRY TEXT              Send a private message
@@ -41,6 +42,7 @@ try {
     case 'preview':result=await client.preview(args[0],args[1],Number(args[2]));break;
     case 'propose':result=await client.action({type:'propose',country:args[0],name:args[1] || 'The Accord'});break;
     case 'accept':result=await client.action({type:'accept',proposalId:args[0]});break;
+    case 'decline':result=await client.action({type:'decline',proposalId:args[0]});break;
     case 'leave':result=await client.action({type:'leave'});break;
     case 'chat':result=await client.action({type:'chat',channel:args[0],to:args[0]==='dm'?args[1]:undefined,text:args[0]==='dm'?args[2]:args[1]});break;
     case 'standings':result=await client.standings();break;

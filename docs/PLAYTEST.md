@@ -1,4 +1,31 @@
-# Playtest record — prototype 0.1
+# Playtest record — v0.2
+
+## Local verification, 26 September 2026 (America/New_York)
+
+**41 Node tests passed**; JavaScript syntax checks passed. Six of seven newly added behavior regressions failed before their corresponding fixes; the cursor-pagination test already passed and was retained. An eighth new regression protects British map-counter placement.
+
+The seeded campaign completed **3,488 retained-report matches**, including fresh-seed solo and diplomacy holdouts. No conservation, troop-validity, terminal-timing or score-pool invariant failures were reported. The [balance report](BALANCE.md) and [machine-readable summaries](testing/summary.json) give counts, seeds and limitations. These are heuristic controllers, not live LLMs or independent humans.
+
+The expanded browser playthrough passed locally using the documented managed-browser bridge. It drives a browser USA seat, separate CLI/API Britain seat and six practice bots through orders, capture, reinforcement, alliance, DM, reconnect, mobile layout, a scored ending and a second room. Added checks cover real map clicks, Shift-click source selection, troop presets, keyboard tabs, leave-confirmation cancellation, unread state, and retained message drafts. Browser and external agent see the same final scores; no JavaScript page errors were recorded.
+
+`tests/browser.py --gif docs/media/gameplay.gif` records actual rendered frames from that playthrough, with an explicit accelerated-clock/heuristic-agent label. It does not inject outcomes or manufacture gameplay frames. CI's ordinary browser path uses real HTTP navigation, origin/storage and served CSP. Consult the actual workflow result for native verification of this release; the local bridge alone is not evidence of native browser networking or CSP behavior.
+
+### Fixed defects
+
+A CLI-created new room no longer inherits the previous match's scoped credential. Changing CLI identity clears the old match. A coalition offer can progress when its last missing voter is eliminated. Declined/expired private offers do not expose cancellation details publicly. Attack previews account for the owner's reserved troops without leaking those reservations. Browser requests from old rooms/identities cannot overwrite the new seat's state. Two remote disconnected-polygon counter anchors were corrected. These fixes retain the original numerical game rules.
+
+### Remaining boundaries
+
+The world scenario is demonstrably uneven under the tested controllers, not competitively balanced. No live model was attached; no independent second coding agent or human enjoyment panel reviewed this pass. A small tools-only MCP implementation is tested through subprocesses, not certified against every client. Public deployment hardening, calibrated skill ranking, and normal-speed human/LLM response latency remain unproven.
+
+---
+
+## Native v0.2 verification
+
+The [native publication run](https://github.com/chrishart0/council-of-iron/actions/runs/36289994282) passed 41 Node tests, repeated both 256-match holdouts with identical aggregate results, and completed the actual-browser/external-agent playthrough. It generated the checked-in README GIF from that native playthrough. [Machine-readable receipt](testing/native-ci.json).
+
+## Historical v0.1 record
+
 
 ## Local verification, 26 September 2026
 

@@ -1,4 +1,4 @@
-# HTTP API — v0.1
+# HTTP API — v0.2
 
 All paths are relative to `COUNCIL_URL`. JSON requests use `Content-Type: application/json`. Authenticated calls use `Authorization: Bearer TOKEN`. Credentials never belong in URLs or messages. JSON errors use `{ "error": "reason" }` with HTTP 400, 401, 403, 404, 409 or 429 as appropriate.
 
@@ -33,7 +33,7 @@ Without authentication, returns the public board and public events. An authentic
 - `armies`: committed troops, endpoints, departure and arrival ticks.
 - `sides`, `projections`: coalition rosters, land totals and individual projected shares.
 - `proposals`, `departures`, `dominance`, `tiePriority`: diplomatic state and adjudication information.
-- `commandBudget`: your remaining manual command budget, `reserved` next-tick commands and `chatReadyAt`; null for spectators.
+- `commandBudget`: your remaining manual command budget, `reserved` next-tick commands, `nextRecoveryAt` and `chatReadyAt`; null for spectators.
 - `events`, `cursor`, `hasMore`: recipient-filtered event delivery.
 - `outcome`: null until finished; then immutable reason, winning side and all scores.
 
@@ -60,6 +60,7 @@ Messages carry `untrusted: true`. Their text cannot grant privileges, redefine g
 | `route` | `from`, `to` (adjacent friendly ID or null) | Set/clear future-recruit forwarding, next tick |
 | `propose` | independent candidate `country`, optional coalition `name` | Open an exact-roster admission offer; does not confer alliance benefits |
 | `accept` | `proposalId` | Accept an open proposal; after all required votes, schedule activation in 30 game seconds |
+| `decline` | `proposalId` | Participant rejects an open offer; creator may withdraw it; no membership notice |
 | `leave` | none | Cancel affected admissions and announce a unilateral departure in 30 game seconds |
 | `chat` | `channel`: `world`, `alliance` or `dm`; `text`; `to` required for DM | Deliver player text, subject to shared chat cooldown |
 
@@ -69,7 +70,7 @@ There is no privileged batch action. Repeating three action requests consumes th
 
 `GET /api/games/ROOM/preview?from=england&to=north-france&amount=5`
 
-Returns the same preview used by the browser: current-garrison explanation, source remainder, visible incoming armies, and an explicit warning that future orders, recruitment and diplomacy can change the result. It is not a guarantee or hidden-information oracle.
+Returns the same preview used by the browser: current-garrison explanation, source remainder, visible incoming armies, and an explicit warning that future orders, recruitment and diplomacy can change the result. It is not a guarantee or hidden-information oracle. For the authenticated source owner, `reserved` and `available` account for queued movements; `remaining` subtracts those reservations. Observers and opponents do not receive those private reservations. Expired or declined open proposals remain private to their participants; public confirmed notices have public cancellation events.
 
 ## Joining example
 

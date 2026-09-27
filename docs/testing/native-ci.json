@@ -1,0 +1,101 @@
+{
+  "workflow": "https://github.com/chrishart0/council-of-iron/actions/runs/36289994282",
+  "transport": "native-browser-http",
+  "nodeTestsPassed": 41,
+  "holdoutMatchesRepeated": 512,
+  "status": "passed",
+  "browserAssertions": [
+    "Human browser created room and joined USA through UI.",
+    "Separate CLI process joined Britain; six practice bots filled seats; host started eight-seat match.",
+    "Browser and CLI committed armies; browser set a standing reinforcement route.",
+    "Browser proposed coalition; CLI accepted; public notice elapsed; both shared the coalition and payout projection.",
+    "Leaving an alliance requires explicit confirmation; Escape leaves membership untouched.",
+    "Reading the wire clears the unread badge; an unsent draft survives live polling.",
+    "Private diplomacy delivered both ways; spectator API excluded DMs; HTML in agent speech rendered as text, not executable markup.",
+    "Browser-issued attack captured Mexico after travel and combat; world and Europe zoom rendered.",
+    "Same-seat reconnect restored country and private inbox without duplicate orders.",
+    "390-pixel mobile layout displayed controls without horizontal page overflow.",
+    "Wall-clock match reached a final result; browser and external agent observed identical final scores.",
+    "Persistent experimental standings included the browser player after returning to the lobby.",
+    "A second room starts with the same browser identity; map targeting, Max, Shift-source selection and keyboard tabs work."
+  ],
+  "outcome": {
+    "winningSide": "solo:ottoman:0",
+    "reason": "domination",
+    "tick": 1331,
+    "draw": false,
+    "scores": [
+      {
+        "country": "usa",
+        "maturity": 1,
+        "maximumShare": 400,
+        "projectedPrestige": 300,
+        "payout": 0,
+        "prestige": -100
+      },
+      {
+        "country": "britain",
+        "maturity": 1,
+        "maximumShare": 400,
+        "projectedPrestige": 300,
+        "payout": 0,
+        "prestige": -100
+      },
+      {
+        "country": "france",
+        "maturity": 1,
+        "maximumShare": 800,
+        "projectedPrestige": 700,
+        "payout": 0,
+        "prestige": -100
+      },
+      {
+        "country": "germany",
+        "maturity": 1,
+        "maximumShare": 800,
+        "projectedPrestige": 700,
+        "payout": 0,
+        "prestige": -100
+      },
+      {
+        "country": "russia",
+        "maturity": 1,
+        "maximumShare": 800,
+        "projectedPrestige": 700,
+        "payout": 0,
+        "prestige": -100
+      },
+      {
+        "country": "ottoman",
+        "maturity": 1,
+        "maximumShare": 800,
+        "projectedPrestige": 700,
+        "payout": 800,
+        "prestige": 700
+      },
+      {
+        "country": "qing",
+        "maturity": 1,
+        "maximumShare": 800,
+        "projectedPrestige": 700,
+        "payout": 0,
+        "prestige": -100
+      },
+      {
+        "country": "japan",
+        "maturity": 1,
+        "maximumShare": 800,
+        "projectedPrestige": 700,
+        "payout": 0,
+        "prestige": -100
+      }
+    ]
+  },
+  "gif": {
+    "path": "docs/media/gameplay.gif",
+    "frames": 57,
+    "bytes": 1559157,
+    "sha256": "c6aeeb43fc7d1b05e5bb9e0b265270e0365f081efb04d321b3b5025d5af1f9f4"
+  },
+  "limitations": "Automated browser controls and heuristic agents; not a live-LLM or independent-human enjoyment test."
+}

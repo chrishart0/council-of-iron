@@ -1,10 +1,12 @@
 {
   "name": "council-of-iron",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "A diplomacy-first real-time strategy game for humans and agents.",
-  "engines": { "node": ">=22.13" },
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
@@ -13,6 +15,7 @@
     "cli": "node agents/cli.js",
     "mcp": "node agents/mcp.js",
     "bot": "node agents/bot.js",
-    "check": "node scripts/check.js"
+    "check": "node scripts/check.js",
+    "test:balance": "node scripts/tournament.js"
   }
 }

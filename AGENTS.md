@@ -13,3 +13,7 @@ Keep the game small. This is diplomacy with a readable military system, not a co
 - Update `docs/API.md` and tests when changing the external contract. Update `docs/PLAYTEST.md` with actual, not inferred, evidence.
 
 See `docs/design-v0.1.md` for the original rules and `docs/AGENTS.md` for gameplay-agent setup. Known v0.1 deviations are two-to-eight-seat lobbies, optional globally accelerated quick mode, and simplified fictional map provinces. Do not claim numerical balance or human enjoyment from automated self-play.
+
+## v0.2 test discipline
+
+Run `npm run test:balance -- --rounds 32 --mode diplomacy` as well as the rules tests. Balance candidates live in `tests/balance-cases.json`, never silently in the published map. Do not overfit starting-army handicaps to the heuristic controller. Preserve explicit room/identity fetch cancellation and same-operation-ID network retry. Record gameplay with `python tests/browser.py --gif docs/media/gameplay.gif`; never substitute a generated mockup for the README recording.

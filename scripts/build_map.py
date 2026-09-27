@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 import geopandas as gpd
-from shapely.geometry import Polygon, box
+from shapely.geometry import Polygon, Point, box
 from shapely.ops import unary_union
 
 # id, label, longitude, latitude. IDs are part of the public API.
@@ -73,8 +73,10 @@ for id,name,x,y in SEEDS:
         cell=cell.intersection(hp)
     geom=cell.intersection(land)
     assert not geom.is_empty,id
-    biggest=max(geom.geoms,key=lambda p:p.area) if hasattr(geom,'geoms') else geom
-    marker=biggest.representative_point(); px,py=project(marker.x,marker.y)
+    # Name anchors matter more than a distant island's area (e.g. Greenland).
+    parts=list(geom.geoms) if hasattr(geom,'geoms') else [geom]
+    local=min(parts,key=lambda p:p.distance(Point(x,y)))
+    marker=local.representative_point(); px,py=project(marker.x,marker.y)
     regions.append({'id':id,'name':name,'x':round(px,1),'y':round(py,1),'path':path(geom),'geom':geom,'neighbors':[]})
 edges={}
 def connect(a,b,sea):

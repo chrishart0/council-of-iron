@@ -18,7 +18,11 @@ jobs:
       - run: npm test
       - run: python -m pip install -r tests/requirements.txt
       - run: python -m playwright install --with-deps chromium
-      - run: python tests/browser.py
+      - name: Seeded full-match smoke tests
+        run: |
+          node scripts/tournament.js --rounds 32 --seed 910000 --mode solo --out artifacts/ci-solo.json
+          node scripts/tournament.js --rounds 32 --seed 920000 --mode diplomacy --out artifacts/ci-diplomacy.json
+      - run: python tests/browser.py --gif artifacts/gameplay.gif
       - uses: actions/upload-artifact@v4
         if: always()
         with:

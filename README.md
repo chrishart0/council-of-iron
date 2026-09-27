@@ -4,7 +4,17 @@
 
 Choose an empire, move armies, negotiate coalitions, and share victory—or try to win alone. Humans use the browser. Agents use the same HTTP API through a CLI or stdio MCP adapter. There is no privileged bot API.
 
-This is a playable **0.1 prototype**, not an established balanced game or a validated model benchmark. Eight selectable powers occupy 64 fictional game provinces over real coastlines. The setting is inspired by 1910; **the borders and starting possessions are not a historical political map**.
+This is a playable **0.2 prototype**, not an established balanced game or a validated model benchmark. Eight selectable powers occupy 64 fictional game provinces over real coastlines. The setting is inspired by 1910; **the borders and starting possessions are not a historical political map**.
+
+![Actual Council of Iron browser gameplay](docs/media/gameplay.gif)
+
+*Actual browser capture, not a mockup. The test clock runs at 12×; the external agent and practice opponents are heuristics, not LLMs. The GIF is recorded during the end-to-end test.*
+
+## v0.2: tested and easier to play
+
+A map-first atlas, legible zooming counters, incoming-attack alerts, committed-army history, troop presets, reservation-aware previews, decline/withdraw offers, explicit coalition costs, keyboard navigation and a mobile layout. CLI credentials and eliminated-voter admission bugs have regression tests.
+
+**3,488 complete seeded test matches exposed a real starting-position imbalance.** The USA/Ottoman advantage remains; this release does not claim to have solved it. Read the [balance and pacing report](docs/BALANCE.md), [UI design notes](docs/UI-DESIGN.md), and [test evidence](docs/PLAYTEST.md). The original equal starting budgets are retained instead of tuning country bonuses to weak bots.
 
 ## Run locally
 
@@ -30,11 +40,11 @@ Use that exact origin in everyone’s browser and `COUNCIL_URL`. For Internet ac
 
 ## How to play
 
-Select one of your provinces, then an adjacent destination. Choose the troop count and **Commit army**. You must leave one troop at home; travel takes 45 game seconds after the next command tick. The sidebar also provides source/destination selectors. Zoom into Europe or your country to inspect dense fronts.
+Click one of your provinces, then an adjacent destination. Shift-click changes the source; Escape clears selection. Use 25%, 50%, Max or an exact troop count. Choose the troop count and **Commit army**. You must leave one troop at home; travel takes 45 game seconds after the next command tick. The sidebar also provides source/destination selectors. Zoom into Europe or your country to inspect dense fronts.
 
 Each province recruits one troop every 20 game seconds. Combat subtracts opposing strengths. **Recruitment arrows** forward future recruits to a friendly neighbor, not the existing garrison. Sending troops to an ally gives that ally control of the arriving troops.
 
-Use **Council** to propose or accept an alliance. Formation and admission require consent, followed by 30 seconds of public notice. Departures are unilateral with the same notice; there is no kick button. **Dispatches** contains world, alliance, and private messages. Promises in chat are not enforced orders.
+Use **Council** to propose, accept, decline or withdraw an alliance offer. Formation and admission require consent, followed by 30 seconds of public notice. Departures are unilateral with the same notice; there is no kick button. **Dispatches** contains world, alliance, and private messages. Promises in chat are not enforced orders.
 
 Hold at least 39 provinces for 90 continuous game seconds to win early. Otherwise, the side with most land at 30:00 wins. A tie, or a coalition containing every original player, is a draw.
 
@@ -93,10 +103,13 @@ Its heuristic policy is deliberately simple. Built-in practice bots automaticall
 ```sh
 npm test                  # deterministic rules, replay, HTTP, SQLite, CLI, MCP
 npm run check             # syntax-check every JavaScript source
-python -m pip install playwright
+npm run test:balance -- --rounds 128 --mode diplomacy  # full seeded matches
+python -m pip install -r tests/requirements.txt
 python -m playwright install chromium
 npm run test:browser      # actual browser + external CLI/API agent, complete match
 ```
+
+To record the README media locally, run `python tests/browser.py --gif docs/media/gameplay.gif`. It requires the same optional test dependencies.
 
 The browser test launches its own temporary server and SQLite database, accelerates the **entire** simulation clock 12×, drives real browser controls, and waits for a completed match. It saves screenshots and a JSON report under `artifacts/`. No HTTP endpoint can advance the game clock. GitHub Actions runs the suite and uploads evidence.
 
@@ -107,7 +120,8 @@ The browser test launches its own temporary server and SQLite database, accelera
 - `src/engine.js`: deterministic simulation, combat, diplomacy, scoring and redacted observations.
 - `src/server.js`: authoritative HTTP server and wall-clock simulation loop.
 - `src/store.js`: SQLite snapshots, hashed credentials, exactly-once match results.
-- `public/`: dependency-free browser client and checked-in map.
+- `public/`: dependency-free browser client, separate atlas/UI modules, and checked-in map.
+- `scripts/tournament.js`: seeded full-match harness; rejected balance fixtures remain test-only.
 - `agents/`: shared HTTP client, CLI, tools-only stdio MCP, practice policy.
 - `tests/`: rule and integration tests plus browser playthrough.
 

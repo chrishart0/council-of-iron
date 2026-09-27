@@ -14,6 +14,8 @@ const PRESETS = { standard: 1, quick: 6 };
 const staticFiles = new Map([
   ['/', ['public/index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['public/app.js', 'text/javascript; charset=utf-8']],
+  ['/atlas.js', ['public/atlas.js', 'text/javascript; charset=utf-8']],
+  ['/ui.js', ['public/ui.js', 'text/javascript; charset=utf-8']],
   ['/style.css', ['public/style.css', 'text/css; charset=utf-8']],
   ['/map.json', ['public/map.json', 'application/json']],
 ]);
@@ -75,7 +77,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         let bucket=ipBudgets.get(ip); if(!bucket || now-bucket.at>60000) {bucket={at:now,count:0};ipBudgets.set(ip,bucket);}
         requireRule(++bucket.count<=1200,'Transport request limit exceeded.',429);
       }
-      if(path==='/api/health' && req.method==='GET') return json(res,200,{ok:true,version:'0.1.0'});
+      if(path==='/api/health' && req.method==='GET') return json(res,200,{ok:true,version:'0.2.0'});
       if(path==='/api/players' && req.method==='POST') {
         const data=await body(req); return json(res,201,store.register(text(data.name,'Player name',40)));
       }
@@ -110,7 +112,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         }
         if(endpoint==='preview' && req.method==='GET') {
           if(identity) auth(g.id);
-          return json(res,200,preview(g,MAP,url.searchParams.get('from'),url.searchParams.get('to'),Number(url.searchParams.get('amount'))));
+          return json(res,200,preview(g,MAP,url.searchParams.get('from'),url.searchParams.get('to'),Number(url.searchParams.get('amount')),g.players.find(p=>p.profileId===identity?.id)?.id || null));
         }
         if(endpoint==='join' && req.method==='POST') {
           const me=auth(g.id),data=await body(req);

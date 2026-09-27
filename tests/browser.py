@@ -7,6 +7,7 @@ interaction and server integration, NOT browser networking/CSP/navigation.
 No browser policy is modified. CI uses normal mode, never the bridge.
 """
 import argparse
+import base64
 import json
 import os
 from pathlib import Path
@@ -23,10 +24,16 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--bridge', action='store_true')
+    parser.add_argument('--gif', help='Write an actual browser-capture GIF to this path.')
     parser.add_argument('--executable', default=os.environ.get('BROWSER_EXECUTABLE'))
     parser.add_argument('--artifacts', default=str(ROOT / 'artifacts'))
     args = parser.parse_args()
     artifacts = Path(args.artifacts); artifacts.mkdir(parents=True, exist_ok=True)
+    gif_frames=[]
+    def capture(page,duration=140):
+        if not args.gif:return
+        page.evaluate('window.scrollTo(0,0)')
+        gif_frames.append((page.screenshot(),duration))
     report = {'transport': 'python-http-bridge' if args.bridge else 'native-browser-http', 'assertions': [], 'pageErrors': []}
     with tempfile.TemporaryDirectory(prefix='council-browser-') as tmp:
         env = {**os.environ, 'PORT': '0', 'TEST_DB': str(Path(tmp)/'test.db'), 'TEST_CLOCK_SCALE': '12'}
@@ -77,10 +84,14 @@ def main():
                             if(!crypto.randomUUID)crypto.randomUUID=()=>[...crypto.getRandomValues(new Uint8Array(16))].map(n=>n.toString(16).padStart(2,'0')).join('');
                             window.fetch=async(path,options={})=>{const r=await window.__localHttp({path,options});return {ok:r.status>=200&&r.status<300,status:r.status,json:async()=>JSON.parse(r.body)};};
                         }''',saved or {})
-                        page.add_script_tag(type='module',content=(ROOT/'public/app.js').read_text())
-                        expect(page.locator('#connection')).to_have_text('Connected')
+                        app_source=(ROOT/'public/app.js').read_text()
+                        for module in ['atlas.js','ui.js']:
+                            data_url='data:text/javascript;base64,'+base64.b64encode((ROOT/'public'/module).read_bytes()).decode()
+                            app_source=app_source.replace(f"'./{module}'",repr(data_url))
+                        page.add_script_tag(type='module',content=app_source)
+                        expect(page.locator('#connection')).to_have_text('Live')
                         if match: page.locator(f'[data-room="{match}"]').click()
-                    expect(page.locator('#connection')).to_have_text('Connected')
+                    expect(page.locator('#connection')).to_have_text('Live')
                 page=context.new_page();load_page(page)
                 page.screenshot(path=str(artifacts/'01-lobby.png'),full_page=True)
                 page.locator('#display-name').fill('Browser Commander')
@@ -99,6 +110,9 @@ def main():
                 page.locator('#start-match').click()
                 expect(page.locator('#phase')).to_have_text('IN SESSION')
                 report['assertions'].append('Separate CLI process joined Britain; six practice bots filled seats; host started eight-seat match.')
+                if args.gif:
+                    page.evaluate('''() => { const note=document.createElement('div');note.textContent='ACTUAL BROWSER CAPTURE · 12× TEST CLOCK · HEURISTIC AGENTS';note.style.cssText='position:fixed;right:18px;bottom:10px;z-index:20;padding:6px 10px;background:#142c34ee;border:1px solid #c6a87280;color:#e4d6ae;font:9px system-ui;letter-spacing:.7px;border-radius:3px;pointer-events:none';document.body.append(note); }''')
+                capture(page,800)
                 # Simulate the randomUUID restriction of plain-HTTP LAN browsers.
                 page.evaluate('crypto.randomUUID = undefined')
                 # Real DOM inputs -> shared action endpoint. No direct state mutation.
@@ -114,16 +128,26 @@ def main():
                 page.locator('#set-route').click()
                 expect(page.locator('#route-status')).to_contain_text('New recruits',timeout=10000)
                 report['assertions'].append('Browser and CLI committed armies; browser set a standing reinforcement route.')
+                capture(page,1000)
                 page.locator('[data-tab="council"]').click()
                 page.locator('#ally-choice').select_option('britain')
                 page.locator('#coalition-name').fill('Atlantic Accord')
                 page.locator('#alliance-form button').click()
                 expect(page.locator('#offers')).to_contain_text('Atlantic Accord')
+                capture(page,1000)
                 agent_state=cli('state')
                 offer=next(q for q in agent_state['proposals'] if q['name']=='Atlantic Accord')
                 cli('accept',offer['id'])
                 expect(page.locator('#coalition-info')).to_contain_text('Atlantic Accord',timeout=15000)
                 report['assertions'].append('Browser proposed coalition; CLI accepted; public notice elapsed; both shared the coalition and payout projection.')
+                capture(page,1000)
+                # Cancellation must not file an accidental irreversible departure.
+                page.locator('#leave-alliance').click()
+                expect(page.locator('#confirm-dialog')).to_be_visible()
+                page.keyboard.press('Escape')
+                expect(page.locator('#confirm-dialog')).not_to_be_visible()
+                assert not http(f'/api/games/{room}')['departures']
+                report['assertions'].append('Leaving an alliance requires explicit confirmation; Escape leaves membership untouched.')
                 page.locator('[data-tab="dispatches"]').click()
                 page.locator('#channel').select_option('dm')
                 page.locator('#recipient').select_option('britain')
@@ -134,6 +158,12 @@ def main():
                 cli('chat','dm','usa','<img src=x onerror="window.INJECTED=true"> Agreed. I will hold.')
                 expect(page.locator('#messages')).to_contain_text('Agreed. I will hold.')
                 assert page.locator('#messages img').count()==0
+                expect(page.locator('#unread')).to_have_text('')
+                page.locator('#chat-text').fill('Unsent draft survives live updates.')
+                page.wait_for_timeout(900)
+                expect(page.locator('#chat-text')).to_have_value('Unsent draft survives live updates.')
+                capture(page,1200)
+                report['assertions'].append('Reading the wire clears the unread badge; an unsent draft survives live polling.')
                 assert not page.evaluate('Boolean(window.INJECTED)')
                 public_state=http(f'/api/games/{room}')
                 assert not any(e['type']=='message' and e.get('channel')=='dm' for e in public_state['events'])
@@ -148,7 +178,8 @@ def main():
                     page.wait_for_timeout(300)
                 assert next(p for p in state['provinces'] if p['id']=='mexico')['owner']=='usa'
                 page.screenshot(path=str(artifacts/'02-campaign.png'),full_page=True)
-                page.locator('#europe-view').click();page.screenshot(path=str(artifacts/'03-europe.png'),full_page=True)
+                capture(page,800)
+                page.locator('#europe-view').click();capture(page,900);page.screenshot(path=str(artifacts/'03-europe.png'),full_page=True)
                 page.locator('#world-view').click()
                 report['assertions'].append('Browser-issued attack captured Mexico after travel and combat; world and Europe zoom rendered.')
                 # Reconnect a second page with the same browser identity, not another join.
@@ -167,7 +198,13 @@ def main():
                 page.set_viewport_size({'width':1600,'height':1050})
                 report['assertions'].append('390-pixel mobile layout displayed controls without horizontal page overflow.')
                 # Do not advance the clock through a privileged endpoint: wait for wall-clock play.
+                if args.gif:
+                    deadline=time.monotonic()+180
+                    while not page.locator('#result').is_visible() and time.monotonic()<deadline:
+                        capture(page)
+                        page.wait_for_timeout(1800)
                 expect(page.locator('#result')).to_be_visible(timeout=180000)
+                capture(page,2200)
                 result=http(f'/api/games/{room}')
                 assert result['status']=='finished' and len(result['outcome']['scores'])==8
                 report['outcome']=result['outcome']
@@ -184,7 +221,47 @@ def main():
                 page.locator('[data-home]').click()
                 expect(page.locator('#standings')).to_contain_text('Browser Commander')
                 report['assertions'].append('Persistent experimental standings included the browser player after returning to the lobby.')
+                # Local UI interactions: distinct source selection, keyboard tabs and a real next room.
+                page.locator('#room-name').fill('Second Council')
+                page.locator('#create-form button').click()
+                expect(page.locator('#lobby')).to_be_visible()
+                page.locator('#country-choice').select_option('usa')
+                page.locator('#join-form button').click()
+                page.locator('#fill-bots').click()
+                page.locator('#start-match').click()
+                expect(page.locator('#phase')).to_have_text('IN SESSION')
+                page.locator('#marker-west-us').click()
+                expect(page.locator('#source')).to_have_value('west-us')
+                page.locator('[data-fraction="1"]').click()
+                expected_amount=int(page.locator('#amount').get_attribute('max'))
+                expect(page.locator('#amount')).to_have_value(str(expected_amount))
+                page.locator('#marker-mexico').click()
+                expect(page.locator('#destination')).to_have_value('mexico')
+                page.locator('#marker-central-us').click(modifiers=['Shift'])
+                expect(page.locator('#source')).to_have_value('central-us')
+                expect(page.locator('#destination')).to_have_value('')
+                page.locator('#orders-label').focus()
+                page.keyboard.press('ArrowRight')
+                expect(page.locator('#council-label')).to_be_focused()
+                expect(page.locator('#council-label')).to_have_attribute('aria-selected','true')
+                report['assertions'].append('A second room starts with the same browser identity; map targeting, Max, Shift-source selection and keyboard tabs work.')
                 assert not report['pageErrors'],report['pageErrors']
+                if args.gif:
+                    from io import BytesIO
+                    from PIL import Image
+                    images=[]
+                    for data,_ in gif_frames:
+                        image=Image.open(BytesIO(data)).convert('RGB')
+                        image=image.resize((1100,round(image.height*1100/image.width)),Image.Resampling.LANCZOS)
+                        images.append(image)
+                    samples=images[::max(1,len(images)//16)][:16]
+                    montage=Image.new('RGB',(640,400))
+                    for i,image in enumerate(samples):montage.paste(image.resize((160,100)),((i%4)*160,(i//4)*100))
+                    palette=montage.quantize(colors=192)
+                    frames=[image.quantize(palette=palette,dither=Image.Dither.NONE) for image in images]
+                    gif_path=Path(args.gif);gif_path.parent.mkdir(parents=True,exist_ok=True)
+                    frames[0].save(gif_path,save_all=True,append_images=frames[1:],duration=[d for _,d in gif_frames],loop=0,optimize=True,disposal=1)
+                    report['gif']={'frames':len(frames),'path':str(gif_path),'bytes':gif_path.stat().st_size,'simulationClockScale':12}
                 report['status']='passed'
                 browser.close()
         finally:

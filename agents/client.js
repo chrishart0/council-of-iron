@@ -29,12 +29,14 @@ export class CouncilClient {
   async register(name) {
     if(this.explicitToken)throw new Error('Unset COUNCIL_TOKEN before creating a new identity.');
     const profile=await this.request('/api/players','POST',{name},'');
-    this.session={url:this.url,name,profileToken:profile.token};this.persist();
+    this.session={url:this.url,name,profileToken:profile.token};this.match='';this.persist();
     return {name:profile.name,sessionFile:this.sessionPath};
   }
   async create(name,preset='standard') {
     const result=await this.request('/api/games','POST',{name,preset},this.explicitToken || this.session.profileToken);
-    this.match=result.id;this.persist();return result;
+    this.match=result.id;this.session.match=result.id;
+    delete this.session.seatToken;delete this.session.country;
+    this.persist();return result;
   }
   async join(match,country,name='Agent',model='',persona='') {
     if(!this.session.profileToken && !this.explicitToken)await this.register(name);
