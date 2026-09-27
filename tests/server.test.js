@@ -6,6 +6,7 @@ import { join as pathJoin } from 'node:path';
 import { spawn } from 'node:child_process';
 import { request as httpRequest } from 'node:http';
 import { makeServer } from '../src/server.js';
+import { start as launchEngine } from '../src/engine.js';
 
 async function fixture(t,{disk=false,...options}={}) {
   const dir=mkdtempSync(pathJoin(tmpdir(),'council-test-'));
@@ -21,7 +22,8 @@ async function fixture(t,{disk=false,...options}={}) {
   async function room(host,name='Test chamber'){return (await call('/api/games','POST',{name},host.token)).data.id;}
   async function seat(id,profile,country,kind='human'){return (await call(`/api/games/${id}/join`,'POST',{country,kind},profile.token)).data;}
   async function boot(){const a=await register('Human'),b=await register('Agent');const id=await room(a);const sa=await seat(id,a,'usa'),sb=await seat(id,b,'britain','agent');return {a,b,id,sa,sb};}
-  return {dir,call,register,room,seat,boot,get app(){return app;},get url(){return url;},async restart(){
+  async function launch(id,token){const response=await call(`/api/games/${id}/start`,'POST',{},token);assert.equal(response.status,200);launchEngine(app.games.get(id));}
+  return {dir,call,register,room,seat,boot,launch,get app(){return app;},get url(){return url;},async restart(){
     await app.close();app=makeServer({dbPath:pathJoin(dir,'state.db'),automatic:false,...options});
     await new Promise(r=>app.server.listen(0,'127.0.0.1',r));url=`http://127.0.0.1:${app.server.address().port}`;
   }};
@@ -44,6 +46,45 @@ test('HTTP lobby: human and agent identities, occupied countries, host controls,
   const late=await f.register('Late');assert.equal((await f.call(`/api/games/${id}/join`,'POST',{country:'france'},late.token)).status,409);
   const rejoined=await f.call(`/api/games/${id}/join`,'POST',{country:'usa'},a.token);
   assert.equal(rejoined.status,200);assert.equal((await f.call(`/api/games/${id}`,'GET',undefined,rejoined.data.token)).data.you,'usa');
+});
+test('opening locks introductions, blocks orders, and launches when every seat is ready',async t=>{
+  const f=await fixture(t),{id,sa,sb}=await f.boot();
+  const started=await f.call(`/api/games/${id}/start`,'POST',{},sa.token);
+  assert.equal(started.data.status,'opening');
+  const opening=(await f.call(`/api/games/${id}`,'GET',undefined,sb.token)).data;
+  assert.equal(opening.openingRemaining,90);
+  assert.equal((await f.call(`/api/games/${id}/actions`,'POST',{opId:'early',action:{type:'develop',from:'england'}},sb.token)).status,409);
+  assert.equal((await f.call(`/api/games/${id}/opening`,'POST',{leaderName:'Lady Ash',openingMessage:'We enter in good faith.'},sb.token)).status,200);
+  assert.equal((await f.call(`/api/games/${id}/opening`,'POST',{leaderName:'Lady Ash',openingMessage:'We enter in good faith.'},sb.token)).status,200);
+  assert.equal((await f.call(`/api/games/${id}/opening`,'POST',{leaderName:'Again',openingMessage:'Again'},sb.token)).status,409);
+  const ready=await f.call(`/api/games/${id}/opening`,'POST',{leaderName:'President Vale',openingMessage:'The republic is ready.'},sa.token);
+  assert.equal(ready.data.status,'running');
+  const publicView=(await f.call(`/api/games/${id}`)).data;
+  assert.equal(publicView.events.filter(e=>e.type==='message'&&e.channel==='world').length,2);
+  assert.equal(publicView.players.find(p=>p.id==='britain').leaderName,'Lady Ash');
+});
+test('opening timeout supplies defaults on the scaled server clock',async t=>{
+  const f=await fixture(t,{automatic:true,clockScale:300}),{id,sa}=await f.boot();
+  await f.call(`/api/games/${id}/start`,'POST',{},sa.token);
+  const deadline=Date.now()+3000;
+  let view;
+  do{await new Promise(resolve=>setTimeout(resolve,50));view=(await f.call(`/api/games/${id}`)).data;}while(view.status==='opening'&&Date.now()<deadline);
+  assert.equal(view.status,'running');
+  assert.equal(view.events.filter(e=>e.type==='message'&&e.channel==='world').length,2);
+  assert.ok(view.players.every(p=>p.openingLocked));
+});
+test('public agent introduction enters the completed report while human introduction stays private',async t=>{
+  const f=await fixture(t),host=await f.register('Host'),agent=await f.register('Public Agent'),id=await f.room(host);
+  const humanSeat=await f.seat(id,host,'usa');
+  const aiSeat=(await f.call(`/api/games/${id}/join`,'POST',{country:'britain',kind:'agent',model:'test-model',visibility:'public'},agent.token)).data;
+  await f.call(`/api/games/${id}/start`,'POST',{},humanSeat.token);
+  await f.call(`/api/games/${id}/opening`,'POST',{leaderName:'Agent Regent',openingMessage:'A public entrance.'},aiSeat.token);
+  await f.call(`/api/games/${id}/opening`,'POST',{leaderName:'Human Regent',openingMessage:'A private seat speaks publicly.'},humanSeat.token);
+  f.app.step(f.app.games.get(id),1800);
+  const report=(await f.call(`/api/games/${id}/review`)).data;
+  assert.equal(report.historyAvailable,true);
+  assert.ok(report.messages.some(m=>m.leaderName==='Agent Regent'&&m.text==='A public entrance.'));
+  assert.ok(!report.messages.some(m=>m.text==='A private seat speaks publicly.'));
 });
 test('public lobby keeps active rooms visible ahead of recent finished games',async t=>{
   const f=await fixture(t),host=await f.register('Host'),active=await f.room(host,'Live council');
@@ -86,7 +127,7 @@ test('HTTP authentication, match scopes, origin/host protection, JSON validation
   assert.equal((await fetch(f.url+'/src/store.js')).status,404);
 });
 test('HTTP action replay, reservations, privacy, projected score, preview parity and live transfers',async t=>{
-  const f=await fixture(t),{id,sa,sb}=await f.boot();await f.call(`/api/games/${id}/start`,'POST',{},sa.token);
+  const f=await fixture(t),{id,sa,sb}=await f.boot();await f.launch(id,sa.token);
   const post=(token,opId,action)=>f.call(`/api/games/${id}/actions`,'POST',{opId,action},token);
   const order={type:'move',from:'west-us',to:'mexico',amount:5};
   const first=await post(sa.token,'army',order);assert.equal(first.status,200);
@@ -97,8 +138,8 @@ test('HTTP action replay, reservations, privacy, projected score, preview parity
   const own=(await f.call(`/api/games/${id}`,'GET',undefined,sa.token)).data;
   const agent=(await f.call(`/api/games/${id}`,'GET',undefined,sb.token)).data;
   const publicState=(await f.call(`/api/games/${id}`)).data;
-  assert.equal(own.events.filter(e=>e.type==='message').length,1);assert.equal(agent.events.filter(e=>e.type==='message').length,1);
-  assert.equal(publicState.events.filter(e=>e.type==='message').length,0);assert.equal(agent.commandBudget.reserved.length,0);assert.equal(own.commandBudget.reserved.length,1);
+  assert.equal(own.events.filter(e=>e.type==='message' && e.channel==='dm').length,1);assert.equal(agent.events.filter(e=>e.type==='message' && e.channel==='dm').length,1);
+  assert.equal(publicState.events.filter(e=>e.type==='message' && e.channel==='dm').length,0);assert.equal(agent.commandBudget.reserved.length,0);assert.equal(own.commandBudget.reserved.length,1);
   assert.equal(own.economyThreshold,Math.ceil(own.sides.reduce((n,s)=>n+s.economy,0)*.6));
   assert.equal(own.sides.find(s=>s.members.includes('usa')).economy,
     own.provinces.filter(p=>p.owner==='usa').reduce((n,p)=>n+p.development,0));
@@ -110,7 +151,7 @@ test('HTTP action replay, reservations, privacy, projected score, preview parity
   assert.equal(done.battles.length,0);
 });
 test('SQLite restart preserves credentials, committed armies, inboxes, idempotency and exactly-once results',async t=>{
-  const f=await fixture(t,{disk:true}),{a,id,sa}=await f.boot();await f.call(`/api/games/${id}/start`,'POST',{},sa.token);
+  const f=await fixture(t,{disk:true}),{a,id,sa}=await f.boot();await f.launch(id,sa.token);
   const payload={opId:'persist-move',action:{type:'move',from:'west-us',to:'mexico',amount:5}};
   const accepted=await f.call(`/api/games/${id}/actions`,'POST',payload,sa.token);f.app.step(f.app.games.get(id),1);
   await f.restart();
@@ -127,7 +168,7 @@ test('built-in practice bots invalidate league eligibility and use the common ga
   const f=await fixture(t,{league:true}),{id,sa}=await f.boot();
   assert.equal(f.app.games.get(id).eligible,true);
   assert.equal((await f.call(`/api/games/${id}/bots`,'POST',{},sa.token)).data.players,8);
-  await f.call(`/api/games/${id}/start`,'POST',{},sa.token);const g=f.app.games.get(id);f.app.step(g,1800);
+  await f.launch(id,sa.token);const g=f.app.games.get(id);f.app.step(g,1800);
   assert.equal(g.status,'finished');assert.equal(g.eligible,false);assert.equal(g.outcome.scores.length,8);
   assert.ok(g.actionLog.some(a=>a.opId.startsWith('bot-')));
   const review=(await f.call(`/api/games/${id}/review`)).data;
@@ -140,7 +181,7 @@ test('real CLI subprocess joins, observes, sends orders, reconnects from a priva
   const run=(...args)=>subprocess('agents/cli.js',args,env);
   const joined=await run('join',id,'britain','CLI diplomat');assert.equal(joined.code,0,joined.stderr);assert.equal(JSON.parse(joined.stdout).country,'britain');
   assert.equal(statSync(env.COUNCIL_SESSION).mode & 0o777,0o600);
-  await f.call(`/api/games/${id}/start`,'POST',{},sa.token);
+  await f.launch(id,sa.token);
   const moved=await run('move','england','north-france','5');assert.equal(moved.code,0,moved.stderr);
   const state=JSON.parse((await run('state')).stdout);assert.equal(state.you,'britain');assert.equal(state.commandBudget.reserved.length,1);
   const invalid=await run('move','west-us','mexico','5');assert.equal(invalid.code,1);assert.match(invalid.stderr,/not own/);
@@ -164,7 +205,7 @@ test('stdio MCP negotiates, validates schemas, joins an agent, calls real HTTP, 
   ].map(x=>JSON.stringify(x)).join('\n')+'\n';
   const result=await subprocess('agents/mcp.js',[],env,input);assert.equal(result.code,0,result.stderr);
   const output=result.stdout.trim().split('\n').map(x=>JSON.parse(x));assert.equal(output.length,9);
-  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,29);
+  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,30);
   assert.equal(JSON.parse(output[2].result.content[0].text).country,'britain');
   assert.equal(JSON.parse(output[3].result.content[0].text).you,'britain');
   assert.equal(output[4].error.code,-32602);assert.equal(output[5].error.code,-32602);assert.deepEqual(output[6].result,{});
@@ -179,7 +220,7 @@ test('industrial HTTP plans are private, atomic, synchronized, recallable and pe
   const f=await fixture(t,{disk:true}),host=await f.register('Industrial human'),agent=await f.register('Industrial agent');
   const id=(await f.call('/api/games','POST',{name:'Industry'},host.token)).data.id;
   const usa=await f.seat(id,host,'usa'),germany=await f.seat(id,agent,'germany','agent');
-  await f.call(`/api/games/${id}/start`,'POST',{},usa.token);
+  await f.launch(id,usa.token);
   const map=(await f.call(`/api/games/${id}/map`)).data;
   assert.equal(map.rulesVersion,3);assert.ok(map.provinces.length>64);
   const request={to:'mexico',sources:[{from:'west-us',percent:50},{from:'central-us',percent:50}]};
@@ -196,15 +237,16 @@ test('industrial HTTP plans are private, atomic, synchronized, recallable and pe
   f.app.step(f.app.games.get(id),10);
   assert.ok(!f.app.games.get(id).armies.some(a=>a.groupId===receipt.groupId));
   f.app.step(f.app.games.get(id),140);
+  f.app.games.get(id).provinces.find(p=>p.id==='namibia').troops=25;
   const build=await f.call(`/api/games/${id}/actions`,'POST',{opId:'build',action:{type:'develop',from:'namibia'}},germany.token);
   assert.equal(build.status,200,JSON.stringify(build.data));
-  f.app.step(f.app.games.get(id),61);assert.equal(f.app.games.get(id).provinces.find(p=>p.id==='namibia').development,2);
+  f.app.step(f.app.games.get(id),91);assert.equal(f.app.games.get(id).provinces.find(p=>p.id==='namibia').development,2);
 });
 
 test('MCP exposes structured multi-source plans, validates nested schemas and retries one attack exactly once',async t=>{
   const f=await fixture(t),host=await f.register('Host'),other=await f.register('Opponent');
   const id=(await f.call('/api/games','POST',{name:'MCP industry'},host.token)).data.id;
-  const seat=await f.seat(id,host,'usa');await f.seat(id,other,'britain');await f.call(`/api/games/${id}/start`,'POST',{},seat.token);
+  const seat=await f.seat(id,host,'usa');await f.seat(id,other,'britain');await f.launch(id,seat.token);
   const commands=[
     {jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-06-18'}},
     {jsonrpc:'2.0',method:'notifications/initialized'},
@@ -222,7 +264,7 @@ test('MCP exposes structured multi-source plans, validates nested schemas and re
 });
 
 test('the active scenario contributes to standings and player history',async t=>{
-  const f=await fixture(t),{a,id,sa}=await f.boot();await f.call(`/api/games/${id}/start`,'POST',{},sa.token);
+  const f=await fixture(t),{a,id,sa}=await f.boot();await f.launch(id,sa.token);
   const g=f.app.games.get(id);g.provinces.find(p=>p.id==='mexico').owner='usa';g.provinces.find(p=>p.id==='mexico').nextRecruit=20;f.app.step(g,1800);
   assert.equal((await f.call('/api/standings')).data.standings.length,2);
   assert.equal((await f.call('/api/standings?scenario=classic-64')).status,400);

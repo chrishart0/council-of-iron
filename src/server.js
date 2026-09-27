@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { Store } from './store.js';
-import { act, attackPlan, createGame, join, observe, preview, start, tick, RuleError, requireRule, text } from './engine.js';
+import { act, attackPlan, beginOpening, createGame, displayName, join, lockOpening, observe, preview, start, tick, RuleError, requireRule, text } from './engine.js';
 import { buildReview, unavailableReview } from './review.js';
 import { replayReader } from '../public/replay-model.js';
 import { operationalInsights } from '../public/insights.js';
@@ -26,6 +26,7 @@ const staticFiles = new Map([
   ['/replay-model.js', ['public/replay-model.js', 'text/javascript; charset=utf-8']],
   ['/insights.js', ['public/insights.js', 'text/javascript; charset=utf-8']],
   ['/movement.js', ['public/movement.js', 'text/javascript; charset=utf-8']],
+  ['/combat.js', ['public/combat.js', 'text/javascript; charset=utf-8']],
   ['/map.json', ['public/imperial-map.json', 'application/json']],
 ]);
 async function body(req) {
@@ -119,7 +120,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         return json(res,200,{games:listed.map(g=>({
           id:g.id,name:g.name,status:g.status,tick:g.tick,speed:g.speed,
           you:identity && (!identity.gameId || identity.gameId===g.id) ? g.players.find(p=>p.profileId===identity.id)?.id || null : null,
-          players:g.players.map(p=>({id:p.id,name:p.name,kind:p.kind})),eligible:g.eligible}))});
+          players:g.players.map(p=>({id:p.id,name:p.name,displayName:displayName(p),kind:p.kind,model:p.model})),eligible:g.eligible}))});
       }
       if(path==='/api/games' && req.method==='POST') {
         const me=auth(), data=await body(req);
@@ -130,7 +131,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
           speed:PRESETS[data.preset || 'standard'],eligible:league},MAP);
         games.set(g.id,g);save(g);return json(res,201,{id:g.id});
       }
-      const match=path.match(/^\/api\/games\/([a-zA-Z0-9-]+)(?:\/(join|start|bots|actions|preview|plan|map|review|replay))?$/);
+      const match=path.match(/^\/api\/games\/([a-zA-Z0-9-]+)(?:\/(join|start|opening|bots|actions|preview|plan|map|review|replay))?$/);
       if(match) {
         const g=games.get(match[1]);requireRule(g,'Room not found.',404);
         const endpoint=match[2], gameMap=MAP;
@@ -179,7 +180,13 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
           } else join(g,gameMap,{...data,profileId:me.id,name:me.name});
           save(g);return json(res,200,{country:data.country,token:store.credential(me.id,g.id),match:g.id});
         }
-        if(endpoint==='start' && req.method==='POST') {host();seat();await body(req);start(g);fractions.set(g.id,0);save(g);return json(res,200,{ok:true});}
+        if(endpoint==='start' && req.method==='POST') {host();seat();await body(req);beginOpening(g);fractions.set(g.id,0);save(g);return json(res,200,{ok:true,status:g.status,openingSeconds:g.rules.openingSeconds});}
+        if(endpoint==='opening' && req.method==='POST') {
+          const p=seat(),data=await body(req);
+          const result=lockOpening(g,p.id,data);
+          if(g.status==='opening' && g.players.every(member=>member.openingLocked))start(g);
+          save(g);return json(res,200,{...result,status:g.status});
+        }
         if(endpoint==='bots' && req.method==='POST') {
           host();await body(req);requireRule(g.status==='lobby','Cannot add seats during play.',409);
           for(const c of gameMap.countries.filter(c=>!g.players.some(p=>p.id===c.id))) {
@@ -204,6 +211,12 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
   const interval=automatic ? setInterval(()=>{
     const now=performance.now(), elapsed=(now-previous)*clockScale;previous=now;
     try {
+      for(const g of games.values()) if(g.status==='opening') {
+        const before=Math.ceil((g.openingRemainingMs||0)/1000);
+        g.openingRemainingMs=Math.max(0,(g.openingRemainingMs||0)-elapsed*g.speed);
+        if(g.openingRemainingMs===0){start(g);save(g);fractions.set(g.id,0);}
+        else if(Math.ceil(g.openingRemainingMs/1000)!==before)save(g);
+      }
       for(const g of games.values()) if(g.status==='running') {
         const accumulated=(fractions.get(g.id)||0)+elapsed*g.speed;
         const count=Math.floor(accumulated/1000);fractions.set(g.id,accumulated%1000);

@@ -54,6 +54,7 @@ export class CouncilClient {
   map() {return this.request(this.match ? this.gamePath('/map') : '/map.json','GET',undefined,'');}
   plan(action) {return this.request(this.gamePath('/plan'),'POST',action);}
   start() {return this.request(this.gamePath('/start'),'POST',{});}
+  opening(leaderName,openingMessage) {return this.request(this.gamePath('/opening'),'POST',{leaderName,openingMessage});}
   bots() {return this.request(this.gamePath('/bots'),'POST',{});}
   standings() {return this.request('/api/standings','GET',undefined,'');}
 }

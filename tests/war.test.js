@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {createGame,join,start,act,tick,observe} from '../src/engine.js';
+import {createGame,join,start,act,tick,observe,preview} from '../src/engine.js';
+import {combatForecast} from '../public/combat.js';
 const map=JSON.parse(readFileSync(new URL('../public/imperial-map.json',import.meta.url)));
 let next=0;
 function game(ids=['usa','britain','france']){
@@ -112,4 +113,48 @@ test('accepted peace pulls engaged troops out before the next combat round',()=>
   const defenders=target.troops;tick(g);
   assert.equal(g.battles.length,0);
   assert.equal(target.troops,defenders);
+});
+test('industrial defense bonus lowers exact capture odds and matches rolled defense dice',()=>{
+  const open=combatForecast(16,16,1),fortified=combatForecast(16,16,4);
+  assert.ok(open.attackerWinChance>fortified.attackerWinChance);
+  assert.equal(fortified.defenseBonus,2);assert.equal(fortified.exact,true);
+  const g=game(['usa','britain']),target=province(g,'mexico');
+  target.owner='britain';target.troops=16;target.development=4;target.nextRecruit=1000;
+  province(g,'west-us').troops=25;
+  send(g,'usa',{type:'declare_war',country:'britain'});
+  const move=send(g,'usa',{type:'move',from:'west-us',to:'mexico',amount:16});
+  advance(g,move.arrivesAt);tick(g);
+  const round=g.battles[0]?.lastRound || g.events.find(e=>e.type==='battle')?.lastRound;
+  assert.ok(round);
+  assert.ok(round.defendDice[0]>=3);
+  assert.equal(round.attackerLoss+round.defenderLoss,Math.min(round.attackDice.length,round.defendDice.length));
+});
+test('attack preview counts visible defender reinforcements due before arrival',()=>{
+  const g=game(['usa','britain']),target=province(g,'mexico');target.owner='britain';target.troops=6;
+  target.nextRecruit=g.tick+20;province(g,'west-us').troops=30;
+  g.armies.push({id:'visible-reinforcement',country:'britain',from:'central-america',to:'mexico',amount:20,departedAt:g.tick,arrivesAt:g.tick+5});
+  const forecast=preview(g,map,'west-us','mexico',20,'usa');
+  assert.equal(forecast.defenseAtArrival.incoming,20);
+  assert.ok(forecast.defenseAtArrival.total>=26);
+  assert.ok(forecast.combatAtArrival.attackerWinChance<forecast.combat.attackerWinChance);
+});
+test('allied attackers combine on one side and later arrivals reinforce the active battle',()=>{
+  const g=game(['usa','france','britain']);g.rules.hold=1800;
+  const offer=send(g,'usa',{type:'propose',country:'france',name:'Accord'});
+  send(g,'france',{type:'accept',proposalId:offer.proposalId});advance(g,30);
+  const motion=send(g,'usa',{type:'declare_war',country:'britain'});
+  send(g,'france',{type:'vote_war',motionId:motion.motionId});
+  const target=province(g,'mexico');target.owner='britain';target.troops=100;target.nextRecruit=1000;
+  province(g,'central-us').owner='france';province(g,'central-us').troops=90;
+  province(g,'west-us').troops=90;
+  const first=send(g,'usa',{type:'move',from:'west-us',to:'mexico',amount:20});
+  const second=send(g,'france',{type:'move',from:'central-us',to:'mexico',amount:30,arriveAt:first.arrivesAt+3});
+  advance(g,first.arrivesAt-g.tick);
+  assert.equal(g.battles.length,1);assert.equal(g.armies.filter(a=>a.engaged).reduce((n,a)=>n+a.amount,0),20);
+  advance(g,second.arrivesAt-g.tick);
+  assert.equal(g.battles.length,1);
+  assert.ok(g.battles[0].arrivals.some(a=>a.country==='usa'));
+  assert.ok(g.battles[0].arrivals.some(a=>a.country==='france'));
+  assert.ok(g.armies.filter(a=>a.engaged).some(a=>a.country==='france'));
+  assert.ok(g.battles[0].rounds.length>0);
 });

@@ -3,7 +3,7 @@
  * The materialized public record is persisted: later patches need not rerun old rules.
  */
 import { isDeepStrictEqual } from 'node:util';
-import { act, createGame, economyThreshold, gameRules, join, requireRule, sides, start, tick } from './engine.js';
+import { act, createGame, displayName, economyThreshold, gameRules, join, requireRule, sides, start, tick } from './engine.js';
 
 const clone = value => structuredClone(value);
 const sum = values => values.reduce((n, v) => n + v, 0);
@@ -31,7 +31,7 @@ function terminalProjection(g) {
     ...(gameRules(g).warRequired?{wars:g.wars,battles:g.battles}:{}) };
 }
 function summary(game) {
-  const players = game.players.map(p => ({ country: p.id, name: p.name, kind: p.kind,
+  const players = game.players.map(p => ({ country: p.id, name: p.name, displayName: displayName(p), leaderName:p.leaderName, kind: p.kind,
     model: p.model, persona: p.persona, visibility: p.visibility || 'private', side: p.side, eliminatedAt: p.eliminatedAt,
     land: game.provinces.filter(v => v.owner === p.id).length,
     economy: sum(game.provinces.filter(v => v.owner === p.id).map(v => v.development)),
@@ -82,6 +82,10 @@ export function buildReview(game, map) {
     if (g.tick % 10 === 0 || g.status === 'finished') report.series.push(sample);
   }
   function addEvent(e) { report.events.push(e); }
+  for(const e of g.events)if(e.type==='message' && e.archiveEligible===true){
+    report.messages.push({id:e.id,tick:e.tick,from:e.from,to:e.to,side:e.side,channel:e.channel,text:e.text,leaderName:e.leaderName});
+    addEvent({tick:e.tick,type:'dispatch',from:e.from,channel:e.channel});
+  }
   record();
   while (g.status === 'running' && g.tick < game.tick) {
     while (game.actionLog[actionIndex]?.tick === g.tick) {
@@ -98,7 +102,7 @@ export function buildReview(game, map) {
     for (const e of events) {
       // Explicit allowlist: new engine events are NOT automatically made public here.
       if(e.type==='message' && e.archiveEligible===true) {
-        report.messages.push({id:e.id,tick:e.tick,from:e.from,to:e.to,side:e.side,channel:e.channel,text:e.text});
+        report.messages.push({id:e.id,tick:e.tick,from:e.from,to:e.to,side:e.side,channel:e.channel,text:e.text,leaderName:e.leaderName});
         addEvent({tick:e.tick,type:'dispatch',from:e.from,channel:e.channel});
         continue;
       }

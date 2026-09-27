@@ -32,7 +32,7 @@ test('report scores are the original scores and alliance scores sum the retained
   assert.equal(JSON.stringify(recorded),original,'Building a report must not mutate its source match.');
 });
 test('every historical tick matches the real simulation, including movements, recalls, industry and alliances',()=>{
-  const g=fresh();start(g);let index=0;
+  const g=fresh();g.rules=structuredClone(recorded.rules);g.travelTimes=structuredClone(recorded.travelTimes);start(g);let index=0;
   for(let t=0;t<=recorded.tick;t++) {
     const expected=publicBoard(g),actual=read(t);
     for(const field of Object.keys(expected))assert.deepEqual(actual[field],expected[field],`${field} at ${t}`);
@@ -104,7 +104,7 @@ test('live review and gameplay mutation from a replay are disallowed',()=>{
 test('development payback aligns with actual recruitment ticks and includes the deadline tick',()=>{
   const g=fresh(),p=g.provinces.find(p=>p.id==='west-us');p.development=1;p.troops=100;start(g);
   const base=structuredClone(g),f=developmentForecast(observe(g,'usa'),p.id);
-  assert.equal(f.completesAt,61);assert.equal(f.firstExtraAt,80);assert.equal(f.paybackAt,300);
+  assert.equal(f.completesAt,91);assert.equal(f.firstExtraAt,100);assert.equal(f.paybackAt,480);
   act(g,map,'usa',{type:'develop',from:p.id},'build');
   advance(g,f.paybackAt-1);advance(base,f.paybackAt-1);
   assert.equal(g.provinces.find(v=>v.id===p.id).troops-base.provinces.find(v=>v.id===p.id).troops,-1);
@@ -115,8 +115,8 @@ test('development payback aligns with actual recruitment ticks and includes the 
 test('development forecast honors a queued or already-started upgrade without charging twice',()=>{
   const g=fresh(),p=g.provinces.find(p=>p.id==='alaska');p.owner='usa';p.troops=60;p.development=1;start(g);
   act(g,map,'usa',{type:'develop',from:p.id},'build');const queued=developmentForecast(observe(g,'usa'),p.id);
-  assert.equal(queued.queued,true);assert.equal(queued.completesAt,61);tick(g);
-  const built=developmentForecast(observe(g,'usa'),p.id);assert.equal(built.alreadyInvested,true);assert.equal(built.completesAt,61);
+  assert.equal(queued.queued,true);assert.equal(queued.completesAt,91);tick(g);
+  const built=developmentForecast(observe(g,'usa'),p.id);assert.equal(built.alreadyInvested,true);assert.equal(built.completesAt,91);
 });
 test('admission forecasts expose combined territory and each full share without resetting incumbents',()=>{
   const at=read(305),russia=at.players.find(p=>p.id==='russia');

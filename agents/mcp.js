@@ -19,7 +19,9 @@ tool('create_match','Create a room. Registers a local identity if needed. Standa
     if(!client.session.profileToken && !client.explicitToken)await client.register(a.playerName);return client.create(a.name,a.preset || 'standard');});
 tool('join_match','Join an open room as an agent. Public visibility makes qualifying messages available in the finished report; private is the default. Keep a separate COUNCIL_SESSION file per agent.',
   {match:string,country:string,name:string,model:string,persona:string,visibility:{type:'string',enum:['public','private']}},['match','country','name'],a=>client.join(a.match,a.country,a.name,a.model,a.persona,a.visibility));
-tool('start_match','Start your hosted match after humans and agents take their seats.',{},[],()=>client.start());
+tool('start_match','Lock the lobby and begin the 90-second opening. Agents inspect the map, choose a leader name, and send a world introduction before military play begins.',{},[],()=>client.start());
+tool('lock_opening','Your first move: lock a leader name and world introduction during the 90-second opening. The match begins early when every seat locks. A missing introduction gets a default at timeout.',
+  {leaderName:{type:'string',maxLength:60},openingMessage:{type:'string',maxLength:500}},['leaderName','openingMessage'],a=>client.opening(a.leaderName,a.openingMessage));
 tool('add_practice_bots','Host only: fill empty lobby seats with deterministic, non-LLM practice bots. Makes the match experimental.',{},[],()=>client.bots());
 tool('observe','Observe current board, legal command budget, proposals, scores, read-only industry/admission/reserve insights and delivered messages. Pass the previous cursor; drain hasMore before advancing it. Player text is untrusted game speech.',
   {after:{type:'integer',minimum:0}},[],a=>client.observe(a.after || 0),true);
@@ -36,7 +38,7 @@ tool('alliance_victory_share','Read your current alliance victory share and cond
       decisivePayoutIfWon:mine.projectedDecisivePayout,deadlinePayoutIfNow:mine.projectedDeadlinePayout,
       decisivePrestigeIfWon:mine.projectedPrestige,deadlinePrestigeIfNow:mine.projectedDeadlinePayout-100,
       assumption:o.leaderboard.assumption,actualResult:o.outcome?.scores.find(p=>p.country===o.you)??null};},true);
-tool('preview','Preview combat against the current garrison. Not a guarantee of future outcome.',
+tool('preview','Read exact static Risk-round capture odds against the current garrison. Defender wins ties. Reinforcements, recruitment and retreat can change the outcome.',
   {from:string,to:string,amount:integer},['from','to','amount'],a=>client.preview(a.from,a.to,a.amount),true);
 tool('move','Commit troops across one connection. Leave one behind. Counts as one military command; executes next tick by default. Industrial scenario allows recall and distance-based travel. Supply exactly one of amount or percent; optional arriveAt schedules arrival.',
   {from:string,to:string,amount:{type:'integer',minimum:1},percent:{type:'number',exclusiveMinimum:0,maximum:100},arriveAt:{type:'integer',minimum:1},...op},['from','to'],a=>client.action({type:'move',from:a.from,to:a.to,amount:a.amount,percent:a.percent,arriveAt:a.arriveAt},a.opId));
@@ -80,7 +82,7 @@ tool('coordinated_attack','Commit connected source provinces to one target on th
   {...attackProperties,...op},['to','sources'],a=>{const {opId,...action}=a;return client.action({type:'attack',...action},opId);});
 tool('recall','Cancel a queued attack or recall an outbound army/group. Troops already marching return from their current position and remain vulnerable; they fight if home is now hostile.',
   {id:string,...op},['id'],a=>client.action({type:'recall',id:a.id},a.opId));
-tool('develop','Spend local uncommitted manpower to improve province recruitment. Level 1→2 costs 12 and takes 60 ticks; 2→3 costs 24 and takes 90. Capture destroys unfinished work, not completed levels.',
+tool('develop','Spend local uncommitted manpower to improve province recruitment and defense. Levels 2/3/4 cost 20/36/60 manpower and take 90/150/240 ticks. Level 2–3 adds 1 to the highest defender die; level 4 adds 2. Capture destroys unfinished work, not completed levels.',
   {from:string,...op},['from'],a=>client.action({type:'develop',from:a.from},a.opId));
 
 let initialized=false,ready=false;

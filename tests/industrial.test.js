@@ -34,9 +34,9 @@ test('completed development alone can reach 60% of active industry and start a c
   province(g,'west-us').troops=40;start(g);
   assert.equal(economyThreshold(g),3);
   action(g,'usa',{type:'develop',from:'west-us'});
-  advance(g,60);assert.equal(g.dominance[country(g,'usa').side],undefined);
+  advance(g,90);assert.equal(g.dominance[country(g,'usa').side],undefined);
   tick(g);assert.equal(province(g,'west-us').development,2);
-  assert.equal(economyThreshold(g),3);assert.equal(g.dominance[country(g,'usa').side],61);
+  assert.equal(economyThreshold(g),3);assert.equal(g.dominance[country(g,'usa').side],91);
   advance(g,89);assert.equal(g.status,'running');tick(g);
   assert.equal(g.outcome.winningSide,country(g,'usa').side);
 });
@@ -58,6 +58,9 @@ test('deadline ranks economic output, even when the winner owns fewer provinces'
 });
 test('distance movement takes longer overseas and crosses the antimeridian by the short direction',()=>{
   const g=game();assert.ok(g.travelTimes.england['east-us']>g.travelTimes.england['north-france']);
+  const west=map.provinces.find(p=>p.id==='west-us'),mexico=map.provinces.find(p=>p.id==='mexico');
+  const former=15+Math.ceil(distanceKm(west,mexico)/35),current=g.travelTimes['west-us'].mexico;
+  assert.ok(current<=Math.ceil(former/2)+1,`expected roughly double march speed: ${former} → ${current}`);
   assert.ok(distanceKm({lon:179,lat:0},{lon:-179,lat:0})<230);
   const r=action(g,'usa',{type:'move',from:'west-us',to:'mexico',percent:50});
   const available=province(g,'west-us').troops-1;assert.equal(r.orders[0].amount,Math.floor(available/2));
@@ -110,19 +113,20 @@ test('returning army must fight if its home was captured; it never teleports to 
   action(g,'usa',{type:'recall',id:army.id});tick(g);advance(g,5);
   assert.equal(province(g,'west-us').owner,'usa');assert.equal(province(g,'west-us').troops,5);
 });
-test('development spends reserved manpower, builds over time, increases production and caps at three',()=>{
-  const g=game(),p=province(g,'namibia');p.troops=40;
-  const r=action(g,'germany',{type:'develop',from:p.id});assert.equal(p.troops,40);assert.equal(reservedTroops(g,'germany',p.id),12);
+test('development spends reserved manpower, builds over time, increases production and caps at four',()=>{
+  const g=game(),p=province(g,'namibia');p.troops=180;
+  const r=action(g,'germany',{type:'develop',from:p.id});assert.equal(p.troops,180);assert.equal(reservedTroops(g,'germany',p.id),20);
   assert.throws(()=>action(g,'germany',{type:'develop',from:p.id}),/underway/);
-  tick(g);assert.equal(p.troops,28);assert.equal(p.development,1);assert.equal(p.developing.completesAt,r.completesAt);
-  advance(g,60);assert.equal(p.development,2);assert.equal(p.developing,null);const before=p.troops;
+  tick(g);assert.equal(p.troops,160);assert.equal(p.development,1);assert.equal(p.developing.completesAt,r.completesAt);
+  advance(g,90);assert.equal(p.development,2);assert.equal(p.developing,null);const before=p.troops;
   advance(g,19);assert.equal(p.troops,before+2);
-  action(g,'germany',{type:'develop',from:p.id});advance(g,91);assert.equal(p.development,3);
+  action(g,'germany',{type:'develop',from:p.id});advance(g,151);assert.equal(p.development,3);
+  action(g,'germany',{type:'develop',from:p.id});advance(g,241);assert.equal(p.development,4);
   assert.throws(()=>action(g,'germany',{type:'develop',from:p.id}),/fully developed/);
 });
 test('capture preserves completed factories but destroys an unfinished investment without a refund',()=>{
-  const g=game(),p=province(g,'namibia');p.troops=15;
-  action(g,'germany',{type:'develop',from:p.id});tick(g);assert.equal(g.economy.invested,12);
+  const g=game(),p=province(g,'namibia');p.troops=24;
+  action(g,'germany',{type:'develop',from:p.id});tick(g);assert.equal(g.economy.invested,20);
   g.armies.push({id:'invader',country:'usa',from:'west-us',to:p.id,amount:10,departedAt:0,arrivesAt:2});tick(g);
   assert.equal(p.owner,'usa');assert.equal(p.developing,null);assert.equal(p.development,1);
   const ruhr=province(g,'ruhr');ruhr.troops=0;g.armies.push({id:'second',country:'usa',from:'west-us',to:ruhr.id,amount:10,departedAt:0,arrivesAt:3});tick(g);

@@ -8,8 +8,8 @@ function node(tag, attributes = {}) {
 }
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 export class Atlas {
-  constructor(svg, map, onSelect) {
-    this.svg = svg; this.map = map; this.onSelect = onSelect;
+  constructor(svg, map, onSelect, onBattle=()=>{}) {
+    this.svg = svg; this.map = map; this.onSelect = onSelect;this.onBattle=onBattle;
     this.positionsById=Object.fromEntries(map.provinces.map(p=>[p.id,{x:p.x,y:p.y}]));
     this.places = new Map(map.provinces.map(p => [p.id, p]));
     this.countries = new Map(map.countries.map(c => [c.id, c]));
@@ -54,7 +54,8 @@ export class Atlas {
       const stripe=node('rect',{x:-16,y:-10,width:4,height:21,class:'counter-stripe'});
       const label=node('text',{y:-17,class:'province-name'});label.textContent=p.name;
       const industry=node('text',{y:21,class:'industry-label'});group.append(industry);
-      group.append(disc,stripe,text,label);markers.append(group);this.markers.set(p.id,{group,disc,stripe,text,label,industry});
+      const battleMark=node('text',{y:-31,class:'battle-mark','text-anchor':'middle'});battleMark.textContent='⚔';
+      group.append(disc,stripe,text,label,battleMark);markers.append(group);this.markers.set(p.id,{group,disc,stripe,text,label,industry,battleMark});
     }
     svg.append(markers);
     this.tooltip=document.createElement('div');this.tooltip.className='atlas-tooltip';this.tooltip.hidden=true;svg.parentElement.append(this.tooltip);
@@ -67,7 +68,7 @@ export class Atlas {
     svg.addEventListener('pointerleave',()=>{this.tooltip.hidden=true;});
     svg.addEventListener('keydown',event=>{
       const id=event.target.closest('[data-province]')?.dataset.province;
-      if(id && ['Enter',' '].includes(event.key)){event.preventDefault();onSelect(id,{shiftKey:event.shiftKey});}
+      if(id && ['Enter',' '].includes(event.key)){event.preventDefault();if(this.state?.battles?.some(b=>b.province===id))this.onBattle(id);else onSelect(id,{shiftKey:event.shiftKey});}
     });
     this.resize=new ResizeObserver(()=>this.layout());this.resize.observe(svg);
     this.applyView();
@@ -116,7 +117,7 @@ export class Atlas {
   up(event) {
     const gesture=this.gesture;this.pointers.delete(event.pointerId);
     if(this.svg.hasPointerCapture(event.pointerId))this.svg.releasePointerCapture(event.pointerId);
-    if(!this.dragged && gesture?.id)this.onSelect(gesture.id,{shiftKey:gesture.shiftKey,target:gesture.target});
+    if(!this.dragged && gesture?.id){if(this.state?.battles?.some(b=>b.province===gesture.id))this.onBattle(gesture.id);else this.onSelect(gesture.id,{shiftKey:gesture.shiftKey,target:gesture.target});}
     if(!this.pointers.size)this.gesture=null;
   }
   hover(event) {
@@ -186,13 +187,15 @@ export class Atlas {
       shape.setAttribute('fill',this.countries.get(p.owner)?.color || '#aaa994');
       const role=p.id===source?'selected':p.id===destination?'destination':neighbors.includes(p.id)?'neighbor':'';
       shape.setAttribute('class',`province ${role}${p.owner?' occupied':''}`);
-      marker.group.setAttribute('class',`map-counter ${role}${p.owner===state.you && state.you?' owned':''}`);
+      const fighting=state.battles?.some(b=>b.province===p.id);
+      marker.group.setAttribute('class',`map-counter ${role}${p.owner===state.you && state.you?' owned':''}${fighting?' fighting':''}`);
+      marker.battleMark.style.display=fighting?'':'none';
+      marker.group.setAttribute('aria-label',`${this.places.get(p.id).name}, ${p.troops} troops, ${this.countries.get(p.owner)?.name || 'uncontrolled'}${fighting?', battle in progress; open details':''}`);
       marker.disc.setAttribute('stroke',this.countries.get(p.owner)?.color || '#a5a28c');
       marker.stripe.setAttribute('fill',this.countries.get(p.owner)?.color || '#a5a28c');
       const width=Math.max(32,String(p.troops).length*7+15);marker.disc.setAttribute('width',width);marker.disc.setAttribute('x',-width/2);marker.stripe.setAttribute('x',-width/2);
       marker.text.textContent=p.troops;
-      marker.industry.textContent=p.owner ? `${'ⅠⅡⅢ'[(p.development || 1)-1]}${p.developing?' ↑':''}`:'';
-      marker.group.setAttribute('aria-label',`${this.places.get(p.id).name}, ${p.troops} troops, ${this.countries.get(p.owner)?.name || 'uncontrolled'}`);
+      marker.industry.textContent=p.owner ? `${'ⅠⅡⅢⅣ'[(p.development || 1)-1]}${p.developing?' ↑':''}`:'';
     }
     for(const edge of this.seas.children)edge.classList.toggle('selected-connection',edge.dataset.edge.split('|').includes(source));
     this.connections.replaceChildren();

@@ -7,7 +7,8 @@ const help=`Council of Iron CLI (Node 22.13+)
   matches                            List rooms
   create NAME [standard|quick]       Create a room; requires register
   join MATCH COUNTRY [NAME] [public|private]  Join as an agent; private by default
-  start                              Start your hosted room
+  start                              Lock lobby and begin 90-second opening
+  opening LEADER MESSAGE             Lock leader name and world introduction
   bots                               Fill empty seats with practice bots
   state [EVENT_CURSOR]              Observe board and your diplomatic inbox
   map                                Province IDs, connections, and countries
@@ -46,6 +47,7 @@ try {
     case 'create':result=await client.create(args[0],args[1] || 'standard');break;
     case 'join':result=await client.join(args[0],args[1],args[2],'','',args[3] || 'private');break;
     case 'start':result=await client.start();break;
+    case 'opening':result=await client.opening(args[0],args[1]);break;
     case 'bots':result=await client.bots();break;
     case 'state':result=await client.observe(Number(args[0] || 0));break;
     case 'map':result=await client.map();break;

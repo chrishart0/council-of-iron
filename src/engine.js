@@ -1,4 +1,5 @@
 import { travelTicks, journeyPoint } from '../public/movement.js';
+import { combatForecast } from '../public/combat.js';
 /** Authoritative, deterministic rules. Time is an integer simulation second.
  * No HTTP, random numbers, timers, credentials, or persistence in this module.
  */
@@ -6,15 +7,23 @@ export const RULES = Object.freeze({ duration: 1800, recruit: 20,
   notice: 30, hold: 90, economyShare: .6, maturity: 300, orderWindow: 10,
   strengthExponent: .75, deadlinePrizes: [.5, .25, .25],
   orderLimit: 3, chatWindow: 10, messageLength: 500, proposalLife: 120,
-  diplomacyLife: 60, warRequired: true,
-  marchSetup: 15, kmPerTick: 35, maxScheduleDelay: 300, maxAttackSources: 16,
+  diplomacyLife: 60, warRequired: true, openingSeconds: 90,
+  marchSetup: 8, kmPerTick: 70, maxScheduleDelay: 300, maxAttackSources: 16,
   maxTransitHops: 8,
-  maxDevelopment: 3, developmentCosts: [0, 12, 24], developmentTicks: [0, 60, 90] });
+  maxDevelopment: 4, developmentCosts: [0, 20, 36, 60], developmentTicks: [0, 90, 150, 240] });
 export const gameRules = g => g.rules;
 export const reservedTroops = (g, country, from) => g.orders
   .filter(o => o.country === country && o.from === from && ['move', 'transit', 'develop'].includes(o.type))
   .reduce((n, o) => n + o.amount, 0);
 const journeyTicks = (g, from, to) => g.travelTimes[from][to];
+function arrivalDefense(g,target,arrivesAt){
+  const recruits=target.owner && Number.isSafeInteger(target.nextRecruit) && target.nextRecruit<=arrivesAt
+    ? (Math.floor((arrivesAt-target.nextRecruit)/gameRules(g).recruit)+1)*target.development : 0;
+  const incoming=g.armies.filter(a=>!a.engaged && !a.returning && a.to===target.id && target.owner && allied(g,a.country,target.owner) && a.arrivesAt<=arrivesAt)
+    .reduce((n,a)=>n+a.amount,0);
+  return {current:target.troops,recruits,incoming,total:target.troops+recruits+incoming,
+    assumption:'Current owner, industry, recruitment schedule and visible friendly incoming armies stay unchanged; no new orders, captures, recalls or combat.'};
+}
 
 export class RuleError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
@@ -42,6 +51,10 @@ function votes(g, roster, approvals) { return roster.filter(id=>player(g,id).eli
 export function player(g, id) {
   const p = g.players.find(p => p.id === id);
   requireRule(p, 'Country has no player.', 404); return p;
+}
+export function displayName(p) {
+  return p.kind==='agent' && p.model && !p.name.toLowerCase().includes(p.model.toLowerCase())
+    ? `${p.name} · ${p.model}` : p.name;
 }
 function province(g, id) {
   const p = g.provinces.find(p => p.id === id);
@@ -88,13 +101,37 @@ export function join(g, map, { profileId, name, country, kind = 'human', model =
   event(g, 'joined', { country, name: p.name, kind }); return p;
 }
 export function start(g) {
-  requireRule(g.status === 'lobby', 'Match has already started.', 409);
+  requireRule(g.status === 'lobby' || g.status === 'opening', 'Match has already started.', 409);
   requireRule(g.players.length >= 2, 'At least two occupied countries are needed.');
+  if(g.status==='opening')for(const p of g.players)if(!p.openingLocked)lockOpening(g,p.id,{leaderName:p.name,openingMessage:`${p.name} of ${p.id} enters the council.`});
   g.status = 'running';
   for (const p of g.provinces) if (p.owner) p.nextRecruit = gameRules(g).recruit;
   event(g, 'started', { countries: g.players.map(p => p.id), speed: g.speed });
   // Preserve the exact opening for public after-action reconstruction. Never exported.
   g.reviewOrigin = structuredClone(g);
+}
+export function beginOpening(g) {
+  requireRule(g.status==='lobby','Match has already started.',409);
+  requireRule(g.players.length>=2,'At least two occupied countries are needed.');
+  g.status='opening';g.openingRemainingMs=gameRules(g).openingSeconds*1000;
+  event(g,'opening_started',{duration:gameRules(g).openingSeconds});
+  for(const p of g.players.filter(p=>p.kind==='bot'))lockOpening(g,p.id,{leaderName:p.name,openingMessage:`${p.name} of ${p.id} enters the council.`});
+}
+export function lockOpening(g,country,{leaderName,openingMessage}) {
+  const p=player(g,country);
+  if(p.openingLocked){
+    requireRule(p.leaderName===leaderName?.trim() && p.openingMessage===openingMessage?.trim(),
+      'Your introduction is already locked.',409);
+    return {leaderName:p.leaderName,openingMessage:p.openingMessage,locked:true};
+  }
+  requireRule(g.status==='opening','The opening is not accepting introductions.',409);
+  p.leaderName=text(leaderName,'Leader name',60);
+  p.openingMessage=text(openingMessage,'Opening message',gameRules(g).messageLength);
+  p.openingLocked=true;
+  event(g,'opening_locked',{country});
+  event(g,'message',{from:country,to:null,side:p.side,channel:'world',text:p.openingMessage,
+    leaderName:p.leaderName,archiveEligible:p.kind==='agent' && p.visibility==='public'});
+  return {leaderName:p.leaderName,openingMessage:p.openingMessage,locked:true};
 }
 function running(g) { requireRule(g.status === 'running', 'The match is not running.', 409); }
 function mapProvince(map, id) { return map.provinces.find(p => p.id === id); }
@@ -154,7 +191,10 @@ export function attackPlan(g, map, country, action) {
   requireRule(Number.isSafeInteger(arrivesAt) && arrivesAt >= earliest, `Earliest shared arrival is tick ${earliest}.`);
   requireRule(arrivesAt <= earliest + r.maxScheduleDelay, 'Arrival is scheduled too far ahead.');
   requireRule(arrivesAt <= r.duration, 'The army would arrive after the match deadline.');
-  return { to: action.to, earliest, arrivesAt, total: sources.reduce((n, s) => n + s.amount, 0),
+  const total=sources.reduce((n,s)=>n+s.amount,0);
+  const defenseAtArrival=arrivalDefense(g,target,arrivesAt);
+  return { to: action.to, earliest, arrivesAt, total, combat:combatForecast(total,target.troops,target.development),
+    defenseAtArrival,combatAtArrival:combatForecast(total,defenseAtArrival.total,target.development),
     sources: sources.map(s => ({ ...s, executeAt: arrivesAt - s.travel })),
     warning: 'Waiting troops remain in their source garrisons and can be attacked. Every component is checked again at departure.' };
 }
@@ -656,6 +696,7 @@ function resolveBattleRounds(g) {
     if(strength()>0 && target.troops>0) {
       attackDice=Array.from({length:Math.min(3,strength())},(_,i)=>die(g,battle,i)).sort((a,b)=>b-a);
       defendDice=Array.from({length:Math.min(2,target.troops)},(_,i)=>die(g,battle,3+i)).sort((a,b)=>b-a);
+      defendDice[0]=Math.min(6,defendDice[0]+Math.floor(target.development/2));
       for(let i=0;i<Math.min(attackDice.length,defendDice.length);i++){
         if(attackDice[i]>defendDice[i])defenderLoss++;else attackerLoss++;
       }
@@ -668,6 +709,8 @@ function resolveBattleRounds(g) {
       g.armies=g.armies.filter(a=>a.amount>0);
     }
     battle.lastRound={tick:g.tick,attackDice,defendDice,attackerLoss:Math.min(attackDice.length,defendDice.length)-defenderLoss,defenderLoss};
+    (battle.rounds ||= []).push({...battle.lastRound,attackers:strength(),defenders:target.troops});
+    if(battle.rounds.length>40)battle.rounds.shift();
     const survivors=g.armies.filter(a=>a.engaged && a.to===target.id);
     if(survivors.length && target.troops>0)continue;
     let industryLost=0;
@@ -827,7 +870,8 @@ export function observe(g, country = null, after = 0, limit = 200) {
   const events = visible.slice(0, limit).map(({ recipients, ...e }) => e);
   const p = country ? player(g, country) : null;
   return { id: g.id, name: g.name, status: g.status, tick: g.tick, speed: g.speed, rules: gameRules(g), scenario: g.scenario, travelTimes: g.travelTimes,
-    eligible: g.eligible, you: country, players: g.players.map(({ profileId, orderTicks, lastChat, ...p }) => p),
+    openingRemaining: g.status==='opening'?Math.ceil((g.openingRemainingMs||0)/1000):null,
+    eligible: g.eligible, you: country, players: g.players.map(({ profileId, orderTicks, lastChat, ...p }) => ({...p,displayName:displayName(p)})),
     provinces: g.provinces, armies: g.armies, battles: g.battles || [], sides: sides(g), wars: g.wars || [], economyThreshold: economyThreshold(g), projections: score(g), leaderboard: leaderboard(g),
     dominanceBreaks: g.dominanceBreaks || [],
     diplomacy: (g.diplomacy || []).filter(m=>['voting','offered'].includes(m.status) &&
@@ -856,6 +900,8 @@ export function preview(g, map, from, to, amount, viewer = null) {
   else if(amount>b.troops) summary=`Against the current garrison: capture with ${amount-b.troops} surviving troops.`;
   else if(amount===b.troops) summary='Both forces are destroyed; the previous owner keeps the empty province.';
   else summary=`The current defenders survive with ${b.troops-amount} troops.`;
-  return {from,to,amount,reserved,warRequired:Boolean(a.owner && !mayEnter(g,a.owner,b.owner)),travelTicks:journeyTicks(g,from,to),arrivesAt:g.tick+1+journeyTicks(g,from,to),available:a.troops-reserved-1,remaining:a.troops-reserved-amount,summary,
-    incoming:g.armies.filter(a=>a.to===to),warning:'Current garrison only; not a prediction of dice, future orders, recruitment, or diplomatic changes.'};
+  const arrivesAt=g.tick+1+journeyTicks(g,from,to),defenseAtArrival=arrivalDefense(g,b,arrivesAt);
+  return {from,to,amount,reserved,warRequired:Boolean(a.owner && !mayEnter(g,a.owner,b.owner)),travelTicks:journeyTicks(g,from,to),arrivesAt,available:a.troops-reserved-1,remaining:a.troops-reserved-amount,summary,combat:combatForecast(amount,b.troops,b.development),
+    defenseAtArrival,combatAtArrival:combatForecast(amount,defenseAtArrival.total,b.development),
+    incoming:g.armies.filter(a=>a.to===to),warning:'Arrival forecast counts scheduled recruitment and visible friendly incoming armies. New orders, battles, diplomacy and recalls can change it.'};
 }

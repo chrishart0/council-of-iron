@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { createGame, join, start, act, tick, sides } from '../src/engine.js';
+import { travelTicks } from '../public/movement.js';
 
 export const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../tests/fixtures/handplay-20260927.json.gz', import.meta.url))));
 export const map = JSON.parse(readFileSync(new URL('../public/imperial-map.json', import.meta.url)));
@@ -16,6 +17,12 @@ export const projection = g => ({ tick:g.tick, status:g.status, provinces:g.prov
 export const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const troopTotal = g => g.provinces.reduce((n,p)=>n+p.troops,0)+g.armies.reduce((n,a)=>n+a.amount,0);
 const counts = (items,key) => items.reduce((result,item)=>{const k=key(item);result[k]=(result[k]||0)+1;return result;},{});
+export function recordedRules(g){
+  Object.assign(g.rules,{warRequired:false,marchSetup:15,kmPerTick:35,maxDevelopment:3,
+    developmentCosts:[0,12,24],developmentTicks:[0,60,90]});
+  const byId=new Map(map.provinces.map(p=>[p.id,p]));
+  g.travelTimes=Object.fromEntries(map.provinces.map(p=>[p.id,Object.fromEntries(p.neighbors.map(id=>[id,travelTicks(p,byId.get(id),g.rules)]))]));
+}
 function validator(g) {
   const initial=troopTotal(g);let casualties=0,eventIndex=0,checks=0;
   return () => {
@@ -43,7 +50,7 @@ function summary(g,ledger,transport) {
 export function replay() {
   const g=createGame({id:'handplay',name:'Handplay replay',hostId:'britain'},map);
   // This immutable pre-war recording retains its original room rules.
-  g.rules.warRequired=false;
+  recordedRules(g);
   for(const c of map.countries)join(g,map,{profileId:c.id,name:`Single-controller ${c.id}`,country:c.id,kind:'agent'});
   start(g);const validate=validator(g);let ledger=validate(),index=0;
   while(g.status==='running') {
@@ -67,8 +74,9 @@ export async function replayHttp() {
     const room=(await request('/api/games','POST',{name:'Recorded all-seat HTTP replay',preset:'standard'},profiles.britain.token)).data.id;
     for(const c of map.countries)tokens[c.id]=(await request(`/api/games/${room}/join`,'POST',{country:c.id,kind:'agent'},profiles[c.id].token)).data.token;
     assert.equal((await request(`/api/games/${room}/start`,'POST',{},tokens.britain)).status,200);
-    const g=app.games.get(room);g.rules.warRequired=false;
-    g.reviewOrigin.rules.warRequired=false;
+    const g=app.games.get(room);recordedRules(g);
+    // The old recording predates the opening ceremony; restore its exact tick-zero event stream.
+    g.status='lobby';g.events.pop();g.sequence--;start(g);
     const validate=validator(g);let ledger=validate(),index=0;
     while(g.status==='running') {
       for(const a of fixture.rejectedActions.filter(a=>a.tick===g.tick)) {

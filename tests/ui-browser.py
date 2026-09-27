@@ -105,6 +105,15 @@ def main():
             page.locator('#replay-slider').fill('530');page.locator('[data-aar-map="europe"]').click();capture('10-replay.png')
             ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
             report['assertions'].append('After-action standards identify all winning members; exact map playback keeps separate SVG IDs and no live command surface.')
+            page.locator('#back').click();page.locator('[data-room="ui-war"][data-spectate="true"]').click()
+            expect(page.locator('#live-battles')).to_be_visible()
+            page.locator('[data-battle="mexico"]').first.click()
+            expect(page.locator('#battle-dialog')).to_be_visible()
+            expect(page.locator('#battle-detail')).to_contain_text('defender die +1')
+            expect(page.locator('.battle-rolls>div').first).to_contain_text('attackers')
+            capture('13-recorded-battle-details.png')
+            page.locator('#battle-close').click();expect(page.locator('#battle-dialog')).to_be_hidden()
+            report['assertions'].append('Recorded active battle opens a read-only odds and per-roll casualty modal; this fixture is a recorded position, not a live match.')
             page.emulate_media(reduced_motion='reduce');assert page.evaluate('getComputedStyle(document.querySelector("#battle-signal")).animationName')=='none'
             assert not report['pageErrors'],report['pageErrors'];report['status']='passed'
             browser.close()
