@@ -1,0 +1,11 @@
+{
+  "generatedCommit": "44a24357ff715cbd87acf0ee134f82dbcd430a4b",
+  "testRun": "https://github.com/chrishart0/council-of-iron/actions/runs/36289994282",
+  "testSteps": "All passed: syntax, 41 regressions/integration tests, 512 repeated holdout matches, native-browser playthrough and GIF recording.",
+  "originalWorkflowConclusion": "failure in the final git push only",
+  "publicationFailure": "The GitHub Actions token lacked workflows permission to update .github/workflows/test.yml. Tests and generation had completed successfully; the tested commit object was uploaded but master was not advanced by that token.",
+  "publicationMethod": "The authorized repository connection publishes this exact tested commit plus this provenance note using a non-force fast-forward. No additional application-code changes.",
+  "nativeTestReceipt": "native-ci.json",
+  "gifPath": "../media/gameplay.gif",
+  "gifSha256": "c6aeeb43fc7d1b05e5bb9e0b265270e0365f081efb04d321b3b5025d5af1f9f4"
+}
