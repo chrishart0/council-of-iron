@@ -1,0 +1,20 @@
+name: Refinement workspace snapshot
+on:
+  push:
+    paths: ['.github/workflows/refine-workspace.yml']
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ed22b813465d2d4818d1ee4272e9a47ae22550f0
+      - run: git archive --format=zip --output=/tmp/source.zip HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: refinement-source
+          path: /tmp/source.zip
+          retention-days: 3
