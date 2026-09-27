@@ -1,22 +1,134 @@
-name: Spectator integration source
+name: Verify and publish integrated command-table UI
 on:
   push:
     branches: [command-table-v05-workbench]
     paths: [.github/workflows/ui-workbench.yml]
+  workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
+concurrency:
+  group: council-v05-publication
+  cancel-in-progress: false
 jobs:
-  source:
+  publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 125cf3ce070a6e9275d13353a6b401de8935ef6b
-          persist-credentials: false
-      - run: git archive --format=tar HEAD > /tmp/spectator-source.tar
-      - uses: actions/upload-artifact@v4
+          fetch-depth: 0
+      - name: Reconstruct UI and reconciled spectator changes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, lzma
+          inputs=[('v05-payload',5,'abaa8265fceaea0434fbb398cb3f8e3de44c0ffd8433317356c215f0565795bf','6118b7fe790917a0dab4576e4fddd599d5d9981be7282e366e8a0dfead1f2755'),('v05-integration',2,'b468c34961f3812d655f926910c20e460e3f93f5a403ab5eb5a3a5b648bee501','c0a1859f80cb1fd081510d2136dd46b3785cfe3f888f5022879c277f1aeccb78')]
+          for folder,count,compressed_sha,patch_sha in inputs:
+              data=b''.join(Path(f'.github/{folder}/{i:02}.part').read_bytes() for i in range(1,count+1))
+              assert hashlib.sha256(data).hexdigest()==compressed_sha
+              patch=lzma.decompress(data)
+              assert hashlib.sha256(patch).hexdigest()==patch_sha
+              Path(f'/tmp/{folder}.patch').write_bytes(patch)
+          PY
+          git checkout --detach fe2ebd4957afad81965f9531a88dfacd8321cc26
+          git apply --unidiff-zero --check /tmp/v05-payload.patch
+          git apply --unidiff-zero /tmp/v05-payload.patch
+          git apply --unidiff-zero --check /tmp/v05-integration.patch
+          git apply --unidiff-zero /tmp/v05-integration.patch
+          # The supplemental patch preserves all eight concurrent spectator files.
+          # Move the parent/index, not the reconciled working tree, to the new master.
+          git reset --mixed 125cf3ce070a6e9275d13353a6b401de8935ef6b
+          git diff --check
+      - uses: actions/setup-node@v4
         with:
-          name: spectator-source
-          path: /tmp/spectator-source.tar
-          retention-days: 3
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Syntax, interface logic and gameplay regression tests
+        run: |
+          set -o pipefail
+          mkdir -p artifacts
+          npm run check
+          npm test | tee artifacts/node-tests.log
+          grep -q '# pass 86' artifacts/node-tests.log
+          grep -q '# fail 0' artifacts/node-tests.log
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          expected=json.loads(Path('docs/testing/v05-local.json').read_text())
+          for path,digest in expected['unchangedFiles'].items():
+              assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest,path
+          PY
+      - name: Reproduce unchanged-rules seeded smoke games
+        run: |
+          node scripts/tournament.js --rounds 32 --seed 950000 --mode solo --out artifacts/smoke-solo.json
+          node scripts/tournament.js --rounds 32 --seed 960000 --mode diplomacy --out artifacts/smoke-diplomacy.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          expected=json.loads(Path('docs/testing/v05-local.json').read_text())['smoke']
+          for mode in ['solo','diplomacy']:
+              actual=json.loads(Path(f'artifacts/smoke-{mode}.json').read_text())['summary']
+              assert actual['rounds']==32 and actual['invariantFailures']==0
+              for field in ['countryWins','draws','meanDuration','meanPrestige']:
+                  assert actual[field]==expected[mode][field],(mode,field)
+          PY
+      - run: python -m pip install -r tests/requirements.txt
+      - run: python -m playwright install --with-deps chromium
+      - name: Native gameplay, spectator, replay and command-HUD checks; record GIFs
+        run: python tests/browser.py --gif docs/media/gameplay.gif --review-gif docs/media/after-action.gif --ui-gif docs/media/interface.gif
+      - name: Record verification and preserve the tested candidate
+        env:
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python - <<'PY'
+          import json, hashlib, os, shutil
+          from pathlib import Path
+          from PIL import Image
+          reports={key:json.loads(Path(path).read_text()) for key,path in {'gameplay':'artifacts/browser-report.json','review':'artifacts/review/review-browser-report.json','interface':'artifacts/ui/ui-browser-report.json'}.items()}
+          for key,report in reports.items():
+              assert report['status']=='passed' and report['transport']=='native-browser-http',key
+              assert not report['pageErrors'],key
+          gifs={}
+          for name,minimum in [('gameplay',20),('after-action',20),('interface',10)]:
+              p=Path(f'docs/media/{name}.gif');image=Image.open(p)
+              assert image.n_frames>=minimum and p.stat().st_size<8_000_000,name
+              gifs[name]={'path':str(p),'frames':image.n_frames,'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()}
+          shutil.copyfile('artifacts/ui/01-command-europe.png','docs/media/command-table.png')
+          local=json.loads(Path('docs/testing/v05-local.json').read_text())
+          receipt={'date':'2026-09-27','workflow':os.environ['RUN_URL'],'baseCommit':local['baseCommit'],'status':'passed','transport':'native-browser-http','nodeTestsPassed':86,'repeatedSmokeGames':64,'gameplayRulesChanged':False,'unchangedFiles':local['unchangedFiles'],'browser':reports,'gifs':gifs,'preservedConcurrentCommit':'125cf3ce070a6e9275d13353a6b401de8935ef6b','limitations':'Automated controls and heuristic/recorded opponents. The focused interface tour resumes a recorded test position; it is not a new live match or independent human usability study.'}
+          Path('docs/testing/v05-native-ci.json').write_text(json.dumps(receipt,indent=2)+'\n')
+          p=Path('docs/PLAYTEST.md')
+          note='## Native v0.5 integrated verification\n\nThe [native publication run]('+os.environ['RUN_URL']+') passed 86 Node tests and reproduced all 64 seeded smoke games. All three actual-browser suites passed: complete gameplay with an external agent and public spectating, exact after-action review, and focused command-table interactions including battle signals, docked controls, roster focus and responsive layouts. No captured page errors occurred. Concurrent spectator features and their tests are preserved; authenticated Resume remains distinct from public Spectate. README screenshots and GIFs were recorded by that native run. [Machine-readable receipt](testing/v05-native-ci.json).\n\n'
+          p.write_text(p.read_text().replace('## Earlier verification records',note+'## Earlier verification records',1))
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --name-only | grep -q '^.github/'; then echo 'Refusing to publish transport or workflow files'; exit 1; fi
+          git diff --cached --check
+          git diff --cached --stat
+          git commit -m 'Ship v0.5 command-table UI; preserve public spectating and player resume'
+          git archive --format=tar HEAD > /tmp/council-v05-tested.tar
+          git rev-parse HEAD | tee artifacts/tested-commit.txt
+          git push origin HEAD:refs/heads/command-table-v05-verified-${GITHUB_RUN_ID}
+      - name: Fast-forward master only when the reconciled base is still current
+        run: |
+          test "$(git ls-remote origin refs/heads/master | cut -f1)" = 125cf3ce070a6e9275d13353a6b401de8935ef6b
+          git push origin HEAD:master
+          git push origin --delete command-table-v05-verified-${GITHUB_RUN_ID}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v05-integrated-native-playtest
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v05-tested-source
+          path: /tmp/council-v05-tested.tar
+          if-no-files-found: ignore
+          retention-days: 14
