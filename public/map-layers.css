@@ -1,0 +1,76 @@
+/* v0.6 map layers: border hierarchy, level-of-detail counters, battles and decorative effects.
+   Kept separate from style.css. Every stroke is screen-constant (non-scaling). */
+.atlas-v6 .province:not(.selected):not(.destination):not(.neighbor){stroke:transparent}
+.coast-shelf{fill:none;stroke:#a9cfc6;stroke-opacity:.16;stroke-width:5;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.coastline{fill:none;stroke:#0c1b21;stroke-opacity:.85;stroke-width:1.05;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.province-borders path{fill:none;stroke:#f3ead0;stroke-opacity:.36;stroke-width:.6;stroke-dasharray:2.5 2;vector-effect:non-scaling-stroke}
+.atlas-v6[data-lod=far] .province-borders path{stroke-opacity:.2;stroke-dasharray:none}
+.country-borders path{fill:none;stroke:#10232b;stroke-opacity:.92;stroke-width:1.7;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.atlas-v6[data-lod=near] .country-borders path{stroke-width:2.2}
+.country-name{font:600 12.5px var(--serif,Georgia,serif);letter-spacing:2.6px;text-anchor:middle;dominant-baseline:central;fill:#fbf1d6;fill-opacity:.9;paint-order:stroke;stroke:#10252d;stroke-width:3.2;stroke-linejoin:round;stroke-opacity:.85}
+.counter-leader{fill:none;stroke:#f3e2b5;stroke-opacity:.7;stroke-width:1;vector-effect:non-scaling-stroke}
+.map-counter.counter-merged{display:none}
+.map-cluster .counter-body{fill:#172b34;stroke-width:1.6}
+.map-cluster:hover .counter-body,.map-cluster:focus .counter-body{fill:#233d48}
+.map-cluster:focus{outline:none}.map-cluster:focus .counter-body{stroke:#ffe1a0}
+.map-cluster.owned .counter-body{stroke-width:2}
+.cluster-badge rect{fill:#d8b46a;stroke:#132831;stroke-width:1}
+.cluster-badge text{font:700 8.5px var(--sans,system-ui,sans-serif);fill:#132831;text-anchor:middle;dominant-baseline:central}
+.moving-army.engaged{display:none}
+/* Country view: small foreign columns keep their arrow; their numbers return when zoomed in. */
+.atlas-v6[data-lod=far] .moving-army.minor text{display:none}
+.industry-pips{pointer-events:none}.industry-pips rect{fill:#e9d29c;stroke:#132b34;stroke-width:1}.industry-rising{fill:#a9e0a0;stroke:#132b34;stroke-width:.8}
+/* Battle in progress: attacker | crossed swords | defender. */
+.battle-counter{cursor:pointer}
+.battle-counter:focus{outline:none}.battle-counter:focus .battle-body{stroke:#ffe1a0}
+.battle-body{fill:#3a1714;stroke:#f08a64;stroke-width:1.4}
+.battle-stripe{pointer-events:none}
+.battle-name{display:none;font:11px var(--serif,Georgia,serif);fill:#ffe3cf;text-anchor:middle;paint-order:stroke;stroke:#2a110e;stroke-width:3;stroke-linejoin:round;pointer-events:none}
+.battle-counter.named .battle-name{display:inline}
+.battle-value{font:750 12px var(--sans,system-ui,sans-serif);fill:#fff0cd;text-anchor:middle;dominant-baseline:central;pointer-events:none}
+.battle-swords{fill:none;stroke:#ffd9a0;stroke-width:1.7;stroke-linecap:round;pointer-events:none}
+.battle-pulse{fill:none;stroke:#ff8a63;stroke-width:1.5;opacity:.55;transform-box:fill-box;transform-origin:center;animation:battle-pulse 1.4s ease-out infinite}
+.battle-counter.battle-hit .battle-body{animation:battle-hit .5s ease-out 2}
+.round-loss{font:800 11px var(--sans,system-ui,sans-serif);fill:#ff9a7a;text-anchor:middle;paint-order:stroke;stroke:#1b0d0b;stroke-width:2.5;animation:round-loss 1.2s ease-out forwards}
+@keyframes battle-pulse{from{transform:scale(1);opacity:.75}to{transform:scale(1.35,1.9);opacity:0}}
+@keyframes battle-hit{0%{fill:#b3371f}100%{fill:#3a1714}}
+@keyframes round-loss{from{transform:translateY(4px);opacity:1}to{transform:translateY(-8px);opacity:0}}
+/* Decorative map effects (atlas.effect). Base styles are the static reduced-motion highlight. */
+.map-effects{pointer-events:none}
+.fx-ring{fill:none;stroke-width:2.2;transform-box:fill-box;transform-origin:center;animation:fx-ring 1.9s ease-out forwards}
+.fx-ring.fx-late{animation-delay:.35s;opacity:0}
+.fx-industry-up .fx-ring{stroke:#e7c677}
+.fx-industry-up .fx-icon{fill:#f2d9a0;stroke:#2a1f0e;stroke-width:.8}
+.fx-disc{fill:#15303a;stroke:#e7c677;stroke-width:1.6}.fx-industry-down .fx-disc{fill:#2d1512;stroke:#e0553b}
+.fx-rise{animation:fx-rise 2.2s ease-out forwards}.fx-burst{transform-box:fill-box;transform-origin:center;animation:fx-pop 2.2s ease-out forwards}
+.fx-industry-down .fx-ring{stroke:#e0553b}
+.fx-smoke{fill:#6d5b55;opacity:.5;transform-box:fill-box;transform-origin:center;animation:fx-smoke 2.1s ease-out forwards}
+.fx-crack{fill:none;stroke:#ff6b4f;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;animation:fx-fade 2.1s ease-in forwards}
+.fx-level{font:800 11px var(--sans,system-ui,sans-serif);text-anchor:middle;paint-order:stroke;stroke:#10232b;stroke-width:3;fill:#f6dfa3;animation:fx-fade 2.1s ease-in forwards}
+.fx-industry-down .fx-level{fill:#ff9a82}
+.fx-fill{fill-opacity:.55;stroke:none;animation:fx-fill 2.2s ease-out forwards}
+.fx-outline{fill:none;stroke-width:3.2;stroke-linejoin:round;vector-effect:non-scaling-stroke;animation:fx-fade 2.2s ease-in forwards}
+.fx-captured-ring .fx-ring{stroke-width:3}.fx-captured-ring .fx-shadow{stroke:#10232b;stroke-width:6;stroke-opacity:.6}
+.fx-glow{fill:none;stroke-width:7;stroke-opacity:.35;stroke-linejoin:round;vector-effect:non-scaling-stroke;animation:fx-glow 2.2s ease-in-out forwards}
+.fx-glow-core{fill:none;stroke:#fff3c8;stroke-width:1.6;stroke-linejoin:round;vector-effect:non-scaling-stroke;animation:fx-glow 2.2s ease-in-out forwards}
+.fx-link{fill:none;stroke:#f6d77f;stroke-width:1.8;stroke-dasharray:6 5;vector-effect:non-scaling-stroke;animation:fx-link 2.2s linear forwards}
+.fx-front{fill:none;stroke-width:4;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.fx-war .fx-front{stroke:#ff4a33;animation:fx-war 2.2s ease-out forwards}
+.fx-peace .fx-front{stroke:#fbfaf3;animation:fx-peace 2.2s ease-out forwards}
+.fx-ash{fill:#171513;fill-opacity:.5;stroke:none;animation:fx-ash 2.2s ease-in-out forwards}
+.fx-fade-border{fill:none;stroke-width:3;vector-effect:non-scaling-stroke;animation:fx-fade 2.2s ease-in forwards}
+@keyframes fx-ring{from{transform:scale(.35);opacity:1}to{transform:scale(1.9);opacity:0}}
+@keyframes fx-rise{0%{transform:translateY(10px);opacity:0}20%{transform:translateY(0);opacity:1}80%{opacity:1}100%{transform:translateY(-8px);opacity:0}}
+@keyframes fx-pop{0%{transform:scale(.3);opacity:0}15%{transform:scale(1.15);opacity:1}25%{transform:scale(1)}80%{opacity:1}100%{opacity:0}}
+@keyframes fx-smoke{from{transform:scale(.4);opacity:.8}to{transform:scale(2.1) translateY(-4px);opacity:0}}
+@keyframes fx-fade{0%,55%{opacity:1}100%{opacity:0}}
+@keyframes fx-fill{0%{fill-opacity:.2}15%{fill-opacity:.8}100%{fill-opacity:0}}
+@keyframes fx-glow{0%{stroke-opacity:0}30%,70%{stroke-opacity:.8}100%{stroke-opacity:0}}
+@keyframes fx-link{from{stroke-dashoffset:44;opacity:1}80%{opacity:1}to{stroke-dashoffset:0;opacity:0}}
+@keyframes fx-war{0%,30%,60%{stroke-opacity:1;stroke-width:5}15%,45%{stroke-opacity:.25}100%{stroke-opacity:0;stroke-width:2}}
+@keyframes fx-peace{0%{stroke-opacity:.95}100%{stroke-opacity:0}}
+@keyframes fx-ash{0%{fill-opacity:0}35%{fill-opacity:.6}100%{fill-opacity:0}}
+/* Reduced motion: no pulse or travel; effects are a brief static highlight. */
+.map-effect.still *,.map-effect.still{animation:none!important}
+.map-effect.still .fx-ring.fx-late,.map-effect.still .fx-smoke{display:none}
+@media(prefers-reduced-motion:reduce){.battle-pulse,.round-loss,.battle-counter.battle-hit .battle-body{animation:none!important}.battle-pulse{opacity:.5}}

@@ -258,6 +258,10 @@ def main():
                 page.locator('#fill-bots').click()
                 page.locator('#start-match').click()
                 expect(page.locator('#phase')).to_have_text('IN SESSION')
+                # World view aggregates each contiguous holding; clicking the merged counter zooms in.
+                page.locator('#map .map-cluster[data-cluster*="west-us"]').click()
+                expect(page.locator('#marker-west-us')).to_be_visible()
+                page.locator('#zoom-out').click()  # keep neighbouring Mexico in view as well
                 page.locator('#marker-west-us').click()
                 expect(page.locator('#source')).to_have_value('west-us')
                 page.locator('[data-fraction="1"]').click()

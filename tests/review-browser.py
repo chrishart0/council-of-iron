@@ -66,6 +66,8 @@ def main():
                     expect(page.locator('#review-map-troops-'+province)).to_have_text(str(expected))
             assert page.locator('#review-map-province-mexico').get_attribute('fill')!=opening_fill
             page.locator('[data-aar-map="europe"]').click()
+            # Neighbouring same-owner counters may be merged at this width; one zoom step separates them.
+            page.locator('[data-aar-map="in"]').click();expect(page.locator('#review-map-marker-low-countries')).to_be_visible()
             page.locator('#review-map-marker-low-countries').press('Enter')
             expect(page.locator('#replay-inspector')).to_contain_text('Netherlands')
             expect(page.locator('#replay-inspector')).to_contain_text('Incoming waves')

@@ -7,6 +7,113 @@ from playwright.sync_api import sync_playwright,expect
 from browser_helpers import load_bridge
 ROOT=Path(__file__).resolve().parents[1]
 
+# Reads what the live map actually shows and compares it with the public room state.
+MAP_AUDIT='''async room => {
+  const state=await (await fetch(`/api/games/${room}`)).json();
+  const svg=document.querySelector('#map'),box=svg.getBoundingClientRect(),troops=new Map(state.provinces.map(p=>[p.id,p]));
+  const shown=e=>getComputedStyle(e).display!=='none' && e.getBoundingClientRect().width>0;
+  const units=[];
+  for(const e of svg.querySelectorAll('.map-counter,.battle-counter')){
+    if(!shown(e))continue;
+    const body=e.querySelector('.counter-body,.battle-body').getBoundingClientRect();
+    const members=e.dataset.cluster?e.dataset.cluster.split(','):[e.dataset.province];
+    units.push({members,total:e.dataset.cluster?Number(e.dataset.total):e.classList.contains('battle-counter')?Number(e.dataset.defend):Number(e.querySelector('.counter-value').textContent),
+      owners:[...new Set(members.map(id=>troops.get(id).owner||null))],battle:e.classList.contains('battle-counter'),
+      rect:{x:body.x,y:body.y,w:body.width,h:body.height},onScreen:body.right>box.left&&body.left<box.right&&body.bottom>box.top&&body.top<box.bottom});
+  }
+  const count=new Map();for(const u of units)for(const id of u.members)count.set(id,(count.get(id)||0)+1);
+  const overlaps=[];
+  for(let i=0;i<units.length;i++)for(let j=i+1;j<units.length;j++){const a=units[i].rect,b=units[j].rect;
+    if(units[i].onScreen&&units[j].onScreen&&a.x<b.x+b.w-.5&&b.x<a.x+a.w-.5&&a.y<b.y+b.h-.5&&b.y<a.y+a.h-.5)overlaps.push(units[i].members[0]+'/'+units[j].members[0]);}
+  const engaged=id=>state.armies.filter(a=>a.engaged&&a.to===id).reduce((n,a)=>n+a.amount,0);
+  return {lod:svg.dataset.lod,clusters:units.filter(u=>u.members.length>1).length,
+    badSums:units.filter(u=>u.total!==u.members.reduce((n,id)=>n+troops.get(id).troops,0)).map(u=>u.members.join()),
+    mixedOwners:units.filter(u=>u.owners.length>1).map(u=>u.members.join()),
+    missing:state.provinces.filter(p=>count.get(p.id)!==1).map(p=>p.id),overlaps,
+    battles:state.battles.map(b=>b.province),
+    battleMarks:units.filter(u=>u.battle).map(u=>({id:u.members[0],attack:Number(svg.querySelector(`.battle-counter[data-province="${u.members[0]}"]`).dataset.attack),expected:engaged(u.members[0])})),
+    mergedBattles:units.filter(u=>u.members.length>1&&u.members.some(id=>state.battles.some(b=>b.province===id))).length};
+}'''
+
+audit=[]
+def audit_zooms(page,room,label,views):
+    levels=set()
+    for name,steps in views:
+        page.locator('#world-view' if name=='world' else '#europe-view').click()
+        for _ in range(steps):page.locator('#zoom-out').click()
+        page.wait_for_timeout(120)
+        result=page.evaluate(MAP_AUDIT,room);levels.add(result['lod'])
+        where=f'{label} {name}+{steps} ({result["lod"]})'
+        audit.append({'view':where,'mergedCounters':result['clusters'],'battleMarkers':len(result['battleMarks'])})
+        assert not result['badSums'],(where,result['badSums'])
+        assert not result['mixedOwners'],(where,result['mixedOwners'])
+        assert not result['missing'],(where,result['missing'])
+        assert not result['overlaps'],(where,result['overlaps'])
+        assert result['mergedBattles']==0,where
+        assert sorted(m['id'] for m in result['battleMarks'])==sorted(result['battles']),(where,result)
+        assert all(m['attack']==m['expected'] and m['attack']>0 for m in result['battleMarks']),(where,result['battleMarks'])
+    return levels
+
+def map_checks(page,server,report,capture):
+    views=[('world',0),('europe',0),('europe',1),('europe',2),('europe',3)]
+    page.locator('#back').click();page.locator('[data-room="ui-fixture"][data-resume]').click()
+    expect(page.locator('#commander-title')).to_have_text('British Empire')
+    levels=set()
+    for w,h in [(1366,768),(1920,1080),(390,844)]:
+        page.set_viewport_size({'width':w,'height':h});page.wait_for_timeout(150)
+        levels|=audit_zooms(page,'ui-fixture',f'fixture {w}',views)
+    assert levels=={'far','mid','near'},levels
+    assert any(a['mergedCounters'] for a in audit if '(far)' in a['view']) and any(a['mergedCounters'] for a in audit if '(mid)' in a['view']),audit
+    report['mapAudit']=audit
+    page.set_viewport_size({'width':1366,'height':768});page.locator('#world-view').click();page.wait_for_timeout(100)
+    before=float(page.locator('#map').get_attribute('viewBox').split()[2])
+    cluster=page.locator('#map .map-cluster').first
+    members=cluster.get_attribute('data-cluster').split(',');cluster.click();page.wait_for_timeout(150)
+    assert float(page.locator('#map').get_attribute('viewBox').split()[2])<before
+    report['assertions'].append('Map LOD: country, merged and per-province counters at 1366×768, 1920×1080 and 390px; every province is counted exactly once, merged totals equal the summed public garrisons, owners never mix, visible counters never overlap, and a merged counter zooms in when clicked.')
+    page.locator('#back').click();page.locator('[data-room="ui-war"][data-resume]').click()
+    expect(page.locator('#map .battle-counter')).to_have_count(2)
+    for w,h in [(1366,768),(390,844)]:
+        page.set_viewport_size({'width':w,'height':h});page.wait_for_timeout(150)
+        audit_zooms(page,'ui-war',f'war {w}',views)
+    page.set_viewport_size({'width':1366,'height':768});page.locator('#europe-view').click()
+    server.stdin.write('war 56\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==56
+    expect(page.locator('#map .round-loss').first).to_be_attached(timeout=6000)
+    capture('13-battle-round.png',600)
+    report['assertions'].append('Real phased battles show a persistent attacker-vs-defender clash marker at every zoom (never merged), matching engaged armies and garrison, and flash the losses of a newly adjudicated round.')
+
+EFFECT_CHECK='''async () => {
+  const {Atlas,MAP_EFFECTS}=await import('/atlas.js');
+  const map=await (await fetch('/map.json')).json(),state=await (await fetch('/api/games/ui-war')).json();
+  const host=document.createElement('div');host.style.cssText='position:fixed;left:0;top:0;width:640px;height:340px';
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.id='effect-test-map';svg.setAttribute('viewBox','0 0 1280 680');svg.style.cssText='width:640px;height:340px';
+  host.append(svg);document.body.append(host);
+  const atlas=new Atlas(svg,map,()=>{});atlas.update(state,null,null);
+  const good=[['industry_up',{province:'ruhr',level:3}],['industry_down',{province:'ruhr',level:2}],['captured',{province:'alpine-france',owner:'germany'}],
+    ['alliance',{countries:['britain','france']}],['war',{from:['germany'],to:['france']}],['peace',{from:['usa'],to:['japan']}],['eliminated',{country:'qing'}]];
+  const bad=[[],['nope',{}],['industry_up'],['industry_up',null],['industry_up',{province:'atlantis'}],['captured',{province:'ruhr',owner:'<b>x</b>'}],
+    ['alliance',{countries:'britain'}],['alliance',{countries:['britain']}],['war',{from:['x'],to:['y']}],['peace',{from:null,to:[{}]}],['eliminated',{country:{}}],['eliminated',{country:'atlantis'}]];
+  const accepted=good.map(([k,d])=>atlas.effect(k,d));
+  let threw=false,rejected=[];
+  try{rejected=bad.map(args=>atlas.effect(...args));}catch(e){threw=true;}
+  const effects=[...svg.querySelectorAll('.map-effect')];
+  const result={kinds:[...MAP_EFFECTS],accepted,rejected,threw,count:effects.length,
+    hidden:svg.querySelector('.map-effects').getAttribute('aria-hidden'),
+    ids:[...svg.querySelectorAll('.map-effects [id]')].length,
+    leaked:document.querySelectorAll('#map .map-effect').length,
+    still:effects.every(e=>e.classList.contains('still')),
+    animations:[...svg.querySelectorAll('.map-effect *')].map(e=>getComputedStyle(e).animationName).filter(n=>n!=='none').length};
+  atlas.destroy();host.remove();return result;
+}'''
+
+def effect_checks(page,report):
+    result=page.evaluate(EFFECT_CHECK)
+    assert result['kinds']==['industry_up','industry_down','captured','alliance','war','peace','eliminated'],result
+    assert all(result['accepted']),result;assert not any(result['rejected']),result;assert not result['threw']
+    assert result['count']>=7 and result['hidden']=='true' and result['ids']==0 and result['leaked']==0,result
+    assert result['still'] and result['animations']==0,result
+    report['assertions'].append('atlas.effect exposes the supported kinds, draws aria-hidden effects inside its own map instance only, returns false for unknown kinds/ids/malformed data without throwing, and is a static highlight under reduced motion.')
+
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--bridge',action='store_true')
@@ -105,7 +212,9 @@ def main():
             page.locator('#replay-slider').fill('530');page.locator('[data-aar-map="europe"]').click();capture('10-replay.png')
             ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
             report['assertions'].append('After-action standards identify all winning members; exact map playback keeps separate SVG IDs and no live command surface.')
+            map_checks(page,server,report,capture)
             page.emulate_media(reduced_motion='reduce');assert page.evaluate('getComputedStyle(document.querySelector("#battle-signal")).animationName')=='none'
+            if not args.bridge:effect_checks(page,report)  # dynamic module import needs native HTTP
             assert not report['pageErrors'],report['pageErrors'];report['status']='passed'
             browser.close()
         if args.gif:
