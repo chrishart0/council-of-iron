@@ -365,8 +365,8 @@ def relation_checks(page,server,report,capture):
     expect(page.locator('#ally-chip')).to_have_attribute('data-state','independent')
     rows=page.locator('#lb-rows .lb-row');assert rows.count()>=5
     for i in range(rows.count()):
-        row=rows.nth(i);cid=row.get_attribute('data-id')
-        expected='you' if cid=='britain' else 'enemy' if at_war('britain',cid) else 'neutral'
+        row=rows.nth(i);cid=row.get_attribute('data-id');countries=row.get_attribute('data-countries').split(',')
+        expected='you' if 'britain' in countries else 'enemy' if any(at_war('britain',c) for c in countries) else 'neutral'
         assert row.get_attribute('data-relation')==expected,(cid,row.get_attribute('data-relation'))
         assert row.locator('.lb-rel').text_content()==('⚔' if expected=='enemy' else '')
     check_layout(page,'1366x768 war room')
@@ -415,7 +415,7 @@ def relation_checks(page,server,report,capture):
     expect(page.locator('#lb-rows .lb-row[data-band="active"]').first).to_be_visible()
     colors=page.evaluate(BAND_COLORS,side)
     assert colors['rows'] and all(c==colors['expected'][s] for _,s,c in colors['rows']),colors  # every band = the shared allianceColors
-    assert {r[0] for r in colors['rows'] if r[1]==side}<={'britain','qing'},colors
+    assert {r[0] for r in colors['rows'] if r[1]==side}=={'britain','qing',side},colors  # the alliance row and both members
     assert colors['feed'] and colors['feed'][-1]==[side,colors['expected'][side]],colors
     assert page.locator('b[onclick]').count()==0
     expect(page.locator('#feed-list [data-kind="alliance"]').last).to_contain_text(HOSTILE_ALLIANCE)
@@ -658,17 +658,31 @@ def main():
                 expect(page.locator('#leaderboard')).to_be_visible();check_layout(page,f'{w}x{h} leaderboard')
                 rows=page.locator('#lb-rows .lb-row')
                 assert rows.count()>=5
+                groups=0
                 for i in range(rows.count()):
-                    row=rows.nth(i);country=row.get_attribute('data-id')
-                    assert int(row.get_attribute('data-troops'))==expected_troops(country),country
-                    assert int(row.get_attribute('data-provinces'))==sum(1 for p in observed['provinces'] if p['owner']==country)
+                    # Teams view: an alliance row totals its nested members; every row sums its countries.
+                    row=rows.nth(i);countries=row.get_attribute('data-countries').split(',')
+                    assert int(row.get_attribute('data-troops'))==sum(expected_troops(c) for c in countries),countries
+                    assert int(row.get_attribute('data-provinces'))==sum(1 for p in observed['provinces'] if p['owner'] in countries)
+                    if row.get_attribute('data-kind')=='group':
+                        groups+=1
+                        nested=[rows.nth(j) for j in range(i+1,rows.count()) if rows.nth(j).get_attribute('data-kind')=='member'][:len(countries)]
+                        assert sorted(r.get_attribute('data-id') for r in nested)==sorted(countries)
+                        assert abs(sum(float(r.get_attribute('data-share')) for r in nested)-1)<1e-9
+                        troops=[int(r.get_attribute('data-troops')) for r in nested];assert troops==sorted(troops,reverse=True)
+                assert groups==3,groups  # three coalitions in the recorded position
             expect(page.locator('#lb-rows .lb-row.you')).to_contain_text('Britain')
-            page.locator('[data-lb-mode="alliances"]').click()
-            expect(page.locator('#lb-rows .lb-row').first).to_contain_text('Atlantic Accord')
-            page.screenshot(path=str(out/'14-leaderboard-alliances.png'))
-            page.locator('[data-lb-mode="players"]').click()
-            page.screenshot(path=str(out/'15-leaderboard-1920.png'))
-            report['assertions'].append('Leaderboard heads the right rail at 1366×768 and 1920×1080 without overlapping any overlay; each row matches garrisons + armies from the public observation; Players/Alliances toggle works.')
+            expect(page.locator('#lb-rows .lb-row').first).to_contain_text('Atlantic Accord')  # teams view is the default
+            page.screenshot(path=str(out/'14-leaderboard-teams.png'))
+            accord=page.locator('#lb-rows .lb-group').first;toggle=accord.locator('.lb-expand')
+            members=page.locator('#lb-rows .lb-member').count()
+            toggle.focus();page.keyboard.press('Enter');expect(toggle).to_have_attribute('aria-expanded','false')
+            assert page.locator('#lb-rows .lb-member').count()==members-len(accord.get_attribute('data-countries').split(','))
+            page.keyboard.press('Enter');expect(page.locator('#lb-rows .lb-group').first.locator('.lb-expand')).to_have_attribute('aria-expanded','true')
+            page.locator('[data-lb-mode="players"]').click();expect(page.locator('#lb-rows .lb-group')).to_have_count(0)
+            page.screenshot(path=str(out/'15-leaderboard-players-1920.png'))
+            page.locator('[data-lb-mode="teams"]').click()
+            report['assertions'].append('Leaderboard heads the right rail at 1366×768 and 1920×1080 without overlapping any overlay. Teams view (default): each alliance row equals the sum of its nested members, which are sorted by troops with shares summing to 100%; every row matches garrisons + armies from the public observation; groups collapse and expand by keyboard; the flat Players toggle works.')
             page.locator('#council-label').click()
             page.locator('[data-country-focus="germany"]').focus();page.wait_for_timeout(850)
             expect(page.locator('[data-country-focus="germany"]')).to_be_focused()

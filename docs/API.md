@@ -63,6 +63,19 @@ Casualties are one shared total; no per-country kills are attributed. Private ev
 
 There is no separate endpoint: the ranking is the pure function `leaderboard(observation, { mode, you, limit })` in `public/leaderboard.js`, shared by the browser, CLI (`leaderboard [players|alliances]`) and MCP (`leaderboard`). It uses only public observation fields, and every army is already public. Rows: `rank`, `id`, `kind` (`country` or `alliance`), `name` (alliances only; player text), `countries`, `provinces`, `share` (of all provinces), `troops` (garrisons + all own armies on the map, including engaged and returning), `eliminated`, and `you` on the viewer's row. Rank by provinces, then troops, then ID. With `limit`, the viewer's row is appended with its real rank when it is outside the top rows. Territory is not the victory condition; industry is.
 
+v0.7 adds `mode: 'teams'` (the browser default, and the CLI/MCP default): top-level entries are alliances and independent countries, ranked as before. An alliance row is the total of its members and nests them:
+
+```json
+{ "rank": 1, "kind": "alliance", "id": "coalition-1", "name": "Atlantic Accord", "provinces": 48, "share": 0.608, "troops": 1532,
+  "countries": ["france", "britain", "usa"],
+  "members": [
+    { "id": "france",  "kind": "country", "troops": 595, "provinces": 17, "share": 0.215, "shareOfAlliance": 0.388 },
+    { "id": "britain", "kind": "country", "troops": 544, "provinces": 18, "share": 0.228, "shareOfAlliance": 0.355, "you": true },
+    { "id": "usa",     "kind": "country", "troops": 393, "provinces": 13, "share": 0.165, "shareOfAlliance": 0.257 } ] }
+```
+
+`troops` and `provinces` of an alliance equal the sums of its members (troops include marching, returning and engaged armies); members are sorted by troops; `shareOfAlliance` is each member's share of the alliance troops and sums to 1. An alliance inside its public activation delay appears as `forming: true` (with `activateAt`) and its members are not repeated as independents. `players` stays flat; `alliances` sums coalitions without nesting.
+
 v0.7 adds public relations to every row: `atWarWith` (sorted country IDs the row's countries are hostile to) and, when a viewer is given, `relation` = `you`, `ally` (same coalition side), `enemy` or `neutral`. Relations come from the shared `public/relations.js` (`relationsOf`, `atWar`, `allianceColors`, `formingAlliances`), the same module the atlas uses: with formal war rules an enemy is a pair in `observation.wars`; in legacy rooms (`rules.warRequired: false`) every non-ally is hostile, exactly as the engine allows attacks. `public/leaderboard.js` also exports `warsOf(observation)` → active formal wars grouped into fronts between sides: `[{ id, sides: [{ side, name, countries }, { … }], pairs: [[a, b], …] }]`; `name` is the coalition name (player text) or `null` for an independent country, and the union of `pairs` is exactly `observation.wars` (empty in legacy rooms). CLI `wars` and MCP `wars` return `{ tick, status, you, warRequired, wars: warsOf(view), relations: relationsOf(view, you) | null }`. Nothing here is beyond what spectators already receive.
 
 ## Plan without committing

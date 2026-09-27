@@ -68,9 +68,9 @@ The adapter is dependency-free, and its supported subset is exercised by a real 
 
 ## Leaderboard
 
-MCP `leaderboard` (`mode`: `players` or `alliances`, optional `limit` up to 8), CLI `leaderboard [players|alliances]` and `CouncilClient.leaderboard()` return the same ranking every human sees on the map. It is computed by the shared `public/leaderboard.js` from a public observation: provinces held and share, then total troops (garrisons + every army of that country on the map), then ID. Your own row is always included. It is orientation only: victory depends on industry, not territory.
+MCP `leaderboard` (`mode`: `teams`, `players` or `alliances`, optional `limit` up to 8), CLI `leaderboard [teams|players|alliances]` and `CouncilClient.leaderboard()` return the same ranking every human sees on the map. It is computed by the shared `public/leaderboard.js` from a public observation: provinces held and share, then total troops (garrisons + every army of that country on the map), then ID. Your own row is always included. It is orientation only: victory depends on industry, not territory.
 
-Rows also carry `atWarWith` and, for your own view, `relation` (`you`, `ally`, `enemy`, `neutral`). MCP `wars`, CLI `wars` and `CouncilClient.wars()` list the active wars as side-vs-side fronts with their country pairs, plus your own `allies`, `enemies` and `neutral` countries: the same data the browser shows in its HUD war chip and Council → Wars view. Public data only. A war is a precondition for attacking another country's provinces when `rules.warRequired` is true.
+The default `teams` mode returns one total row per alliance with its members nested (`members[]` with `shareOfAlliance`), independents as single rows, and forming alliances marked `forming`; `players` is flat and `alliances` sums without nesting. Rows also carry `atWarWith` and, for your own view, `relation` (`you`, `ally`, `enemy`, `neutral`). MCP `wars`, CLI `wars` and `CouncilClient.wars()` list the active wars as side-vs-side fronts with their country pairs, plus your own `allies`, `enemies` and `neutral` countries: the same data the browser shows in its HUD war chip and Council → Wars view. Public data only. A war is a precondition for attacking another country's provinces when `rules.warRequired` is true.
 
 ## After the match
 

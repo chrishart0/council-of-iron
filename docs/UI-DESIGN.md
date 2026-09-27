@@ -42,6 +42,10 @@ compact strip, narrower rail, order card up to full height on the left.
 - **Map controls**: bottom-left, beside the card; +/− hidden on coarse pointers (pinch), World/Europe/Home stay. The atlas key (legend and Political/Diplomacy toggle) sits beside them; M toggles the mode.
 - **Camera insets**: `focus`/`home`/`fit` calls pass `{insets:{top,right,bottom,left}}` as an optional trailing argument describing the covered edges; the current atlas ignores it.
 
+## Team totals (user request: "how many troops each team has in total")
+
+The leaderboard defaults to **Teams**: one row per alliance (colour swatch, name as text, total land share and troops) with its members nested underneath (standard, name, a bar and percentage for their share of the alliance's troops, land, troops), sorted by strength; independents are single rows. Groups collapse to their total with a keyboard-accessible ▾/▸ button (`aria-expanded`); forming alliances are dashed and marked "forming"; the viewer's own row stays highlighted inside its group. **Players** keeps the flat list. The same `leaderboard(observation, {mode:'teams'})` feeds the CLI and MCP.
+
 ## Expand map and installable app (user report: "I don't see how to put the replay map into fullscreen")
 
 - Every map has a thumb-reachable **⤢ Expand** control: live and spectator maps at the top of the camera cluster, the replay map in its bottom-right corner (a menu entry, "Expand map (full screen)", is never hidden). `public/expand.js` toggles a CSS pseudo-fullscreen (`position:fixed; inset:0`, safe-area padding, page scroll locked) that needs no Fullscreen API, which iPhone Safari lacks for non-video elements. Where the API exists it also requests real fullscreen (errors ignored) and leaving it through the browser leaves the pseudo state.

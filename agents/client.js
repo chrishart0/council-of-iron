@@ -51,7 +51,7 @@ export class CouncilClient {
   /** Public World feed (world chat + engine headlines), oldest first. Reply with chat on channel world. */
   feed(after=0,limit=100) { return this.request(this.gamePath(`/feed?${new URLSearchParams({after,limit})}`)); }
   /** Same ranking as the browser panel, computed from a public observation (no event backlog). */
-  async leaderboard(mode='players',limit=Infinity) {
+  async leaderboard(mode='teams',limit=Infinity) {
     const view=await this.observe(Number.MAX_SAFE_INTEGER);
     return {tick:view.tick,status:view.status,you:view.you,...leaderboard(view,{mode,you:view.you,limit})};
   }

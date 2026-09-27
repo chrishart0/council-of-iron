@@ -258,7 +258,7 @@ test('World feed is one public, cursor-based stream for HTTP, CLI and MCP with e
   assert.equal(out[2].error.code,-32602);
   // Leaderboard: one shared function over the public observation, same for CLI and MCP.
   const {leaderboard}=await import('../public/leaderboard.js');
-  const expected=leaderboard((await f.call(`/api/games/${id}`)).data,{you:'britain',limit:8}).rows;
+  const expected=leaderboard((await f.call(`/api/games/${id}`)).data,{mode:'teams',you:'britain',limit:8}).rows;
   const board=await subprocess('agents/cli.js',['leaderboard'],env);assert.equal(board.code,0,board.stderr);
   assert.deepEqual(JSON.parse(board.stdout).rows,expected);assert.ok(expected.find(r=>r.id==='britain').you);
   const lb=await subprocess('agents/mcp.js',[],env,[input.split('\n')[0],input.split('\n')[1],

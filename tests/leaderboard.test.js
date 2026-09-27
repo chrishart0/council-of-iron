@@ -68,3 +68,27 @@ test('rows carry public relations from relations.js; wars group into side-vs-sid
   assert.equal(leaderboard(legacy, { you: 'britain' }).rows.find(r => r.id === 'france').relation, 'enemy');
   assert.deepEqual(warsOf(legacy), []);
 });
+test('teams: one total row per alliance with nested members; totals include every army; shares sum to 100%', async () => {
+  const sided = { ...view, rules: { warRequired: true }, wars: ['britain:germany'], proposals: [],
+    players: view.players.map(p => ({ ...p, side: view.sides.find(s => s.members.includes(p.id)).id })) };
+  const b = leaderboard(sided, { mode: 'teams', you: 'britain' });
+  assert.deepEqual(b.rows.map(r => [r.rank, r.id, r.kind, r.provinces, r.troops]),
+    [[1, 'coalition-1', 'alliance', 3, 47], [2, 'germany', 'country', 2, 31], [3, 'france', 'country', 2, 4], [4, 'japan', 'country', 0, 0]]);
+  const accord = b.rows[0];
+  assert.equal(accord.name, '<b>Accord</b>'); assert.equal(accord.you, true); assert.equal(accord.relation, 'you');
+  // Members sorted by strength; totals are the member sums, including engaged and returning armies.
+  assert.deepEqual(accord.members.map(m => [m.id, m.troops, m.provinces, m.relation]), [['britain', 30, 1, 'you'], ['usa', 17, 2, 'ally']]);
+  assert.equal(accord.troops, accord.members.reduce((n, m) => n + m.troops, 0));
+  assert.equal(accord.provinces, accord.members.reduce((n, m) => n + m.provinces, 0));
+  assert.equal(accord.members.find(m => m.id === 'usa').troops, 5 + 4 + 6 + 2, 'garrisons + engaged + returning armies');
+  assert.ok(Math.abs(accord.members.reduce((n, m) => n + m.shareOfAlliance, 0) - 1) < 1e-9);
+  assert.equal(accord.members[0].shareOfAlliance, 30 / 47);
+  assert.deepEqual(accord.atWarWith, ['germany']); assert.equal(b.rows[1].relation, 'enemy');
+  assert.equal(b.rows[1].members, undefined, 'independents are single rows');
+  // A coalition inside its activation delay is grouped as forming, with the same totals rule.
+  const forming = { ...sided, proposals: [{ id: 'p7', status: 'pending', name: 'New Pact', roster: ['france', 'germany'], activateAt: 90, coalition: null }] };
+  const f = leaderboard(forming, { mode: 'teams' }).rows.find(r => r.id === 'p7');
+  assert.equal(f.forming, true); assert.equal(f.troops, 31 + 4); assert.deepEqual(f.countries, ['germany', 'france']);
+  assert.ok(!leaderboard(forming, { mode: 'teams' }).rows.some(r => r.id === 'france' || r.id === 'germany'), 'forming members are nested, not repeated');
+  assert.throws(() => leaderboard(view, { mode: 'nope' }), /teams, players or alliances/);
+});

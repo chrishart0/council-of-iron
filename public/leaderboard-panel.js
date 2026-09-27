@@ -1,6 +1,8 @@
-/** Always-visible map leaderboard (v0.6, v0.7 relations). Presentation only; ranking and
- * relations come from leaderboard.js. Rows are fixed slots updated in place (textContent), so
- * polling never flickers or reflows. Alliance names are player text: textContent only.
+/** Always-visible map leaderboard (v0.6; v0.7 teams and relations). Presentation only: ranking,
+ * totals and relations come from leaderboard.js / relations.js. Rows are slots updated in place
+ * (textContent), so polling never flickers. Alliance names are player text: textContent only.
+ * Teams view (default): one total row per alliance (colour swatch + name) with its members nested
+ * underneath, each with a bar for its share of the alliance's troops; groups collapse to their total.
  */
 import { leaderboard, warsOf } from './leaderboard.js';
 import { allianceColors } from './relations.js';
@@ -10,17 +12,25 @@ const ARROW_MS = 4000;
 const node = (tag, className) => { const e = document.createElement(tag); e.className = className; return e; };
 const setText = (element, value) => { if (element.textContent !== value) element.textContent = value; };
 const RELATION = { enemy: ['⚔', 'at war with you'], ally: ['⛓', 'allied with you'] };
+const percent = n => `${Math.round(n * 100)}%`;
 
 export class LeaderboardPanel {
-  /** `fronts` lists bloc-vs-bloc wars in the alliances view; `onFocus(country|null)` fires when a
-   * row is hovered or focused, so the map can light up that country's enemies and allies. */
+  /** `fronts` lists bloc-vs-bloc wars in the teams view; `onFocus(country|null)` fires when a row is
+   * hovered or focused, so the map can light up that country's enemies and allies. */
   constructor({ root, rows, toggle, summary, modes, fronts, onFocus }, names) {
     Object.assign(this, { root, list: rows, toggle, summary, modes, fronts, onFocus, names });
-    this.mode = 'players'; this.previous = new Map(); this.arrows = new Map(); this.lastMode = null;
+    this.mode = 'teams'; this.previous = new Map(); this.arrows = new Map(); this.lastMode = null; this.collapsed = new Set();
     const focusRow = event => { const li = event.target.closest?.('.lb-row'); this.onFocus?.(li ? li.dataset.focus || null : null); };
     rows.addEventListener('mouseover', focusRow); rows.addEventListener('focusin', focusRow);
     rows.addEventListener('mouseleave', () => this.onFocus?.(null));
     rows.addEventListener('focusout', event => { if (!rows.contains(event.relatedTarget)) this.onFocus?.(null); });
+    rows.addEventListener('click', event => {
+      const button = event.target.closest('.lb-expand'); if (!button) return;
+      const id = button.closest('.lb-row').dataset.id;
+      if (this.collapsed.has(id)) this.collapsed.delete(id); else this.collapsed.add(id);
+      if (this.state) this.update(this.state, this.limit);
+      this.list.querySelector(`.lb-row[data-id="${CSS.escape(id)}"] .lb-expand`)?.focus();
+    });
   }
   get open() { return this.toggle.getAttribute('aria-expanded') === 'true'; }
   setOpen(open) {
@@ -33,6 +43,7 @@ export class LeaderboardPanel {
   }
   label(row) { return row.kind === 'alliance' ? row.name : (this.names.short ?? this.names.country)(row.id); }
   update(state, limit = 5) {
+    this.state = state; this.limit = limit;
     const board = leaderboard(state, { mode: this.mode, you: state.you, limit });
     const now = Date.now(), sameMode = this.lastMode === this.mode;
     for (const row of board.rows) {
@@ -40,59 +51,80 @@ export class LeaderboardPanel {
       if (sameMode && before !== undefined && before !== row.rank) this.arrows.set(row.id, { up: row.rank < before, until: now + ARROW_MS });
     }
     this.previous = new Map(board.rows.map(r => [r.id, r.rank])); this.lastMode = this.mode;
-    // Coalitions still in their activation notice are "forming": shown dashed, distinct from active.
-    this.colors = allianceColors(state); this.forming = new Map();
+    this.colors = allianceColors(state);
+    // Players view: coalitions in their activation delay are "forming" (dashed), distinct from active.
+    this.forming = new Map();
     for (const q of state.proposals || []) if (q.status === 'pending') for (const id of q.roster) this.forming.set(id, q);
-    while (this.list.children.length < board.rows.length) this.list.append(this.slot());
-    while (this.list.children.length > board.rows.length) this.list.lastElementChild.remove();
-    board.rows.forEach((row, i) => this.fill(this.list.children[i], row, now, i, state));
+    const display = board.rows.flatMap(row => row.members
+      ? [{ row, type: 'group' }, ...(this.collapsed.has(row.id) ? [] : row.members.map(m => ({ row: m, type: 'member', group: row })))]
+      : [{ row, type: 'single' }]);
+    while (this.list.children.length < display.length) this.list.append(this.slot());
+    while (this.list.children.length > display.length) this.list.lastElementChild.remove();
+    display.forEach((item, i) => this.fill(this.list.children[i], item, now, board, state));
     const own = board.rows.find(r => r.you), lead = board.rows[0];
     const pick = own || lead;
-    setText(this.summary, pick ? `${own ? 'You' : this.label(lead)} #${pick.rank} · ${(pick.share * 100).toFixed(1)}% · ${pick.troops} troops` : '');
+    setText(this.summary, pick ? `${own ? 'You' : this.label(lead)} #${pick.rank}${own?.kind === 'alliance' ? ` (${own.name})` : ''} · ${(pick.share * 100).toFixed(1)}% · ${pick.troops} troops` : '');
     this.renderFronts(state);
     return board;
   }
   slot() {
     const li = node('li', 'lb-row'); li.tabIndex = 0;
-    li.append(node('span', 'lb-rank'), node('span', 'lb-move'), node('span', 'lb-flags'), node('span', 'lb-name'),
-      node('span', 'lb-rel'), node('span', 'lb-land'), node('span', 'lb-troops'));
+    const flags = node('span', 'lb-flags'), expand = node('button', 'lb-expand'); expand.type = 'button';
+    flags.append(expand, node('i', 'lb-swatch'), node('span', 'lb-standards'));
+    const name = node('span', 'lb-name'), bar = node('i', 'lb-bar');
+    bar.append(node('i', ''));
+    name.append(node('span', 'lb-label'), bar, node('small', 'lb-pct'));
+    li.append(node('span', 'lb-rank'), node('span', 'lb-move'), flags, name, node('span', 'lb-rel'), node('span', 'lb-land'), node('span', 'lb-troops'));
     return li;
   }
-  fill(li, row, now, index, state) {
+  fill(li, { row, type, group }, now, board, state) {
     const [rank, move, flags, name, rel, land, troops] = li.children;
-    li.classList.toggle('you', Boolean(row.you)); li.classList.toggle('eliminated', row.eliminated);
-    li.classList.toggle('detached', row.rank !== index + 1); // own row shown outside the top N
-    li.dataset.id = row.id; li.dataset.provinces = String(row.provinces); li.dataset.troops = String(row.troops);
-    li.dataset.focus = row.countries[0] || ''; li.dataset.relation = row.relation || '';
-    // Alliance band: the coalition's colour on the row edge (players view) or a swatch (alliances view).
-    const side = row.kind === 'alliance' ? row.id : state.players.find(p => p.id === row.id)?.side;
-    const alliance = side && !side.startsWith('solo:') ? state.sides.find(s => s.id === side) : null;
-    const pending = !alliance && row.kind !== 'alliance' ? this.forming.get(row.id) : null;
-    const color = alliance ? this.colors[alliance.id] : pending ? this.colors[pending.id] : null;
-    li.dataset.band = alliance ? 'active' : pending ? 'forming' : '';
-    li.dataset.side = alliance?.id || '';
+    const [expand, , standards] = flags.children, [label, bar, pct] = name.children;
+    li.className = `lb-row lb-${type}`;
+    li.classList.toggle('you', Boolean(row.you) && type !== 'group'); li.classList.toggle('your-team', type === 'group' && Boolean(row.you));
+    li.classList.toggle('eliminated', row.eliminated);
+    li.classList.toggle('detached', type !== 'member' && board.rows.indexOf(row) !== row.rank - 1); // own entry outside the top N
+    Object.assign(li.dataset, { id: row.id, kind: type, provinces: String(row.provinces), troops: String(row.troops), focus: row.countries[0] || '',
+      relation: row.relation || '', countries: row.countries.join(','), share: type === 'member' ? String(row.shareOfAlliance) : '' });
+    // Alliance colour: a band on the row edge (group, its members, and players-view rows of a member).
+    const alliance = type === 'group' ? row : group || null, pending = !alliance && this.forming.get(row.id);
+    const side = alliance ? (alliance.forming ? '' : alliance.id) : state.players.find(p => p.id === row.id)?.side;
+    const active = !alliance && side && !side.startsWith('solo:') ? state.sides.find(s => s.id === side) : null;
+    const color = alliance ? this.colors[alliance.id] : active ? this.colors[active.id] : pending ? this.colors[pending.id] : null;
+    li.dataset.band = alliance ? (alliance.forming ? 'forming' : 'active') : active ? 'active' : pending ? 'forming' : '';
+    li.dataset.side = alliance ? (alliance.forming ? '' : alliance.id) : active?.id || '';
     if (color) li.style.setProperty('--band', color); else li.style.removeProperty('--band');
-    setText(rank, String(row.rank));
-    const arrow = this.arrows.get(row.id), live = arrow && arrow.until > now;
+    setText(rank, type === 'member' ? '' : String(row.rank));
+    const arrow = type !== 'member' && this.arrows.get(row.id), live = arrow && arrow.until > now;
     setText(move, live ? (arrow.up ? '▲' : '▼') : '');
     move.className = `lb-move${live ? (arrow.up ? ' up' : ' down') : ''}`;
     move.setAttribute('aria-label', live ? (arrow.up ? 'rank up' : 'rank down') : '');
-    const key = row.countries.slice(0, 3).join(',');
-    if (flags.dataset.key !== key) { flags.dataset.key = key; flags.innerHTML = row.countries.slice(0, 3).map(insignia).join(''); } // authored SVG only
-    setText(name, this.label(row) + (row.eliminated ? ' · fallen' : '')); // alliance name is player text
+    expand.hidden = type !== 'group';
+    if (type === 'group') {
+      const open = !this.collapsed.has(row.id);
+      expand.setAttribute('aria-expanded', String(open)); setText(expand, open ? '▾' : '▸');
+      expand.setAttribute('aria-label', `${open ? 'Collapse' : 'Expand'} ${row.name}: ${row.countries.length} members`);
+    }
+    const shown = type === 'group' ? [] : type === 'member' ? [row.id] : row.countries.slice(0, 3);
+    const key = shown.join(',');
+    if (standards.dataset.key !== key) { standards.dataset.key = key; standards.innerHTML = shown.map(insignia).join(''); } // authored SVG only
+    setText(label, this.label(row) + (row.eliminated ? ' · fallen' : '') + (type === 'group' && row.forming ? ' · forming' : '')); // alliance name: text
+    bar.hidden = pct.hidden = type !== 'member';
+    if (type === 'member') { bar.firstChild.style.width = percent(row.shareOfAlliance); setText(pct, percent(row.shareOfAlliance)); }
     const [mark, words] = RELATION[row.relation] || ['', ''];
     setText(rel, mark); rel.className = `lb-rel${row.relation ? ` ${row.relation}` : ''}`;
-    const membership = alliance ? `${row.kind === 'alliance' ? 'Alliance' : 'Member of'} ${alliance.name}` : pending ? `Forming ${pending.name}` : row.kind === 'alliance' ? '' : 'Independent';
+    const membership = type === 'group' ? `${row.forming ? 'Forming alliance' : 'Alliance'} of ${row.countries.map(this.names.country).join(', ')}`
+      : type === 'member' ? `${percent(row.shareOfAlliance)} of ${group.name}'s troops` : active ? `Member of ${active.name}` : pending ? `Forming ${pending.name}` : row.kind === 'alliance' ? '' : 'Independent';
     const enemies = row.atWarWith.map(this.names.country).join(', ');
-    const summary = [row.countries.map(this.names.country).join(' + '), membership, words, enemies ? `at war with ${enemies}` : ''].filter(Boolean).join(' · ');
-    if (li.title !== summary) { li.title = summary; li.setAttribute('aria-label', `#${row.rank} ${this.label(row)} · ${summary} · ${(row.share * 100).toFixed(1)}% land · ${row.troops} troops`); }
-    setText(land, `${(row.share * 100).toFixed(1)}% · ${row.provinces}`);
+    const summary = [type === 'group' ? '' : row.countries.map(this.names.country).join(' + '), membership, words, enemies ? `at war with ${enemies}` : ''].filter(Boolean).join(' · ');
+    if (li.title !== summary) { li.title = summary; li.setAttribute('aria-label', `${type === 'member' ? '' : `#${row.rank} `}${this.label(row)} · ${summary} · ${(row.share * 100).toFixed(1)}% land · ${row.troops} troops`); }
+    setText(land, `${(row.share * 100).toFixed(1)}%`); land.title = `${row.provinces} of ${board.provinces} provinces`;
     setText(troops, String(row.troops));
   }
-  /** Alliances view: the war pairs between blocs (names are player text → textContent). */
+  /** Teams view: the war pairs between blocs (names are player text → textContent). */
   renderFronts(state) {
     if (!this.fronts) return;
-    const fronts = this.mode === 'alliances' ? warsOf(state) : [];
+    const fronts = this.mode === 'teams' ? warsOf(state).filter(f => f.sides.some(s => s.name)) : [];
     this.fronts.hidden = !fronts.length;
     const key = JSON.stringify(fronts.map(f => f.sides.map(s => [s.side, s.name])));
     if (this.fronts.dataset.key === key) return;

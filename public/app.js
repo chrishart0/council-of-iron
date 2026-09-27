@@ -23,6 +23,9 @@ let spectating=false;
 // One command panel: `tab` picks its content; nothing is open until a province or HUD button asks.
 let panelOpen=false, panelOpener=null;
 const narrow=matchMedia('(max-width:759px)');
+// Phones (either orientation): the atlas key starts collapsed, and collapses again when the screen shrinks.
+const compactScreen=matchMedia('(max-width:759px), (max-height:499px)');
+compactScreen.addEventListener('change',event=>{if(event.matches)atlas?.setLegendCollapsed(true);});
 let messageCatchupComplete=false;
 let worldFeed, herald, standings, expander;
 const country = id => map.countries.find(c=>c.id===id);
@@ -153,7 +156,7 @@ function initMap(){
   atlas?.destroy();
   const previous=$('map'),replacement=previous.cloneNode(false);previous.replaceWith(replacement);
   // The atlas key (legend + Political/Diplomacy toggle) mounts in the camera cluster, beside the buttons.
-  atlas=new Atlas(replacement,map,selectProvince,{legend:{placement:'bottom-left',container:$('map-key'),collapsed:matchMedia('(max-width:759px), (max-height:499px)').matches}});
+  atlas=new Atlas(replacement,map,selectProvince,{legend:{placement:'bottom-left',container:$('map-key'),collapsed:compactScreen.matches}});
   $('landing-map').innerHTML=map.provinces.map(p=>`<path d="${p.path}"/>`).join('');
 }
 /** Screen insets (px) covered by the HUD, rail and open panel, so a camera move can centre the target in the
