@@ -32,6 +32,8 @@ User verdict after playing on a phone: *"The UX is too complex and not intuitive
 | Menu popover, war log window, sound popover | ☰ (war log and sound inside it) |
 | Skip link | Skip link |
 
+Uncovered map (4 px sampling of overlay rectangles): 1920x1080 79.8% idle / 74.4% with an order card peeking · 1366x768 73.6% idle / 63.4% with an order card peeking · 1280x720 72.0% idle / 60.4% with an order card peeking · 390x844 82.4% idle / 49.0% with an order card peeking · 844x390 65.9% idle / 53.0% with an order card peeking · 768x1024 85.9% idle / 67.9% with an order card peeking. (v0.7 at 1366×768: 72.9% / 65.1%; tablets upright were 51–55% idle.)
+
 Persistent or common on a phone: **7** (map, HUD, powers strip, camera, history, card, popups), plus ☰ on demand and the three tips once. v0.7 had 15. Idle, at most four overlays sit on the map (HUD, leaderboard, history, camera), asserted at six viewports.
 
 ## Measured (scripted walkthroughs, `tests/ui_tasks.py`)
@@ -62,7 +64,7 @@ Not verified: real devices, screen readers, iOS; whether it is more intuitive or
 
 - Dragging from a merged counter at world zoom is not possible; tap zooms in first (as before).
 - The desktop rail still covers the eastern edge until panned; camera insets are now used by Home, rail rows and card reveals, not by World/Europe.
-- The README GIF shows the v0.8 live match only if re-recorded (see README note).
+- The README GIF was re-recorded with `python tests/browser.py --gif docs/media/gameplay.gif` (60 real frames, 12× test clock, heuristic agents); it shows the live match, not the task walkthroughs.
 
 # v0.7 — The map is the screen
 
