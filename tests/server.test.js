@@ -275,3 +275,27 @@ test('World feed is one public, cursor-based stream for HTTP, CLI and MCP with e
     JSON.stringify({jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'wars',arguments:{}}})].join('\n')+'\n');
   assert.deepEqual(JSON.parse(JSON.parse(mcpWars.stdout.trim().split('\n')[1]).result.content[0].text).wars,warsOf(view));
 });
+test('HTTP join notice: new rooms announce post-match alliance chat; unflagged rooms do not',async t=>{
+  const f=await fixture(t),host=await f.register('Host'),guest=await f.register('Guest');
+  const id=await f.room(host);
+  const flagged=await f.call(`/api/games/${id}/join`,'POST',{country:'usa'},host.token);
+  assert.equal(flagged.status,200);
+  assert.deepEqual(flagged.data.notices,['Alliance chat becomes public in the replay after the match ends.']);
+  assert.equal((await f.call(`/api/games/${id}`)).data.rules.revealAllianceChatAfterMatch,true);
+  const old=await f.room(host,'Older room');delete f.app.games.get(old).rules.revealAllianceChatAfterMatch;
+  const plain=await f.call(`/api/games/${old}/join`,'POST',{country:'britain'},guest.token);
+  assert.equal(plain.status,200);assert.deepEqual(plain.data.notices,[]);
+});
+test('HTTP declare-and-march shares the engine path, retry receipt and command budget',async t=>{
+  const f=await fixture(t),{id,sa,sb}=await f.boot();await f.call(`/api/games/${id}/start`,'POST',{},sa.token);
+  const g=f.app.games.get(id),mexico=g.provinces.find(p=>p.id==='mexico');mexico.owner='britain';mexico.troops=3;
+  const action={type:'move',from:'west-us',to:'mexico',amount:5,declareWar:true};
+  const refused=await f.call(`/api/games/${id}/actions`,'POST',{opId:'dm-bad',action:{...action,amount:999}},sa.token);
+  assert.equal(refused.status,400);assert.deepEqual(g.wars,[]);
+  const first=await f.call(`/api/games/${id}/actions`,'POST',{opId:'dm-1',action},sa.token);
+  assert.equal(first.status,200);assert.equal(first.data.warDeclared,true);assert.deepEqual(first.data.war.pairs,['britain:usa']);
+  const retry=await f.call(`/api/games/${id}/actions`,'POST',{opId:'dm-1',action},sa.token);
+  assert.deepEqual(retry.data,first.data);assert.equal(g.orders.length,1);
+  const view=(await f.call(`/api/games/${id}`,'GET',undefined,sa.token)).data;
+  assert.deepEqual(view.wars,['britain:usa']);assert.equal(view.commandBudget.remaining,2);
+});

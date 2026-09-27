@@ -10,21 +10,27 @@ const manifest = JSON.parse(readFileSync(new URL('../public/audio/manifest.json'
 const h = (kind, extra = {}) => ({ headline: { kind, ...extra } });
 const cue = (item, viewer) => headlineCue(item, viewer)?.cue;
 
-test('every headline kind maps to one cue, with own-country variants', () => {
+test('every headline kind maps to one cue; loud stingers only when it affects the viewer', () => {
   const me = { you: 'france', side: 'france' }, spectator = {};
-  assert.equal(cue(h('war', { from: ['germany'], to: ['russia'] }), me), 'war');
+  // Other people's news is a quiet blip (the rail row), not a stinger.
+  assert.equal(cue(h('war', { from: ['germany'], to: ['russia'] }), me), 'chat');
+  assert.equal(cue(h('war', { from: ['germany'], to: ['france'] }), me), 'war');
   assert.equal(headlineCue(h('war', { from: ['germany'], to: ['france'] }), me).priority, PRIORITY.war + 2);
-  assert.equal(cue(h('peace', { from: ['a'], to: ['b'] }), me), 'peace');
-  assert.equal(cue(h('alliance', { countries: ['a', 'b'], side: 's' }), me), 'alliance');
-  assert.equal(cue(h('departure', { country: 'a', side: 's' }), me), 'dispatch');
-  assert.equal(cue(h('dissolved', { side: 's' }), me), 'dispatch');
-  assert.equal(cue(h('eliminated', { country: 'russia' }), me), 'fallen');
+  assert.equal(cue(h('peace', { from: ['a'], to: ['b'] }), me), 'chat');
+  assert.equal(cue(h('peace', { from: ['a'], to: ['france'] }), me), 'peace');
+  assert.equal(cue(h('alliance', { countries: ['a', 'b'], side: 's' }), me), 'chat');
+  assert.equal(cue(h('alliance', { countries: ['france', 'b'], side: 's' }), me), 'alliance');
+  assert.equal(cue(h('departure', { country: 'a', side: 's' }), me), 'chat');
+  assert.equal(cue(h('departure', { country: 'a', side: 'france' }), me), 'dispatch');
+  assert.equal(cue(h('dissolved', { side: 'france' }), me), 'dispatch');
+  assert.equal(cue(h('eliminated', { country: 'russia' }), me), 'chat');
+  assert.equal(cue(h('eliminated', { country: 'russia' }), { ...me, allies: ['russia'] }), 'fallen');
   assert.equal(cue(h('eliminated', { country: 'france' }), me), 'defeat');
-  assert.equal(cue(h('eliminated', { country: 'france' }), spectator), 'fallen');
-  assert.equal(cue(h('major_battle', { province: 'p', owner: 'a', previousOwner: 'b' }), me), 'battle');
+  assert.equal(cue(h('eliminated', { country: 'france' }), spectator), 'chat');
+  assert.equal(cue(h('major_battle', { province: 'p', owner: 'a', previousOwner: 'b' }), me), 'chat');
   assert.equal(headlineCue(h('major_battle', { province: 'p', owner: 'a', previousOwner: 'france' }), me).mine, true);
-  assert.equal(cue(h('industry_up', { province: 'p', level: 3 }), me), 'industry_up');
-  assert.equal(cue(h('industry_down', { province: 'p', level: 2 }), me), 'industry_down');
+  assert.equal(cue(h('industry_up', { province: 'p', level: 3 }), me), 'chat');
+  assert.equal(cue(h('industry_down', { province: 'p', level: 2, owner: 'france' }), me), 'industry_down');
   assert.equal(cue(h('dominance', { side: 'x' }), me), 'countdown');
   assert.equal(headlineCue(h('dominance', { side: 'france' }), me).mine, true);
   assert.equal(cue(h('dominance_broken', { side: 'x' }), me), 'countdown_stop');
@@ -49,7 +55,7 @@ test('events: headlines and other people’s world chat only; stopped holds by s
     { id: 4, type: 'order_accepted' },
     { id: 5, type: 'war_declared', ...h('war', { from: ['germany'], to: ['russia'] }) },
   ];
-  assert.deepEqual(eventCues(events, viewer).map(r => r.cue), ['chat', 'war']);
+  assert.deepEqual(eventCues(events, viewer).map(r => r.cue), ['chat', 'chat'], 'a third-party war is a quiet blip');
   const breaks = [{ seq: 4, ...h('dominance_broken', { side: 'x' }) }, { seq: 9, ...h('dominance_broken', { side: 'france' }) }, { seq: 12 }];
   assert.deepEqual(breakCues(breaks, 4, viewer).map(r => [r.cue, r.mine]), [['countdown_stop', true]]);
 });

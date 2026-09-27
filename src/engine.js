@@ -142,7 +142,7 @@ function running(g) { requireRule(g.status === 'running', 'The match is not runn
 function mapProvince(map, id) { return map.provinces.find(p => p.id === id); }
 function military(g, map, p, action) {
   alive(g, p.id);
-  if (action.type === 'move') return coordinated(g, map, p, { ...action, sources: [{ from: action.from, ...(action.amount !== undefined ? { amount: action.amount } : {}), ...(action.percent !== undefined ? { percent: action.percent } : {}) }] });
+  if (action.type === 'move') return coordinated(g, map, p, { ...action, sources: moveSources(action) });
   const source = province(g, action.from);
   requireRule(source.owner === p.id, 'You do not own the source province.', 403);
   requireRule(action.to === null && action.type === 'route' || mapProvince(map, source.id).neighbors.includes(action.to),
@@ -209,7 +209,8 @@ function coordinated(g, map, p, action) {
   event(g, 'attack_accepted', { country: p.id, groupId, arrivesAt: plan.arrivesAt, orders }, [p.id]);
   return { groupId, orderId: orders[0].id, executeAt: orders[0].executeAt, arrivesAt: plan.arrivesAt, orders };
 }
-function transit(g,map,p,action) {
+/** Validate a transit without mutating state or consuming budget. */
+function transitPlan(g,map,p,action) {
   alive(g,p.id);const source=province(g,action.from),r=gameRules(g);
   requireRule(source.owner===p.id,'You do not own the source province.',403);
   requireRule(Array.isArray(action.path) && action.path.length>=2 && action.path.length<=r.maxTransitHops,
@@ -228,12 +229,46 @@ function transit(g,map,p,action) {
   requireRule(Number.isSafeInteger(action.amount) && action.amount>0 && action.amount<=available,
     'Not enough uncommitted troops; leave one at home.');
   requireRule(g.tick+1+travel<=r.duration,'The transit would arrive after the deadline.');
+  return {source,travel};
+}
+function transit(g,map,p,action) {
+  const {source,travel}=transitPlan(g,map,p,action);
   checkBudget(g,p);useBudget(g,p);
   const order={id:identifier(g,'order-'),groupId:identifier(g,'transit-'),type:'transit',country:p.id,
     from:source.id,to:action.path[0],path:[...action.path],amount:action.amount,
     executeAt:g.tick+1,ultimateArrivesAt:g.tick+1+travel};
   g.orders.push(order);event(g,'order_accepted',{country:p.id,orderId:order.id,executeAt:order.executeAt},[p.id]);
   return {orderId:order.id,groupId:order.groupId,executeAt:order.executeAt,arrivesAt:order.ultimateArrivesAt};
+}
+const moveSources = action => [{ from: action.from, ...(action.amount !== undefined ? { amount: action.amount } : {}), ...(action.percent !== undefined ? { percent: action.percent } : {}) }];
+/** Optional `declareWar: true` on move/attack/transit: one atomic "declare war and march".
+ * Only a solo country may combine them; the march is validated as if the war already existed,
+ * then the ordinary solo declaration runs, then the ordinary reservation. Any invalid part
+ * rejects the whole action before any state changes. The declaration itself consumes no
+ * military command, exactly as a separate `declare_war`; the march consumes its usual one.
+ * Where no declaration is needed (neutral/unowned, own or allied target, already at war,
+ * or a room without formal war rules) the flag is harmless and the march is unchanged. */
+function march(g, map, p, action, commit) {
+  if (action.declareWar === undefined) return commit();
+  requireRule(typeof action.declareWar === 'boolean', 'declareWar must be true or false.');
+  if (!action.declareWar) return commit();
+  alive(g, p.id);
+  const targetId = action.type === 'transit' ? (Array.isArray(action.path) ? action.path.at(-1) : undefined) : action.to;
+  const owner = g.provinces.find(v => v.id === targetId)?.owner;
+  if (!owner || !g.players.some(x => x.id === owner) || mayEnter(g, p.id, owner)) return { ...commit(), warDeclared: false };
+  requireRule(sideRoster(g, p.side).length === 1, 'Coalition members must call a war vote first; the march is not sent.', 409);
+  const target = player(g, owner), pairs = sideRoster(g, target.side).map(b => warKey(p.id, b)).sort();
+  // Dry run under the assumed war; restore the war list whatever happens.
+  const wars = g.wars;
+  g.wars = [...new Set([...wars, ...pairs])].sort();
+  try {
+    if (action.type === 'transit') transitPlan(g, map, p, action);
+    else attackPlan(g, map, p.id, action.type === 'move' ? { ...action, sources: moveSources(action) } : action);
+    checkBudget(g, p);
+  } finally { g.wars = wars; }
+  const war = beginDiplomacy(g, p, { country: owner }, 'war');
+  requireRule(war.status === 'enacted', 'War declaration was not enacted; the march is not sent.', 409);
+  return { ...commit(), warDeclared: true, war: { motionId: war.motionId, from: p.side, to: target.side, pairs } };
 }
 function develop(g, p, action) {
   alive(g, p.id);
@@ -468,9 +503,10 @@ export function act(g, map, country, action, opId) {
   if (previous) { requireRule(previous.fingerprint === fingerprint, 'Operation ID already used for a different action.', 409); return previous.result; }
   running(g); const p = player(g, country); let result;
   switch (action.type) {
-    case 'move': case 'route': result = military(g, map, p, action); break;
-    case 'attack': result = coordinated(g, map, p, action); break;
-    case 'transit': result = transit(g,map,p,action); break;
+    case 'move': result = march(g, map, p, action, () => military(g, map, p, action)); break;
+    case 'route': result = military(g, map, p, action); break;
+    case 'attack': result = march(g, map, p, action, () => coordinated(g, map, p, action)); break;
+    case 'transit': result = march(g, map, p, action, () => transit(g,map,p,action)); break;
     case 'recall': result = recall(g, p, action); break;
     case 'develop': result = develop(g, p, action); break;
     case 'propose': result = propose(g, p, action); break;

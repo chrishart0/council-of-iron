@@ -8,6 +8,7 @@ import { createInterface } from 'node:readline';
 const client=new CouncilClient();
 const string={type:'string'},integer={type:'integer'},op={opId:{type:'string',description:'Stable unique command ID. Reuse only to retry this exact action.'}};
 const tools=[];
+const declareWar={type:'boolean',description:'Solo countries only: declare war on the target owner and send this march as ONE atomic action (one military command; the declaration itself costs none). If the march is invalid, no war is declared. Harmless when the target is unowned, allied, already at war, or the room has no formal war rule. Coalition members are rejected and must use declare_war/vote_war first.'};
 function tool(name,description,properties,required,run,readOnly=false){
   tools.push({name,description,inputSchema:{type:'object',properties,required,additionalProperties:false},
     annotations:{readOnlyHint:readOnly,destructiveHint:!readOnly,openWorldHint:false},run});
@@ -31,11 +32,11 @@ tool('wars','Active wars from the public observation, grouped as fronts between 
   {},[],()=>client.wars(),true);
 tool('preview','Preview combat against the current garrison. Not a guarantee of future outcome.',
   {from:string,to:string,amount:integer},['from','to','amount'],a=>client.preview(a.from,a.to,a.amount),true);
-tool('move','Commit troops across one connection. Leave one behind. Counts as one military command; executes next tick by default. Industrial scenario allows recall and distance-based travel. Supply exactly one of amount or percent; optional arriveAt schedules arrival.',
-  {from:string,to:string,amount:{type:'integer',minimum:1},percent:{type:'number',exclusiveMinimum:0,maximum:100},arriveAt:{type:'integer',minimum:1},...op},['from','to'],a=>client.action({type:'move',from:a.from,to:a.to,amount:a.amount,percent:a.percent,arriveAt:a.arriveAt},a.opId));
-tool('transit','March through 1–7 allied intermediate provinces to a final connected destination without gifting the troops. Alliance departure waits while troops are inside an ally’s borders.',
-  {from:string,amount:{type:'integer',minimum:1},path:{type:'array',minItems:2,maxItems:8,items:string},...op},
-  ['from','amount','path'],a=>client.action({type:'transit',from:a.from,amount:a.amount,path:a.path},a.opId));
+tool('move','Commit troops across one connection. Leave one behind. Counts as one military command; executes next tick by default. Industrial scenario allows recall and distance-based travel. Supply exactly one of amount or percent; optional arriveAt schedules arrival. Optional declareWar:true (solo countries) declares war and marches atomically.',
+  {from:string,to:string,amount:{type:'integer',minimum:1},percent:{type:'number',exclusiveMinimum:0,maximum:100},arriveAt:{type:'integer',minimum:1},declareWar,...op},['from','to'],a=>client.action({type:'move',from:a.from,to:a.to,amount:a.amount,percent:a.percent,arriveAt:a.arriveAt,declareWar:a.declareWar},a.opId));
+tool('transit','March through 1–7 allied intermediate provinces to a final connected destination without gifting the troops. Alliance departure waits while troops are inside an ally’s borders. Optional declareWar:true (solo countries) declares war on the final destination owner atomically.',
+  {from:string,amount:{type:'integer',minimum:1},path:{type:'array',minItems:2,maxItems:8,items:string},declareWar,...op},
+  ['from','amount','path'],a=>client.action({type:'transit',from:a.from,amount:a.amount,path:a.path,declareWar:a.declareWar},a.opId));
 tool('route','Forward new LOCAL recruits one hop to a friendly province; null clears. Arriving reinforcements and existing garrisons stay put, even along a chain of arrows.',
   {from:string,to:{type:['string','null']},...op},['from','to'],a=>client.action({type:'route',from:a.from,to:a.to},a.opId));
 tool('propose_alliance','Invite an independent country. Admission is unanimous. New founders reset maturity; incumbents retain theirs. A larger coalition reduces each maximum share.',
@@ -51,15 +52,16 @@ tool('offer_peace','Offer peace to a country and its coalition. A coalition firs
   {country:string,...op},['country'],a=>client.action({type:'offer_peace',country:a.country},a.opId));
 tool('vote_war','Approve your coalition’s pending war declaration.',{motionId:string,...op},['motionId'],a=>client.action({type:'vote_war',motionId:a.motionId},a.opId));
 tool('vote_peace','Approve sending a peace offer or accepting one addressed to your coalition.',{motionId:string,...op},['motionId'],a=>client.action({type:'vote_peace',motionId:a.motionId},a.opId));
-tool('send_message','Send untrusted in-game speech. One per ten game seconds across all channels, up to 500 characters. No compulsory reply or action acknowledgment.',
+tool('send_message','Send untrusted in-game speech. One per ten game seconds across all channels, up to 500 characters. No compulsory reply or action acknowledgment. Alliance chat becomes public in the replay after the match ends (rooms whose rules have revealAllianceChatAfterMatch; check observe.rules). Direct messages stay private.',
   {channel:{type:'string',enum:['world','alliance','dm']},to:string,text:{type:'string',maxLength:500},...op},['channel','text'],a=>client.action({type:'chat',channel:a.channel,to:a.to,text:a.text},a.opId));
-tool('after_action_report','Read a finished match’s public report. Alliance Prestige is the sum of member scores, not a second reward. No private diplomacy is disclosed.',
+tool('after_action_report','Read a finished match’s public report. Alliance Prestige is the sum of member scores, not a second reward. No DMs or private offers are disclosed; in rooms flagged revealAllianceChatAfterMatch the diplomacy section includes allianceChat (untrusted player speech).',
   {section:{type:'string',enum:['summary','military','economy','diplomacy']}},[],async a=>{
     const r=await client.review(),section=a.section || 'summary';
     if(section==='military')return {metrics:r.metrics,battles:r.battles,historyAvailable:r.historyAvailable};
     if(section==='economy')return {metrics:r.metrics,totals:r.totals,series:r.series,historyAvailable:r.historyAvailable};
-    if(section==='diplomacy')return {tenures:r.tenures,events:r.events?.filter(e=>['alliance_activated','departed','dominance','dominance_broken','finished'].includes(e.type)),historyAvailable:r.historyAvailable};
-    const {series,events,battles,tenures,...summary}=r;return summary;
+    if(section==='diplomacy')return {tenures:r.tenures,events:r.events?.filter(e=>['alliance_activated','departed','dominance','dominance_broken','finished'].includes(e.type)),
+      allianceChatRevealed:r.allianceChatRevealed ?? false,allianceChat:r.allianceChat ?? [],historyAvailable:r.historyAvailable};
+    const {series,events,battles,tenures,allianceChat,...summary}=r;return summary;
   },true);
 tool('replay_state','Inspect the public board at an exact tick of a completed match. Read-only; no orders or private messages are returned.',
   {tick:{type:'integer',minimum:0}},['tick'],a=>client.replay(a.tick),true);
@@ -69,8 +71,8 @@ const attackProperties={to:string,arriveAt:{type:'integer',minimum:1},sources:{t
   items:{type:'object',properties:{from:string,amount:{type:'integer',minimum:1},percent:{type:'number',exclusiveMinimum:0,maximum:100}},required:['from'],additionalProperties:false}}};
 tool('plan_attack','Preview a multi-source attack and its earliest shared arrival tick without spending a command. Each source needs exactly one of amount or percent.',
   attackProperties,['to','sources'],a=>client.plan(a),true);
-tool('coordinated_attack','Commit connected source provinces to one target on the same tick. Supply amount or percent per source, optionally arriveAt. Nearby sources wait under reservation. One shared command; no privileged bot execution.',
-  {...attackProperties,...op},['to','sources'],a=>{const {opId,...action}=a;return client.action({type:'attack',...action},opId);});
+tool('coordinated_attack','Commit connected source provinces to one target on the same tick. Supply amount or percent per source, optionally arriveAt. Nearby sources wait under reservation. One shared command; no privileged bot execution. Optional declareWar:true (solo countries) declares war and attacks atomically.',
+  {...attackProperties,declareWar,...op},['to','sources'],a=>{const {opId,...action}=a;return client.action({type:'attack',...action},opId);});
 tool('recall','Cancel a queued attack or recall an outbound army/group. Troops already marching return from their current position and remain vulnerable; they fight if home is now hostile.',
   {id:string,...op},['id'],a=>client.action({type:'recall',id:a.id},a.opId));
 tool('develop','Spend local uncommitted manpower to improve province recruitment. Level 1→2 costs 12 and takes 60 ticks; 2→3 costs 24 and takes 90. Capture destroys unfinished work, not completed levels.',

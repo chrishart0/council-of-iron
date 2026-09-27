@@ -388,6 +388,41 @@ def map_checks(page,server,report,capture):
     report['assertions'].append('Real phased battles show a persistent attacker-vs-defender clash marker at every zoom (never merged), matching engaged armies and garrison, and flash the losses of a newly adjudicated round.')
 
 HOSTILE_ALLIANCE='<b onclick="x()">Iron & "Pact"</b>'
+def inbox_checks(page,server,context,url,report,capture):
+    """Messages and decisions addressed to this seat are impossible to miss, and never replayed as toasts."""
+    page.set_viewport_size({'width':1366,'height':768})
+    if page.locator('#feed-toggle').get_attribute('aria-expanded')=='true':page.locator('#feed-toggle').click()  # a row visible in the open rail counts as read
+    for line in ['dm germany britain Our armies should talk before the Rhine burns.','offer qing france']:
+        server.stdin.write(line+'\n');server.stdin.flush();json.loads(server.stdout.readline())
+    expect(page.locator('#inbox-badge .badge-count')).to_have_text('1',timeout=5000)
+    expect(page.locator('#action-badge .badge-count')).to_have_text('1')
+    expect(page.locator('#notice')).to_contain_text('German Empire',timeout=5000)  # the DM toast names its sender
+    expect(page.locator('#notice')).to_contain_text('Alliance offer',timeout=6000);expect(page.locator('#notice [data-accept]')).to_be_visible()
+    capture('19-offer-toast.png')
+    page.reload();expect(page.locator('#commander-title')).to_have_text('British Empire')
+    expect(page.locator('#notice')).to_contain_text('1 unread message · 1 decision waiting',timeout=6000)
+    expect(page.locator('#action-badge .badge-count')).to_have_text('1');expect(page.locator('#inbox-badge .badge-count')).to_have_text('1')
+    page.wait_for_timeout(1600);assert 'German Empire' not in page.locator('#notice').inner_text(),'old toasts are not replayed'
+    page.locator('#notice [data-notice-close]').click()
+    page.locator('#action-badge').click();expect(page.locator('[data-feed-filter="action"]')).to_have_attribute('aria-pressed','true')
+    row=page.locator('#feed-list [data-kind="system-offer"][data-actionable="true"]').last;expect(row).to_be_visible()
+    row.locator('[data-accept]').click();expect(page.locator('#confirm-dialog')).to_be_visible();page.locator('#confirm-dialog [value="confirm"]').click()
+    expect(page.locator('#feed-list [data-kind="system-offer"]').last).to_contain_text('you accepted',timeout=5000);expect(page.locator('#action-badge')).to_be_hidden()
+    page.locator('#inbox-badge').click();expect(page.locator('#feed-list .feed-chat[data-channel="dm"]').last).to_be_visible()
+    expect(page.locator('#inbox-badge .badge-count')).to_have_text('',timeout=5000)
+    spectator=context.new_page();spectator.goto(url+'/?match=ui-war&spectate=1');expect(spectator.locator('#phase')).to_have_text('SPECTATING')
+    spectator.wait_for_timeout(800)
+    assert spectator.locator('#feed-list .feed-chat[data-channel="dm"],#feed-list [data-kind="system-offer"]').count()==0
+    expect(spectator.locator('#inbox-badge')).to_be_hidden();expect(spectator.locator('#action-badge')).to_be_hidden();spectator.close()
+    report['assertions'].append('Inbox: a DM from another seat raises ✉ 1 and a toast naming the sender; an alliance offer that needs this seat raises ⚑ 1 and a toast with Accept; after a reload both badges persist with one summary toast and no replayed toasts; accepting from the rail row works and updates it; opening the DM clears ✉; a spectator sees none of these private items.')
+
+TOAST_SIZE='''() => {
+  const out={};for(const id of ['declaration','notice']){const e=document.getElementById(id);e.hidden=false;
+    if(id==='declaration'){e.className='declaration war';e.querySelector('#declaration-kind').textContent='THE COUNCIL’S SEAL';e.querySelector('#declaration-title').textContent='WAR DECLARED';e.querySelector('#declaration-detail').textContent='German Empire declared war on British Empire. Both sides may now attack.';}
+    else e.innerHTML='<div class="notice-card"><span class="notice-flag"></span><div class="notice-words"><b class="notice-title">German Empire</b><span class="notice-detail">Our armies should talk before the Rhine burns.</span></div><button class="notice-close">✕</button></div>';
+    const r=e.getBoundingClientRect();out[id]={top:r.top,bottom:r.bottom,height:r.height,left:r.left,right:r.right};e.hidden=true;}
+  return out;
+}'''
 BAND_COLORS='''async side=>{
   const {allianceColors}=await import('/relations.js'),state=await (await fetch('/api/games/ui-war')).json(),colors=allianceColors(state),expected={};
   for(const [id,color] of Object.entries(colors)){const probe=document.createElement('i');probe.style.color=color;document.body.append(probe);expected[id]=getComputedStyle(probe).color;probe.remove();}
@@ -432,7 +467,7 @@ def relation_checks(page,server,report,capture):
             if owner.get(p['id'])!='britain':continue
             for n in p['neighbors']:
                 if owner.get(n)==enemy:return p['id'],n
-    for enemy,relation,words in [('usa','enemy','AT WAR'),('france','neutral','NEUTRAL')]:
+    for enemy,relation,words in [('usa','enemy','AT WAR'),('france','neutral','NOT AT WAR')]:
         src,dst=border(enemy);ensure_orders(page,'half')
         page.locator('#source').select_option(src);page.locator('#destination').select_option(dst)
         expect(page.locator('#relation-banner')).to_have_attribute('data-relation',relation);expect(page.locator('#relation-banner')).to_contain_text(words)
@@ -441,10 +476,31 @@ def relation_checks(page,server,report,capture):
     expect(page.locator('#command-panel')).to_have_attribute('data-tab','council')
     expect(page.locator('#diplomacy-target')).to_have_value('france');expect(page.locator('#declare-war')).to_be_focused()
     expect(page.locator('#relation-banner')).to_be_hidden()  # the relation line belongs to the order card only
+    page.keyboard.press('Escape')
+    # Declare war & march (solo): one confirmed order declares the war and reserves the march, or neither.
+    src,dst=border('france');ensure_orders(page,'half');page.locator('#source').select_option(src);page.locator('#destination').select_option(dst)
+    send=page.locator('#send-army');expect(send).to_have_attribute('data-war','declare');expect(send).to_contain_text('Declare war & march')
+    send.click();dialog=page.locator('#confirm-dialog');expect(dialog).to_be_visible();expect(dialog).to_contain_text('Declare war on French Republic?')
+    expect(dialog.locator('.war-confirm')).to_contain_text('French Republic');expect(dialog.locator('[value="cancel"]')).to_be_focused()
+    page.keyboard.press('Escape');expect(dialog).to_be_hidden()
+    assert 'britain:france' not in page.evaluate("fetch('/api/games/ui-war').then(r=>r.json())")['wars'],'Cancel keeps the peace'
+    banners=page.evaluate('()=>{window.__banners=[];const seen=new Set();new MutationObserver(()=>{for(const e of document.querySelectorAll("#declaration:not([hidden]),#alliance-seal:not([hidden]),#fallen-seal:not([hidden])"))if(e.dataset.seq&&!seen.has(e.dataset.seq)){seen.add(e.dataset.seq);window.__banners.push(e.textContent);}}).observe(document.body,{subtree:true,attributes:true,attributeFilter:["hidden","data-seq"]});return 0;}')
+    send.focus();page.keyboard.press('Enter');expect(dialog).to_be_visible();page.keyboard.press('Tab')
+    expect(dialog.locator('[value="confirm"]')).to_be_focused();expect(dialog.locator('[value="confirm"]')).to_contain_text('Declare war & march')
+    page.keyboard.press('Enter');expect(dialog).to_be_hidden()
+    expect(page.locator('#feed-list [data-kind="war"]').last).to_contain_text('French Republic',timeout=5000)
+    state=page.evaluate("fetch('/api/games/ui-war').then(r=>r.json())");assert 'britain:france' in state['wars'],state['wars']
+    mine=page.evaluate("fetch('/api/games/ui-war',{headers:{Authorization:'Bearer '+JSON.parse(localStorage.getItem('coi.identity')).token}}).then(r=>r.json())")
+    assert any(o['type']=='move' and o['from']==src and o['to']==dst for o in mine['commandBudget']['reserved']),mine['commandBudget']
+    page.wait_for_timeout(1200);assert page.evaluate('window.__banners.length')==1 and 'WAR DECLARED' in page.evaluate('window.__banners[0]'),page.evaluate('window.__banners')
+    report['assertions'].append('Declare war & march (solo, keyboard only): a neutral target turns the commit into “Declare war & march”; the confirmation names the whole target side with Cancel focused; Escape keeps the peace; confirming declares the war and reserves the march in one order, adds the war row to the rail and shows exactly one banner (it affects this seat).')
+    page.keyboard.press('Escape')
     report['assertions'].append('Relations (recorded war room, Britain at war with the USA): the HUD war chip names exactly the viewer’s enemies; every leaderboard row’s relation marker matches the public war list; the Wars view opens from the chip by keyboard, lists exactly the observation’s war pairs, marks the one involving the viewer and focuses the map on its front; the context card states AT WAR or NEUTRAL for the target owner and links to the war council.')
     # Alliances: forming (dashed) during the notice, then active in the alliance colour; the name stays text.
+    if page.locator('#council-label').get_attribute('aria-expanded')!='true':page.locator('#council-label').click()
     page.locator('#ally-choice').select_option('qing');page.locator('#coalition-name').fill(HOSTILE_ALLIANCE)  # Japan is in the fixture's forming Pacific Pact
-    page.locator('#alliance-form button').click();expect(page.locator('#offers')).to_contain_text(HOSTILE_ALLIANCE)
+    page.locator('#alliance-form button').click();expect(page.locator('#confirm-dialog')).to_contain_text('Sending this offer is your approval')
+    page.locator('#confirm-dialog [value="confirm"]').click();expect(page.locator('#offers')).to_contain_text(HOSTILE_ALLIANCE)
     server.stdin.write('ally qing\n');server.stdin.flush();assert json.loads(server.stdout.readline())['status']=='pending'
     expect(page.locator('#ally-chip')).to_have_attribute('data-state','forming',timeout=5000)
     expect(page.locator('#lb-rows .lb-row[data-id="britain"]')).to_have_attribute('data-band','forming')  # your row is always listed
@@ -461,6 +517,16 @@ def relation_checks(page,server,report,capture):
     assert page.locator('b[onclick]').count()==0
     expect(page.locator('#feed-list [data-kind="alliance"]').last).to_contain_text(HOSTILE_ALLIANCE)
     check_layout(page,'1366x768 alliance active');capture('18-alliance-relations.png')
+    # Coalition member: a neutral target asks for a war vote instead of marching.
+    state=page.evaluate("fetch('/api/games/ui-war').then(r=>r.json())");owner={p['id']:p['owner'] for p in state['provinces']};wars=set(state['wars'])
+    allies={p['id'] for p in state['players'] if p['side']==side}
+    target=next(((p['id'],n) for p in board['provinces'] if owner.get(p['id'])=='britain' for n in p['neighbors']
+        if owner.get(n) and owner.get(n) not in allies and ':'.join(sorted(['britain',owner.get(n)])) not in wars),None)
+    assert target,'no neutral neighbour for the coalition vote case'
+    ensure_orders(page,'half');page.locator('#source').select_option(target[0]);page.locator('#destination').select_option(target[1])
+    expect(page.locator('#send-army')).to_have_attribute('data-war','vote');expect(page.locator('#send-army')).to_contain_text('Call war vote on')
+    page.keyboard.press('Escape')
+    report['assertions'].append('As a coalition member the same commit reads “Call war vote on …” (no march is sent without the vote).')
     expect(page.locator('#map .map-effect')).to_have_count(0,timeout=6000)  # the live alliance effect ends before the effect-scope check
     report['assertions'].append('Alliances: a new coalition shows as forming (dashed) in the HUD chip and leaderboard during its notice, then active with the ally’s standard; leaderboard bands and the alliance feed row use the same colour as the shared allianceColors helper (relations.js, also used by the map blocs); a hostile alliance name renders only as text.')
 
@@ -508,6 +574,13 @@ def expand_checks(browser,url,identity,report,out):
         page.screenshot(path=str(out/f'20-expanded-live-{w}x{h}.png'))
         page.keyboard.press('Escape');expect(page.locator('#stage')).not_to_have_class(re.compile('map-expanded'))
         expect(page.locator('.hud-bar')).to_be_visible();expect(live).to_be_focused()
+        # Popups on phones are compact toasts under the HUD, never over the order sheet or its commit.
+        page.locator('#orders-label').click();page.locator('#source').select_option(index=1)
+        sheet=page.locator('#command-panel').bounding_box();commit=page.locator('#send-army').bounding_box();sizes=page.evaluate(TOAST_SIZE)
+        for name,r in sizes.items():
+            assert r['height']<=min(72,h*.15)+.5 and r['top']>=0,(w,h,name,r)
+            for other in [sheet,commit]:assert r['bottom']<=other['y'] or r['top']>=other['y']+other['height'] or r['right']<=other['x'] or r['left']>=other['x']+other['width'],(w,h,name,r,other)
+        page.keyboard.press('Escape')
         page.locator('#menu-button').click();expect(page.locator('#fullscreen-toggle')).to_be_visible()  # never hidden without the Fullscreen API
         page.locator('#fullscreen-toggle').click();expect(page.locator('#stage')).to_have_class(re.compile('map-expanded'));live.click()
         manifest=page.evaluate("fetch('/manifest.webmanifest').then(async r=>({type:r.headers.get('content-type'),body:await r.json()}))")
@@ -516,6 +589,7 @@ def expand_checks(browser,url,identity,report,out):
         assert page.locator('link[rel=manifest]').count()==1 and page.locator('meta[name=apple-mobile-web-app-capable][content=yes]').count()==1
         assert not errors,errors
         context.close()
+    report['assertions'].append('Popups on phones (390×844, 844×390) are compact toasts ≤72 px and ≤15% of the viewport height, clear of the order sheet and its commit button.')
     report['assertions'].append('Expand map without the Fullscreen API (iPhone emulation, 390×844 and 844×390): the replay and live maps each show a thumb-reachable Expand control; expanded, the map covers the viewport, the page does not scroll, replay play/slider/speed stay on screen and work, rotation refits without moving the camera centre, and Escape or ✕ Exit restores the layout and focus; the menu entry is never hidden; the web app manifest (display fullscreen → standalone) and its icons are served; replay and live SVG IDs stay scoped.')
 
 LONG_MESSAGE=('The Atlantic Accord proposes a longer public statement to check the history column: '+'we will hold the Channel, the Low Countries and the sea lanes to the Americas together. '*4).strip()
@@ -524,6 +598,7 @@ def feed_checks(page,report):
     page.set_viewport_size({'width':1600,'height':1000})
     if page.locator('#feed-toggle').get_attribute('aria-expanded')!='true':page.locator('#feed-toggle').click()
     history=page.locator('#feed-list')
+    history.evaluate('(l)=>{l.scrollTop=l.scrollHeight;l.dispatchEvent(new Event("scroll"))}')  # start caught up: no earlier "new" count
     first=history.evaluate('(l)=>{l.scrollTop=0;const f=l.firstElementChild.getBoundingClientRect(),b=l.getBoundingClientRect();return {scrollable:l.scrollHeight>l.clientHeight,shown:f.top>=b.top-1 && f.top<b.bottom,key:l.firstElementChild.dataset.feedKey}}')
     assert first['scrollable'] and first['shown'],first
     form=page.locator('#feed-form').bounding_box();panel=page.locator('#world-feed').bounding_box()
@@ -710,7 +785,7 @@ def main():
                 report.setdefault('uncoveredMap',{})[tag]=coverage
                 if tag=='1366x768':assert coverage['idle']>=.65 and coverage['selectedPeek']>=.62,coverage  # overlays stay compact; the map dominates
                 page.keyboard.press('Escape');expect(page.locator('#command-panel')).to_be_hidden()
-                for drawer in ['council','dispatches']:
+                for drawer in ['council']:  # v0.7 single view: messages live in the rail, not a drawer
                     page.locator(f'#{drawer}-label').click();expect(page.locator(f'#{drawer}-tab')).to_be_visible()
                     check_layout(page,f'{tag} {drawer}');page.screenshot(path=str(shots/f'{tag}-{drawer}.png'))
                 page.keyboard.press('Escape');expect(page.locator('#command-panel')).to_be_hidden()
@@ -878,6 +953,7 @@ def main():
             relations_checks(page,report,capture)
             battle_checks(page,server,report,capture)
             if not args.bridge:relation_checks(page,server,report,capture)  # v0.7 HUD/rail/card relations; runs after the tick-58 battle step
+            if not args.bridge:inbox_checks(page,server,context,url,report,capture)
             page.emulate_media(reduced_motion='reduce');assert page.evaluate('getComputedStyle(document.querySelector("#battle-signal")).animationName')=='none'
             if not args.bridge:effect_checks(page,report);hostile_name_check(page,report)  # dynamic module import needs native HTTP
             for selector in ['#declaration','#alliance-seal','.alliance-ribbon','#fallen-seal','.fallen-strike']:

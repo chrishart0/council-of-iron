@@ -3,7 +3,7 @@
  * banners), public world chat (feed row), hostile armies aimed at the viewer's land (threat strip)
  * and the viewer's own committed orders (toast). A sound never carries information alone.
  */
-import { isWorldMessage } from './feed-model.js';
+import { isWorldMessage, affectsViewer } from './feed-model.js';
 
 /** Base priority. UI = 1; ordinary world news = 2; decisive diplomacy = 3; own defeat = 5.
  * A cue that names the viewer's own country gets +2 (see `mine`). */
@@ -23,12 +23,17 @@ export const STINGER_GAP = 2.5;        // seconds before an equal-or-lower prior
 export const STINGER_WINDOW = [20, 4]; // at most 4 stingers in 20 s (priority ≥ 5 always passes)
 export const isStinger = cue => PRIORITY[cue] >= 2;
 
+const KNOWN = new Set(['war', 'peace', 'alliance', 'departure', 'dissolved', 'eliminated', 'major_battle', 'industry_up', 'industry_down', 'dominance', 'dominance_broken', 'finished']);
 const request = (cue, mine = false) => ({ cue, priority: PRIORITY[cue] + (mine ? 2 : 0), mine });
 
-/** Cue for one classified headline. `viewer` = { you, side } (both null for spectators). */
+/** Cue for one classified headline. `viewer` = viewerOf(state) (you/side null for spectators).
+ * Loud stingers only for headlines that affect the viewer; other people's news is a quiet,
+ * rate-limited blip (the `chat` cue), like the rail row it accompanies. */
 export function headlineCue(item, viewer = {}) {
-  const h = item.headline, you = viewer.you ?? null;
+  const h = item?.headline, you = viewer.you ?? null;
   if (!h) return null;
+  if (!KNOWN.has(h.kind)) return null;
+  if (!affectsViewer(item, viewer)) return request('chat');
   const mine = Boolean(you) && [h.from, h.to, h.countries, [h.country, h.owner, h.previousOwner]].flat().includes(you);
   switch (h.kind) {
     case 'war': return request('war', mine);

@@ -130,24 +130,44 @@ test('headlines are deterministic, legacy saves simply lack them, and a stopped 
 
 const names = { country: id => ({ usa: 'United States', britain: 'British Empire', france: 'French Republic' })[id] || id,
   province: id => id, side: id => id, time: n => `t${n}` };
-test('clients format, but never reclassify, headlines; eliminations get a dedicated fallen/defeat banner', () => {
+test('clients format, but never reclassify, headlines; big banners only for what affects the viewer', () => {
   const alliance = { id: 3, seq: 3, tick: 30, type: 'alliance_activated', name: '<img src=x>', headline: { kind: 'alliance', side: 'c1', countries: ['usa', 'france'] } };
   assert.match(headlineCopy(alliance, names).detail, /^<img src=x>: United States \+ French Republic\.$/);
-  const plan = presentHeadline(alliance, names, 'usa');
+  const plan = presentHeadline(alliance, names, { you: 'usa' });
   assert.equal(plan.banner.kind, 'alliance'); assert.equal(plan.banner.name, '<img src=x>');
   assert.deepEqual(plan.effects, [['alliance', { countries: ['usa', 'france'] }]]);
+  assert.equal(presentHeadline(alliance, names, { you: 'britain' }).banner, null, 'someone else\'s alliance: rail row only');
+  assert.deepEqual(presentHeadline(alliance, names, { you: 'britain' }).effects, plan.effects, 'the map effect stays');
   const fallen = { id: 8, tick: 90, type: 'eliminated', country: 'france', headline: { kind: 'eliminated', country: 'france' } };
-  const other = presentHeadline(fallen, names, 'usa'), own = presentHeadline(fallen, names, 'france');
-  assert.equal(other.banner.kind, 'fallen'); assert.equal(other.banner.title, 'French Republic has fallen');
+  assert.equal(presentHeadline(fallen, names, { you: 'usa' }).banner, null);
+  const ally = presentHeadline(fallen, names, { you: 'usa', allies: ['france'] }), own = presentHeadline(fallen, names, { you: 'france' });
+  assert.equal(ally.banner.kind, 'fallen'); assert.equal(ally.banner.title, 'French Republic has fallen');
   assert.equal(own.banner.kind, 'defeat'); assert.equal(own.banner.title, 'Your country has fallen');
-  assert.deepEqual(other.effects, [['eliminated', { country: 'france' }]]);
-  const fight = { id: 9, tick: 91, type: 'battle', headline: { kind: 'major_battle', province: 'mexico', casualties: 44, worldTroops: 900, threshold: 27, captured: true, owner: 'usa', previousOwner: 'britain' } };
-  assert.equal(presentHeadline(fight, names, null).banner.title, 'Major battle at mexico');
-  assert.match(presentHeadline(fight, names, null).banner.detail, /^44 troops lost/);
+  assert.deepEqual(ally.effects, [['eliminated', { country: 'france' }]]);
+  const fight = { id: 9, tick: 91, type: 'battle', arrivals: [{ country: 'usa', amount: 40 }], headline: { kind: 'major_battle', province: 'mexico', casualties: 44, worldTroops: 900, threshold: 27, captured: true, owner: 'usa', previousOwner: 'britain' } };
+  assert.equal(presentHeadline(fight, names, { you: 'britain' }).banner.title, 'Major battle at mexico');
+  assert.match(presentHeadline(fight, names, { you: 'usa' }).banner.detail, /^44 troops lost/);
+  assert.equal(presentHeadline(fight, names, { you: 'france' }).banner, null);
   assert.deepEqual(presentHeadline(fight, names, null).effects, [['captured', { province: 'mexico', owner: 'usa' }]]);
   const built = { id: 10, tick: 92, type: 'development_completed', headline: { kind: 'industry_up', province: 'ruhr', country: 'usa', level: 3 } };
-  assert.equal(presentHeadline(built, names, null).banner, null, 'industry is feed + map effect only');
+  assert.equal(presentHeadline(built, names, { you: 'usa' }).banner, null, 'industry is feed + map effect only');
   assert.deepEqual(presentHeadline(built, names, null).effects, [['industry_up', { province: 'ruhr', level: 3 }]]);
+});
+
+test('popup policy: a third-party war is a rail row, a war on the viewer is one banner, spectators get none', async () => {
+  const { affectsViewer } = await import('../public/feed-model.js');
+  const war = to => ({ headline: { kind: 'war', from: ['germany'], to } });
+  assert.equal(presentHeadline(war(['russia']), names, { you: 'usa' }).banner, null);
+  assert.equal(presentHeadline(war(['usa', 'britain']), names, { you: 'usa' }).banner.kind, 'war');
+  assert.equal(presentHeadline(war(['britain']), names, { you: 'usa', allies: ['britain'] }).banner.kind, 'war', 'your coalition is named');
+  const kinds = [war(['usa']), { headline: { kind: 'peace', from: ['usa'], to: ['germany'] } }, { headline: { kind: 'alliance', side: 'c', countries: ['usa'] } },
+    { headline: { kind: 'eliminated', country: 'usa' } }, { headline: { kind: 'major_battle', province: 'p', owner: 'usa' } },
+    { headline: { kind: 'dominance', side: 'c' } }, { headline: { kind: 'dominance_broken', side: 'c' } }, { headline: { kind: 'departure', country: 'usa', side: 'c' } }];
+  for (const item of kinds) assert.equal(presentHeadline(item, names, { you: null }).banner, null, item.headline.kind);
+  assert.equal(affectsViewer({ headline: { kind: 'finished' } }, {}), true, 'the result is the one thing spectators are shown big');
+  assert.equal(affectsViewer({ headline: { kind: 'dissolved', side: 'c9' } }, { you: 'usa', side: 'solo:usa:3', pastSides: ['c9'] }), true);
+  assert.equal(affectsViewer({ headline: { kind: 'industry_down', province: 'p', owner: 'usa' } }, { you: 'usa' }), true);
+  assert.equal(affectsViewer({ headline: { kind: 'dominance', side: 'c' } }, { you: 'usa' }), true, 'a countdown is for or against every seat');
 });
 
 test('a real elimination reaches every client as the same feed headline', () => {

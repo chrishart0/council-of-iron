@@ -33,6 +33,9 @@ for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>app.close().the
 
 // A private test-process channel, never a route on the game server.
 createInterface({input:process.stdin}).on('line',line=>{
+  // Test-only: another seat in the war room sends a DM or an alliance offer (the same act() path as any client).
+  if(line.startsWith('dm ')){const [,from,to,...words]=line.split(' ');act(w,MAP,from,{type:'chat',channel:'dm',to,text:words.join(' ')},`ui-war-dm-${w.tick}-${from}-${to}`);app.store.save(w);console.log(JSON.stringify({tick:w.tick}));return;}
+  if(line.startsWith('offer ')){const [,from,to]=line.split(' ');const r=act(w,MAP,from,{type:'propose',country:to,name:'Iron Triangle'},`ui-war-offer-${w.tick}-${from}-${to}`);app.store.save(w);console.log(JSON.stringify({tick:w.tick,proposalId:r.proposalId}));return;}
   // Test-only: an agent seat in the war room accepts the open alliance offer it received.
   if(line.startsWith('ally ')){const who=line.slice(5).trim(),offer=w.proposals.find(q=>q.status==='open'&&q.roster.includes(who));if(!offer)throw new Error('No open offer');
     act(w,MAP,who,{type:'accept',proposalId:offer.id},`ui-war-accept-${offer.id}`);app.store.save(w);console.log(JSON.stringify({tick:w.tick,status:offer.status}));return;}

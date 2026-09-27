@@ -67,7 +67,6 @@ main{max-width:1800px;margin:auto;padding:30px 3vw}
 .march-list{margin-top:17px;border-top:1px solid var(--line);padding-top:13px}.march-list h3{font-size:18px}.march-scroll{max-height:300px;overflow:auto}.march-row{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid #53624f7a;font-size:11px}.march-row>span,.march-row>.march-focus{flex:1;min-width:0}.march-row small{display:block;font-size:10px;color:var(--muted)}.march-row>button{font-size:10px;padding:5px 7px;min-height:32px}.march-row>.march-focus{border:0;text-align:left;padding:0;background:transparent}.march-row.returning{border-left:2px solid var(--gold);padding-left:8px}
 .route-reserve-note,.development-payback,.coalition-forecast,#attack-plan{font-size:11px;line-height:1.65;padding:10px 12px;margin:12px 0;border-left:2px solid var(--gold);background:#0e2128}.route-reserve-note p{margin:8px 0}.route-reserve-note button{font-size:10px;padding:4px 6px;min-height:30px;margin-top:5px}#attack-plan:empty{display:none}.coalition-forecast strong{color:#ead49b}.coalition-forecast table{width:100%;font-size:10px;margin-top:8px}.coalition-forecast td{padding:4px 2px;vertical-align:top}.coalition-forecast td:last-child{text-align:right}.incoming-waves{padding:13px 0 0;margin-top:15px;border-top:1px solid var(--line)}.incoming-waves h3{font-size:17px}.incoming-waves p{font-size:11px;margin:7px 0;color:var(--muted)}
 .coalition-member{display:flex;justify-content:space-between;gap:10px;font-size:12px;border-bottom:1px solid #53624f80;padding:9px 0}.coalition-member>span:last-child{text-align:right}.coalition-member small{color:var(--muted)}#coalition-info>p.small{margin-top:12px;font-size:11px}.offer{background:#12232a;border:1px solid #9a8552;padding:13px;margin:13px 0;font-size:11px}.offer strong{display:block;font:21px var(--serif);margin-bottom:7px}.offer p{margin-bottom:8px}.offer-terms,.notice{padding-left:9px;border-left:2px solid var(--gold)}.offer small{color:var(--muted)}.offer .button-row{margin-top:10px}#alliance-form{margin-top:18px}#leave-alliance{width:100%;font-size:11px;margin:14px 0}
-.dispatches h2{font-size:25px}.dispatches #messages{height:clamp(220px,32vh,440px);overflow:auto;padding:8px 0;margin-bottom:14px;border-block:1px solid var(--line);scrollbar-width:thin}.message{padding:12px 0;border-bottom:1px solid #5a66584d;font-size:12px;overflow-wrap:anywhere}.message header{font-size:9px;color:var(--muted);margin-bottom:6px;letter-spacing:.3px}.message header b{color:#e9c895}.message p{margin:0;white-space:pre-wrap;line-height:1.65}.chat-target{display:flex;gap:8px}.chat-target label{flex:1;min-width:0}
 .war-council{border-top:1px solid var(--line);margin-top:24px;padding-top:20px}.war-council h3{margin:3px 0 10px}.war-council .button-row{margin:10px 0}.war-council .button-row button{min-width:0}.war-council>p.small{line-height:1.55}.diplomacy-motion{padding:12px;margin-top:11px;border:1px solid var(--line);background:#12242c;border-left:3px solid #94624c}.diplomacy-motion strong{font:18px var(--serif)}.diplomacy-motion p{font-size:11px;margin:7px 0}.diplomacy-motion small{display:block;color:var(--muted);margin-bottom:8px}.diplomacy-motion button{width:100%;font-size:11px}
 .transit-panel{margin:17px 0;padding:15px;border:1px solid var(--line);background:#0f2229}.transit-panel h3{font:19px var(--serif);margin:0 0 5px}.transit-panel p{margin:0 0 11px}.transit-panel label{display:block;margin:8px 0}.transit-panel button{width:100%;margin-top:7px}
 dialog{color:#eae1cd;background:#192d35;border:1px solid var(--gold);padding:28px;width:min(470px,90vw);box-shadow:0 18px 70px #0008}dialog::backdrop{background:#07141ccc}dialog h2{font-size:28px}dialog .confirmation-text{font-size:13px;line-height:1.7;color:#c4cbbb}dialog .button-row{margin-top:24px}
@@ -132,7 +131,6 @@ body[data-status=lobby] .hud-rail{display:none}
 .alerts>*{max-width:100%;margin:0;box-shadow:0 8px 22px #0007;pointer-events:auto}
 .spectator-note{padding:8px 12px;background:#243b42f2;color:#e9d7ad;font-size:11px;border:1px solid #a88f61}
 .threat-strip{background:#573628f0;border:1px solid #c69b69;color:#ffe6c4;display:flex;align-items:center;gap:6px 8px;padding:6px 10px;font-size:11px;flex-wrap:wrap}.threat-strip>span{font-weight:600}.threat-strip button{background:transparent;border-color:#a38a614d;font-size:11px;min-height:30px;padding:3px 7px;color:inherit}.threat-strip b{margin-left:6px}
-.council-alert{display:flex;align-items:center;gap:8px;font-size:12px;background:#2c3a2ff2;border-color:#c9ae73;color:#f3e2b6;text-align:left}.council-alert .ui-icon{margin:0;color:var(--gold)}
 .battle-signal{display:flex;align-items:center;gap:12px;background:#142b32f5;color:#f1e7ce;border:1px solid #c8ab6d;padding:10px 12px;animation:signal-arrive .22s ease-out}.battle-signal[data-tone=lost]{background:#49302af5;border-color:#dca17d}.battle-signal>div{min-width:0}.battle-signal span{display:block;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#e1bb7a}.battle-signal strong{display:block;font:20px var(--serif)}.battle-signal small{font-size:11px;color:#d0d0bb}.battle-signal button{font-size:11px;min-height:32px}.battle-signal>.ui-icon{width:24px;height:24px;margin:0;color:var(--gold)}
 .countdown-break{background:#22362bf0;border-left:3px solid #dbc189;color:#e3d3ae;font-size:11px;padding:8px 12px;pointer-events:none}
 /* Right rail: leaderboard, then the World history filling the rest of the edge. */
@@ -264,3 +262,38 @@ html.map-expanded-lock,html.map-expanded-lock body{overflow:hidden;overscroll-be
 .war-room.map-expanded{--hud-h:0px;--nav-h:0px;--top:var(--safe-t);--bottom:var(--safe-b)}
 .war-room.map-expanded .hud-bar{display:none}
 .war-room.map-expanded .expand-button{background:#394343}
+/* Declare war & march: the commit becomes a war action; the confirmation lists the real consequences. */
+#send-army.war-primary{background:#8e2a2e;color:#ffeee4;border-color:#e0806a;box-shadow:inset 0 -2px #4b1216}#send-army.war-primary:hover{background:#a8363a}
+.war-confirm{margin-top:10px;display:grid;gap:8px}.war-confirm-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:12px}.war-confirm-row>b{flex-basis:100%;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--gold)}
+.war-confirm-country{display:inline-flex;align-items:center;gap:5px}.war-confirm-country .insignia{width:18px;height:22px}.war-confirm p{margin:0;color:#c4cbbb}
+/* HUD attention badges: unread DM/alliance messages (✉) and decisions waiting for you (⚑). */
+.hud-badge{gap:4px;padding:0 8px;border-left-width:1px}.hud-badge.has-unread{background:#3a2f16;border-color:#ffb454;color:#ffe2a6}.hud-badge.action{background:#3a1d19;border-color:#ff6a4d;color:#ffd9cc}
+.badge-count:empty{display:none}.badge-count{font-weight:800;font-variant-numeric:tabular-nums}
+/* Notices: compact, non-blocking cards for things addressed to you. Beside the rail on wide screens. */
+.notice{position:fixed;z-index:55;top:calc(var(--top) + var(--gap));right:calc(var(--rail-w) + 2 * var(--gap) + var(--safe-r));width:min(360px,calc(100vw - 2 * var(--gap)))}
+.notice-card{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 36px 8px 10px;position:relative;background:#132b33f7;border:1px solid #e0bc7c;border-left:4px solid #ffb454;box-shadow:0 10px 28px #000a;color:#f1e7ce;font-size:12px}
+.notice[data-kind=decision] .notice-card{border-left-color:#ff6a4d}
+.notice-flag .insignia{width:22px;height:26px}.notice-words{flex:1;min-width:0;display:flex;flex-direction:column}
+.notice-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.notice-detail{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#d0d0bb;font-size:11px}
+.notice-actions{flex-basis:100%;display:flex;gap:6px}.notice-actions button{min-height:32px;padding:3px 10px;font-size:11px}
+.notice-close{position:absolute;top:4px;right:4px;width:28px;min-height:28px;padding:0;background:transparent;border-color:transparent}
+/* Big banners are reserved for what affects you; even those stay within 40% of the screen. */
+.declaration,.alliance-seal,.fallen-seal{max-height:40vh;max-width:40vw;overflow:hidden}
+@media(max-width:1099px){.declaration,.alliance-seal,.fallen-seal{max-width:calc(100vw - 2 * var(--gap))}}
+/* Phones: every popup is a compact toast under the HUD (≤72 px), never over the sheet or the commit. */
+@media(max-width:759px),(max-height:499px){
+ .notice{top:calc(var(--top) + 6px);left:calc(var(--gap) + var(--safe-l));right:calc(var(--gap) + var(--safe-r));width:auto}
+ .notice-card{max-height:72px;overflow:hidden;padding:6px 34px 6px 8px}.notice-card:has(.notice-actions){max-height:none}
+ .declaration,.alliance-seal,.fallen-seal{top:calc(var(--top) + 6px);left:calc(var(--gap) + var(--safe-l));right:calc(var(--gap) + var(--safe-r));width:auto;max-width:none;max-height:min(72px,15vh);
+  transform:none;animation:toast-in var(--banner-duration,3s) both;padding:8px 12px;display:flex;align-items:center;gap:10px;text-align:left;border-top-width:3px;flex-direction:row}
+ .declaration:before{display:none}.declaration span,.alliance-stamp,.fallen-seal span{font-size:8px;letter-spacing:1.4px;margin:0}
+ .declaration strong,.alliance-ribbon strong,.fallen-seal strong{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .declaration p,.alliance-ribbon p,.fallen-seal p{margin:0;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .declaration>*,.fallen-seal>div,.alliance-ribbon{min-width:0}
+ .alliance-standards{flex:none;gap:2px}.alliance-standard .insignia{width:22px;height:26px}.alliance-standard figcaption{display:none}
+ .alliance-ribbon{margin:0;padding:0;min-width:0;flex:1;background:none;color:inherit;clip-path:none;text-align:left;animation:none}
+ .fallen-standard .insignia{width:24px;height:28px}.fallen-standard figcaption,.fallen-strike{display:none}
+}
+@keyframes toast-in{0%{opacity:0;transform:translateY(-12px)}8%,85%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-6px)}}
+/* Landscape phones: the order panel runs full height on the left, so toasts start to its right. */
+@media(max-height:499px) and (min-width:760px){body:has(#command-panel:not([hidden])) :is(.notice,.declaration,.alliance-seal,.fallen-seal){left:calc(var(--panel-w) + 2 * var(--gap) + var(--safe-l))}}

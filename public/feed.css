@@ -135,3 +135,16 @@
  .lb-toggle{min-height:40px}.lb-modes button{min-height:40px;padding:3px 11px}
 }
 @media(prefers-reduced-motion:reduce){.lb-move{animation:none!important}}
+
+/* v0.7 single view: the rail carries every channel the viewer may read. */
+.feed-chips{flex:none;display:flex;gap:4px;padding:6px 8px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid #a88e5c33}
+.feed-chip{flex:none;min-height:28px;padding:2px 10px;font-size:11px;border-radius:14px;background:#13262d;border-color:#5f716290;white-space:nowrap}
+.feed-chip.alliance{border-left:4px solid var(--band,#65706a)}.feed-chip[aria-pressed=true]{background:#394343;border-color:#e0bc7c;color:#ffe0a4}
+.feed-channel{font-size:9px;letter-spacing:.6px;text-transform:uppercase;padding:0 5px;border-radius:3px;background:#ffffff14;color:#d7ceb8;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.feed-channel.alliance{border-left:3px solid var(--band,#65706a)}.feed-channel.dm{background:#3b2f4a;color:#e9d9ff}
+.feed-chat[data-channel=alliance]{border-left-color:#6cb8ff55}.feed-chat[data-channel=dm]{border-left-color:#b48cff66;background:#b48cff0d}
+.feed-row.unread{box-shadow:inset 3px 0 #ffb454}
+.feed-system>div{display:flex;align-items:center;gap:8px}.feed-actions{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:4px 0 2px 30px}.feed-actions:empty{display:none}
+.feed-actions button{min-height:30px;padding:3px 10px;font-size:11px}.feed-status{font-size:10px;color:#cdbfae;flex-basis:100%}
+.feed-recipient{margin:0;flex-basis:100%}.feed-recipient select{min-height:30px;margin:0;padding:3px 6px;font-size:12px}
+.feed-notice:not([hidden]){flex-basis:100%;display:block;color:#e6cf97;font-size:10px}

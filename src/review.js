@@ -45,14 +45,19 @@ function summary(game) {
     maximumPrize: 100 * game.players.length,
     unawardedPrize: Math.max(0, 100 * game.players.length - sum(players.map(p => p.payout))),
     allianceScoreDefinition: 'Sum of final roster members’ individual match Prestige. Not a second reward or a separate rating.',
-    privacy: 'Public military history and formal alliance changes only. No private messages, unexecuted orders or private offers.' };
+    privacy: 'Public military history and formal alliance changes only. No private messages, unexecuted orders or private offers.' +
+      (gameRules(game).revealAllianceChatAfterMatch === true ? ' This room announced at join that alliance chat becomes public after the match; direct messages stay private.' : '') };
 }
 export function unavailableReview(game, reason) {
-  return { version: 1, report: { ...summary(game), historyAvailable: false, historyError: reason }, replay: null };
+  return { version: 1, report: { ...summary(game), historyAvailable: false, historyError: reason, allianceChatRevealed: false }, replay: null };
 }
 export function buildReview(game, map) {
   requireRule(game.status === 'finished' && game.outcome, 'After-action review is available only when the match is finished.', 409);
+  // Sole exception to the recipient rule: rooms created with this flag announce at join that
+  // coalition chat becomes public after the match. Never DMs, offers, orders or event IDs.
+  const revealAllianceChat = gameRules(game).revealAllianceChatAfterMatch === true;
   const report = { ...summary(game), historyAvailable: true, series: [], events: [], battles: [], tenures: [],
+    allianceChatRevealed: revealAllianceChat, allianceChat: [],
     totals: { battles: 0, casualties: 0, interned: 0, recruited: 0, invested: 0, upgrades: 0 } };
   const g = freshGame(game, map), rules = gameRules(g), ids = g.players.map(p => p.id);
   const metrics = new Map(ids.map(id => [id, { country: id, recruited: 0, invested: 0, upgrades: 0,
@@ -97,6 +102,12 @@ export function buildReview(game, map) {
     }
     for (const e of events) {
       // Explicit allowlist: new engine events are NOT automatically made public here.
+      if (revealAllianceChat && e.type === 'message' && e.channel === 'alliance') {
+        // Chat is created in act(), before tick(): `affiliations` is the sender's side at send time.
+        const side = affiliations.get(e.from);
+        report.allianceChat.push({ tick: e.tick, from: e.from, side,
+          sideName: g.coalitions.find(c => c.id === side)?.name ?? null, text: e.text, untrusted: true });
+      }
       if (e.recipients) continue;
       if (e.type === 'battle') {
         const casualties = e.casualties ?? (e.before + (e.defenderRecruited||0) + sum(e.arrivals.map(a => a.amount)) - e.troops - (e.withdrawn||0) - (e.defenderRouted||0));

@@ -23,9 +23,11 @@ export function operationId() {
   return crypto.randomUUID?.() ?? [...crypto.getRandomValues(new Uint8Array(16))].map(n=>n.toString(16).padStart(2,'0')).join('');
 }
 /** Mouse, keyboard, Escape and touch share the native dialog/focus implementation. */
-export function confirmAction({ title, message, accept='Confirm' }) {
+/** `extra` is an optional DOM node (built by the caller with textContent and authored SVG only). */
+export function confirmAction({ title, message, accept='Confirm', extra=null }) {
   const dialog=document.getElementById('confirm-dialog'),previous=document.activeElement;
   dialog.querySelector('h2').textContent=title;dialog.querySelector('.confirmation-text').textContent=message;
+  dialog.querySelector('.confirmation-extra').replaceChildren(...(extra?[extra]:[]));
   dialog.querySelector('[value="confirm"]').textContent=accept;
   dialog.returnValue='cancel';dialog.showModal();
   return new Promise(resolve=>dialog.addEventListener('close',()=>{previous?.focus();resolve(dialog.returnValue==='confirm');},{once:true}));

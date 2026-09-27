@@ -44,7 +44,8 @@ export class CouncilClient {
     if(!this.session.profileToken && !this.explicitToken)await this.register(name);
     const result=await this.request(`/api/games/${match}/join`,'POST',{country,kind:'agent',model,persona},this.explicitToken || this.session.profileToken);
     this.match=match;this.session.match=match;this.session.country=country;this.session.seatToken=result.token;this.persist();
-    return {match,country,sessionFile:this.sessionPath};
+    // Room notices (e.g. alliance chat published in the post-match replay); never contain credentials.
+    return {match,country,sessionFile:this.sessionPath,notices:result.notices || []};
   }
   gamePath(suffix='') {if(!this.match)throw new Error('Join a match or set COUNCIL_MATCH first.');return `/api/games/${this.match}${suffix}`;}
   observe(after=0) { return this.request(this.gamePath(`?after=${after}`)); }
@@ -63,6 +64,7 @@ export class CouncilClient {
   }
   review() {return this.request(this.gamePath('/review'));}
   replay(tick) {return this.request(this.gamePath(`/replay?tick=${encodeURIComponent(tick)}`));}
+  /** Any action object is sent as-is; move/attack/transit accept optional declareWar:true (solo, atomic). */
   action(action,opId=randomUUID()) { return this.request(this.gamePath('/actions'),'POST',{action,opId}); }
   preview(from,to,amount) {return this.request(this.gamePath(`/preview?${new URLSearchParams({from,to,amount})}`));}
   list() {return this.request('/api/games','GET',undefined,'');}

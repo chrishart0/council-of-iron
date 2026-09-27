@@ -2,7 +2,7 @@
  * Headlines come from the engine's `event.headline`; this module never reclassifies them.
  * Player text (chat, alliance names) is written with textContent only.
  */
-import { feedItems, headlineCopy } from './feed-model.js';
+import { headlineCopy, affectsViewer, systemCopy, isPersonal } from './feed-model.js';
 import { icon, insignia } from './presentation.js';
 
 // The history column keeps the whole match (a full 30-minute match stays well below this).
@@ -18,13 +18,16 @@ const node = (tag, className, text) => {
 const itemKey = item => item.id === null ? `b${item.seq}:${item.side}` : `e${item.id}`;
 const reducedMotion = () => globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-/** Chronological public history. Rows are appended, never re-rendered, so scroll position,
- * focus and screen-reader position survive polling. New live rows arrive expanded (clamped to
- * four lines), then shrink to two; any clamped text expands on click, Enter or Space. */
+/** The unified rail (v0.7): headlines, world chat and, for a seated player, their own alliance chat,
+ * DMs and diplomatic system rows — exactly the events this seat received (commsItems). Rows are
+ * appended, never re-rendered, so scroll position, focus and screen-reader position survive polling.
+ * New live rows arrive expanded (clamped to four lines), then shrink to two; any clamped text expands
+ * on click, Enter or Space. Filter chips show All / World / an alliance / DMs / Needs action. */
 export class WorldFeed {
   constructor({ list, unread, toggle, body, jump }, names) {
     Object.assign(this, { list, unread, toggle, body, jump, names });
     this.keys = new Set(); this.count = 0; this.lastSeq = 0; this.caughtUp = false; this.below = 0; this.timers = new Set();
+    this.filter = 'all'; this.readSeq = 0; this.onRead = null; this.actionRows = new Map();
     list.addEventListener('click', event => { const clamp = event.target.closest('.feed-clamp[aria-expanded]'); if (clamp) this.expand(clamp); });
     list.addEventListener('keydown', event => {
       const clamp = event.target.closest('.feed-clamp[aria-expanded]');
@@ -32,10 +35,19 @@ export class WorldFeed {
     });
     list.addEventListener('scroll', () => { if (this.atBottom()) this.showJump(0); }, { passive: true });
     jump?.addEventListener('click', () => { this.list.scrollTop = this.list.scrollHeight; this.showJump(0); });
+    // A personal row counts as read once it has actually been visible in the open rail.
+    this.seen = globalThis.IntersectionObserver ? new IntersectionObserver(entries => {
+      if (!this.open) return;
+      let top = this.readSeq;
+      for (const entry of entries) if (entry.isIntersecting && entry.target.dataset.personal) top = Math.max(top, Number(entry.target.dataset.seq));
+      if (top > this.readSeq) { this.readSeq = top; this.onRead?.(top); }
+    }, { root: list, threshold: .6 }) : null;
   }
   reset() {
     for (const timer of this.timers) clearTimeout(timer); this.timers.clear();
-    this.list.replaceChildren(); this.keys.clear(); this.count = 0; this.lastSeq = 0; this.caughtUp = false; this.showUnread(); this.showJump(0);
+    this.seen?.disconnect(); this.actionRows.clear(); this.room = null; this.filter = 'all';
+    this.list.replaceChildren(); this.keys.clear(); this.count = 0; this.lastSeq = 0; this.caughtUp = false; this.readSeq = 0;
+    this.showUnread(); this.showJump(0);
   }
   get open() { return this.toggle.getAttribute('aria-expanded') === 'true'; }
   setOpen(open) {
@@ -53,23 +65,51 @@ export class WorldFeed {
     this.below = n; if (!this.jump) return;
     this.jump.hidden = !n; this.jump.textContent = n ? `${n} new ↓` : '';
   }
-  /** `live` marks items that arrived after catch-up: only those count as unread, flash or start expanded. */
-  update(events, breaks, { live, you }) {
-    const atBottom = this.atBottom(), added = [];
-    for (const item of feedItems(events, breaks)) {
+  /** Filter token: 'all', 'world', 'alliance:<side>', 'dm', or 'action' (rows waiting for your decision). */
+  setFilter(filter) {
+    this.filter = filter;
+    for (const li of this.list.children) this.applyFilter(li);
+    this.list.scrollTop = this.list.scrollHeight; this.measureAll();
+  }
+  applyFilter(li) {
+    const f = this.filter, threads = (li.dataset.threads || '').split(' ');
+    li.hidden = !(f === 'all' || li.classList.contains('feed-empty') || (f === 'action' ? li.dataset.actionable === 'true' : threads.includes(f)));
+  }
+  /** `items` = commsItems(...); `live` marks items that arrived after catch-up (they flash, start
+   * expanded and count as unread while the rail is collapsed). Returns the newly added live items. */
+  update(items, { live, you }) {
+    const atBottom = this.atBottom(), added = [], fresh = [];
+    for (const item of items) {
       const key = itemKey(item); if (this.keys.has(key)) continue;
-      const li = this.row(item, live); this.keys.add(key); this.list.append(li); added.push(li);
+      const li = this.row(item, live, you); this.keys.add(key); this.list.append(li); this.applyFilter(li); added.push(li);
+      if (live) fresh.push(item);
       if (live && !this.open && !(item.type === 'message' && item.from === you)) this.count++;
     }
     while (this.list.children.length > MAX_ROWS) { this.list.firstElementChild.remove(); }
-    if (!this.list.children.length) this.list.append(node('li', 'feed-empty', 'No headlines or public messages yet.'));
-    else this.list.querySelector('.feed-empty')?.remove();
+    if (!this.list.children.length) this.list.append(node('li', 'feed-empty', 'No headlines or messages yet.'));
+    else if (this.list.children.length > 1) this.list.querySelector('.feed-empty')?.remove();
     if (added.length) {
       if (atBottom || !live) this.list.scrollTop = this.list.scrollHeight;
       else this.showJump(this.below + added.length);
       for (const li of added) this.measure(li.querySelector('.feed-clamp'));
     }
     this.showUnread();
+    return fresh;
+  }
+  /** Inline decisions on diplomatic rows. `decide(item)` → { status, buttons: [{ label, data, primary }] }. */
+  refreshActions(decide) {
+    for (const [li, item] of this.actionRows) {
+      if (!li.isConnected) { this.actionRows.delete(li); continue; }
+      const { status = '', buttons = [] } = decide(item) || {}, box = li.querySelector('.feed-actions');
+      const key = JSON.stringify([status, buttons]);
+      if (box.dataset.key === key) continue;
+      box.dataset.key = key; li.dataset.actionable = String(buttons.length > 0); this.applyFilter(li);
+      box.replaceChildren(...(status ? [node('small', 'feed-status', status)] : []), ...buttons.map(b => {
+        const button = node('button', b.primary ? 'primary' : '', b.label); button.type = 'button';
+        for (const [k, v] of Object.entries(b.data)) button.dataset[k] = v;
+        return button;
+      }));
+    }
   }
   /** Expand or collapse one clamped text. */
   expand(clamp) {
@@ -96,16 +136,31 @@ export class WorldFeed {
     }, FRESH_MS);
     this.timers.add(timer);
   }
-  row(item, live) {
+  row(item, live, you) {
     const n = this.names, li = node('li', `feed-row${live ? ' fresh' : ''}`);
-    li.dataset.feedKey = itemKey(item);
+    li.dataset.feedKey = itemKey(item); li.dataset.seq = String(item.seq); li.dataset.threads = (item.threads || ['world']).join(' ');
+    if (isPersonal(item, you)) { li.dataset.personal = 'true'; this.seen?.observe(li); if (item.seq > this.readSeq) li.classList.add('unread'); }
     if (live) this.settle(li);
-    if (!item.headline) {
-      li.classList.add('feed-chat');
+    if (item.type === 'message') {
+      li.classList.add('feed-chat'); li.dataset.channel = item.channel || 'world';
       const header = node('header'), who = node('b', '', n.country(item.from));
       const flag = node('span', 'feed-flag'); flag.innerHTML = insignia(item.from); // authored constant SVG
-      header.append(flag, who, node('time', '', n.time(item.tick)));
+      header.append(flag, who);
+      if (item.channel === 'alliance') { const badge = node('span', 'feed-channel alliance', n.side(item.side) || 'Alliance'); const color = n.sideColor?.(item.side); if (color) badge.style.setProperty('--band', color); header.append(badge); }
+      if (item.channel === 'dm') header.append(node('span', 'feed-channel dm', item.from === you ? `DM → ${n.country(item.with)}` : 'DM'));
+      header.append(node('time', '', n.time(item.tick)));
       li.append(header, node('p', 'feed-text feed-clamp', item.text)); // player text: textContent only
+      return li;
+    }
+    if (item.system) {
+      const copy = systemCopy(item, n);
+      li.classList.add('feed-headline', 'feed-system'); li.dataset.tone = copy.tone; li.dataset.kind = `system-${item.system}`;
+      if (item.proposalId) li.dataset.proposal = item.proposalId; if (item.motionId) li.dataset.motion = item.motionId;
+      const head = node('div'), mark = node('span', 'feed-icon'); mark.innerHTML = icon(copy.icon);
+      const words = node('span', 'feed-words'); words.append(node('b', '', copy.title), node('time', '', n.time(item.tick)));
+      head.append(mark, words);
+      li.append(head, node('p', 'feed-detail feed-clamp', copy.detail), node('div', 'feed-actions'));
+      if (['offer', 'vote', 'peace_offer'].includes(item.system)) this.actionRows.set(li, item);
       return li;
     }
     const copy = headlineCopy(item, n);
@@ -126,6 +181,42 @@ export class WorldFeed {
     target.append(mark, words);
     li.append(target, node('p', 'feed-detail feed-clamp', copy.detail));
     return li;
+  }
+}
+
+/** Compact, non-blocking notices for things addressed to this seat (a DM, an alliance message, an
+ * offer or vote waiting for you). One at a time; ≤3 s unless it carries a decision, which stays until
+ * acted on or dismissed (✕, swipe up or Escape). Text only via textContent; standards are authored SVG. */
+export class Notifier {
+  constructor(root) {
+    this.root = root; this.queue = []; this.current = null; this.timer = null;
+    root.addEventListener('click', event => { if (event.target.closest('[data-notice-close]') || event.target.closest('button[data-accept],button[data-decline],button[data-vote-war],button[data-vote-peace],button[data-notice-view]')) setTimeout(() => this.dismiss()); });
+    let startY = null;
+    root.addEventListener('pointerdown', event => { startY = event.clientY; });
+    root.addEventListener('pointerup', event => { if (startY !== null && startY - event.clientY > 30) this.dismiss(); startY = null; });
+  }
+  reset() { clearTimeout(this.timer); this.queue = []; this.current = null; this.root.hidden = true; this.root.replaceChildren(); }
+  push(notice) {
+    if (this.queue.some(q => q.key === notice.key) || this.current?.key === notice.key) return;
+    this.queue.push(notice); while (this.queue.length > 4) this.queue.shift();
+    if (!this.current) this.next();
+  }
+  dismiss() { if (!this.current) return false; clearTimeout(this.timer); this.next(); return true; }
+  next() {
+    this.current = this.queue.shift() || null; this.root.hidden = !this.current;
+    if (!this.current) { this.root.replaceChildren(); return; }
+    const n = this.current, card = node('div', 'notice-card'), flag = node('span', 'notice-flag');
+    if (n.standard) flag.innerHTML = insignia(n.standard); // authored SVG
+    const words = node('div', 'notice-words'); words.append(node('b', 'notice-title', n.title), node('span', 'notice-detail', n.detail || ''));
+    const close = node('button', 'notice-close', '✕'); close.type = 'button'; close.dataset.noticeClose = ''; close.setAttribute('aria-label', 'Dismiss notice');
+    card.append(flag, words);
+    if (n.buttons?.length) {
+      const row = node('div', 'notice-actions');
+      for (const b of n.buttons) { const button = node('button', b.primary ? 'primary' : '', b.label); button.type = 'button'; for (const [k, v] of Object.entries(b.data)) button.dataset[k] = v; row.append(button); }
+      card.append(row);
+    }
+    card.append(close); this.root.replaceChildren(card); this.root.dataset.kind = n.kind || '';
+    if (!n.sticky) this.timer = setTimeout(() => this.next(), 3000);
   }
 }
 
@@ -157,11 +248,13 @@ export class Herald {
     const b = this.current, target = b.kind === 'alliance' ? this.alliance(b) : b.kind === 'fallen' || b.kind === 'defeat' ? this.fallen(b) : this.decree(b);
     target.dataset.seq = String(b.seq ?? ''); // which headline is showing (tests assert no stale replay)
     target.hidden = false; target.style.animation = 'none'; void target.offsetWidth; target.style.animation = '';
-    // Shorter when more is waiting, so a burst does not lag far behind the board.
-    const duration = (b.kind === 'battle' ? 3200 : b.kind === 'alliance' || b.kind === 'fallen' || b.kind === 'defeat' ? 4800 : 4400) * (this.queue.length > 1 ? .7 : 1);
+    // Brief (≤3 s) and shorter when more is waiting, so a burst does not lag behind the board.
+    const duration = (b.kind === 'battle' ? 2600 : 3000) * (this.queue.length > 1 ? .7 : 1);
     target.style.setProperty('--banner-duration', `${duration}ms`);
     this.timer = setTimeout(() => this.next(), duration);
   }
+  /** Escape (or a new room) dismisses the current banner at once; the next waiting one follows. */
+  dismiss() { if (!this.current) return false; clearTimeout(this.timer); this.next(); return true; }
   decree(b) {
     const box = this.el.declaration;
     box.className = `declaration ${b.kind}`;
@@ -196,8 +289,11 @@ export class Herald {
   }
 }
 
-/** Banner and map-effect plan for one live headline. Low-importance items return no banner. */
-export function presentHeadline(item, names, you) {
+/** Banner and map-effect plan for one live headline. Only headlines that directly affect the viewer
+ * (affectsViewer) get a banner; the rest are rail rows with their map effect. `viewer` is viewerOf(). */
+export function presentHeadline(item, names, viewer = {}) {
+  if (typeof viewer === 'string' || viewer === null) viewer = { you: viewer };
+  const you = viewer.you ?? null;
   const h = item.headline, copy = headlineCopy(item, names);
   const effects = [];
   let banner = null;
@@ -223,6 +319,7 @@ export function presentHeadline(item, names, you) {
     case 'industry_down': effects.push(['industry_down', { province: h.province, level: h.level }]); break;
     default: break;
   }
+  if (banner && !affectsViewer(item, viewer)) banner = null;
   if (banner) {
     banner.seq = item.seq ?? item.id;
     banner.mine = Boolean(you) && [h.from, h.to, h.countries, [h.country, h.owner, h.previousOwner]].flat().includes(you);

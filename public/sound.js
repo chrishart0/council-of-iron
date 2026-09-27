@@ -6,6 +6,7 @@
  * can observe what would be heard without real audio output.
  */
 import { CuePolicy, PRIORITY, eventCues, breakCues, threatIds, tensionActive, isStinger } from './sound-model.js';
+import { viewerOf } from './feed-model.js';
 
 const KEY = 'coi.sound';
 const DEFAULTS = { muted: false, music: 0.3, effects: 0.7, reduced: false };
@@ -156,8 +157,10 @@ export class SoundBoard {
    * catching up. Baselines (threats, stopped holds) always advance, so nothing old replays. */
   update(state, events = [], live = false) {
     if (!state) return;
-    if (state.id !== this.room) { this.room = state.id; this.threats = null; this.breakSeq = 0; }
-    const me = state.players?.find(p => p.id === state.you), viewer = { you: state.you || null, side: me?.side || null };
+    if (state.id !== this.room) { this.room = state.id; this.threats = null; this.breakSeq = 0; this.pastSides = new Set(); }
+    const me = state.players?.find(p => p.id === state.you);
+    if (me?.side) (this.pastSides ??= new Set()).add(me.side);
+    const viewer = viewerOf(state, this.pastSides || []);
     const threats = threatIds(state), breaks = state.dominanceBreaks || [];
     const requests = [];
     if (live && this.threats) {

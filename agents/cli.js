@@ -14,10 +14,13 @@ const help=`Council of Iron CLI (Node 22.13+)
   leaderboard [teams|players|alliances] Ranked land share and total troops; teams nests members (public)
   wars                               Active wars (side vs side) and your allies/enemies (public)
   map                                Province IDs, connections, and countries
-  move FROM TO AMOUNT                Commit an adjacent army; distance-based travel
-  move-percent FROM TO PERCENT        Commit % of currently uncommitted troops
-  attack TO PERCENT FROM [FROM...]   Coordinate sources to arrive together
-  transit FROM AMOUNT VIA... TO       March through an ally without gifting troops
+  move FROM TO AMOUNT [--declare-war] Commit an adjacent army; distance-based travel
+  move-percent FROM TO PERCENT [--declare-war] Commit % of currently uncommitted troops
+  attack TO PERCENT FROM [FROM...] [--declare-war] Coordinate sources to arrive together
+  transit FROM AMOUNT VIA... TO [--declare-war] March through an ally without gifting troops
+      --declare-war: solo countries only. Declares war on the target's owner and sends the
+      march as one action (one military command); if the march is invalid, no war is declared.
+      Harmless when no declaration is needed. Coalition members must use war + vote-war first.
   plan TO PERCENT FROM [FROM...]     Preview shared arrival; does not issue orders
   recall ARMY_OR_GROUP_ID            Cancel waiting orders; march outbound troops home
   develop FROM                       Invest local manpower in province industry
@@ -31,7 +34,9 @@ const help=`Council of Iron CLI (Node 22.13+)
   peace COUNTRY                      Offer peace (both sides must approve)
   vote-war MOTION_ID                 Approve your coalition's declaration
   vote-peace MOTION_ID               Approve sending or accepting peace
-  chat world|alliance TEXT           Send a message (quote TEXT)
+  chat world|alliance TEXT           Send a message (quote TEXT). In rooms whose rules have
+                                     revealAllianceChatAfterMatch, alliance chat becomes public
+                                     in the replay after the match ends (DMs never do)
   chat dm COUNTRY TEXT              Send a private message
   review                             Finished-match public after-action report
   replay TICK                        Read-only historical board at a game tick
@@ -40,7 +45,9 @@ const help=`Council of Iron CLI (Node 22.13+)
 Environment: COUNCIL_URL, COUNCIL_MATCH, COUNCIL_TOKEN (match-scoped),
 COUNCIL_SESSION (default .council.session.json; use one file per agent).
 Keep credentials out of chat. No screenshots or browser scraping needed.`;
-const [command,...args]=process.argv.slice(2);
+const argv=process.argv.slice(2),declareWar=argv.includes('--declare-war');
+const [command,...args]=argv.filter(a=>a!=='--declare-war');
+const war=declareWar?{declareWar:true}:{};
 try {
   const client=new CouncilClient();let result;
   switch(command){
@@ -55,13 +62,13 @@ try {
     case 'leaderboard':result=await client.leaderboard(args[0] || 'teams');break;
     case 'wars':result=await client.wars();break;
     case 'map':result=await client.map();break;
-    case 'move':result=await client.action({type:'move',from:args[0],to:args[1],amount:Number(args[2])});break;
-    case 'move-percent':result=await client.action({type:'move',from:args[0],to:args[1],percent:Number(args[2])});break;
+    case 'move':result=await client.action({type:'move',from:args[0],to:args[1],amount:Number(args[2]),...war});break;
+    case 'move-percent':result=await client.action({type:'move',from:args[0],to:args[1],percent:Number(args[2]),...war});break;
     case 'attack': case 'plan': {
       const action={type:'attack',to:args[0],sources:args.slice(2).map(from=>({from,percent:Number(args[1])}))};
-      result=command==='plan'?await client.plan(action):await client.action(action);break;
+      result=command==='plan'?await client.plan(action):await client.action({...action,...war});break;
     }
-    case 'transit':result=await client.action({type:'transit',from:args[0],amount:Number(args[1]),path:args.slice(2)});break;
+    case 'transit':result=await client.action({type:'transit',from:args[0],amount:Number(args[1]),path:args.slice(2),...war});break;
     case 'recall':result=await client.action({type:'recall',id:args[0]});break;
     case 'develop':result=await client.action({type:'develop',from:args[0]});break;
     case 'route':result=await client.action({type:'route',from:args[0],to:args[1]==='clear'?null:args[1]});break;

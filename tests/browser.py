@@ -163,12 +163,14 @@ def main():
                 expect(page.locator('#confirm-dialog')).not_to_be_visible()
                 assert not http(f'/api/games/{room}')['departures']
                 report['assertions'].append('Leaving an alliance requires explicit confirmation; Escape leaves membership untouched.')
-                page.locator('[data-tab="dispatches"]').click()
-                page.locator('#channel').select_option('dm')
-                page.locator('#recipient').select_option('britain')
-                page.locator('#chat-text').fill('Hold the Atlantic. This dispatch is private.')
-                page.locator('#chat-form button').click()
-                expect(page.locator('#messages')).to_contain_text('This dispatch is private.')
+                # v0.7 single view: private diplomacy lives in the same rail, on the DMs chip.
+                page.keyboard.press('Escape')
+                page.locator('[data-feed-filter="dm"]').click()
+                page.locator('#feed-recipient').select_option('britain')
+                expect(page.locator('#feed-send')).to_be_enabled(timeout=10000)
+                page.locator('#feed-text').fill('Hold the Atlantic. This dispatch is private.')
+                page.locator('#feed-send').click()
+                expect(page.locator('#feed-list .feed-chat[data-channel="dm"]').last).to_contain_text('This dispatch is private.')
                 # Drain the agent's cursor: the added banner waits let more events accumulate than one page.
                 agent_events,agent_cursor=[],0
                 while True:
@@ -178,18 +180,21 @@ def main():
                 cli('chat','dm','usa','<img src=x onerror="window.INJECTED=true"> Agreed. I will hold.')
                 page.wait_for_timeout(10000/12+200)  # shared chat cooldown on the 12x test clock
                 cli('chat','world','<img src=x onerror="window.INJECTED=true"> The envoy speaks to all.')
-                expect(page.locator('#feed-list .feed-chat').last).to_contain_text('The envoy speaks to all.',timeout=10000)
+                page.locator('[data-feed-filter="world"]').click()
+                expect(page.locator('#feed-list .feed-chat[data-channel="world"]').last).to_contain_text('The envoy speaks to all.',timeout=10000)
                 assert page.locator('#world-feed img').count()==0 and not page.evaluate('window.INJECTED')
-                assert 'Agreed. I will hold.' not in page.locator('#feed-list').inner_text()
-                report['assertions'].append('Agent world speech reached the browser World feed as inert text; private messages stayed out of it.')
-                expect(page.locator('#messages')).to_contain_text('Agreed. I will hold.')
-                assert page.locator('#messages img').count()==0
-                expect(page.locator('#unread')).to_have_text('')
-                page.locator('#chat-text').fill('Unsent draft survives live updates.')
+                expect(page.locator('#feed-list .feed-chat[data-channel="dm"]').last).to_be_hidden()  # the World chip shows no DMs
+                report['assertions'].append('Agent world speech reached the browser rail as inert text; the World chip excludes private messages.')
+                page.locator('[data-feed-filter="dm"]').click()
+                dm=page.locator('#feed-list .feed-chat[data-channel="dm"]').last
+                expect(dm).to_contain_text('Agreed. I will hold.');expect(dm).to_be_visible()
+                assert page.locator('#feed-list img').count()==0
+                expect(page.locator('#inbox-badge .badge-count')).to_have_text('',timeout=5000)  # read once visible in the rail
+                page.locator('#feed-text').fill('Unsent draft survives live updates.')
                 page.wait_for_timeout(900)
-                expect(page.locator('#chat-text')).to_have_value('Unsent draft survives live updates.')
+                expect(page.locator('#feed-text')).to_have_value('Unsent draft survives live updates.')
                 capture(page,1200)
-                report['assertions'].append('Reading the wire clears the unread badge; an unsent draft survives live polling.')
+                report['assertions'].append('A DM seen in the rail clears the ✉ badge; an unsent draft survives live polling.')
                 assert not page.evaluate('Boolean(window.INJECTED)')
                 public_state=http(f'/api/games/{room}')
                 assert not any(e['type']=='message' and e.get('channel')=='dm' for e in public_state['events'])
@@ -202,16 +207,16 @@ def main():
                 expect(spectator.locator('#move-form')).to_be_hidden()
                 expect(spectator.locator('#command-footer')).to_be_hidden()
                 assert spectator.evaluate('document.documentElement.scrollHeight<=innerHeight+1')
-                spectator.locator('[data-tab="dispatches"]').click()
-                assert 'This dispatch is private.' not in spectator.locator('#messages').inner_text()
+                assert 'This dispatch is private.' not in spectator.locator('#feed-list').inner_text()
+                expect(spectator.locator('#feed-list .feed-chat[data-channel="dm"]')).to_have_count(0)
+                expect(spectator.locator('#inbox-badge')).to_be_hidden()
                 expect(spectator.locator('#scoreboard .country-card')).to_have_count(8)
                 spectator.screenshot(path=str(artifacts/'spectator-desktop.png'),full_page=True)
                 # v0.7: spectating is already full screen: the map is the viewport and the history stays beside it.
                 assert spectator.locator('#map').bounding_box()=={'x':0,'y':0,'width':1600,'height':1050}
                 expect(spectator.locator('#world-feed #feed-list')).to_be_visible()
-                page.locator('#channel').select_option('world')
-                expect(page.locator('#chat-form button')).to_be_enabled(timeout=10000)
-                # Reply from the World feed itself: the shared chat action on channel world.
+                page.locator('#feed-text').fill('');page.locator('[data-feed-filter="world"]').click()
+                # Reply from the rail on the World chip: the shared chat action on channel world.
                 expect(page.locator('#feed-send')).to_be_enabled(timeout=10000)
                 page.locator('#feed-text').fill('<img src=x onerror="window.INJECTED=true"> Public call to the council.')
                 page.locator('#feed-send').click()

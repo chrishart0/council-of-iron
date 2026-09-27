@@ -14,6 +14,7 @@ import { choose } from '../agents/policy.js';
 const root = fileURLToPath(new URL('../', import.meta.url));
 export const MAP = JSON.parse(readFileSync(resolve(root, 'public/imperial-map.json'), 'utf8'));
 const PRESETS = { standard: 1, quick: 6 };
+export const ALLIANCE_CHAT_NOTICE = 'Alliance chat becomes public in the replay after the match ends.';
 const staticFiles = new Map([
   ['/', ['public/index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['public/app.js', 'text/javascript; charset=utf-8']],
@@ -152,6 +153,8 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         requireRule(data.scenario===undefined || data.scenario===MAP.id,'Unknown scenario.');
         const g=createGame({id:randomUUID().slice(0,8),name:data.name || 'Council chamber',hostId:me.id,
           speed:PRESETS[data.preset || 'standard'],eligible:league},MAP);
+        // New rooms only (never inside createGame): alliance chat is published in the finished replay.
+        g.rules.revealAllianceChatAfterMatch=true;
         games.set(g.id,g);save(g);return json(res,201,{id:g.id});
       }
       const match=path.match(/^\/api\/games\/([a-zA-Z0-9-]+)(?:\/(join|start|bots|actions|preview|plan|map|review|replay|feed))?$/);
@@ -207,7 +210,8 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
           if(existing && g.status!=='lobby') {
             requireRule(existing.id===data.country,'You already control a different country.',409);
           } else join(g,gameMap,{...data,profileId:me.id,name:me.name});
-          save(g);return json(res,200,{country:data.country,token:store.credential(me.id,g.id),match:g.id});
+          save(g);return json(res,200,{country:data.country,token:store.credential(me.id,g.id),match:g.id,
+            notices:g.rules?.revealAllianceChatAfterMatch===true?[ALLIANCE_CHAT_NOTICE]:[]});
         }
         if(endpoint==='start' && req.method==='POST') {host();seat();await body(req);start(g);fractions.set(g.id,0);save(g);return json(res,200,{ok:true});}
         if(endpoint==='bots' && req.method==='POST') {
