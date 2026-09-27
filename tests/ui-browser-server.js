@@ -13,6 +13,16 @@ g.rules.hold=1800;
 start(g);let index=0;
 while(g.tick<480){while(fixture.actions[index]?.tick===g.tick){const a=fixture.actions[index++];act(g,MAP,a.country,a.action,a.opId);}tick(g);}
 app.games.set(g.id,g);app.store.save(g);
+// A short finished match whose room announced public alliance chat after the match (replay parity checks).
+const talks=createGame({id:'ui-chat',name:'Pacific talks',hostId:profiles.britain.id},MAP);
+for(const c of MAP.countries)join(talks,MAP,{country:c.id,name:profiles[c.id].name,profileId:profiles[c.id].id,kind:'agent'});
+talks.rules.revealAllianceChatAfterMatch=true;talks.rules.duration=150;start(talks);
+while(talks.status==='running'){
+  if(talks.tick===1){const q=act(talks,MAP,'usa',{type:'propose',country:'japan',name:'Pacific Pact'},'ui-chat-p');act(talks,MAP,'japan',{type:'accept',proposalId:q.proposalId},'ui-chat-a');}
+  if(talks.tick===45)act(talks,MAP,'usa',{type:'chat',channel:'alliance',text:'Hold the Pacific <b>line</b>.'},'ui-chat-c');
+  if(talks.tick===50)act(talks,MAP,'usa',{type:'move',from:'west-us',to:'mexico',amount:5},'ui-chat-m');
+  tick(talks);}
+app.games.set(talks.id,talks);app.store.save(talks);
 const finished=replay().game;finished.id='ui-review';finished.name='The Atlantic campaign';app.games.set(finished.id,finished);app.store.save(finished);
 // A second recorded position with real phased battles (formal war rules), for the map suite.
 // The same position is also created as separate task rooms for the v0.8 walkthroughs (phone, desktop),

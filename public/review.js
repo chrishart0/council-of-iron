@@ -3,6 +3,8 @@ import { Atlas } from './atlas.js';
 import { escapeHTML as esc, setHTML } from './ui.js';
 import { replayReader } from './replay-model.js';
 import { ExpandableMap } from './expand.js';
+import { LeaderboardPanel } from './leaderboard-panel.js';
+import { faction } from './presentation.js';
 const clock = n => `${Math.floor(n / 60).toString().padStart(2, '0')}:${Math.floor(n % 60).toString().padStart(2, '0')}`;
 const number = n => Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
 const signed = n => `${n >= 0 ? '+' : '−'}${number(Math.abs(n))}`;
@@ -142,7 +144,59 @@ export class AfterAction {
     return `<button class="aar-event" data-aar-seek="${e.tick}" ${e.province ? `data-aar-province="${e.province}"` : ''}><time>${clock(e.tick)}</time><span>${esc(this.describe(e))}</span></button>`;
   }
   replayLayout() {
-    this.el('aar-replay').innerHTML = `<div id="replay-theatre" class="aar-theatre"><div class="aar-replay-toolbar"><div><p class="eyebrow">CAMPAIGN REPLAY</p><p>Read-only history · game time · private diplomacy excluded</p></div><div><button data-aar-map="world">World</button><button data-aar-map="europe">Europe</button><button data-aar-map="out" aria-label="Zoom replay out">−</button><button data-aar-map="in" aria-label="Zoom replay in">+</button></div></div><p id="replay-loading" role="status">Select this tab to load the recorded map.</p><div id="replay-stage" class="aar-replay-stage" hidden><div class="aar-replay-map"><div class="aar-map-frame"><button id="replay-expand" class="expand-button map-expand-corner" type="button" aria-pressed="false">⤢ Expand</button><svg id="review-map" class="replay-map" viewBox="0 0 1280 680" role="group" aria-label="Read-only historical map; select a province to inspect it"></svg></div><div class="aar-legend">${this.report.players.map(p=>`<span><i style="--country:${this.country(p.country).color}"></i>${esc(this.country(p.country).name)} · ${esc(this.playerName(p.country))}</span>`).join('')}</div></div><aside><p class="eyebrow">AT THIS MOMENT</p><div id="replay-sides"></div><div id="replay-inspector"><p>Select a province to inspect its garrison, industry and incoming armies.</p></div></aside></div><div class="aar-replay-controls"><div class="aar-transport"><button data-aar-transport="start" aria-label="Go to opening">|←</button><button data-aar-transport="back" aria-label="Back ten game seconds">−10s</button><button class="primary" id="replay-play" data-aar-transport="play" disabled>Play</button><button data-aar-transport="forward" aria-label="Forward ten game seconds">+10s</button><button data-aar-transport="end" aria-label="Go to final tick">→|</button><label>Speed<select id="replay-speed"><option value="1">1×</option><option value="4">4×</option><option value="16" selected>16×</option><option value="64">64×</option></select></label><output id="replay-clock" aria-live="off">00:00 / ${clock(this.report.duration)}</output></div><label class="sr-only" for="replay-slider">Replay game time</label><input id="replay-slider" type="range" min="0" max="${this.report.duration}" value="0" step="1" disabled aria-valuetext="00:00"><div class="aar-replay-jumps"><button data-aar-event="previous">← Previous event</button><p id="replay-event-label">The opening position</p><button data-aar-event="next">Next event →</button></div></div></div><details class="aar-event-browser"><summary>Browse the public timeline</summary><div class="aar-timeline">${this.report.events.map(e => this.eventButton(e)).join('')}</div></details>`;
+    this.el('aar-replay').innerHTML = `<div id="replay-theatre" class="aar-theatre"><div class="aar-replay-toolbar"><div><p class="eyebrow">CAMPAIGN REPLAY</p><p>Read-only history · game time · private diplomacy excluded</p></div><div><button data-aar-map="world">World</button><button data-aar-map="europe">Europe</button><button data-aar-map="out" aria-label="Zoom replay out">−</button><button data-aar-map="in" aria-label="Zoom replay in">+</button></div></div><p id="replay-loading" role="status">Select this tab to load the recorded map.</p><div id="replay-stage" class="aar-replay-stage" hidden><div class="aar-replay-map"><div class="aar-map-frame"><button id="replay-expand" class="expand-button map-expand-corner" type="button" aria-pressed="false">⤢ Expand</button><svg id="review-map" class="replay-map" viewBox="0 0 1280 680" role="group" aria-label="Read-only historical map; select a province to inspect it"></svg></div><div class="aar-legend">${this.report.players.map(p=>`<span><i style="--country:${this.country(p.country).color}"></i>${esc(this.country(p.country).name)} · ${esc(this.playerName(p.country))}</span>`).join('')}</div></div><aside><p class="eyebrow">AT THIS MOMENT</p><section class="leaderboard replay-leaderboard" aria-label="Leaderboard at this moment"><div class="lb-head"><button class="lb-toggle" type="button" aria-expanded="true"><b>Powers</b><span class="lb-summary"></span></button><div class="lb-modes" role="group" aria-label="Rank"><button type="button" data-lb-mode="teams" aria-pressed="true">Teams</button><button type="button" data-lb-mode="players" aria-pressed="false">Players</button></div></div><ol class="lb-rows"></ol><ul class="lb-fronts" aria-label="Wars between blocs" hidden></ul></section><div id="replay-sides"></div><div id="replay-inspector"><p>Select a province to inspect its garrison, industry and incoming armies.</p></div></aside></div><div class="aar-replay-controls"><div class="aar-transport"><button data-aar-transport="start" aria-label="Go to opening">|←</button><button data-aar-transport="back" aria-label="Back ten game seconds">−10s</button><button class="primary" id="replay-play" data-aar-transport="play" disabled>Play</button><button data-aar-transport="forward" aria-label="Forward ten game seconds">+10s</button><button data-aar-transport="end" aria-label="Go to final tick">→|</button><label>Speed<select id="replay-speed"><option value="1">1×</option><option value="4">4×</option><option value="16" selected>16×</option><option value="64">64×</option></select></label><output id="replay-clock" aria-live="off">00:00 / ${clock(this.report.duration)}</output></div><label class="sr-only" for="replay-slider">Replay game time</label><input id="replay-slider" type="range" min="0" max="${this.report.duration}" value="0" step="1" disabled aria-valuetext="00:00"><div class="aar-replay-jumps"><button data-aar-event="previous">← Previous event</button><p id="replay-event-label">The opening position</p><button data-aar-event="next">Next event →</button></div></div></div><section class="replay-history" aria-label="History up to this moment"><div class="replay-history-head"><p class="eyebrow">HISTORY TO THIS MOMENT</p><div class="feed-chips" role="group" aria-label="Show"><button type="button" class="feed-chip" data-replay-filter="all" aria-pressed="true">All</button><button type="button" class="feed-chip" data-replay-filter="events" aria-pressed="false">Headlines</button>${this.report.allianceChatRevealed && this.report.allianceChat?.length ? '<button type="button" class="feed-chip" data-replay-filter="chat" aria-pressed="false">Alliance chat</button>' : ''}</div></div><ol id="replay-feed" class="replay-feed"></ol><p class="aar-footnote">Public events only${this.report.allianceChatRevealed ? '; alliance chat was announced at join as public after the match' : ''}. Select a row to jump there.</p></section><details class="aar-event-browser"><summary>Browse the public timeline</summary><div class="aar-timeline">${this.report.events.map(e => this.eventButton(e)).join('')}</div></details>`;
+    this.buildHistory();
+  }
+  /** The replay's history rail: public events plus (only when the room announced it) revealed alliance chat,
+   * shown up to the scrubbed tick; a row seeks there. Chat is player text: textContent only. */
+  buildHistory() {
+    const list = this.el('replay-feed'); if (!list) return;
+    const rows = [...this.report.events.map(e => ({ tick: e.tick, kind: 'event', e })),
+      ...(this.report.allianceChatRevealed ? this.report.allianceChat || [] : []).map(m => ({ tick: m.tick, kind: 'chat', m }))]
+      .sort((a, b) => a.tick - b.tick || (a.kind === 'chat') - (b.kind === 'chat'));
+    this.historyRows = rows.map(row => {
+      const li = document.createElement('li'); li.className = `replay-row replay-${row.kind}`; li.dataset.tick = String(row.tick);
+      const button = document.createElement('button'); button.type = 'button'; button.dataset.aarSeek = String(row.tick);
+      if (row.e?.province) button.dataset.aarProvince = row.e.province;
+      const when = document.createElement('time'); when.textContent = clock(row.tick);
+      const text = document.createElement('span');
+      if (row.kind === 'chat') {
+        const who = document.createElement('b'); who.textContent = `${this.country(row.m.from)?.name || row.m.from} · ${row.m.sideName || 'Alliance'}: `;
+        text.append(who, document.createTextNode(row.m.text)); // revealed player speech, text only
+      } else text.textContent = this.describe(row.e);
+      button.append(when, text); li.append(button); list.append(li);
+      return { ...row, li };
+    });
+    this.filterHistory('all');
+  }
+  filterHistory(filter) {
+    this.historyFilter = filter;
+    for (const b of this.root.querySelectorAll('[data-replay-filter]')) b.setAttribute('aria-pressed', String(b.dataset.replayFilter === filter));
+    this.paintHistory(true);
+  }
+  paintHistory(force = false) {
+    if (!this.historyRows) return;
+    const tick = Math.floor(this.position), list = this.el('replay-feed');
+    if (!force && tick === this.historyTick) return; this.historyTick = tick;
+    let current = null;
+    for (const row of this.historyRows) {
+      const shown = row.tick <= tick && (this.historyFilter === 'all' || (this.historyFilter === 'chat') === (row.kind === 'chat'));
+      row.li.hidden = !shown; row.li.classList.remove('current');
+      if (shown) current = row;
+    }
+    current?.li.classList.add('current');
+    if (current) list.scrollTop = Math.max(0, current.li.offsetTop - list.offsetTop - list.clientHeight + current.li.offsetHeight + 8);
+  }
+  /** Map effects for events crossed while playing forward only (never when scrubbing or jumping). */
+  forwardEffects(from, to) {
+    if (!this.atlas || to <= from) return;
+    for (const e of this.report.events) {
+      if (e.tick <= from || e.tick > to) continue;
+      const plan = e.type === 'war_declared' ? ['war', { from: e.fromRoster, to: e.toRoster }] : e.type === 'peace_accepted' ? ['peace', { from: e.fromRoster, to: e.toRoster }]
+        : e.type === 'alliance_activated' ? ['alliance', { countries: e.roster }] : e.type === 'eliminated' ? ['eliminated', { country: e.country }]
+        : e.type === 'capture' && e.owner ? ['captured', { province: e.province, owner: e.owner }] : null;
+      if (plan) { try { this.atlas.effect(...plan); this.effectsPlayed = (this.effectsPlayed || 0) + 1; } catch { /* decorative */ } }
+    }
   }
   async ensureReplay() {
     if (this.reader || !this.report.historyAvailable) return;
@@ -155,6 +209,13 @@ export class AfterAction {
         this.reader = replayReader(replay); this.map = replay.map;
         this.el('replay-stage').hidden = false; this.el('replay-loading').hidden = true;
         this.atlas = new Atlas(this.el('review-map'), this.map, id => { this.inspected = id; this.paint(); });
+        // The same team leaderboard as the live match, fed the board at the scrubbed tick (public data only).
+        const box = this.root.querySelector('.replay-leaderboard');
+        this.standings = new LeaderboardPanel({ root: box, rows: box.querySelector('.lb-rows'), toggle: box.querySelector('.lb-toggle'), summary: box.querySelector('.lb-summary'),
+          modes: [...box.querySelectorAll('[data-lb-mode]')], fronts: box.querySelector('.lb-fronts'), onFocus: id => this.atlas?.setRelationFocus(id), onSelect: id => this.atlas?.setRelationFocus(id) },
+          { country: id => this.country(id)?.name || id, short: id => faction(id).short });
+        for (const b of box.querySelectorAll('[data-lb-mode]')) b.addEventListener('click', () => { this.standings.setMode(b.dataset.lbMode); this.paintedTick = null; this.paint(); });
+        box.querySelector('.lb-toggle').addEventListener('click', () => this.standings.setOpen(!this.standings.open));
         // Expand: map, "at this moment" and playback controls fill the screen (works without the Fullscreen API).
         this.expander = new ExpandableMap(this.el('replay-theatre'), this.el('replay-expand'), { label: 'replay map',
           onChange: () => requestAnimationFrame(() => { this.atlas?.layout(); this.atlas?.positions(); }) });
@@ -191,6 +252,9 @@ export class AfterAction {
     this.el('replay-slider').value = tick; this.el('replay-slider').setAttribute('aria-valuetext', `${clock(tick)} of ${clock(this.report.duration)}`);
     this.el('replay-clock').textContent = `${clock(tick)} / ${clock(this.report.duration)}`;
     this.el('replay-stage').dataset.tick = tick;
+    const kinds = new Map(this.report.players.map(p => [p.country, p]));
+    this.standings?.update({ ...board, players: board.players.map(p => ({ ...p, kind: kinds.get(p.id)?.kind, model: kinds.get(p.id)?.model })) }, 8);
+    this.paintHistory();
     const leader = [...board.sides].sort((a, b) => this.report.rules.economyShare === undefined ? b.provinces - a.provinces : b.economy - a.economy);
     setHTML(this.el('replay-sides'), leader.map(s => `<div class="aar-replay-side"><b>${esc(this.side(s.id))}</b><span>${this.report.rules.economyShare === undefined ? `${s.provinces}/${this.report.rules.threshold} provinces` : `${s.economy}/${board.economyThreshold} industry`}</span><div class="aar-replay-members">${s.members.map(id => `<span>${esc(this.country(id).name)} · <b>${esc(this.playerName(id))}</b></span>`).join('')}</div>${board.dominance[s.id] !== undefined ? `<small>Victory in ${Math.max(0, this.report.rules.hold - (tick - board.dominance[s.id]))}s</small>` : ''}</div>`).join(''));
     const last = this.report.events.filter(e => e.tick <= tick).at(-1);
@@ -215,7 +279,9 @@ export class AfterAction {
     const frame = now => {
       if (!this.playing) return;
       const delta = Math.min(.25, (now - last) / 1000); last = now;
+      const before = Math.floor(this.position);
       this.seek(this.position + delta * this.speed);
+      this.forwardEffects(before, Math.floor(this.position));
       if (this.position >= this.report.duration) { this.pause(); return; }
       this.animation = requestAnimationFrame(frame);
     };
@@ -226,6 +292,7 @@ export class AfterAction {
     if (button.hasAttribute('data-aar-retry')) { this.load(this.fallback); return; }
     if (button.hasAttribute('data-aar-load')) { await this.ensureReplay(); return; }
     if (button.dataset.aarTab) await this.showTab(button.dataset.aarTab);
+    if (button.dataset.replayFilter) this.filterHistory(button.dataset.replayFilter);
     if (button.hasAttribute('data-aar-seek')) {
       await this.showTab('replay'); this.seek(Number(button.dataset.aarSeek));
       if (button.dataset.aarProvince && this.atlas) { this.inspected = button.dataset.aarProvince; this.atlas.focus(this.inspected); this.paint(); }

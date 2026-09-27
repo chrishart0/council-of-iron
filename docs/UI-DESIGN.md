@@ -1,3 +1,69 @@
+# v0.8 — One map, two nouns
+
+User verdict after playing on a phone: *"The UX is too complex and not intuitive enough. I get lost."* They got lost declaring war, forming an alliance and responding to offers and messages; troop movement "isn't smooth yet"; "the map feels good". This pass keeps the map (rendering, zoom, counters, borders) and replaces everything around it with fewer concepts. No rule, balance value, event, API field, CLI or MCP command changed.
+
+## The model
+
+1. **Everything starts from the map.** Two nouns: a **province** (troops) and a **country** (diplomacy). One context card shows whichever you selected; it has two levels only: **peek** and **expanded** ("Show more").
+2. **Troops: direct manipulation.** Drag from your province's counter to a neighbour: an arrow follows the finger, snaps to adjacent provinces (they light up, the rest dim) and shows `troops · ETA`. Tap-tap works the same (your province, then a neighbour), and so does target-first (tap an enemy province: your best-placed neighbour is proposed). The card then holds **one amount control** (a slider plus 25/50/75/100%, remembered per browser) and **one primary button whose label says what happens**: `Attack Normandy with 5`, `Reinforce Ruhr with 24`, `Send 9 → Netherlands`, `Declare war on France & send 9` (danger style, confirmation lists everyone you will be at war with) or `Call war vote on Germany` for coalition members. Coordinate is not a mode: with a target chosen, tap more of your provinces beside it to add them (chips with per-source amounts; one `attack` order). Develop is a button on your own province's card. After sending, the moving army is the arrow; tap it (or your source province) to **Recall**. Reserves, recruitment arrow, incoming waves, your orders and the rules are under "Show more". Keyboard: Enter on a province counter, then on a neighbour, focuses the primary; Enter sends, Escape cancels; the expanded card also has a "send to" select. The atomic `declareWar` move/attack and same-opId retry are unchanged.
+3. **Diplomacy: tap a country** (a leaderboard row, a standard on the phone's powers strip, a province card's owner line, a rail row's "Open ›", your allies in the alliance card). The country card states the relation in big words (**AT WAR / ALLIED / ALLIANCE FORMING / ALLIANCE OFFER PENDING / NEUTRAL / HOSTILE / FALLEN**), strength (troops, provinces, bloc, wars) and one primary: Neutral → *Propose alliance* (inline name, default `Britain–Russia Pact`, terms in one line) with *Declare war* as the secondary; an offer → *Accept alliance* / *Decline* (the terms are in the card, so no second dialog); at war → *Offer peace* (or *Call peace vote*); ally → *Message*, *Leave alliance*. Expanded, it shows the conversation with that country (DMs and diplomatic rows) and a message box (`.composer`, `data-voice`). **Your alliance card** (tap your standard) replaces the Council: members and tenure, industry toward victory, wars, pending votes (Approve), alliance chat, Leave.
+4. **Responding: one inbox.** ✉ and ⚑ are merged into one attention badge beside your standard (decisions first, then unread private messages). Tapping it opens the first item in context (the offering country's card, your alliance card for a vote, the sender's card with the message box focused). Toasts for things that affect you carry direct Accept/Decline/Reply. Read state is **per item** (a set of seqs per match and seat), marked when the row is actually visible in the rail or the card's thread.
+5. **HUD: one row.** Standard (+ badge), clock with a one-phrase victory status, forces and land, ☰. The second row, ally/war chips and the bottom navigation are gone; relations are on the map (blocs, fronts, red rings on threatened provinces) and in the leaderboard (⚔/⛓ markers, bands, and the list of war fronts, the one involving you highlighted and clickable).
+6. **History rail = history only**, three chips: All, World, Mine. Private rows link to the card that answers them. Incoming hostile armies are a rail row plus a red ring on the province (a toast when they arrive within 20 s); the alerts stack is gone.
+7. **☰ holds the rare things:** World/Europe views, Expand, War log (J), sound, room link, identity, the three tips, the map key (legend and Diplomacy colours), controls help. The camera cluster is Expand + Home (+/− with a fine pointer).
+8. **Onboarding:** three first-match tips (drag to attack; tap a country; your standard shows what needs you), stored per browser, replayable from ☰; a tip that has just been acted on advances by itself. Empty states say what to do next ("You are independent. Select a country … to propose an alliance").
+9. **Spectators** get the same map, leaderboard, rail and read-only cards (no actions, no message boxes). **Replay** uses the same components: the team leaderboard at the scrubbed tick, a history rail up to that tick (public events, plus alliance chat only in rooms that announced it, under an "Alliance chat" chip), rows that seek the scrubber, and map effects only while playing forward. All from the public report and replay data.
+
+## Surfaces, before and after (390×844 player)
+
+| v0.7 | v0.8 |
+|---|---|
+| HUD row 1 (menu, sound, standard, clock, 3 stats) | **HUD** (standard + badge, clock/status, 2 stats, ☰) |
+| HUD row 2 (ally chip, war chip, ✉, ⚑, victory line) | — (badge in the HUD; relations on map and leaderboard) |
+| Leaderboard strip | **Powers strip** (your rank + every other standard, one tap into diplomacy) |
+| Alerts stack (threats, battle notice, countdown) | — (red ring + rail row + toast; countdown in the rail and HUD) |
+| Map | **Map** |
+| Camera cluster (Expand, World, Europe, Home) + Map key chip | **Camera** (Home, Expand); views and key in ☰ |
+| Messages ticker → rail sheet (5+ chips, DM recipient select) | **History** ticker → sheet (All/World/Mine) |
+| Bottom nav (Orders, Council, War log) | — |
+| Order sheet (3 modes, relation line, war council link, 3 commit buttons) | **Card** (province/army/country/alliance; one primary) |
+| Council sheet | — (country card + alliance card = the same card) |
+| Popups (banners, notices, order toasts, confirm) | **Popups** (affecting you only; confirm for war, develop, leave) |
+| Menu popover, war log window, sound popover | ☰ (war log and sound inside it) |
+| Skip link | Skip link |
+
+Persistent or common on a phone: **7** (map, HUD, powers strip, camera, history, card, popups), plus ☰ on demand and the three tips once. v0.7 had 15. Idle, at most four overlays sit on the map (HUD, leaderboard, history, camera), asserted at six viewports.
+
+## Measured (scripted walkthroughs, `tests/ui_tasks.py`)
+
+Each task is scripted like a player in its own copy of the recorded war room and counts taps/clicks/drags (typing and camera pans are counted separately). Bounds are asserted.
+
+| Task | Bound | 390×844 touch | 1366×768 mouse |
+|---|---|---|---|
+| Declare war on a neutral country and march (incl. confirm) | ≤4 | 3 (tap target, primary, confirm) | 3 |
+| Attack a neighbouring enemy province with 50% | ≤3 | 3 (tap target, 50%, send) | 3 (drag, 50%, send) |
+| Propose an alliance | ≤3 | 3 (standard, Propose, Send) | 3 (row, Propose, Send) |
+| Respond to an incoming offer from the badge | ≤2 | 2 (badge, Accept) | 2 |
+| Reply to a DM | ≤3 + typing | 2 (badge, Send) | 2 |
+| Recall an army | ≤2 | 2 (source province, Recall)* | 2* |
+| Develop a province | ≤3 | 3 (+1 camera pan) | 3 (+1 pan) |
+
+\* The fixture's column was still on top of a counter, where counter taps win (map contract), so the walkthrough used the source province's Recall; tapping the army itself is also 2 when it is clear of counters. Step screenshots: `artifacts/ui/tasks/<viewport>/`.
+
+## Verified (automated, not a usability study)
+
+`npm test`, `npm run check` and `python tests/browser.py` (live 12× match, review, the focused UI suite, voice). The focused suite additionally checks, on recorded positions: the one-map layout at 1920×1080, 1366×768, 1280×720, 390×844, 844×390 and 768×1024 for player and spectator (idle, order card peek/expanded, country card, alliance card, history), with exactly one primary button, visible and unobstructed; ≥65% of the map uncovered idle at 1366×768 and ≥62% with a card peeking; keyboard order entry; a real CDP touch drag with a snapped arrow and ETA; the three tips; the badge with per-item read state across reloads and no replayed toasts; declare-war-and-march by keyboard with exactly one banner; alliance forming → active in the card, HUD and leaderboard; replay parity (leaderboard at tick, history up to tick with revealed alliance chat as text, seek from rows, no effects when scrubbing). All v0.6/v0.7 map, sound and effect checks still pass. A pre-existing failure from the ui-map-wrap merge (the dateline test assumed the old world-view geometry) was fixed in the test.
+
+Screenshots were read at every step at 390×844 and 1366×768 and adjusted until each step had one primary action and nothing overlapped (found and fixed this way: the toast covering the primary button, an empty country card filling the screen, a queued recall still offered, a forming alliance labelled neutral, short-landscape cards pushing the primary off screen).
+
+Not verified: real devices, screen readers, iOS; whether it is more intuitive or enjoyable for people — only that the tasks take few, clearly labelled steps in scripts.
+
+## Known issues
+
+- Dragging from a merged counter at world zoom is not possible; tap zooms in first (as before).
+- The desktop rail still covers the eastern edge until panned; camera insets are now used by Home, rail rows and card reveals, not by World/Europe.
+- The README GIF shows the v0.8 live match only if re-recorded (see README note).
+
 # v0.7 — The map is the screen
 
 A first-principles pass on the live match screen. No rule, balance value, event or map changed; relations (wars, alliances) are presented from data every spectator already receives. Review and replay keep their v0.4–v0.6 page layout (only its heading moved into the shared room menu); redesigning them was out of scope.

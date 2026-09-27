@@ -380,6 +380,8 @@ function openCard(kind,id=null,{size,focus=false,compose=false}={}){
   if(kind!=='province' && kind!=='army'){sources=[];target=null;armyId=kind==='army'?id:null;}
   if(kind!=='country' || !same)proposing=false;
   card={kind,id};box.hidden=false;
+  // Learning by doing: a tip that has just been acted on moves on by itself.
+  if(coachStep===0 && kind==='province' || coachStep===1 && kind==='country'){coachStep++;showCoach();}
   const allied=myPlayer() && !myPlayer().side.startsWith('solo:');
   cardSize=size || (same?cardSize:kind==='country' || kind==='alliance' && allied?'full':'peek');
   if(compact.matches && worldFeed.open)worldFeed.setOpen(false); // phones: one sheet at a time

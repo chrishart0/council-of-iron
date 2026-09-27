@@ -63,3 +63,13 @@
  .aar-theatre.map-expanded .aar-replay-stage aside{max-height:30%;padding:6px 10px;font-size:11px}.aar-theatre.map-expanded .aar-replay-side{padding:4px 0}
  .aar-theatre.map-expanded .atlas-legend{max-height:34vh;overflow:auto}
 }
+/* v0.8 replay parity: the live leaderboard at the scrubbed tick and a history rail up to it. */
+.replay-leaderboard{margin:0 0 12px;max-height:none}.replay-leaderboard .lb-rows{max-height:260px}
+.replay-history{margin-top:14px;border:1px solid var(--line);background:#e9e1ce;padding:10px 12px}
+.replay-history-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}.replay-history-head .eyebrow{margin:0}
+.replay-history .feed-chip{background:#f3ecdb;color:#283a42;border-color:#b3aa8c}.replay-history .feed-chip[aria-pressed=true]{background:#283a42;color:#f3e3bd}
+.replay-feed{list-style:none;margin:8px 0 4px;padding:0;max-height:220px;overflow:auto;scrollbar-width:thin}
+.replay-row button{display:flex;gap:10px;width:100%;min-height:30px;padding:4px 6px;text-align:left;background:transparent;border:0;border-bottom:1px solid #c8c1ab80;font-size:12px}
+.replay-row time{flex:none;font-variant-numeric:tabular-nums;color:#8a6a3c}.replay-row.current button{background:#dccfa8;font-weight:650}
+.replay-chat button{color:#2b4a58}.replay-chat b{font-weight:700}
+.aar-theatre.map-expanded .replay-leaderboard .lb-rows{max-height:120px}

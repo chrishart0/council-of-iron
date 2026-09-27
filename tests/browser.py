@@ -22,11 +22,39 @@ from browser_helpers import load_bridge
 
 ROOT = Path(__file__).resolve().parents[1]
 
-def ensure_orders(page):
-    """v0.7: the order card opens from the HUD Orders button (or a map click) and must show its details."""
-    if page.locator('#orders-label').get_attribute('aria-expanded')!='true':page.locator('#orders-label').click()
-    if page.locator('#command-panel').get_attribute('data-sheet')=='peek':page.locator('#sheet-handle').click()
-    expect(page.locator('#orders-tab')).to_be_visible()
+def centre(locator):
+    box=locator.bounding_box();return box['x']+box['width']/2,box['y']+box['height']/2
+def bring(page,province):
+    """Camera only: pan by dragging empty map until the province counter is well inside the view."""
+    vw,vh=page.viewport_size['width'],page.viewport_size['height']
+    for _ in range(5):
+        x,y=centre(page.locator(f'#marker-{province} .counter-body'))
+        if vw*.15<x<vw*.6 and vh*.2<y<vh*.6:return
+        sx,sy=page.evaluate("""([w,h])=>{for(let y=h*.3;y<h*.6;y+=13)for(let x=w*.25;x<w*.6;x+=13){const e=document.elementFromPoint(x,y);
+          if(e&&e.closest('#map')&&!e.closest('.map-counter,.map-cluster,.battle-counter,.moving-army'))return [x,y];}return null;}""",[vw,vh])
+        page.mouse.move(sx,sy);page.mouse.down()
+        for i in range(1,11):page.mouse.move(sx+(vw*.38-x)*i/10,sy+(vh*.4-y)*i/10)
+        page.mouse.up();page.wait_for_timeout(120)
+    raise AssertionError(('not in view',province))
+def province(page,pid):
+    """v0.8: select your province on the map (its card opens)."""
+    page.keyboard.press('Escape');page.locator('#home-view').click();page.wait_for_timeout(150)
+    clusters=page.locator(f'#map .map-cluster[data-cluster*="{pid}"]')
+    if clusters.count() and clusters.first.is_visible():clusters.first.click();page.wait_for_timeout(150)
+    bring(page,pid);x,y=centre(page.locator(f'#marker-{pid} .counter-body'));page.mouse.click(x,y)
+    expect(page.locator('#card')).to_have_attribute('data-kind','province')
+def order(page,src,dst):
+    """Your province, then (keyboard fallback in the expanded card) a neighbour: the order card."""
+    province(page,src)
+    if page.locator('#card').get_attribute('data-size')!='full':page.locator('#card-size').click()
+    page.locator('#destination').select_option(dst);expect(page.locator('#primary')).to_be_visible()
+    if page.locator('#card').get_attribute('data-size')!='full':page.locator('#card-size').click()
+def camera(page,view):
+    if not page.locator('#hud-menu').is_visible():page.locator('#menu-button').click()
+    page.locator(f'#{view}-view').click()
+def country_card(page,cid):
+    page.keyboard.press('Escape');page.locator(f'#lb-rows .lb-row[data-id="{cid}"]').click()
+    expect(page.locator('#card')).to_have_attribute('data-kind','country')
 
 def main():
     parser = argparse.ArgumentParser()
@@ -98,15 +126,14 @@ def main():
                 # Simulate the randomUUID restriction of plain-HTTP LAN browsers.
                 page.evaluate('crypto.randomUUID = undefined')
                 # Real DOM inputs -> shared action endpoint. No direct state mutation.
-                expect(page.locator('#command-panel')).to_be_hidden()  # nothing is open until the player asks
-                ensure_orders(page)
-                page.locator('#source').select_option('west-us')
-                page.locator('#destination').select_option('mexico')
-                page.locator('#amount').fill('7')
-                expect(page.locator('#preview')).to_contain_text('Risk-style rounds')
+                expect(page.locator('#card')).to_be_hidden()  # nothing is open until the player asks
+                if page.locator('#coach').is_visible():page.locator('#coach-skip').click()  # first-match tips (covered by ui-browser)
+                order(page,'west-us','mexico')
+                page.locator('[data-fraction="0.5"]').click()
+                expect(page.locator('#order-details')).to_contain_text('Risk-style rounds')
                 expect(page.locator('#sound-control')).to_have_attribute('data-loaded','ogg')  # decoded after the first click
-                page.locator('#send-army').click()
-                expect(page.locator('#toast')).to_contain_text('Army committed')
+                page.locator('#primary').click()
+                expect(page.locator('#toast')).to_contain_text('Sent')
                 assert {'cue':'march','priority':1,'audible':True} in page.evaluate('window.__cues'),page.evaluate('window.__cues')
                 report['assertions'].append('Committing the march through the UI played the audible march cue (toast is the visible counterpart).')
                 cli('war','france')
@@ -115,23 +142,23 @@ def main():
                 expect(page.locator('#feed-list [data-kind="war"]').first).to_contain_text('British Empire')
                 report['assertions'].append('A CLI war declaration appeared as a red World-feed headline in the browser.')
                 cli('move','england','north-france','6')
-                page.locator('#source').select_option('central-us')
-                page.locator('#destination').select_option('west-us')
-                page.locator('.standing-order summary').click()
+                order(page,'central-us','west-us')
+                page.locator('#card-body details[data-part="route"] summary').click()
                 page.locator('#set-route').click()
-                expect(page.locator('#route-status')).to_contain_text('New recruits',timeout=10000)
+                province(page,'central-us');page.locator('#card-size').click()
+                expect(page.locator('#card-body')).to_contain_text('Recruitment arrow: new recruits',timeout=10000)
                 report['assertions'].append('Browser and CLI committed armies; browser set a standing reinforcement route.')
                 capture(page,1000)
-                page.locator('[data-tab="council"]').click()
-                page.locator('#ally-choice').select_option('britain')
+                country_card(page,'britain')
+                page.locator('#primary').click()  # Propose alliance: an inline name field with a default
+                expect(page.locator('#card-body .proposal')).to_contain_text('Sending is your approval')
                 page.locator('#coalition-name').fill('Atlantic Accord')
-                page.locator('#alliance-form button').click()
-                expect(page.locator('#confirm-dialog')).to_contain_text('Sending this offer is your approval')
-                page.keyboard.press('Escape')
-                expect(page.locator('#offers')).not_to_contain_text('Atlantic Accord')
-                page.locator('#alliance-form button').click()
-                page.locator('#confirm-dialog [value="confirm"]').click()
-                expect(page.locator('#offers')).to_contain_text('Atlantic Accord')
+                page.keyboard.press('Escape')  # leaving the card sends nothing
+                assert not http(f'/api/games/{room}')['proposals']
+                country_card(page,'britain');page.locator('#primary').click()
+                page.locator('#coalition-name').fill('Atlantic Accord');page.locator('#primary').click()
+                expect(page.locator('#card-status')).to_contain_text('ALLIANCE OFFER PENDING')
+                expect(page.locator('#card-status')).to_contain_text('Atlantic Accord')
                 capture(page,1000)
                 agent_state=cli('state')
                 offer=next(q for q in agent_state['proposals'] if q['name']=='Atlantic Accord')
@@ -146,31 +173,33 @@ def main():
                 page.screenshot(path=str(artifacts/'alliance-seal.png'))
                 expect(page.locator('#feed-list [data-kind="alliance"]').first).to_contain_text('Atlantic Accord')
                 report['assertions'].append('Alliance activation showed the standards-and-ribbon seal with country names and a matching feed headline.')
-                expect(page.locator('#coalition-info')).to_contain_text('Atlantic Accord',timeout=15000)
-                # HUD relations (no drawer needed): allies in the alliance colour, enemies from the public war list.
-                expect(page.locator('#ally-chip')).to_have_attribute('data-state','active')
-                expect(page.locator('#ally-chip')).to_have_attribute('data-allies','britain')
+                expect(page.locator('#commander-side')).to_have_text('Atlantic Accord',timeout=15000)
+                # Relations without a drawer: the leaderboard marks allies and enemies from the public lists.
+                expect(page.locator('#lb-rows .lb-row[data-id="britain"]')).to_have_attribute('data-relation','ally')
                 wars=http(f'/api/games/{room}')['wars']
                 enemies=sorted({b if a=='usa' else a for a,b in (w.split(':') for w in wars) if 'usa' in (a,b)})
-                expect(page.locator('#war-chip')).to_have_attribute('data-enemies',','.join(enemies),timeout=5000)
-                report['assertions'].append(f'HUD relation chips: allied with Britain in Atlantic Accord; at war with {enemies or "nobody"}, matching the public war list.')
+                page.locator('[data-lb-mode="players"]').click()
+                for cid in enemies:expect(page.locator(f'#lb-rows .lb-row[data-id="{cid}"]')).to_have_attribute('data-relation','enemy',timeout=5000)
+                page.locator('[data-lb-mode="teams"]').click()
+                report['assertions'].append(f'Relations: the HUD names the alliance (Atlantic Accord); the leaderboard marks Britain as ally and {enemies or "nobody"} as enemies, matching the public war list.')
                 report['assertions'].append('Browser proposed coalition; CLI accepted; public notice elapsed; both shared the coalition and payout projection.')
                 capture(page,1000)
                 # Cancellation must not file an accidental irreversible departure.
-                page.locator('#leave-alliance').click()
+                page.locator('#hud-standard').click();page.locator('#card-actions button',has_text='Leave alliance').click()
                 expect(page.locator('#confirm-dialog')).to_be_visible()
                 page.keyboard.press('Escape')
                 expect(page.locator('#confirm-dialog')).not_to_be_visible()
                 assert not http(f'/api/games/{room}')['departures']
                 report['assertions'].append('Leaving an alliance requires explicit confirmation; Escape leaves membership untouched.')
-                # v0.7 single view: private diplomacy lives in the same rail, on the DMs chip.
+                # v0.8: private diplomacy lives in the country card (the rail keeps the history).
                 page.keyboard.press('Escape')
-                page.locator('[data-feed-filter="dm"]').click()
-                page.locator('#feed-recipient').select_option('britain')
-                expect(page.locator('#feed-send')).to_be_enabled(timeout=10000)
-                page.locator('#feed-text').fill('Hold the Atlantic. This dispatch is private.')
-                page.locator('#feed-send').click()
+                country_card(page,'britain')
+                expect(page.locator('#composer-send')).to_be_enabled(timeout=10000)
+                page.locator('#composer-text').fill('Hold the Atlantic. This dispatch is private.')
+                page.locator('#composer-send').click()
+                expect(page.locator('#card-body .thread-row.mine').last).to_contain_text('This dispatch is private.')
                 expect(page.locator('#feed-list .feed-chat[data-channel="dm"]').last).to_contain_text('This dispatch is private.')
+                page.keyboard.press('Escape')
                 # Drain the agent's cursor: the added banner waits let more events accumulate than one page.
                 agent_events,agent_cursor=[],0
                 while True:
@@ -185,16 +214,16 @@ def main():
                 assert page.locator('#world-feed img').count()==0 and not page.evaluate('window.INJECTED')
                 expect(page.locator('#feed-list .feed-chat[data-channel="dm"]').last).to_be_hidden()  # the World chip shows no DMs
                 report['assertions'].append('Agent world speech reached the browser rail as inert text; the World chip excludes private messages.')
-                page.locator('[data-feed-filter="dm"]').click()
+                page.locator('[data-feed-filter="mine"]').click()
                 dm=page.locator('#feed-list .feed-chat[data-channel="dm"]').last
                 expect(dm).to_contain_text('Agreed. I will hold.');expect(dm).to_be_visible()
                 assert page.locator('#feed-list img').count()==0
-                expect(page.locator('#inbox-badge .badge-count')).to_have_text('',timeout=5000)  # read once visible in the rail
+                expect(page.locator('#attention')).to_be_hidden(timeout=5000)  # read once visible in the rail
                 page.locator('#feed-text').fill('Unsent draft survives live updates.')
                 page.wait_for_timeout(900)
                 expect(page.locator('#feed-text')).to_have_value('Unsent draft survives live updates.')
                 capture(page,1200)
-                report['assertions'].append('A DM seen in the rail clears the ✉ badge; an unsent draft survives live polling.')
+                report['assertions'].append('A DM seen in the rail clears the attention badge; an unsent draft survives live polling.')
                 assert not page.evaluate('Boolean(window.INJECTED)')
                 public_state=http(f'/api/games/{room}')
                 assert not any(e['type']=='message' and e.get('channel')=='dm' for e in public_state['events'])
@@ -203,14 +232,13 @@ def main():
                 expect(spectator.locator('.room-group').first).to_contain_text('Games in progress')
                 spectator.locator(f'[data-room="{room}"][data-spectate="true"]').click()
                 expect(spectator.locator('#phase')).to_have_text('SPECTATING')
-                expect(spectator.locator('#spectator-note')).to_be_visible()
-                expect(spectator.locator('#move-form')).to_be_hidden()
-                expect(spectator.locator('#command-footer')).to_be_hidden()
+                expect(spectator.locator('body')).to_have_class(re.compile('spectating'))
+                expect(spectator.locator('#card')).to_be_hidden();expect(spectator.locator('#hud-standard')).to_be_disabled()
                 assert spectator.evaluate('document.documentElement.scrollHeight<=innerHeight+1')
                 assert 'This dispatch is private.' not in spectator.locator('#feed-list').inner_text()
                 expect(spectator.locator('#feed-list .feed-chat[data-channel="dm"]')).to_have_count(0)
-                expect(spectator.locator('#inbox-badge')).to_be_hidden()
-                expect(spectator.locator('#scoreboard .country-card')).to_have_count(8)
+                expect(spectator.locator('#attention')).to_be_hidden()
+                expect(spectator.locator('#lb-powers [data-power]')).to_have_count(8)  # every power, one tap into its (read-only) card
                 spectator.screenshot(path=str(artifacts/'spectator-desktop.png'),full_page=True)
                 # v0.7: spectating is already full screen: the map is the viewport and the history stays beside it.
                 assert spectator.locator('#map').bounding_box()=={'x':0,'y':0,'width':1600,'height':1050}
@@ -229,7 +257,7 @@ def main():
                 spectator.screenshot(path=str(artifacts/'spectator-fullscreen.png'),full_page=True)
                 assert 'This dispatch is private.' not in spectator.locator('#world-feed').inner_text()
                 spectator.keyboard.press('Escape')
-                expect(spectator.locator('#command-panel')).to_be_hidden()
+                expect(spectator.locator('#card')).to_be_hidden()
                 spectator.set_viewport_size({'width':390,'height':844})
                 assert spectator.locator('#map').bounding_box()=={'x':0,'y':0,'width':390,'height':844}
                 assert spectator.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1')
@@ -238,7 +266,6 @@ def main():
                 report['assertions'].append('Lobby spectator watched on a full-viewport map with the World history beside it on desktop and mobile; the feed reply posted world chat that the read-only spectator feed showed as escaped text, while private dispatches stayed hidden.')
                 # External process now controls the existing agent seat over the real API.
                 bot=subprocess.Popen(['node','agents/bot.js'],cwd=ROOT,env={**os.environ,'COUNCIL_URL':url,'COUNCIL_SESSION':str(Path(tmp)/'agent.session.json'),'COUNCIL_TOKEN':'','COUNCIL_MATCH':room},stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
-                page.locator('[data-tab="orders"]').click()
                 deadline=time.monotonic()+15
                 while time.monotonic()<deadline:
                     state=http(f'/api/games/{room}')
@@ -247,8 +274,8 @@ def main():
                 assert any(e['type']=='battle' and e.get('province')=='mexico' for e in state['events'])
                 page.screenshot(path=str(artifacts/'02-campaign.png'),full_page=True)
                 capture(page,800)
-                page.locator('#europe-view').click();capture(page,900);page.screenshot(path=str(artifacts/'03-europe.png'),full_page=True)
-                page.locator('#world-view').click()
+                camera(page,'europe');capture(page,900);page.screenshot(path=str(artifacts/'03-europe.png'),full_page=True)
+                camera(page,'world')
                 report['assertions'].append('Browser-issued attack fought for Mexico after travel and multiple combat rounds; world and Europe zoom rendered.')
                 # Reconnect a second page with the same browser identity, not another join.
                 if args.bridge:saved=page.evaluate('window.__testStorage')
@@ -269,8 +296,9 @@ def main():
                 reconnect.close()
                 # Mobile width: no document-level horizontal overflow, controls remain reachable.
                 page.set_viewport_size({'width':390,'height':844})
-                page.locator('[data-tab="council"]').click()
+                page.locator('#hud-standard').click()
                 page.screenshot(path=str(artifacts/'04-mobile.png'),full_page=True)
+                page.keyboard.press('Escape')
                 assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1'), 'Mobile horizontal overflow'
                 page.set_viewport_size({'width':1600,'height':1050})
                 report['assertions'].append('390-pixel mobile layout displayed controls without horizontal page overflow.')
@@ -326,46 +354,37 @@ def main():
                 page.locator('#fill-bots').click()
                 page.locator('#start-match').click()
                 expect(page.locator('#phase')).to_have_text('IN SESSION')
-                expect(page.locator('#command-panel')).to_be_hidden()
-                # The full-viewport map may already be at per-province detail; a merged counter zooms in when present.
-                west=page.locator('#map .map-cluster[data-cluster*="west-us"]')
-                if west.count():west.click()
-                expect(page.locator('#marker-west-us')).to_be_visible()
-                if not page.locator('#marker-mexico').is_visible():page.locator('#zoom-out').click()  # keep neighbouring Mexico in view as well
-                page.locator('#marker-west-us').click()
-                expect(page.locator('#source')).to_have_value('west-us')
-                page.locator('[data-fraction="1"]').click()
-                expected_amount=int(page.locator('#amount').get_attribute('max'))
-                expect(page.locator('#amount')).to_have_value(str(expected_amount))
-                page.locator('#marker-mexico').click()
-                expect(page.locator('#destination')).to_have_value('mexico')
-                page.locator('#marker-central-us').click(modifiers=['Shift'])
-                expect(page.locator('#source')).to_have_value('central-us')
-                expect(page.locator('#destination')).to_have_value('')
-                expect(page.locator('#command-panel')).to_have_attribute('data-sheet','peek')  # a map selection opens a peeking card
-                page.locator('#council-label').focus()
-                page.keyboard.press('Enter')
-                expect(page.locator('#council-tab')).to_be_visible()
-                expect(page.locator('#council-label')).to_have_attribute('aria-expanded','true')
-                page.keyboard.press('Escape')
-                expect(page.locator('#command-panel')).to_be_hidden()
-                expect(page.locator('#council-label')).to_be_focused()
-                report['assertions'].append('A second room starts with the same browser identity; map targeting opens a peeking order card; Max, Shift-source selection and keyboard open/close of the Council drawer work.')
-                ensure_orders(page)
-                page.locator('#source').select_option('west-us')
-                page.locator('#destination').select_option('mexico')
-                page.locator('[data-order-mode=coordinate]').click()
-                page.locator('#group-percent').select_option('50')
-                page.locator('[data-attack-source="central-us"]').check()
-                page.locator('#coordinate-preview').click()
-                expect(page.locator('#attack-plan')).to_contain_text('Shared arrival')
+                expect(page.locator('#card')).to_be_hidden()
+                if page.locator('#coach').is_visible():page.locator('#coach-skip').click()
+                names={p['id']:p['name'] for p in http('/map.json')['provinces']}
+                # Tap-tap on the map: your province, then a neighbour; Shift-click switches the source.
+                province(page,'west-us');expect(page.locator('#card-title')).to_have_text(names['west-us'])
+                expect(page.locator('#card')).to_have_attribute('data-size','peek')  # a map selection opens a peeking card
+                if not page.locator('#marker-mexico').is_visible():page.locator('#zoom-out').click()
+                page.mouse.click(*centre(page.locator('#marker-mexico .counter-body')))
+                expect(page.locator('#card-title')).to_have_text(names['mexico']);expect(page.locator('#card-sub')).to_contain_text(names['west-us'])
+                page.locator('[data-fraction="1"]').click();expect(page.locator('#amount-out')).to_contain_text('100%')
+                page.keyboard.down('Shift');page.mouse.click(*centre(page.locator('#marker-central-us .counter-body')));page.keyboard.up('Shift')
+                expect(page.locator('#card-title')).to_have_text(names['central-us'])
+                page.keyboard.press('Escape');expect(page.locator('#card')).to_be_hidden()
+                page.locator('#hud-standard').focus();page.keyboard.press('Enter')
+                expect(page.locator('#card')).to_have_attribute('data-kind','alliance');expect(page.locator('#card-title')).to_be_focused()
+                page.keyboard.press('Escape');expect(page.locator('#card')).to_be_hidden();expect(page.locator('#hud-standard')).to_be_focused()
+                report['assertions'].append('A second room starts with the same browser identity; map taps open a peeking order card (province, then neighbour); 100% and Shift-source selection work; the standard opens and closes the alliance card by keyboard with focus returned.')
+                # Attack together: with the target chosen, tapping another of your provinces beside it adds a source.
+                order(page,'west-us','mexico');page.locator('[data-fraction="0.5"]').click()
+                page.locator('#card-size').click()  # back to peek so the map is free
+                page.mouse.click(*centre(page.locator('#marker-central-us .counter-body')))
+                expect(page.locator('#sources .source-chip')).to_have_count(2)
+                page.locator('#card-size').click();expect(page.locator('#order-details')).to_contain_text('arrive together')
                 page.screenshot(path=str(artifacts/'06-coordinated-plan.png'),full_page=True)
                 capture(page,1300)
-                page.locator('#coordinate-commit').click()
-                expect(page.locator('#toast')).to_contain_text('Coordinated attack committed')
+                page.locator('#primary').click()
+                expect(page.locator('#toast')).to_contain_text('Sent')
                 room2=http('/api/games')['games'][0]['id']
                 page.wait_for_timeout(1400)
                 # Group recall is a browser control, never direct mutation of the game.
+                province(page,'west-us');page.locator('#card-size').click()
                 recall_group=page.locator('[data-recall]').filter(has_text='Recall group')
                 expect(recall_group).to_be_visible(timeout=10000)
                 recall_group.click()
@@ -373,21 +392,20 @@ def main():
                 expect(page.locator('.march-row.returning').first).to_be_visible(timeout=5000)
                 page.screenshot(path=str(artifacts/'07-recalling.png'),full_page=True)
                 capture(page,1300)
-                report['assertions'].append('Browser previewed and committed a two-source synchronized attack, then recalled the group with real return time.')
+                report['assertions'].append('Browser committed a two-source attack (a second province added by tapping it beside the target) as one order, then recalled the group with real return time.')
                 # Alaska starts undeveloped; let natural recruitment fund construction.
-                page.locator('[data-order-mode=develop]').click()
-                page.locator('#source').select_option('alaska')
-                expect(page.locator('#development-panel')).to_be_visible()
-                expect(page.locator('#develop-province')).to_be_enabled(timeout=15000)
-                expect(page.locator('#development-payback')).to_contain_text('payback')
-                page.locator('#develop-province').click()
+                province(page,'alaska')
+                develop=page.locator('#develop-province')
+                expect(develop).to_be_enabled(timeout=15000)
+                page.locator('#card-size').click();expect(page.locator('#development-payback')).to_contain_text('payback')
+                develop.click()
                 expect(page.locator('#confirm-dialog')).to_contain_text('Spend 12 troops')
                 page.locator('#confirm-dialog [value="confirm"]').click()
                 expect(page.locator('#toast')).to_contain_text('Investment committed')
-                expect(page.locator('#development-status')).to_contain_text('completes in',timeout=6000)
+                expect(develop).to_contain_text(re.compile('Construction queued|Building level'),timeout=6000)
                 page.screenshot(path=str(artifacts/'08-development.png'),full_page=True)
                 capture(page,1300)
-                expect(page.locator('#industry-level')).to_contain_text('Ⅱ',timeout=15000)
+                expect(page.locator('#card-sub')).to_contain_text('industry Ⅱ',timeout=15000)
                 report['assertions'].append('Browser funded, confirmed and completed province development using naturally recruited manpower.')
                 page.set_viewport_size({'width':390,'height':844})
                 assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1')

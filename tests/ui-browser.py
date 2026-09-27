@@ -752,6 +752,35 @@ def mobile_checks(browser,url,identity,report,out):
 
 MAX_PX=14
 
+def replay_parity_checks(page,report,capture):
+    """The replay uses the live components: team leaderboard at the scrubbed tick, history up to the tick
+    (with alliance chat only where the room announced it), rows that seek, and effects only when playing forward."""
+    page.set_viewport_size({'width':1366,'height':900});go_back(page);page.locator('[data-room="ui-chat"]').first.click()
+    page.locator('#aar-tab-replay').click();expect(page.locator('#replay-stage')).to_be_visible()
+    rows=lambda:page.locator('#replay-feed .replay-row:not([hidden])')
+    page.locator('#replay-slider').fill('40');page.wait_for_timeout(150)
+    ticks=[int(t) for t in rows().evaluate_all('(n)=>n.map(e=>e.dataset.tick)')];assert ticks and max(ticks)<=40,ticks
+    expect(page.locator('#replay-feed .replay-chat').first).to_be_hidden()
+    expect(page.locator('.replay-leaderboard .lb-group')).to_contain_text('Pacific Pact')
+    page.locator('#replay-slider').fill('10');page.wait_for_timeout(150);expect(page.locator('.replay-leaderboard .lb-group')).to_have_count(0)  # not yet active at 00:10
+    page.locator('#replay-slider').fill('100');page.wait_for_timeout(150)
+    chat=page.locator('#replay-feed .replay-chat').first;expect(chat).to_be_visible();expect(chat).to_contain_text('Hold the Pacific <b>line</b>.')
+    assert chat.locator('b b, span b:not(:first-child)').count()==0 and page.locator('#replay-feed b:has-text("line")').count()==0  # player text stays text
+    page.locator('[data-replay-filter="chat"]').click();assert all('replay-chat' in c for c in rows().evaluate_all('(n)=>n.map(e=>e.className)'))
+    page.locator('[data-replay-filter="all"]').click()
+    page.locator('#replay-feed .replay-event button',has_text='Pacific Pact becomes active').click()
+    expect(page.locator('#replay-stage')).to_have_attribute('data-tick','31');assert page.locator('#replay-slider').input_value()=='31'
+    expect(page.locator('#replay-feed .replay-row.current')).to_contain_text('Pacific Pact')
+    capture('10b-replay-history.png')
+    page.locator('#replay-slider').fill('130');page.locator('#replay-slider').fill('120');page.wait_for_timeout(200)
+    assert page.locator('#review-map .map-effect').count()==0,'scrubbing plays no effects'
+    page.locator('#replay-speed').select_option('4');page.locator('#replay-play').click()
+    expect(page.locator('#review-map .map-effect').first).to_be_attached(timeout=6000)  # the tick-125 capture while playing forward
+    page.locator('#replay-play').click()
+    assert page.locator('#aar-replay [id]').evaluate_all('(n)=>n.every(e=>!document.querySelector("#game .war-room #"+CSS.escape(e.id))||false)')
+    ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
+    report['assertions'].append('Replay parity (short recorded match whose room announced public alliance chat): the shared team leaderboard shows the board at the scrubbed tick (no alliance before activation, Pacific Pact after); the history lists public events and the revealed alliance chat only up to the scrubbed tick, as text; an Alliance chat chip filters; selecting a row seeks the scrubber and marks it current; scrubbing plays no map effects, playing forward does; IDs stay unique.')
+
 def coach_and_drag_checks(browser,url,identity,report,out):
     """First-match tips (three, dismissible, stored per browser) and a real touch drag from a province counter."""
     context=browser.new_context(viewport={'width':390,'height':844},is_mobile=True,has_touch=True,device_scale_factor=2)
@@ -1043,6 +1072,7 @@ def main():
             expect(page.locator('.aar-replay-map .atlas-legend')).to_contain_text('Hover a country');review_chip.click()
             ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
             report['assertions'].append('After-action standards identify all winning members; exact map playback keeps separate SVG IDs and no live command surface.')
+            replay_parity_checks(page,report,capture)
             map_checks(page,server,report,capture)
             wrap_checks(page,report,capture)
             relations_checks(page,report,capture)
