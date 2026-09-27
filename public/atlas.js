@@ -1,6 +1,6 @@
 import { journeyPoint } from './movement.js';
 import { borderNetwork, insideRings, provinceRings } from './map-geometry.js';
-import { allianceColors, atWar, coalitions, formingAlliances, relationsOf, warKey } from './relations.js';
+import { allianceColors, atWar, battleColors, coalitions, formingAlliances, relationsOf, teamColor, warKey } from './relations.js';
 import { faction } from './presentation.js';
 /** Presentation only: the server decides every movement, battle and ownership change.
  * Every SVG fragment below is an authored constant; player text never enters map markup.
@@ -769,37 +769,66 @@ export class Atlas {
       const lead = [...byCountry].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0];
       const attack = engaged.reduce((n, a) => n + a.amount, 0), defend = p.troops;
       const width = 10 + (String(attack).length * 7.5 + 8) + 22 + (String(defend).length * 7.5 + 8);
-      this.battleInfo.set(p.id, { battle, attack, defend, lead, width });
+      // Tug of war: team colours (coalition colour, else country fill), split at the troop share.
+      const colors = battleColors(teamColor(state, lead, this.countries.get(lead)?.color), teamColor(state, p.owner, this.countries.get(p.owner)?.color));
+      this.battleInfo.set(p.id, { battle, attack, defend, lead, width, colors, ratio: this.battleRatio(attack, defend) });
     }
-    for (const [id, mark] of this.battleMarks) if (!this.battleInfo.has(id)) { mark.group.remove(); this.battleMarks.delete(id); }
+    for (const [id, mark] of this.battleMarks) if (!this.battleInfo.has(id) && !mark.resolved) this.resolveBattle(id, mark);
     for (const [id, info] of this.battleInfo) {
+      if (this.battleMarks.get(id)?.resolved) { this.battleMarks.get(id).group.remove(); this.battleMarks.delete(id); }
       if (!this.battleMarks.has(id)) {
         const group = node('g', { class: 'battle-counter', 'data-province': id, tabindex: 0, role: 'button' });
         const pulse = node('rect', { class: 'battle-pulse', y: -16, height: 32, rx: 3 });
-        const body = node('rect', { class: 'battle-body', y: -12, height: 24, rx: 1 });
-        const left = node('rect', { class: 'battle-stripe', y: -12, width: 5, height: 24 }), right = node('rect', { class: 'battle-stripe', y: -12, width: 5, height: 24 });
+        // Plain rects (no gradient/clip IDs): defender bar, attacker bar scaled from the left, divider, frame.
+        const right = node('rect', { class: 'battle-defend-bar', y: -12, height: 24 }), left = node('rect', { class: 'battle-attack-bar', y: -12, height: 24 });
+        const divider = node('rect', { class: 'battle-divider', x: -1, y: -12, width: 2, height: 24 }), body = node('rect', { class: 'battle-body', y: -12, height: 24, rx: 1 });
         const attack = node('text', { class: 'battle-value attack', y: .5 }), defend = node('text', { class: 'battle-value defend', y: .5 });
         const swords = node('path', { class: 'battle-swords', d: SWORDS }), flashes = node('g', { class: 'battle-flashes', 'aria-hidden': 'true' });
         const name = node('text', { class: 'province-name battle-name', y: -20 }); name.textContent = this.places.get(id).name;
-        group.append(pulse, body, left, right, attack, swords, defend, name, flashes); this.battleLayer.append(group);
-        this.battleMarks.set(id, { group, pulse, body, left, right, attack, defend, flashes });
+        group.append(pulse, right, left, divider, body, attack, swords, defend, name, flashes); this.battleLayer.append(group);
+        this.battleMarks.set(id, { group, pulse, body, left, right, divider, attack, defend, flashes });
       }
       const mark = this.battleMarks.get(id), w = info.width, aw = String(info.attack).length * 7.5 + 8, dw = String(info.defend).length * 7.5 + 8;
       mark.pulse.setAttribute('x', -w / 2 - 3); mark.pulse.setAttribute('width', w + 6);
       mark.body.setAttribute('x', -w / 2); mark.body.setAttribute('width', w);
-      mark.left.setAttribute('x', -w / 2); mark.left.setAttribute('fill', this.countries.get(info.lead)?.color || NEUTRAL);
-      mark.right.setAttribute('x', w / 2 - 5); mark.right.setAttribute('fill', this.countries.get(this.byId.get(id).owner)?.color || NEUTRAL);
+      mark.info = info; mark.w = w;
+      mark.left.setAttribute('fill', info.colors.attacker); mark.right.setAttribute('fill', info.colors.defender);
+      this.setSplit(mark, info.ratio);
       const swordsAt = -w / 2 + 5 + aw + 11;
       mark.attack.setAttribute('x', -w / 2 + 5 + aw / 2); mark.attack.textContent = info.attack;
       mark.group.querySelector('.battle-swords').setAttribute('transform', `translate(${swordsAt} 0)`);
       mark.defend.setAttribute('x', w / 2 - 5 - dw / 2); mark.defend.textContent = info.defend;
-      mark.group.dataset.attack = info.attack; mark.group.dataset.defend = info.defend;
+      mark.group.dataset.attack = info.attack; mark.group.dataset.defend = info.defend; mark.group.dataset.ratio = info.ratio.toFixed(4);
+      mark.group.dataset.attackColor = info.colors.attacker; mark.group.dataset.defendColor = info.colors.defender;
       mark.group.setAttribute('aria-label', `Battle at ${this.places.get(id).name}: ${info.attack} attacking, ${info.defend} defending`);
       // Flash only a round this atlas has not shown yet; a fresh load never replays old rounds.
       const round = info.battle.lastRound, key = info.battle.id || id, seen = this.seenRounds.get(key);
       if (round && seen !== undefined && round.tick > seen) this.roundFlash(mark, round, w, aw);
       this.seenRounds.set(key, round?.tick ?? -1);
     }
+  }
+  /** Attacker share of the bar; each side keeps at least 6% while it has troops. */
+  battleRatio(attack, defend) {
+    if (attack + defend <= 0) return .5;
+    let r = attack / (attack + defend);
+    if (attack > 0) r = Math.max(r, .06);
+    if (defend > 0) r = Math.min(r, .94);
+    return r;
+  }
+  setSplit(mark, ratio) {
+    const w = mark.w;
+    for (const bar of [mark.left, mark.right]) { bar.setAttribute('x', -w / 2); bar.setAttribute('width', w); }
+    mark.left.style.transform = `scaleX(${ratio})`;
+    mark.divider.style.transform = `translateX(${-w / 2 + ratio * w}px)`;
+    mark.divider.style.display = ratio <= 0 || ratio >= 1 ? 'none' : '';
+  }
+  /** A finished battle fills with the winner's colour for a final flash, then disappears. */
+  resolveBattle(id, mark) {
+    mark.resolved = true;
+    const won = (this.byId.get(id)?.owner || null) !== (mark.info?.battle.previousOwner || null);
+    mark.group.classList.add('resolved', 'battle-hit'); mark.group.removeAttribute('tabindex'); mark.group.removeAttribute('data-province');
+    this.setSplit(mark, won ? 1 : 0);
+    this.later(() => { mark.group.remove(); if (this.battleMarks.get(id) === mark) this.battleMarks.delete(id); }, this.reducedMotion ? 600 : 900);
   }
   roundFlash(mark, round, w, aw) {
     mark.group.classList.remove('battle-hit'); void mark.group.getBBox?.(); mark.group.classList.add('battle-hit');

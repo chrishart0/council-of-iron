@@ -79,17 +79,22 @@
 /* Battle in progress: attacker | crossed swords | defender. */
 .battle-counter{cursor:pointer}
 .battle-counter:focus{outline:none}.battle-counter:focus .battle-body{stroke:#ffe1a0}
-.battle-body{fill:#3a1714;stroke:#f08a64;stroke-width:1.4}
-.battle-stripe{pointer-events:none}
+.battle-body{fill:#ffffff;fill-opacity:0;stroke:#140b09;stroke-width:2.2}
+/* Tug-of-war background: defender colour, attacker bar scaled from the left, dark divider at the split. */
+.battle-defend-bar,.battle-attack-bar,.battle-divider{pointer-events:none}
+.battle-attack-bar{transition:transform .4s ease}
+.battle-attack-bar{transform-box:fill-box;transform-origin:left center}
+.battle-divider{fill:#10181b;transition:transform .4s ease}
+.battle-counter.resolved .battle-pulse{display:none}
 .battle-name{display:none;font:11px var(--serif,Georgia,serif);fill:#ffe3cf;text-anchor:middle;paint-order:stroke;stroke:#2a110e;stroke-width:3;stroke-linejoin:round;pointer-events:none}
 .battle-counter.named .battle-name{display:inline}
-.battle-value{font:750 12px var(--sans,system-ui,sans-serif);fill:#fff0cd;text-anchor:middle;dominant-baseline:central;pointer-events:none}
-.battle-swords{fill:none;stroke:#ffd9a0;stroke-width:1.7;stroke-linecap:round;pointer-events:none}
+.battle-value{font:750 12px var(--sans,system-ui,sans-serif);fill:#fffaf0;text-anchor:middle;dominant-baseline:central;pointer-events:none;paint-order:stroke;stroke:#10181b;stroke-width:3.2;stroke-linejoin:round}
+.battle-swords{fill:none;stroke:#fff3d6;stroke-width:1.7;stroke-linecap:round;pointer-events:none;filter:drop-shadow(0 0 1px #10181b) drop-shadow(0 0 1px #10181b)}
 .battle-pulse{fill:none;stroke:#ff8a63;stroke-width:1.5;opacity:.55;transform-box:fill-box;transform-origin:center;animation:battle-pulse 1.4s ease-out infinite}
 .battle-counter.battle-hit .battle-body{animation:battle-hit .5s ease-out 2}
 .round-loss{font:800 11px var(--sans,system-ui,sans-serif);fill:#ff9a7a;text-anchor:middle;paint-order:stroke;stroke:#1b0d0b;stroke-width:2.5;animation:round-loss 1.2s ease-out forwards}
 @keyframes battle-pulse{from{transform:scale(1);opacity:.75}to{transform:scale(1.35,1.9);opacity:0}}
-@keyframes battle-hit{0%{fill:#b3371f}100%{fill:#3a1714}}
+@keyframes battle-hit{0%{fill-opacity:.55}100%{fill-opacity:0}}
 @keyframes round-loss{from{transform:translateY(4px);opacity:1}to{transform:translateY(-8px);opacity:0}}
 /* Decorative map effects (atlas.effect). Base styles are the static reduced-motion highlight. */
 .map-effects{pointer-events:none}
@@ -129,5 +134,5 @@
 /* Reduced motion: no pulse or travel; effects are a brief static highlight. */
 .map-effect.still *,.map-effect.still{animation:none!important}
 .map-effect.still .fx-ring.fx-late,.map-effect.still .fx-smoke{display:none}
-@media(prefers-reduced-motion:reduce){.war-front-glow,.battle-pulse,.round-loss,.battle-counter.battle-hit .battle-body{animation:none!important}.battle-pulse{opacity:.5}}
+@media(prefers-reduced-motion:reduce){.war-front-glow,.battle-pulse,.round-loss,.battle-counter.battle-hit .battle-body{animation:none!important}.battle-attack-bar,.battle-divider{transition:none!important}.battle-pulse{opacity:.5}}
 .atlas-v6:focus{outline:none}.atlas-v6:focus-visible{outline:2px solid #e2c993;outline-offset:-2px}
