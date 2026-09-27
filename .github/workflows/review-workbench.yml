@@ -1,0 +1,102 @@
+name: Verify and publish after-action review
+on:
+  push:
+    branches: [after-action-v04-workbench]
+    paths: [.github/workflows/review-workbench.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: council-v04-publication
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reconstruct the locally tested patch against its exact base
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, lzma
+          data=b''.join(Path(f'.github/v04-payload/{i:02}.part').read_bytes() for i in range(1,7))
+          assert hashlib.sha256(data).hexdigest()=='bdc909e0e2351c03dcb086ad64b1d336b6a47e04638beed724149d8775e03b44'
+          patch=lzma.decompress(data)
+          assert hashlib.sha256(patch).hexdigest()=='1a7088866ac0044ea10d1ba2761e1439eda75a6e1f6cb0c97244609166250417'
+          Path('/tmp/v04.patch').write_bytes(patch)
+          PY
+          git checkout --detach 6062d8c5400269d633987e089cb5f0b2a44aef35
+          git apply --unidiff-zero --check /tmp/v04.patch
+          git apply --unidiff-zero /tmp/v04.patch
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Syntax, privacy, replay and regression tests
+        run: |
+          set -o pipefail
+          mkdir -p artifacts
+          npm run check
+          npm test | tee artifacts/node-tests.log
+          grep -q '# pass 80' artifacts/node-tests.log
+          grep -q '# fail 0' artifacts/node-tests.log
+      - name: Reproduce unchanged-rules seeded smoke games
+        run: |
+          node scripts/tournament.js --rounds 32 --seed 910000 --mode solo --out artifacts/v04-smoke-solo.json
+          node scripts/tournament.js --rounds 32 --seed 920000 --mode diplomacy --out artifacts/v04-smoke-diplomacy.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          expected=json.loads(Path('docs/testing/v04-local.json').read_text())['smoke']
+          for mode in ['solo','diplomacy']:
+              actual=json.loads(Path(f'artifacts/v04-smoke-{mode}.json').read_text())['summary']
+              assert actual['rounds']==32 and actual['invariantFailures']==0
+              for field in ['countryWins','draws','meanDuration','meanPrestige']:
+                  assert actual[field]==expected[mode][field],(mode,field)
+          PY
+      - run: python -m pip install -r tests/requirements.txt
+      - run: python -m playwright install --with-deps chromium
+      - name: Native browser playthrough and exact-history review; record actual review GIF
+        run: python tests/browser.py --gif artifacts/gameplay.gif --review-gif docs/media/after-action.gif
+      - name: Record native verification and publish tested application files
+        env:
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python - <<'PY'
+          import json, hashlib, os
+          from pathlib import Path
+          from PIL import Image
+          full=json.loads(Path('artifacts/browser-report.json').read_text())
+          review=json.loads(Path('artifacts/review/review-browser-report.json').read_text())
+          for report in [full,review]:
+              assert report['status']=='passed' and report['transport']=='native-browser-http'
+              assert not report['pageErrors']
+          gif=Path('docs/media/after-action.gif'); image=Image.open(gif)
+          assert image.n_frames>=20 and gif.stat().st_size<8_000_000
+          receipt={'date':'2026-09-27','workflow':os.environ['RUN_URL'],'baseCommit':'6062d8c5400269d633987e089cb5f0b2a44aef35','status':'passed','transport':'native-browser-http','nodeTestsPassed':80,'repeatedSmokeGames':64,'gameplayRulesChanged':False,'fullBrowserAssertions':full['assertions'],'reviewBrowserAssertions':review['assertions'],'fullBrowserOutcome':full['outcome'],'gif':{'path':str(gif),'frames':image.n_frames,'bytes':gif.stat().st_size,'sha256':hashlib.sha256(gif.read_bytes()).hexdigest()},'limitations':'Automated browser controls and heuristic/recorded opponents. Recorded-game review is not an independent match or live-LLM test.'}
+          Path('docs/testing/v04-native-ci.json').write_text(json.dumps(receipt,indent=2)+'\n')
+          p=Path('docs/PLAYTEST.md')
+          note='## Native v0.4 verification\n\nThe [native publication run]('+os.environ['RUN_URL']+') passed all 80 Node tests and reproduced 64 seeded smoke games. It completed the actual-browser/external-agent playthrough and focused after-action suite, including exact backward scrubbing, report tabs, privacy, mobile layouts and legacy fallback. The README review GIF was captured from this native run. [Machine-readable receipt](testing/v04-native-ci.json).\n\n'
+          p.write_text(p.read_text().replace('## Earlier verification records',note+'## Earlier verification records'))
+          PY
+          test "$(git ls-remote origin refs/heads/master | cut -f1)" = 6062d8c5400269d633987e089cb5f0b2a44aef35
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --name-only | grep -q '^.github/'; then echo 'Refusing to publish workbench transport or workflow files'; exit 1; fi
+          git diff --cached --check
+          git diff --cached --stat
+          git commit -m 'Ship v0.4: after-action reports, exact map replay and clearer strategic feedback'
+          git push origin HEAD:master
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v04-native-playtest
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
