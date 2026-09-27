@@ -34,3 +34,12 @@ Run all Node tests plus `python tests/browser.py` (now includes the focused reco
 `public/presentation.js` is an allowlisted set of original decorative SVG fragments and a pure completed-battle signal selector. Never interpolate player text into SVG. Preserve country labels alongside insignia. The command dock contains a form-associated March submit button outside the scrolling form; do not move it below a long details pane again. Roster focus must survive polling, keyboard shortcuts must not hijack text entry, and reconnecting must not replay old battle banners. Keep the live desktop within its viewport, with a flowing layout for narrow/short screens.
 
 The full browser entry point also runs `tests/ui-browser.py`. Its paused fixture and private stdin stepping are test-only. No production advance endpoint or new game rule is implied. Screenshots/GIFs of that fixture must be labeled recorded-position UI, never passed off as a new live match.
+
+## Traditional bot changes
+
+- Keep per-seat memory explicit and private; never put it in `players` or expose it through public review.
+- `agents/bots/` reads only recipient-scoped observations and the public map. No engine imports or board mutation there.
+- Difficulty changes controller cadence and planning, not the engine's budgets, resources or information.
+- Tactical fixtures come before tournament tuning. Run `npm test` and `npm run test:bots`; no-country-rotation or coalition-win-only figures are not reliable strength comparisons.
+- Preserve legacy policies for old saves and reproducible baseline tests. A new policy version cannot silently take over a running old match.
+- The browser entry point includes bot configuration/DM checks. Every new control must retain spectator read-only behavior and visible descriptions of limitations.

@@ -10,6 +10,8 @@ import { buildReview, unavailableReview } from './review.js';
 import { replayReader } from '../public/replay-model.js';
 import { operationalInsights } from '../public/insights.js';
 import { choose } from '../agents/policy.js';
+import { createBot, decideBot, recordDecision } from '../agents/bots/controller.js';
+import { BOT_VERSION, botSettings, botLabel } from '../public/bot-profiles.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 export const LEGACY_MAP = JSON.parse(readFileSync(resolve(root, 'public/map.json'), 'utf8'));
@@ -20,6 +22,7 @@ const staticFiles = new Map([
   ['/', ['public/index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['public/app.js', 'text/javascript; charset=utf-8']],
   ['/atlas.js', ['public/atlas.js', 'text/javascript; charset=utf-8']],
+  ['/bot-profiles.js', ['public/bot-profiles.js', 'text/javascript; charset=utf-8']],
   ['/presentation.js', ['public/presentation.js', 'text/javascript; charset=utf-8']],
   ['/ui.js', ['public/ui.js', 'text/javascript; charset=utf-8']],
   ['/style.css', ['public/style.css', 'text/css; charset=utf-8']],
@@ -61,11 +64,31 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
   }
   function save(g) { store.save(g); }
   function runBots(g) {
-    if (g.tick % 5 !== 0) return;
-    for (const p of g.players.filter(p=>p.kind==='bot')) {
-      const action=choose(observe(g,p.id,g.sequence),mapFor(g),p.id);
-      if (action) try { act(g,mapFor(g),p.id,action,`bot-${g.tick}-${p.id}`); }
-      catch (e) { if (!(e instanceof RuleError)) throw e; }
+    // Rotate simultaneous decision order; never give a permanent country priority.
+    const bots = g.players.filter(p => p.kind === 'bot'), offset = g.tick % (bots.length || 1);
+    for (const p of [...bots.slice(offset), ...bots.slice(0, offset)]) {
+      if (p.eliminatedAt !== null) continue;
+      // An existing match keeps its legacy controller rather than changing mid-war.
+      if (p.model !== BOT_VERSION) {
+        if (g.tick % 5 !== 0) continue;
+        const action = choose(observe(g, p.id, g.sequence), mapFor(g), p.id);
+        if (action) try { act(g, mapFor(g), p.id, action, `bot-${g.tick}-${p.id}`); }
+        catch (e) { if (!(e instanceof RuleError)) throw e; }
+        continue;
+      }
+      const memory = (g.botControllers ||= {})[p.id] ||= createBot(p.id, p.bot, `${g.id}:${p.id}`);
+      if (g.tick < memory.nextThinkAt) continue;
+      const view = observe(g, p.id, memory.cursor, 10000);
+      const decision = decideBot(view, mapFor(g), memory);
+      if (!decision) continue;
+      try {
+        act(g, mapFor(g), p.id, decision.action, `bot-${g.tick}-${p.id}`);
+        recordDecision(memory, decision, view);
+      } catch (e) {
+        if (!(e instanceof RuleError)) throw e;
+        recordDecision(memory, decision, view, false);
+        console.warn('Bot order rejected:', g.id, p.id, decision.action.type, e.message);
+      }
     }
   }
   function step(g, count) {
@@ -102,7 +125,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         let bucket=ipBudgets.get(ip); if(!bucket || now-bucket.at>60000) {bucket={at:now,count:0};ipBudgets.set(ip,bucket);}
         requireRule(++bucket.count<=1200,'Transport request limit exceeded.',429);
       }
-      if(path==='/api/health' && req.method==='GET') return json(res,200,{ok:true,version:'0.5.0'});
+      if(path==='/api/health' && req.method==='GET') return json(res,200,{ok:true,version:'0.6.0'});
       if(path==='/api/players' && req.method==='POST') {
         const data=await body(req); return json(res,201,store.register(text(data.name,'Player name',40)));
       }
@@ -181,12 +204,29 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         }
         if(endpoint==='start' && req.method==='POST') {host();seat();await body(req);start(g);fractions.set(g.id,0);save(g);return json(res,200,{ok:true});}
         if(endpoint==='bots' && req.method==='POST') {
-          host();await body(req);requireRule(g.status==='lobby','Cannot add seats during play.',409);
-          for(const c of gameMap.countries.filter(c=>!g.players.some(p=>p.id===c.id))) {
-            const profile=store.register(`${c.name.split(' ')[0]} automaton`);
-            join(g,gameMap,{profileId:profile.id,name:profile.name,country:c.id,kind:'bot',model:gameMap.rulesVersion?'heuristic-industrial-v3':'heuristic-v1',persona:'expansion-first'});
+          host(); const data = await body(req);
+          requireRule(g.status === 'lobby', 'Cannot configure bots during play.', 409);
+          let settings;
+          try { const { country, ...options } = data; settings = botSettings(options); }
+          catch (e) { throw new RuleError(e.message); }
+          requireRule(data.country === undefined || gameMap.countries.some(c => c.id === data.country), 'Choose a listed bot country.');
+          const selected = data.country ? gameMap.countries.filter(c => c.id === data.country)
+            : gameMap.countries.filter(c => !g.players.some(p => p.id === c.id));
+          // Validate every seat before creating profiles or modifying a lobby.
+          for (const c of selected) requireRule(!g.players.some(p => p.id === c.id && p.kind !== 'bot'), 'That country belongs to a player.', 409);
+          for (const c of selected) {
+            const brain = createBot(c.id, settings, `${g.id}:${c.id}`);
+            let p = g.players.find(p => p.id === c.id);
+            if (!p) {
+              const profile = store.register(`${c.name.split(' ')[0]} commander`);
+              p = join(g, gameMap, { profileId: profile.id, name: profile.name, country: c.id, kind: 'bot' });
+            }
+            Object.assign(p, { model: BOT_VERSION, persona: botLabel(brain.config), bot: { ...brain.config } });
+            (g.botControllers ||= {})[p.id] = brain;
           }
-          save(g);return json(res,200,{ok:true,players:g.players.length});
+          if (selected.length) g.eligible = false; save(g);
+          return json(res, 200, { ok: true, players: g.players.length,
+            bots: g.players.filter(p => p.kind === 'bot').map(p => ({ country: p.id, ...p.bot })) });
         }
         if(endpoint==='actions' && req.method==='POST') {
           const p=seat(),data=await body(req);

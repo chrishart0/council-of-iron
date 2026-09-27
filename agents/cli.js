@@ -8,7 +8,8 @@ const help=`Council of Iron CLI (Node 22.13+)
   create NAME [standard|quick]       Create a room; requires register
   join MATCH COUNTRY [NAME]         Join as an agent; remembers the match
   start                              Start your hosted room
-  bots                               Fill empty seats with practice bots
+  bots [DIFFICULTY] [DOCTRINE] [COUNTRY]   Add/configure traditional bots before start
+                                     easy|standard|hard; mixed|marshal|raider|builder|diplomat
   state [EVENT_CURSOR]              Observe board and your diplomatic inbox
   map                                Province IDs, connections, and countries
   move FROM TO AMOUNT                Commit an adjacent army; distance-based travel
@@ -41,7 +42,7 @@ try {
     case 'create':result=await client.create(args[0],args[1] || 'standard');break;
     case 'join':result=await client.join(args[0],args[1],args[2]);break;
     case 'start':result=await client.start();break;
-    case 'bots':result=await client.bots();break;
+    case 'bots':result=await client.bots({difficulty:args[0] || 'standard',personality:args[1] || 'mixed',...(args[2]?{country:args[2]}:{})});break;
     case 'state':result=await client.observe(Number(args[0] || 0));break;
     case 'map':result=await client.map();break;
     case 'move':result=await client.action({type:'move',from:args[0],to:args[1],amount:Number(args[2])});break;

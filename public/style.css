@@ -135,3 +135,15 @@ footer{display:flex;justify-content:space-between;gap:14px;margin:0 3vw;padding:
  .spectator-map-fullscreen .spectator-bubbles{width:min(320px,calc(100% - 24px));right:12px;bottom:12px}
  .spectator-map-fullscreen .board-panel::after{inset:82px 7px 8px}
 }
+
+/* Lobby-only bot controls reuse the game's command materials. */
+.bot-setup{border:1px solid #aa9470;border-radius:5px;padding:12px 14px;margin:0 0 12px;min-width:0;width:100%}
+.bot-setup legend{font:600 12px var(--sans);letter-spacing:1px;text-transform:uppercase;padding:0 8px}
+.bot-choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.bot-choices label{margin-bottom:0}
+.bot-roster{display:flex;gap:8px 18px;flex-wrap:wrap;margin:12px 0;color:var(--muted);font-size:12px}
+.bot-roster:empty{display:none}
+.bot-roster b{color:var(--ink);margin-right:5px}
+.bot-chat-hint{border-left:2px solid var(--gold);padding-left:10px}
+#host-controls{flex-wrap:wrap}
+@media(max-width:600px){.bot-choices{grid-template-columns:1fr}.bot-setup{box-sizing:border-box}.bot-roster{gap:8px}}

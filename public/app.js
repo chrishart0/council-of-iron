@@ -1,3 +1,4 @@
+import { DIFFICULTIES, PERSONALITIES, botLabel } from './bot-profiles.js';
 const $ = id => document.getElementById(id);
 import { AfterAction } from './review.js';
 import { developmentForecast, coalitionForecast } from './insights.js';
@@ -269,6 +270,16 @@ async function updatePreview(){
 function forecastHTML(f) {
   return `<div class="coalition-forecast"><strong>${f.land}/${f.threshold} provinces after admission</strong><br>${f.wouldDraw?'Every starting player: negotiated draw, not a win.':f.wouldStartHold?`Already above the threshold. Activation would start a fresh ${state.rules.hold}s victory hold.`:`${f.remaining} more provinces needed to start the victory hold.`}<table><caption class="sr-only">Each member’s new prize share</caption><tbody>${f.members.map(p=>`<tr><td>${esc(country(p.country).name)}<br>${p.keepsMaturity?'Keeps earned tenure':'Maturity resets'}</td><td>${p.maximumShare.toFixed(1)} maximum points<br>${signed(p.fullMaturityPrestige)} Prestige at full maturity</td></tr>`).join('')}</tbody></table><small>${esc(f.assumption)}</small></div>`;
 }
+function renderBotSetup(){
+  const seats=map.countries.filter(c=>!state.players.some(p=>p.id===c.id && p.kind!=='bot'));
+  options('bot-seat',[{value:'',label:'All empty seats'},...seats.map(c=>({value:c.id,label:c.name+(state.players.some(p=>p.id===c.id)?' · configure bot':' · open')}))],$('bot-seat').value);
+  const updating=state.players.some(p=>p.id===$('bot-seat').value && p.kind==='bot');
+  $('fill-bots').disabled=!$('bot-seat').value && state.players.length===map.countries.length;
+  $('fill-bots').textContent=updating?'Update commander':$('bot-seat').value?'Add commander':'Fill empty seats with bots';
+  const skill=DIFFICULTIES[$('bot-difficulty').value],style=PERSONALITIES[$('bot-personality').value];
+  $('bot-description').textContent=skill.description+' '+(style?.description || 'A mix of distinct, persistent play styles.');
+  setHTML($('bot-roster'),state.players.filter(p=>p.kind==='bot').map(p=>`<span><b>${esc(country(p.id).name)}</b> ${esc(botLabel(p.bot))}</span>`).join(''));
+}
 function renderCouncil(){
   const me=myPlayer(),team=state.sides.find(s=>s.id===me?.side),projection=state.projections.find(p=>p.country===state.you);
   $('coalition-info').innerHTML=me?`<p><b>${esc(namedSide(me.side))}</b></p>${team.members.map(id=>{const p=state.projections.find(p=>p.country===id);return`<div class="coalition-member"><span>${esc(country(id).name)}</span><span>${Math.round(p.maturity*100)}% earned<br><small>${signed(p.projectedPrestige)} if victorious</small></span></div>`;}).join('')}<p class="small muted">Maximum slice: ${projection.maximumShare.toFixed(1)} points. Unearned points disappear; they are not redistributed.</p>`:'<p class="muted">Observers cannot negotiate formal membership.</p>';
@@ -293,7 +304,15 @@ function renderChat(){
   const signature=`${matchId}:${state.you}:`+messages.map(e=>e.id).join(',');
   if(box.dataset.signature!==signature){box.dataset.signature=signature;box.innerHTML=messages.length?messages.map(m=>`<article class="message"><header><b>${esc(country(m.from)?.name)}</b> · ${time(m.tick)} · ${m.channel==='dm'?`PRIVATE → ${esc(country(m.to)?.name)}`:esc(m.channel.toUpperCase())}</header><p>${esc(m.text)}</p></article>`).join(''):'<p class="muted small">The diplomatic wire is open. Make the first approach.</p>';if(atBottom)box.scrollTop=box.scrollHeight;}
   options('recipient',state.players.filter(p=>p.id!==state.you).map(p=>({value:p.id,label:country(p.id).name})),$('recipient').value);
-  const delay=Math.max(0,(state.commandBudget?.chatReadyAt || 0)-state.tick),button=$('chat-form').querySelector('button');
+  const recipient=state.players.find(p=>p.id===$('recipient').value);
+  $('bot-chat-controls').hidden=$('channel').value!=='dm' || !recipient?.bot;
+  $('bot-chat-hint').textContent=`${botLabel(recipient?.bot)}. Traditional bot: /help or /status. Allies may request /attack PROVINCE_ID or /defend PROVINCE_ID. One request per 45 game seconds. Use Council for alliances; free-form promises are not interpreted.`;
+  const target=state.provinces.find(p=>p.id===destination),isAlly=recipient && recipient.side===myPlayer()?.side;
+  const targetAlly=state.players.find(p=>p.id===target?.owner)?.side===myPlayer()?.side;
+  const tactical=$('bot-tactical-draft');tactical.hidden=!isAlly || !target;
+  tactical.textContent=target?`Request ${targetAlly?'defense':'attack'}: ${place(target.id).name}`:'';
+  tactical.dataset.botDraft=target?`/${targetAlly?'defend':'attack'} ${target.id}`:'';
+  const delay=Math.max(0,(state.commandBudget?.chatReadyAt || 0)-state.tick),button=$('chat-form').querySelector('button[type=submit]');
   button.disabled=!state.you || state.status!=='running' || delay>0;button.textContent=delay?`Send in ${delay} game seconds`:'Send dispatch';
   const unread=messages.filter(m=>m.id>readMessageId).length;
   $('unread').textContent=unread?String(unread):'';
@@ -304,7 +323,7 @@ function renderScoreboard(){
     const troops=land.reduce((n,v)=>n+v.troops,0)+state.armies.filter(a=>a.country===c.id).reduce((n,a)=>n+a.amount,0);
     const button=$('scoreboard').querySelector(`[data-country-focus="${c.id}"]`);
     button.classList.toggle('mine',c.id===state.you);
-    button.title=`${c.name} · ${p?.name || 'Unclaimed'} · ${p?namedSide(p.side):'Neutral'} · ${land.length} provinces · ${troops} troops${projection?` · ${signed(projection.projectedPrestige)} Prestige if victorious`:''}`;
+    button.title=`${c.name} · ${p?.name || 'Unclaimed'}${p?.bot?' · '+botLabel(p.bot):''} · ${p?namedSide(p.side):'Neutral'} · ${land.length} provinces · ${troops} troops${projection?` · ${signed(projection.projectedPrestige)} Prestige if victorious`:''}`;
     button.setAttribute('aria-label',`Inspect ${button.title}`);
     setHTML(button,`${insignia(c.id)}<span class="country-summary"><b>${esc(faction(c.id).short)}</b><span class="country-metrics">${icon('land')}${land.length} ${icon('troops')}${troops}</span><small>${p?esc(p.eliminatedAt!==null?'Eliminated':p.side.startsWith('solo:')?'Independent':namedSide(p.side)):'Unclaimed'}</small></span>`);
   }
@@ -402,7 +421,7 @@ function render(){
   $('game-name').textContent=state.name;$('room-label').textContent=`COUNCIL ${state.id.toUpperCase()} · ${state.eligible?'LEAGUE':'EXPERIMENTAL'} · ${state.players.length}/8 SEATS`;
   $('lobby').hidden=state.status!=='lobby';$('join-form').hidden=Boolean(state.you);
   options('country-choice',map.countries.filter(c=>!state.players.some(p=>p.id===c.id)).map(c=>({value:c.id,label:c.name})),$('country-choice').value);
-  $('host-controls').hidden=!state.isHost;$('fill-bots').disabled=state.players.length===8;$('start-match').disabled=state.players.length<2 || !state.you;
+  $('host-controls').hidden=!state.isHost;renderBotSetup();$('start-match').disabled=state.players.length<2 || !state.you;
   const selectedCountry=country($('country-choice').value);
   $('starting-holdings').textContent=state.you?'':startingSummary(selectedCountry);
   $('join-form').querySelector('button').disabled=!selectedCountry;
@@ -418,7 +437,15 @@ function render(){
 async function home(){resetPresentation();review?.destroy();review=null;setMapFullscreen(false);document.body.classList.remove('reviewing','spectating');generation++;pollController?.abort();document.body.classList.remove('in-game');matchId=null;state=null;spectating=false;messageBubbles=[];messageCatchupComplete=false;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');await rooms();}
 $('create-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('display-name').value);const g=await request('/api/games','POST',{name:$('room-name').value,preset:$('preset').value});await openRoom(g.id);}));
 $('join-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('join-name').value);await request(`/api/games/${matchId}/join`,'POST',{country:$('country-choice').value,kind:'human'});await poll();toast('Your seat is reserved.');}));
-$('fill-bots').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/bots`,'POST',{});await poll();}));
+$('fill-bots').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/bots`,'POST',{difficulty:$('bot-difficulty').value,personality:$('bot-personality').value,...($('bot-seat').value?{country:$('bot-seat').value}:{})});await poll();}));
+$('bot-seat').addEventListener('change',()=>{
+  const config=state.players.find(p=>p.id===$('bot-seat').value)?.bot;
+  if(config){$('bot-difficulty').value=config.difficulty;$('bot-personality').value=config.personality;}
+  renderBotSetup();
+});
+for(const id of ['bot-difficulty','bot-personality'])$(id).addEventListener('change',renderBotSetup);
+$('recipient').addEventListener('change',()=>{if(state)renderChat();});
+$('channel').addEventListener('change',()=>{if(state)renderChat();});
 $('start-match').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/start`,'POST',{});await poll();toast('The council is in session.');}));
 $('move-form').addEventListener('submit',safely(async()=>{const r=await command({type:'move',from:source,to:destination,amount:Number($('amount').value)});if(!r)return;toast(`Army committed. Departure ${time(r.executeAt)}; arrival ${time(r.arrivesAt ?? r.executeAt+state.rules.travel)}.`);}));
 $('source').addEventListener('change',()=>{source=$('source').value || null;destination=null;inspected=source;$('amount').value=Math.max(1,Math.floor(availableTroops()/2));renderOrders();paintMap();});
@@ -477,6 +504,7 @@ document.addEventListener('click',safely(async event=>{
   const button=event.target.closest('button');if(!button)return;
   if(button.id==='journal-toggle')toggleJournal($('war-journal').hidden);
   if(button.id==='journal-close'){toggleJournal(false);$('journal-toggle').focus();}
+  if(button.dataset.botDraft){$('chat-text').value=button.dataset.botDraft;$('chat-text').focus();}
   if(button.hasAttribute('data-dismiss-signal')){$('battle-signal').hidden=true;$('orders-label').focus();}
   if(button.dataset.countrySeat){$('country-choice').value=button.dataset.countrySeat;$('country-choice').dispatchEvent(new Event('change'));atlas.home(button.dataset.countrySeat);}
   if(button.dataset.countryFocus){const id=button.dataset.countryFocus;const focus=state.provinces.filter(p=>p.owner===id).sort((a,b)=>b.troops-a.troops)[0]?.id || country(id).start[0];atlas.focus(focus);inspected=focus;source=null;destination=null;orderMode='march';showTab('orders');renderOrders();paintMap();$('orders-tab').scrollTop=0;}

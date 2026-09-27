@@ -1,3 +1,5 @@
+> **Controller version matters.** The archived figures below used earlier policies. v0.6 introduces stronger traditional opponents without changing map assets or rules. See [the new bot test record](testing/v06-local.json); do not treat the old results as current human win probabilities.
+
 # Balance refinement — v0.3
 
 ## Target and result

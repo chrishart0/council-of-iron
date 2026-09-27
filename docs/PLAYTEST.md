@@ -1,3 +1,23 @@
+# v0.6 — traditional commanders
+
+The bot controller was refined through isolated tactical scenarios, API/restart/privacy tests, mixed-policy matches and self-play. **123 Node tests passed locally**, including the existing recorded-match and after-action suite. Engine rules, maps, combat, movement, scoring and historical reconstruction remain byte-for-byte unchanged from v0.5.
+
+**312 retained-report simulations** include 88 discovery/refinement games and 224 final unused-seed holdouts. The Standard-vs-legacy holdout has 96 games, four seats of each family, country rotation, normal five-tick decision cadence for both, and no alliances: **67 new-policy victories, 27 legacy-family victories, two draws**. Legacy opponents use the four pre-existing test styles. This is evidence against that baseline family, not a universal skill estimate.
+
+The 64-game difficulty holdout has two Easy, four Standard and two Hard seats per game. Easy won **0/128** seat appearances; Standard **31/256**; Hard **32/128**, with one drawn match. Another 64-game Standard self-play set enabled diplomacy: two draws, mean duration **24:33.2** game time, mean **4.30 activated alliance changes** and **32.05 messages across all eight bots** per match. Counts include later admissions, not just distinct alliances. Winning roster appearance is not interchangeable with earned Prestige.
+
+All 312 simulations finished; the troop ledgers, positive army counts and prize limits held. There were no illegal new-bot submissions in these reports. In the 224 final games, 302 already-accepted delayed orders failed at execution (including legacy orders). The highest-failure games in each set were replayed: their failures were source captures or insufficient surviving troops, and their event hashes matched. No engine change was made to hide these ordinary wartime failures.
+
+The first tactical pass exposed excessive reserve allocation that prevented a feasible multi-source breakthrough; target-specific threat reservation fixed it. Further tests exposed an arriving ally becoming hostile during a confirmed departure; defensive classification now uses allegiance at arrival. Browser testing exposed assumptions in the old test harness about one event page and guaranteed decisive outcomes; the harness now drains events and verifies that draws persist without entering decisive-match standings. An overlong synchronous test-clock step exposed stale keepalive sockets in a fixture, corrected by using fresh fixture connections. The new chat-draft controls have explicit submit-button selectors so they cannot hijack Send or its cooldown.
+
+Source hashes, seeds, comparisons, activity totals and exact event-log aggregate fingerprints are retained in [the local record](testing/v06-local.json). [Bot behavior and controls](BOT-AI.md). These are traditional bots and automated tests, not independent human enjoyment testing or paid-model inference.
+
+## Native v0.6 verification
+
+The [native publication run](https://github.com/chrishart0/council-of-iron/actions/runs/36358525854) passed all 123 Node tests, verified unchanged gameplay/map/replay hashes, and reproduced all 224 held-out games with identical per-match event fingerprints and aggregate outcomes. All four native-browser suites passed: full gameplay/external-agent/spectating, after-action history, command-table interactions, and individual bot setup/DM commands/mobile layouts. No page errors were captured. [Machine-readable receipt](testing/v06-native-ci.json).
+
+## Earlier verification records
+
 # v0.5 command-table verification — 27 September 2026
 
 **86 Node tests and JavaScript syntax checks passed locally.** Four new unit tests cover eight distinct decorative insignia, safe fallback for malicious/unknown SVG lookup names, factual battle notifications, and suppression of old/future/unrelated/spectator events. The original 343-action golden game, every public historical tick, privacy and scoring tests remain passing.
