@@ -4,7 +4,7 @@ import { escapeHTML as esc, setHTML } from './ui.js';
 import { replayReader } from './replay-model.js';
 const clock = n => `${Math.floor(n / 60).toString().padStart(2, '0')}:${Math.floor(n % 60).toString().padStart(2, '0')}`;
 const number = n => Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
-const signed = n => `${n >= 0 ? '+' : '−'}${number(Math.abs(n))}`;
+const signed = n => Math.abs(n) < 1e-9 ? '+0' : `${n >= 0 ? '+' : '−'}${number(Math.abs(n))}`;
 const tabs = [['overview', 'Overview'], ['replay', 'Map replay'], ['military', 'Military'], ['economy', 'Economy'], ['diplomacy', 'Diplomacy']];
 
 /** A read-only view; it deliberately has no reference to the gameplay command function. */

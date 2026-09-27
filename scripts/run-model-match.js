@@ -31,7 +31,7 @@ function run(command,args,{cwd,input='',timeout=240000}) {
       if(which==='out')out=(out+chunk).slice(-100000);else err=(err+chunk).slice(-30000);
     });
     child.on('error',error=>{clearTimeout(timer);reject(error);});
-    child.on('close',code=>{clearTimeout(timer);if(expired||code!==0)reject(new Error(`${command} exit ${code}${expired?' (timeout)':''}: ${err.slice(-600)}`));else resolve(out);});
+    child.on('close',code=>{clearTimeout(timer);if(expired||code!==0)reject(new Error(`${command} exit ${code}${expired?' (timeout)':''}`));else resolve(out);});
     child.stdin.end(input);
   });
 }
