@@ -18,16 +18,20 @@ const node = (tag, className, text) => {
 const itemKey = item => item.id === null ? `b${item.seq}:${item.side}` : `e${item.id}`;
 const reducedMotion = () => globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-/** The unified rail (v0.7): headlines, world chat and, for a seated player, their own alliance chat,
- * DMs and diplomatic system rows — exactly the events this seat received (commsItems). Rows are
- * appended, never re-rendered, so scroll position, focus and screen-reader position survive polling.
- * New live rows arrive expanded (clamped to four lines), then shrink to two; any clamped text expands
- * on click, Enter or Space. Filter chips show All / World / an alliance / DMs / Needs action. */
+/** The history rail (v0.7, v0.8 filters): headlines, world chat and, for a seated player, their own
+ * alliance chat, DMs, diplomatic rows and threats — exactly the events this seat received (commsItems).
+ * Rows are appended, never re-rendered, so scroll position, focus and screen-reader position survive
+ * polling. New live rows arrive expanded (clamped to four lines), then shrink to two; any clamped text
+ * expands on click, Enter or Space. Three filters: All, World, Mine. Private rows link to the country
+ * or alliance card where the actions live. Read state is per item (`read`, a set of seq numbers). */
+export const FEED_FILTERS = Object.freeze(['all', 'world', 'mine']);
+/** Is a row "mine" (anything beyond the public world stream)? */
+export const isMine = threads => (threads || ['world']).some(t => t !== 'world');
 export class WorldFeed {
   constructor({ list, unread, toggle, body, jump }, names) {
     Object.assign(this, { list, unread, toggle, body, jump, names });
     this.keys = new Set(); this.count = 0; this.lastSeq = 0; this.caughtUp = false; this.below = 0; this.timers = new Set();
-    this.filter = 'all'; this.readSeq = 0; this.onRead = null; this.actionRows = new Map();
+    this.filter = 'all'; this.read = new Set(); this.onRead = null;
     list.addEventListener('click', event => { const clamp = event.target.closest('.feed-clamp[aria-expanded]'); if (clamp) this.expand(clamp); });
     list.addEventListener('keydown', event => {
       const clamp = event.target.closest('.feed-clamp[aria-expanded]');
@@ -38,15 +42,14 @@ export class WorldFeed {
     // A personal row counts as read once it has actually been visible in the open rail.
     this.seen = globalThis.IntersectionObserver ? new IntersectionObserver(entries => {
       if (!this.open) return;
-      let top = this.readSeq;
-      for (const entry of entries) if (entry.isIntersecting && entry.target.dataset.personal) top = Math.max(top, Number(entry.target.dataset.seq));
-      if (top > this.readSeq) { this.readSeq = top; this.onRead?.(top); }
+      const seen = entries.filter(e => e.isIntersecting && !e.target.hidden && e.target.dataset.personal).map(e => Number(e.target.dataset.seq));
+      this.markRead(seen);
     }, { root: list, threshold: .6 }) : null;
   }
   reset() {
     for (const timer of this.timers) clearTimeout(timer); this.timers.clear();
-    this.seen?.disconnect(); this.actionRows.clear(); this.room = null; this.filter = 'all';
-    this.list.replaceChildren(); this.keys.clear(); this.count = 0; this.lastSeq = 0; this.caughtUp = false; this.readSeq = 0;
+    this.seen?.disconnect(); this.room = null; this.filter = 'all';
+    this.list.replaceChildren(); this.keys.clear(); this.count = 0; this.lastSeq = 0; this.caughtUp = false; this.read = new Set();
     this.showUnread(); this.showJump(0);
   }
   get open() { return this.toggle.getAttribute('aria-expanded') === 'true'; }
@@ -65,15 +68,23 @@ export class WorldFeed {
     this.below = n; if (!this.jump) return;
     this.jump.hidden = !n; this.jump.textContent = n ? `${n} new ↓` : '';
   }
-  /** Filter token: 'all', 'world', 'alliance:<side>', 'dm', or 'action' (rows waiting for your decision). */
+  /** Mark personal rows read by seq (per item, never a single cursor); returns the newly read seqs. */
+  markRead(seqs) {
+    const fresh = [...new Set(seqs)].filter(seq => Number.isSafeInteger(seq) && !this.read.has(seq));
+    if (!fresh.length) return [];
+    for (const seq of fresh) this.read.add(seq);
+    for (const li of this.list.querySelectorAll('.unread')) if (this.read.has(Number(li.dataset.seq))) li.classList.remove('unread');
+    this.onRead?.(fresh); return fresh;
+  }
+  /** Filter: 'all', 'world' (public stream) or 'mine' (alliance, DMs, diplomacy, threats). */
   setFilter(filter) {
-    this.filter = filter;
+    this.filter = FEED_FILTERS.includes(filter) ? filter : 'all';
     for (const li of this.list.children) this.applyFilter(li);
     this.list.scrollTop = this.list.scrollHeight; this.measureAll();
   }
   applyFilter(li) {
-    const f = this.filter, threads = (li.dataset.threads || '').split(' ');
-    li.hidden = !(f === 'all' || li.classList.contains('feed-empty') || (f === 'action' ? li.dataset.actionable === 'true' : threads.includes(f)));
+    const f = this.filter, threads = (li.dataset.threads || 'world').split(' ');
+    li.hidden = !(f === 'all' || li.classList.contains('feed-empty') || (f === 'mine' ? isMine(threads) : threads.includes(f)));
   }
   /** `items` = commsItems(...); `live` marks items that arrived after catch-up (they flash, start
    * expanded and count as unread while the rail is collapsed). Returns the newly added live items. */
@@ -95,21 +106,6 @@ export class WorldFeed {
     }
     this.showUnread();
     return fresh;
-  }
-  /** Inline decisions on diplomatic rows. `decide(item)` → { status, buttons: [{ label, data, primary }] }. */
-  refreshActions(decide) {
-    for (const [li, item] of this.actionRows) {
-      if (!li.isConnected) { this.actionRows.delete(li); continue; }
-      const { status = '', buttons = [] } = decide(item) || {}, box = li.querySelector('.feed-actions');
-      const key = JSON.stringify([status, buttons]);
-      if (box.dataset.key === key) continue;
-      box.dataset.key = key; li.dataset.actionable = String(buttons.length > 0); this.applyFilter(li);
-      box.replaceChildren(...(status ? [node('small', 'feed-status', status)] : []), ...buttons.map(b => {
-        const button = node('button', b.primary ? 'primary' : '', b.label); button.type = 'button';
-        for (const [k, v] of Object.entries(b.data)) button.dataset[k] = v;
-        return button;
-      }));
-    }
   }
   /** Expand or collapse one clamped text. */
   expand(clamp) {
@@ -139,8 +135,19 @@ export class WorldFeed {
   row(item, live, you) {
     const n = this.names, li = node('li', `feed-row${live ? ' fresh' : ''}`);
     li.dataset.feedKey = itemKey(item); li.dataset.seq = String(item.seq); li.dataset.threads = (item.threads || ['world']).join(' ');
-    if (isPersonal(item, you)) { li.dataset.personal = 'true'; this.seen?.observe(li); if (item.seq > this.readSeq) li.classList.add('unread'); }
+    if (isPersonal(item, you)) { li.dataset.personal = 'true'; this.seen?.observe(li); if (!this.read.has(item.seq)) li.classList.add('unread'); }
     if (live) this.settle(li);
+    // Private rows link to the card that holds their actions and conversation.
+    const link = this.link?.(item);
+    const open = () => { const b = node('button', 'feed-open', link.label); b.type = 'button'; b.dataset[link.key] = link.value; b.setAttribute('aria-label', link.aria || link.label); return b; };
+    if (item.type === 'threat') {
+      li.classList.add('feed-headline', 'feed-threat'); li.dataset.tone = 'war'; li.dataset.kind = 'threat';
+      const target = node('button'); target.type = 'button'; target.dataset.feedProvince = item.to; target.title = 'Show on the map';
+      const mark = node('span', 'feed-icon'); mark.innerHTML = icon('military');
+      const words = node('span', 'feed-words'); words.append(node('b', '', `Incoming: ${item.amount} troops → ${n.province(item.to)}`), node('time', '', n.time(item.tick)));
+      target.append(mark, words); li.append(target, node('p', 'feed-detail feed-clamp', `${n.country(item.country)} marches on ${n.province(item.to)}; arrives ${n.time(item.arrivesAt)}.`));
+      return li;
+    }
     if (item.type === 'message') {
       li.classList.add('feed-chat'); li.dataset.channel = item.channel || 'world';
       const header = node('header'), who = node('b', '', n.country(item.from));
@@ -149,6 +156,7 @@ export class WorldFeed {
       if (item.channel === 'alliance') { const badge = node('span', 'feed-channel alliance', n.side(item.side) || 'Alliance'); const color = n.sideColor?.(item.side); if (color) badge.style.setProperty('--band', color); header.append(badge); }
       if (item.channel === 'dm') header.append(node('span', 'feed-channel dm', item.from === you ? `DM → ${n.country(item.with)}` : 'DM'));
       header.append(node('time', '', n.time(item.tick)));
+      if (link) header.append(open());
       li.append(header, node('p', 'feed-text feed-clamp', item.text)); // player text: textContent only
       return li;
     }
@@ -159,8 +167,8 @@ export class WorldFeed {
       const head = node('div'), mark = node('span', 'feed-icon'); mark.innerHTML = icon(copy.icon);
       const words = node('span', 'feed-words'); words.append(node('b', '', copy.title), node('time', '', n.time(item.tick)));
       head.append(mark, words);
-      li.append(head, node('p', 'feed-detail feed-clamp', copy.detail), node('div', 'feed-actions'));
-      if (['offer', 'vote', 'peace_offer'].includes(item.system)) this.actionRows.set(li, item);
+      if (link) head.append(open());
+      li.append(head, node('p', 'feed-detail feed-clamp', copy.detail));
       return li;
     }
     const copy = headlineCopy(item, n);
@@ -190,7 +198,7 @@ export class WorldFeed {
 export class Notifier {
   constructor(root) {
     this.root = root; this.queue = []; this.current = null; this.timer = null;
-    root.addEventListener('click', event => { if (event.target.closest('[data-notice-close]') || event.target.closest('button[data-accept],button[data-decline],button[data-vote-war],button[data-vote-peace],button[data-notice-view]')) setTimeout(() => this.dismiss()); });
+    root.addEventListener('click', event => { if (event.target.closest('button')) setTimeout(() => this.dismiss()); });
     let startY = null;
     root.addEventListener('pointerdown', event => { startY = event.clientY; });
     root.addEventListener('pointerup', event => { if (startY !== null && startY - event.clientY > 30) this.dismiss(); startY = null; });

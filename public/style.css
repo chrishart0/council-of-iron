@@ -82,209 +82,186 @@ footer{display:flex;justify-content:space-between;gap:14px;margin:0 3vw;padding:
  .masthead{height:62px;padding:10px 4vw}.wordmark{font-size:16px;gap:8px;letter-spacing:1px}.wordmark i{font-size:12px}.wordmark small{font-size:6px;letter-spacing:1px}.sigil .ui-icon{width:26px;height:26px}.header-right{font-size:10px;gap:7px}.header-right #identity{max-width:72px}#connection,#account-button{display:none}main{padding:20px 4vw}
  .intro{padding:16px 0 28px;min-height:0}.intro h1{font-size:39px;letter-spacing:-1px}.lede{font-size:13px}.principle{display:none}#landing-map{width:115%;right:-45%;opacity:.14}.faction-parade{gap:7px;padding:16px 0;margin-bottom:12px}.faction-parade .insignia{width:25px;height:30px}.home-grid{grid-template-columns:1fr;gap:20px}.home-grid>.panel:not(:first-child){padding-left:0;border-left:0}.field-manual{grid-column:auto}.panel{padding:20px}
 }
-/* ── v0.7 full-screen match. The map is the screen; everything else floats over it. ──
-   Left column: alerts (top) and the selected province's command card (bottom).
-   Right rail: leaderboard (top) and the persistent World history (below it).
-   Layers (low → high): map 0 · tooltip 8 · map overlays 10 · HUD 20 · lobby 25 · command panel 30 ·
-   menu 40 · war log 45 · banners 50 · toast 60 · native dialog (top layer). */
-:root{--gap:12px;--hud-h:52px;--nav-h:0px;--panel-w:340px;--rail-w:320px;--glass:#0f232bf2;--glass-edge:#a88e5c8c;
+/* ── v0.8 one map, two nouns. The map is the screen; a slim HUD, the rail, one context card. ──
+   Wide (≥1024×500): HUD row · right rail (leaderboard, history) · card bottom-left · camera beside it.
+   Compact (phones, tablets upright, short landscape): HUD row · powers strip · history ticker/sheet ·
+   camera bottom-right · card as a bottom sheet (a left panel in short landscape).
+   Layers (low → high): map 0 · tooltip 8 · overlays 10 · HUD 20 · lobby 25 · card 30 · coach 35 ·
+   menu 40 · war log 45 · banners 50 · notices 55 · toast 60 · native dialog (top layer). */
+:root{--gap:12px;--hud-h:50px;--rail-w:320px;--card-w:360px;--strip-h:0px;--glass:#0f232bf2;--glass-edge:#a88e5c8c;
  --safe-t:env(safe-area-inset-top,0px);--safe-r:env(safe-area-inset-right,0px);--safe-b:env(safe-area-inset-bottom,0px);--safe-l:env(safe-area-inset-left,0px);
- --top:calc(var(--hud-h) + var(--safe-t));--bottom:calc(var(--nav-h) + var(--safe-b))}
+ --top:calc(var(--hud-h) + var(--safe-t));--war:#ff6a4d;--ally:#6cb8ff;--offer:#ffb454}
 .in-game:not(.reviewing){overflow:hidden;overscroll-behavior:none}
 .in-game:not(.reviewing) .masthead,.in-game:not(.reviewing) footer{display:none}
 .in-game:not(.reviewing) main{padding:0;max-width:none}
 .war-room{position:fixed;inset:0;overflow:hidden;overflow:clip;isolation:isolate;background:radial-gradient(ellipse at 50% 45%,#17363f,#0d2027 80%)}
 #map{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;user-select:none;-webkit-user-select:none}
-/* HUD: one status strip — menu, country, resource-style stats, clock, panel buttons. */
-.hud-bar{position:absolute;z-index:20;top:0;left:0;right:0;height:var(--top);padding:var(--safe-t) calc(10px + var(--safe-r)) 0 calc(10px + var(--safe-l));display:flex;align-items:center;gap:10px;background:linear-gradient(#0a181dfa,#0f232bf0);border-bottom:1px solid #a88e5c66;box-shadow:0 4px 18px #0007}
-.hud-menu-button{width:40px;height:40px;min-height:0;padding:0;display:grid;place-items:center;flex:none}
-.burger,.burger::before,.burger::after{display:block;width:18px;height:2px;background:var(--gold);position:relative}.burger::before,.burger::after{content:'';position:absolute;left:0}.burger::before{top:-6px}.burger::after{top:6px}
-.hud{display:flex;align-items:center;gap:10px;flex:1;min-width:0;height:100%}
-.hud-country{display:flex;align-items:center;gap:8px;flex:none;min-width:0;max-width:210px}.hud-country .insignia{width:28px;height:33px}
-.hud-country-name{display:flex;flex-direction:column;min-width:0;line-height:1.15}.hud-country-name b{font:400 17px var(--serif);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#f1e4c4}.hud-country-name small{font-size:10px;color:#c9b88f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hud-country-name small:empty{display:none}
+/* HUD: one row — your standard (+ the one attention badge), clock and victory phrase, forces, menu. */
+.hud-bar{position:absolute;z-index:20;top:0;left:0;right:0;height:var(--top);padding:var(--safe-t) calc(8px + var(--safe-r)) 0 calc(8px + var(--safe-l));display:flex;align-items:center;gap:8px;background:linear-gradient(#0a181dfa,#0f232bf0);border-bottom:1px solid #a88e5c66;box-shadow:0 4px 18px #0007}
+.hud-standard{display:flex;align-items:center;gap:8px;flex:none;min-width:0;max-width:260px;height:42px;min-height:0;padding:0 10px 0 4px;background:#13262d;border-color:#65706a99;text-align:left}
+.hud-standard .insignia{width:26px;height:31px}.hud-standard:disabled{opacity:1;cursor:default;background:transparent;border-color:transparent}
+.hud-country-name{display:flex;flex-direction:column;min-width:0;line-height:1.15}.hud-country-name b{font:400 16px var(--serif);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#f1e4c4}.hud-country-name small{font-size:10px;color:#c9b88f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hud-country-name small:empty{display:none}
+.attention{flex:none;display:flex;align-items:center;gap:4px;height:38px;min-height:0;padding:0 11px;background:#5b1f1b;border:1px solid var(--war);color:#fff0e8;font-weight:800;font-variant-numeric:tabular-nums;border-radius:19px;box-shadow:0 0 0 3px #ff6a4d33}
+.attention:hover{background:#7a2923}
+.campaign-bar{flex:1;min-width:0;display:flex;align-items:baseline;justify-content:center;gap:4px 10px;padding:2px 8px;border-radius:3px;line-height:1.2;text-align:center}
+#phase{font-size:9px;letter-spacing:1.6px;color:var(--gold)}#clock{font:600 17px var(--sans);font-variant-numeric:tabular-nums;color:#f3ead4}#victory-status{min-width:0;font-size:11px;color:#c6c9b7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.campaign-bar.victory-warning{background:#5a3528e6;box-shadow:inset 0 0 0 1px #d4a776}.victory-warning #victory-status{color:#ffe2a6;font-weight:700}
 .hud-stats{display:flex;align-items:center;flex:none}
-/* Friends vs enemies at a glance: alliance chip in the alliance's map colour, war chip in red. */
-.hud-relations{display:flex;align-items:center;gap:6px;flex:none}
-.relation-chip{display:flex;align-items:center;gap:6px;height:34px;min-height:0;padding:0 9px;font-size:11px;font-weight:600;background:#13262d;border:1px solid #65706a99;border-left:3px solid var(--band,#65706a);white-space:nowrap}
-.relation-chip[data-state=forming]{border-left-style:dashed}.relation-chip[data-state=independent]{color:#b9c1b4}
-.chip-flags{display:flex;align-items:center;gap:1px}.chip-flags .insignia{width:15px;height:18px}.chip-flags small{font-size:10px;color:var(--muted);margin-left:2px}
-.chip-name{max-width:120px;overflow:hidden;text-overflow:ellipsis;font-weight:400;color:#d9d2bd}
-.war-chip{border-left-color:#6d7f7a}.war-chip[data-state=war]{background:#3a1d19;border-color:#b85a44;border-left-color:#ff6a4d;color:#ffd9cc}.chip-swords{font-size:13px}
-.alliance-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--band,#65706a);margin:0 4px -0px 2px}
-.stat{position:relative;display:flex;align-items:center;gap:5px;padding:0 9px;height:34px;border-left:1px solid #ffffff17;font-variant-numeric:tabular-nums;cursor:default}.stat .ui-icon{width:16px;height:16px;margin:0;color:var(--gold)}.stat b{font:600 16px var(--sans);color:#f3ead4}.stat small{font-size:11px;color:#a9b3a6;font-weight:400}
-.stat-bar{position:absolute;left:9px;right:9px;bottom:1px;height:2px;background:#ffffff1f}.stat-bar i{display:block;height:100%;background:var(--gold)}
-.campaign-bar{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;justify-content:center;column-gap:10px;padding:3px 12px;border-radius:3px;text-align:center;line-height:1.25}
-#phase{font-size:9px;letter-spacing:1.6px;color:var(--gold)}#clock{font:600 18px var(--sans);font-variant-numeric:tabular-nums;color:#f3ead4}#victory-status{flex-basis:100%;min-width:0;font-size:11px;color:#c6c9b7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.campaign-bar.victory-warning{background:#5a3528e6;box-shadow:inset 0 0 0 1px #d4a776}.victory-warning #victory-status{color:#ffe2a6;font-weight:700}.victory-warning #phase{color:#ffdeaf}
-.hud-rail{display:flex;gap:6px;flex:none}
-.hud-rail button{position:relative;display:flex;align-items:center;gap:6px;height:40px;min-height:0;padding:0 11px;font-size:12px;background:#17303a;border-color:#65706a99}
-.hud-rail button[aria-expanded=true]{background:#394343;border-color:#e0bc7c;color:#ffe0a4;box-shadow:inset 0 -2px #d4b476}
-.hud-rail .ui-icon{width:17px;height:17px;margin:0;color:#d8bb83}.hud-rail kbd{margin-left:0}
-body[data-status=lobby] .hud-rail{display:none}
-.badge:empty{display:none}.badge{background:#ad4f3d;color:#fff5df;font-size:10px;font-weight:700;min-width:18px;padding:0 5px;border-radius:9px;text-align:center;line-height:16px}
-.hud-menu{position:fixed;z-index:40;top:calc(var(--top) + 6px);left:calc(var(--gap) + var(--safe-l));width:min(330px,calc(100% - 2 * var(--gap)));max-height:calc(100dvh - var(--top) - var(--bottom) - 2 * var(--gap));overflow:auto;padding:16px;background:#10242bfa;border:1px solid var(--glass-edge);box-shadow:0 14px 40px #000a}
-.hud-menu h2{font-size:21px;margin:0 0 6px}.menu-status{font-size:11px;color:var(--muted);margin:0}.menu-actions{display:grid;gap:6px;margin:12px 0 0}.menu-actions button{text-align:left}
-.menu-help p,.hud-menu .scenario-note{font-size:11px;color:var(--muted);margin:0}.hud-menu .scenario-note{margin-top:12px}
+.stat{display:flex;align-items:center;gap:4px;padding:0 8px;height:30px;border-left:1px solid #ffffff17;font-variant-numeric:tabular-nums;cursor:default}.stat .ui-icon{width:15px;height:15px;margin:0;color:var(--gold)}.stat b{font:600 15px var(--sans);color:#f3ead4}.stat small{font-size:10px;color:#a9b3a6;font-weight:400}
+.hud-menu-button{width:42px;height:42px;min-height:0;padding:0;display:grid;place-items:center;flex:none}
+.burger,.burger::before,.burger::after{display:block;width:18px;height:2px;background:var(--gold);position:relative}.burger::before,.burger::after{content:'';position:absolute;left:0}.burger::before{top:-6px}.burger::after{top:6px}
+.spectating .hud-standard .hud-country-name small{display:none}
+/* ☰ menu: views, sound, war log, room, identity, map key, help. */
+.hud-menu{position:fixed;z-index:40;top:calc(var(--top) + 6px);right:calc(var(--gap) + var(--safe-r));width:min(340px,calc(100% - 2 * var(--gap)));max-height:calc(100dvh - var(--top) - 2 * var(--gap));overflow:auto;padding:14px;background:#10242bfa;border:1px solid var(--glass-edge);box-shadow:0 14px 40px #000a}
+.hud-menu h2{font-size:20px;margin:0 0 4px}.menu-status{font-size:11px;color:var(--muted);margin:0}
+.menu-views{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:12px 0 0}.menu-views #fullscreen-toggle{grid-column:1/-1}
+.menu-actions{display:grid;gap:6px;margin:6px 0 0}.menu-actions>button{text-align:left}.menu-actions kbd{float:right}
+.menu-sound .sound-control{display:block}.menu-sound .sound-toggle{width:100%;text-align:left;background:#22343b;border:1px solid #65706a}.menu-sound .sound-panel{position:static;width:auto;margin-top:6px;box-shadow:none}
+.menu-key,.menu-help{margin-top:10px;padding-top:10px}.menu-key summary,.menu-help summary{margin-bottom:6px}
+.map-key .atlas-modes{position:static;max-width:none;box-shadow:none}.map-key .atlas-key-toggle{display:none}
+.menu-help p,.hud-menu .scenario-note{font-size:11px;color:var(--muted);margin:0}.hud-menu .scenario-note{margin-top:10px}
 .connection::before{content:'●';color:#a7ba8a;font-size:8px;margin-right:5px}
-/* Alerts: top-left, CK3-style stack of what needs attention now. */
-.alerts{position:absolute;z-index:10;top:calc(var(--top) + var(--gap));left:calc(var(--gap) + var(--safe-l));width:min(340px,calc(100% - var(--rail-w) - 3 * var(--gap) - var(--safe-l) - var(--safe-r)));display:flex;flex-direction:column;align-items:flex-start;gap:8px;pointer-events:none}
-.alerts>*{max-width:100%;margin:0;box-shadow:0 8px 22px #0007;pointer-events:auto}
-.spectator-note{padding:8px 12px;background:#243b42f2;color:#e9d7ad;font-size:11px;border:1px solid #a88f61}
-.threat-strip{background:#573628f0;border:1px solid #c69b69;color:#ffe6c4;display:flex;align-items:center;gap:6px 8px;padding:6px 10px;font-size:11px;flex-wrap:wrap}.threat-strip>span{font-weight:600}.threat-strip button{background:transparent;border-color:#a38a614d;font-size:11px;min-height:30px;padding:3px 7px;color:inherit}.threat-strip b{margin-left:6px}
-.battle-signal{display:flex;align-items:center;gap:12px;background:#142b32f5;color:#f1e7ce;border:1px solid #c8ab6d;padding:10px 12px;animation:signal-arrive .22s ease-out}.battle-signal[data-tone=lost]{background:#49302af5;border-color:#dca17d}.battle-signal>div{min-width:0}.battle-signal span{display:block;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#e1bb7a}.battle-signal strong{display:block;font:20px var(--serif)}.battle-signal small{font-size:11px;color:#d0d0bb}.battle-signal button{font-size:11px;min-height:32px}.battle-signal>.ui-icon{width:24px;height:24px;margin:0;color:var(--gold)}
-.countdown-break{background:#22362bf0;border-left:3px solid #dbc189;color:#e3d3ae;font-size:11px;padding:8px 12px;pointer-events:none}
-/* Right rail: leaderboard, then the World history filling the rest of the edge. */
-.right-rail{position:absolute;z-index:10;top:calc(var(--top) + var(--gap));right:calc(var(--gap) + var(--safe-r));bottom:calc(var(--bottom) + var(--gap));width:var(--rail-w);display:flex;flex-direction:column;align-items:stretch;gap:8px;pointer-events:none}
+/* Right rail (wide): leaderboard on top, the history filling the rest. */
+.right-rail{position:absolute;z-index:10;top:calc(var(--top) + var(--gap));right:calc(var(--gap) + var(--safe-r));bottom:calc(var(--gap) + var(--safe-b));width:var(--rail-w);display:flex;flex-direction:column;align-items:stretch;gap:8px;pointer-events:none}
 .right-rail>*{pointer-events:auto}
 .atlas-tooltip{position:absolute;z-index:8;pointer-events:none;background:#0e222af5;border:1px solid #b99d64a0;padding:11px 14px;box-shadow:0 5px 25px #0004;max-width:255px;color:#eae6d4}.atlas-tooltip strong{display:block;font:19px var(--serif);margin-bottom:4px}.atlas-tooltip span{font-size:11px;color:#bfc8b5}
-/* Map camera cluster: bottom-left, beside (never under) the command card. */
-.map-controls{position:absolute;z-index:10;left:calc(var(--gap) + var(--safe-l));bottom:calc(var(--bottom) + var(--gap));display:flex;align-items:flex-end;gap:8px;outline:none;pointer-events:none}
-.map-controls>*{pointer-events:auto}.camera-buttons{display:flex;flex-direction:column;gap:4px}
-.camera-buttons button{width:56px;min-height:34px;padding:4px;font-size:11px;background:#10242bf0;border-color:#a88e5c80;box-shadow:0 4px 12px #0006}.camera-buttons .zoom-button{font-size:18px;line-height:1}
-/* The atlas's own key (legend + Political/Diplomacy toggle) is mounted here, beside the camera buttons. */
-.map-key .atlas-modes{position:static;max-width:min(240px,calc(100vw - 100px))}.map-key:empty{display:none}
-.war-room:has(#command-panel:not([hidden])) .map-controls{left:calc(var(--panel-w) + 2 * var(--gap) + var(--safe-l))}
-@media(pointer:coarse){.camera-buttons .zoom-button{display:none}.camera-buttons button{min-height:44px}}
-/* Command panel: selection-driven. Orders is a bottom-left card under the alerts;
-   Council and Dispatches are a full-height left drawer (alerts step aside). */
-.command-panel{--sheet-max:calc(100dvh - var(--alerts-bottom,var(--top)) - var(--bottom) - 2 * var(--gap));position:absolute;z-index:30;left:calc(var(--gap) + var(--safe-l));bottom:calc(var(--bottom) + var(--gap));width:var(--panel-w);max-width:calc(100% - 2 * var(--gap));max-height:var(--sheet-max);display:flex;flex-direction:column;background:var(--glass);border:1px solid var(--glass-edge);box-shadow:0 14px 40px #000a;outline:none}
-.command-panel:not([data-tab=orders]){top:calc(var(--top) + var(--gap));height:auto;max-height:none}
-/* Order card sizes (desktop and phone): peek = title, order type and the commit dock only, so the
-   map stays clickable; half/full reveal the details. Drawers are always full. */
-.command-panel[data-tab=orders][data-sheet=peek] .tab-body{display:none}
-/* Half never drops below the peek content (title, order type, commit dock). */
-.command-panel[data-tab=orders][data-sheet=half]{height:min(var(--sheet-max),max(calc(var(--sheet-max) * .55),320px))}
-.command-panel[data-tab=orders][data-sheet=full]{height:var(--sheet-max)}
-.command-panel:not([data-tab=orders]) :is(#order-modes,.sheet-handle,.relation-banner){display:none}
-.war-room:has(#command-panel:not([hidden]):not([data-tab=orders])) .alerts{left:calc(var(--panel-w) + 2 * var(--gap) + var(--safe-l));width:min(340px,calc(100% - var(--panel-w) - var(--rail-w) - 4 * var(--gap) - var(--safe-l) - var(--safe-r)))}
-.sheet-head{position:relative;display:flex;align-items:center;gap:8px;padding:8px 8px 8px 16px;border-bottom:1px solid #a88e5c40;flex:none}
-.sheet-handle{flex:none;display:grid;place-items:center;width:38px;min-height:38px;padding:0;background:transparent;border-color:transparent}.sheet-handle i{display:block;width:9px;height:9px;border:solid var(--gold);border-width:2px 2px 0 0;transform:translateY(2px) rotate(-45deg)}.command-panel[data-sheet=full] .sheet-handle i{transform:translateY(-2px) rotate(135deg)}
-#panel-title{flex:1;min-width:0;margin:0;font-size:21px;color:#f4d9a5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;outline:none}
-.panel-close{width:38px;min-height:38px;padding:0;font-size:22px;line-height:1;background:transparent;border-color:transparent}
-.tab-body{padding:14px 16px;overflow:auto;flex:1;min-height:0;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#7d8873 transparent}.tab-body h3{font-size:19px;margin-bottom:8px}.tab-body .eyebrow{font-size:9px;margin-bottom:6px}#budget{font-size:11px;margin:0 0 12px;color:#c0c6b6}
-/* The commit dock: territorial-style % slider and one big commit, outside the scrolling body. */
-.command-footer{flex:none;margin-top:8px;padding:10px 14px 12px;border-top:1px solid #bfa56b65;background:#0b1b21}.command-footer>button{width:100%;min-height:46px;font-size:14px;letter-spacing:.2px}.command-footer p{margin:0 0 6px;font-size:11px;color:#cfceb8;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
-.amount-control{display:flex;align-items:center;gap:8px;margin-bottom:4px}.amount-control input[type=range]{flex:1;min-width:0;margin:0;min-height:32px}
-.amount-presets{display:flex;gap:4px}.amount-presets button{font-size:11px;padding:4px 8px;min-height:32px}
-.amount-row input{width:110px;min-height:40px;margin:0 0 4px;font-size:17px;font-variant-numeric:tabular-nums}
-#orders-tab{overflow-anchor:none}
-.command-panel:not([data-order-mode=march]) :is(.amount-label,.amount-row,.amount-control,#preview,.standing-order),.command-panel[data-order-mode=develop] .destination-label,.command-panel[data-order-mode=coordinate] .province-readout{display:none}
-.country-card[data-band=active]{border-left:3px solid var(--band)}.scoreboard{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:0 0 18px}.country-card{display:flex;align-items:center;gap:8px;padding:8px;min-width:0;min-height:0;text-align:left;background:#12242c;border:1px solid #56645988;border-top:2px solid var(--country);border-radius:0}.country-card.mine{background:#35413f;box-shadow:inset 0 -2px var(--gold)}.country-card .insignia{width:24px;height:29px}.country-summary{min-width:0;display:block;flex:1}.country-summary>b{font:14px var(--serif);display:block;color:#e8dec8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.country-summary>small{display:block;font-size:9px;color:#b8c2ae;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}.country-metrics{font:12px var(--sans);font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:4px;margin-top:2px}.country-metrics .ui-icon{width:12px;height:12px;margin:0;color:#c9b88f}
-.wars-view{margin-bottom:16px}.war-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
-.war-front-button{width:100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:8px 10px;text-align:left;background:#2a1a17;border-color:#8c4b3c}.war-front.involved .war-front-button{border-color:#ff6a4d;box-shadow:inset 3px 0 #ff6a4d}
-.war-side{display:flex;align-items:center;gap:5px;min-width:0;flex:1 1 40%}.war-names{font-size:12px;overflow-wrap:anywhere}.war-swords{color:#ff7a5c}.war-meta{flex-basis:100%;font-size:10px;color:#cdbfae}.war-you{color:#ffb39e;font-weight:700}
-.war-empty{font-size:12px;color:var(--muted);padding:6px 0}
-/* Context card: the owner's relation to you, prominent even in the peek state. */
-.relation-banner{flex:none;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;margin:8px 14px 0;padding:6px 10px;font-size:11px;border-left:3px solid #6d7f7a;background:#12252c}
-.relation-kind{font-size:10px;letter-spacing:1.4px}.relation-detail{color:#d8d2c0}.relation-owner{flex-basis:100%;color:#aeb8ab;font-size:10px;overflow-wrap:anywhere}
-.relation-banner[data-relation=enemy]{border-left-color:#ff6a4d;background:#34201c}.relation-banner[data-relation=enemy] .relation-kind{color:#ff9c85}
-.relation-banner[data-relation=ally]{border-left-color:#6cb8ff}.relation-banner[data-relation=ally] .relation-kind{color:#9fd0ff}
-.relation-banner[data-relation=neutral] .relation-kind,.relation-banner[data-relation=open] .relation-kind{color:#e6cf97}
-.relation-action{margin-left:auto;min-height:30px;padding:3px 9px;font-size:11px}
-.spectating #move-form,.spectating #order-modes,.spectating .standing-order,.spectating #alliance-form,.spectating #leave-alliance,.spectating #chat-form,.spectating .rules-details,.spectating #home-view,.spectating #budget{display:none}
+/* Camera: Expand, zoom (fine pointers), Home. Bottom-left beside the card on wide screens. */
+.map-controls{position:absolute;z-index:10;left:calc(var(--gap) + var(--safe-l));bottom:calc(var(--gap) + var(--safe-b));display:flex;flex-direction:column;gap:4px;outline:none}
+.map-controls button{width:48px;min-height:38px;padding:4px;font-size:12px;background:#10242bf0;border-color:#a88e5c80;box-shadow:0 4px 12px #0006}.map-controls .zoom-button{font-size:18px;line-height:1}
+.expand-button{font-weight:700;color:#ffe0a4;border-color:#c8a773;font-size:16px!important}
+.war-room:has(#card:not([hidden])) .map-controls{left:calc(var(--card-w) + 2 * var(--gap) + var(--safe-l))}
+@media(pointer:coarse){.map-controls .zoom-button{display:none}.map-controls button{min-height:44px;width:52px}}
+/* The context card: province (orders), army, country (diplomacy) or your alliance. Peek or expanded. */
+.card{position:absolute;z-index:30;left:calc(var(--gap) + var(--safe-l));bottom:calc(var(--gap) + var(--safe-b));width:var(--card-w);max-width:calc(100% - 2 * var(--gap));max-height:calc(100dvh - var(--top) - 2 * var(--gap) - var(--safe-b));display:flex;flex-direction:column;background:var(--glass);border:1px solid var(--glass-edge);border-top:3px solid var(--card-accent,#a88e5c);box-shadow:0 14px 40px #000a;outline:none}
+.card[data-size=full]{max-height:min(640px,calc(100dvh - var(--top) - 2 * var(--gap) - var(--safe-b)))}
+.card[data-relation=war],.card[data-relation=enemy],.card[data-relation=open]{--card-accent:var(--war)}.card[data-relation=ally]{--card-accent:var(--ally)}.card[data-relation=offer]{--card-accent:var(--offer)}.card[data-relation=neutral]{--card-accent:#e6cf97}
+.card-head{flex:none;display:flex;align-items:center;gap:8px;padding:8px 6px 6px 12px}
+.card-flag:empty{display:none}.card-flag .insignia{width:28px;height:33px}
+.card-heading{flex:1;min-width:0}
+#card-title{margin:0;font-size:19px;line-height:1.2;color:#f4d9a5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;outline:none}
+.card-sub{display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;margin-top:2px;font-size:11px;color:#c7cabc}
+.card-meta{white-space:nowrap}
+.card-owner{display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:2px 8px 2px 4px;font-size:11px;background:#15303a;border-color:#65706a;border-radius:14px}.card-owner .insignia{width:15px;height:18px}.card-owner-go{color:var(--gold);font-weight:700}
+.card-size,.card-close{flex:none;width:38px;min-height:38px;padding:0;background:transparent;border-color:transparent}
+.card-size i{display:block;width:9px;height:9px;margin:auto;border:solid var(--gold);border-width:2px 2px 0 0;transform:translateY(2px) rotate(-45deg)}.card[data-size=full] .card-size i{transform:translateY(-2px) rotate(135deg)}
+.card-close{font-size:22px;line-height:1}
+.card-status{flex:none;padding:0 12px 8px}.card-status:empty{display:none}
+.card-relation{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;font-size:12px;color:#d8d2c0}
+.rel{font-size:11px;letter-spacing:1.3px;font-weight:800;color:#e6cf97}
+.card-relation.big .rel{flex-basis:100%;font:400 24px/1.15 var(--serif);letter-spacing:.5px}
+.rel-war,.rel-enemy,.rel-open{color:#ff9c85}.rel-ally,.rel-own,.rel-you{color:#9fd0ff}.rel-offer{color:#ffcf8a}.rel-neutral{color:#e6cf97}.rel-fallen,.rel-unclaimed,.rel-watch{color:#b9c1b4}
+.card-strength{font-variant-numeric:tabular-nums}.card-bloc{flex-basis:100%;display:flex;align-items:center;gap:4px;overflow-wrap:anywhere}.card-wars{flex-basis:100%;color:#ffb39e}.card-note{flex-basis:100%;color:#e6d7b4;font-size:11px;line-height:1.45}
+.card-hint{color:#e9d8b7}
+.card-wars .link,.card-members button{min-height:30px;padding:2px 8px;font-size:11px;margin:2px 4px 0 0}
+.card-members{flex-basis:100%;display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}.card-members button{display:inline-flex;align-items:center;gap:5px}.card-members .insignia{width:15px;height:18px}.card-members small{color:var(--muted)}.card-members button:disabled{opacity:1;cursor:default;border-color:var(--gold)}
+.alliance-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--band,#65706a);flex:none}
+.card-body{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;padding:8px 12px 10px;border-top:1px solid #a88e5c33;scrollbar-width:thin;font-size:12px}
+.card-body h3{font-size:16px;margin:12px 0 6px}.card-body .count{font:11px var(--sans);color:var(--muted)}
+.card-dock{flex:none;padding:8px 12px 12px;border-top:1px solid #bfa56b55;background:#0b1b21}
+.sources{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}.sources-hint{flex-basis:100%;color:#c9b88f;font-size:11px}
+.source-chip{display:inline-flex;align-items:center;gap:5px;min-height:30px;padding:2px 8px;font-size:11px;border-radius:15px;background:#2a3f45;border-color:#e0bc7c}.source-chip b{color:#ffe0a4}.source-chip i{font-style:normal;color:var(--muted)}
+.amount-line{display:flex;justify-content:space-between;align-items:baseline}.amount-line label{margin:0;font-size:10px;letter-spacing:1px;text-transform:uppercase}#amount-out{font:700 14px var(--sans);color:#ffe9bd;font-variant-numeric:tabular-nums}
+#amount-slider{width:100%;margin:4px 0 6px;min-height:30px}
+.amount-presets{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}.amount-presets button{min-height:34px;padding:2px;font-size:12px}.amount-presets button[aria-pressed=true]{background:#394343;border-color:#e0bc7c;color:#ffe0a4}
+.order-preview{margin:6px 0 0;font-size:11px;color:#d8d2c0;font-variant-numeric:tabular-nums}
+.card-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.card-actions:empty{display:none}.card-actions button{flex:1 1 auto;min-height:42px;font-size:13px}
+.card-actions .primary{flex:1 1 100%;min-height:48px;font-size:15px}
+.card-actions .primary.danger{background:#8e2a2e;color:#ffeee4;border-color:#e0806a;box-shadow:inset 0 -2px #4b1216}.card-actions .primary.danger:hover{background:#a8363a}
+.card[data-size=peek] .card-composer{display:none}
+.card-composer{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 4px}.card-composer input{flex:1;min-width:0;min-height:38px;margin:0}.card-composer button[type=submit]{min-height:38px}.composer-note{flex-basis:100%;font-size:10px;color:#c9b88f}.composer-note:empty{display:none}
+.thread{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.thread-row{max-width:92%;padding:6px 9px;background:#16303a;border:1px solid #ffffff14;border-radius:8px 8px 8px 2px;overflow-wrap:anywhere}.thread-row.mine{align-self:flex-end;background:#2a3a2e;border-radius:8px 8px 2px 8px}
+.thread-row header{display:flex;align-items:center;gap:5px;font-size:10px;color:#dfc28a}.thread-row header .insignia{width:12px;height:14px}.thread-row time{margin-left:auto;color:#8f9d95}
+.thread-text{margin:2px 0 0;color:#ebe5d4}.thread-system{align-self:center;max-width:100%;background:transparent;border-style:dashed;font-size:11px;color:#cfc6ad;border-radius:4px}.thread-system b{color:#e6cf97}
+.thread-empty{color:#b9c1b4;font-style:italic;margin:6px 0}
+.proposal{padding:8px 10px;margin:4px 0 8px;border:1px solid #d2ab62;background:#1d2f2a}.proposal label{margin:0 0 4px}.proposal input{margin-top:3px}.proposal p{margin:4px 0 0}
+.province-readout{display:flex;gap:14px;padding:9px 10px;background:#0f2229;border-block:1px solid #5768566b;margin:4px 0 8px}.province-readout>div{flex:1}.province-readout span{display:block;font-size:8px;letter-spacing:1px;color:#bac3af}.province-readout strong{font:20px var(--serif)}
+.order-details{margin:4px 0 8px;padding:8px 10px;border-left:2px solid #bda16c;background:#0e2027;color:#e9d8b7}.order-details small{display:block;margin-top:4px;color:#b7c1b3;font-size:10px}
+.arrive-label{margin-top:6px}.keyboard-select{margin-top:10px}
+.march-list{display:grid;gap:0}.march-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #53624f7a;font-size:11px}.march-row>span,.march-row>.march-focus{flex:1;min-width:0}.march-row small{display:block;font-size:10px;color:var(--muted)}
+.march-focus{text-align:left;background:transparent;border:0;padding:0;min-height:0}.march-row button:not(.march-focus){min-height:32px;padding:3px 10px;font-size:11px}.march-row.returning{opacity:.7}
+/* Map: order arrows, legal targets while dragging, threatened provinces. */
+.draft-arrow{fill:none;stroke:#ffe0a1;stroke-width:3;stroke-dasharray:7 5;vector-effect:non-scaling-stroke;filter:drop-shadow(0 0 2px #0009)}.draft-arrow.snapped{stroke-dasharray:none}
+.draft-label rect{fill:#10242bf2;stroke:#e0bc7c;stroke-width:1;vector-effect:non-scaling-stroke}.draft-label text{fill:#ffe9bd;font:700 11px var(--sans);text-anchor:middle}
+#map.command-drag .province:not(.neighbor):not(.selected){fill-opacity:.4}#map.command-drag .province.neighbor{stroke:#fff3cf;stroke-width:2.2;fill-opacity:1}
+.province.threatened{stroke:#ff6a4d;stroke-width:2}.map-counter.threatened .counter-body{stroke:#ff5a3c!important;stroke-width:2.6}
+/* First-match tips. */
+.coach{position:absolute;z-index:35;width:min(300px,calc(100% - 2 * var(--gap)));padding:12px 14px;background:#f2e6c8;color:#16262d;border-radius:8px;box-shadow:0 12px 36px #000b;font-size:13px;line-height:1.45}
+.coach p{margin:0 0 8px}.coach-step{font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#6d5a33}.coach-actions{display:flex;justify-content:flex-end;gap:6px}.coach-actions button{min-height:36px}.coach-actions .quiet{color:#16262d}
+.coach[data-anchor=card-anchor]{left:calc(2 * var(--gap) + 60px + var(--safe-l));bottom:calc(var(--gap) + var(--safe-b))}
+.coach[data-anchor=leaderboard]{top:calc(var(--top) + var(--gap));right:calc(var(--rail-w) + 2 * var(--gap) + var(--safe-r))}
+.coach[data-anchor=hud-standard]{top:calc(var(--top) + var(--gap));left:calc(var(--gap) + var(--safe-l))}
+.spectating .card-dock .amount-control,.spectating .card-composer{display:none}
 /* Lobby: a floating card over the live atlas. */
 .lobby{position:fixed;z-index:25;top:calc(var(--top) + var(--gap));left:50%;transform:translateX(-50%);width:min(1100px,calc(100% - 2 * var(--gap)));max-height:calc(100dvh - var(--top) - var(--safe-b) - 2 * var(--gap));overflow:auto;display:flex;flex-wrap:wrap;align-items:center;gap:16px;background:#10242bf5;border:1px solid var(--glass-edge);box-shadow:0 20px 60px #000b}
 .lobby-heading{flex:1;min-width:220px}.lobby h2{margin-bottom:7px}.lobby p{margin:0}.lobby-share{min-height:28px;padding:2px 6px;font-size:11px;color:var(--gold);text-decoration:underline}
 .lobby form{display:flex;gap:12px;align-items:end;flex:1.5}.lobby form label{flex:1;min-width:130px;margin:0}.lobby form button{width:auto;white-space:nowrap}
 #host-controls{display:flex;justify-content:end;flex-wrap:wrap;gap:10px;width:100%}.starting-holdings{flex-basis:100%;font-size:12px;color:#d2c7ab}#lobby-note{width:100%}
-.chronicle{position:fixed;z-index:45;top:calc(var(--top) + var(--gap));left:50%;transform:translateX(-50%);width:min(640px,calc(100% - 2 * var(--gap)));max-height:calc(100dvh - var(--top) - var(--bottom) - 2 * var(--gap));display:flex;flex-direction:column;box-shadow:0 16px 60px #000a;background:#172b32fa;border-color:#a58b58;padding:16px}.chronicle>div:first-child{display:flex;align-items:center;gap:15px;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:8px}.chronicle h2{margin:0;font-size:22px}.chronicle .eyebrow{margin:0}.chronicle button{margin-left:auto;font-size:11px;min-height:34px}#events{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;font-size:12px}.event{padding:8px 0;border-bottom:1px solid #66775d3b}.event time{font-size:10px;font-variant-numeric:tabular-nums;color:#d1b37d;margin-right:12px}
-.reviewing #journal-toggle{display:none}
-#toast{position:fixed;z-index:60;bottom:calc(var(--bottom) + 22px);left:50%;transform:translateX(-50%);background:#142c35f5;border:1px solid var(--gold);padding:13px 20px;box-shadow:0 8px 24px #0006;max-width:min(620px,90vw);font-size:12px;color:#f4e4c0}#toast.error{background:#633c2d;color:#ffe9ce;border-color:#dea47f}
+body[data-status=lobby] :is(.hud-standard,.hud-stats){visibility:hidden}
+.chronicle{position:fixed;z-index:45;top:calc(var(--top) + var(--gap));left:50%;transform:translateX(-50%);width:min(640px,calc(100% - 2 * var(--gap)));max-height:calc(100dvh - var(--top) - 2 * var(--gap));display:flex;flex-direction:column;box-shadow:0 16px 60px #000a;background:#172b32fa;border-color:#a58b58;padding:16px}.chronicle>div:first-child{display:flex;align-items:center;gap:15px;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:8px}.chronicle h2{margin:0;font-size:22px}.chronicle .eyebrow{margin:0}.chronicle button{margin-left:auto;font-size:11px;min-height:34px}#events{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;font-size:12px}.event{padding:8px 0;border-bottom:1px solid #66775d3b}.event time{font-size:10px;font-variant-numeric:tabular-nums;color:#d1b37d;margin-right:12px}
+#toast{position:fixed;z-index:60;bottom:calc(var(--gap) + 70px + var(--safe-b));left:50%;transform:translateX(-50%);background:#142c35f5;border:1px solid var(--gold);padding:12px 18px;box-shadow:0 8px 24px #0006;max-width:min(560px,90vw);font-size:12px;color:#f4e4c0}#toast.error{background:#633c2d;color:#ffe9ce;border-color:#dea47f}
 .skip-map{position:absolute;z-index:50;left:50%;top:calc(var(--top) + 8px);transform:translate(-50%,-400%);background:var(--panel);padding:10px;color:var(--ink);border:2px solid var(--gold)}.skip-map:focus{transform:translate(-50%,0)}
-/* Mid widths: icon-only panel buttons (accessible names stay), then drop secondary text. */
-@media(max-width:1599px){.hud-rail .rail-label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}.hud-rail kbd{display:none}.hud-rail button{padding:0 10px}.hud-rail .badge{position:absolute;top:-6px;right:-6px}}
-@media(max-width:1099px){
- :root{--rail-w:288px;--panel-w:330px}
- /* Not enough width for drawer + rail: an open Council/Dispatches drawer takes the rail's place. */
- .war-room:has(#command-panel:not([hidden]):not([data-tab=orders])) .right-rail{display:none}
- /* No room for the map key between an open card and the rail: it returns when the card closes. */
- .war-room:has(#command-panel:not([hidden])) .map-key{display:none}
- .war-room:has(#command-panel:not([hidden]):not([data-tab=orders])) .alerts{width:min(340px,calc(100% - var(--panel-w) - 3 * var(--gap) - var(--safe-l) - var(--safe-r)))}
-}
-@media(max-width:1599px){.chip-name{display:none}}
-@media(max-width:1439px){:root{--rail-w:296px}}
-@media(max-width:1023px){.hud-country-name{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}.stat.prestige{display:none}.stat{padding:0 7px}.relation-chip .chip-label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}}
-/* Tablets and phones held upright: panel buttons become a bottom navigation bar in thumb reach. */
-@media(max-width:1023px) and (min-height:500px){
- :root{--nav-h:58px}
- .hud-rail{position:fixed;z-index:20;left:0;right:0;bottom:0;height:var(--bottom);padding:0 var(--safe-r) var(--safe-b) var(--safe-l);display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:0;background:#0a181dfa;border-top:1px solid #a88e5c66}
- .hud-rail button{height:var(--nav-h);flex-direction:column;justify-content:center;gap:2px;font-size:10px;border:0;border-radius:0;background:transparent;padding:0 2px}
- .hud-rail .rail-label{position:static;width:auto;height:auto;clip:auto}.hud-rail kbd{display:none}
- .hud-rail button[aria-expanded=true]{background:#22363c;box-shadow:inset 0 2px var(--gold)}.hud-rail .badge{top:5px;right:auto;left:calc(50% + 6px)}
-}
-/* Phones, portrait: bottom navigation in thumb reach; command panel and World history are bottom sheets. */
-@media(max-width:759px){
- :root{--hud-h:66px;--gap:8px}
+@media(max-width:1439px){:root{--rail-w:296px;--card-w:350px}}
+@media(max-width:1279px){#phase{display:none}}
+/* Compact: phones, tablets upright, short landscape. The rail dissolves into a top strip and a bottom ticker. */
+@media(max-width:1023px),(max-height:499px){
+ :root{--gap:8px;--hud-h:52px;--strip-h:44px}
  .hud-bar{gap:6px;padding-left:calc(6px + var(--safe-l));padding-right:calc(6px + var(--safe-r))}
- .hud{display:grid;grid-template-columns:auto auto minmax(0,1fr);grid-template-areas:"country clock stats" "rel vs vs";column-gap:8px;align-items:center;align-content:center;row-gap:3px}
- .hud-relations{grid-area:rel;gap:4px}.relation-chip{height:22px;padding:0 5px;gap:3px}.chip-flags .insignia{width:12px;height:14px}
- .hud-country{grid-area:country}.hud-country .insignia{width:24px;height:28px}
- .campaign-bar{display:contents}#phase{display:none}#clock{grid-area:clock;font-size:15px}#victory-status{grid-area:vs;font-size:10px;text-align:left;line-height:1.3}.victory-warning #victory-status{color:#ffcf8a}
- .hud-stats{grid-area:stats;justify-content:flex-end;min-width:0}.stat{padding:0 5px;height:26px;gap:3px}.stat b{font-size:13px}.stat small{display:none}.stat .ui-icon{width:14px;height:14px}
- /* The rail dissolves: leaderboard strip on top, alerts under it, World ticker above the nav. */
+ .hud-standard{padding:0 6px;height:44px}.hud-country-name{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+ .campaign-bar{flex-direction:column;align-items:center;justify-content:center;gap:0}#phase{display:none}#clock{font-size:15px}#victory-status{max-width:100%;font-size:10px}
+ .stat{padding:0 5px;gap:3px}.stat b{font-size:13px}.stat small{display:none}.stat .ui-icon{width:13px;height:13px}
  .right-rail{display:contents}
- .leaderboard{position:absolute;z-index:10;top:calc(var(--top) + var(--gap));left:calc(var(--gap) + var(--safe-l));right:calc(var(--gap) + var(--safe-r))}
- .alerts{top:calc(var(--top) + 2 * var(--gap) + var(--lb-h,0px));right:calc(var(--gap) + var(--safe-r));width:auto}
- .world-feed{position:absolute;z-index:10;left:calc(var(--gap) + var(--safe-l));right:calc(2 * var(--gap) + 56px + var(--safe-r));bottom:calc(var(--bottom) + var(--gap))}
- .world-feed:not(.collapsed){z-index:30;right:calc(var(--gap) + var(--safe-r));height:min(65dvh,calc(100dvh - var(--stack-bottom,var(--top)) - var(--bottom) - 2 * var(--gap)))}
- .war-room:has(.world-feed:not(.collapsed):not([hidden])) .map-controls{display:none}
- .command-panel{--sheet-max:calc(100dvh - var(--stack-bottom,var(--top)) - var(--bottom) - var(--gap));left:calc(var(--gap) + var(--safe-l));right:calc(var(--gap) + var(--safe-r));width:auto;max-width:none;bottom:var(--bottom);border-bottom:0;border-radius:12px 12px 0 0}
- .command-panel:not([data-tab=orders]){top:auto}
- .war-room:has(#command-panel:not([hidden]):not([data-tab=orders])) .alerts{left:calc(var(--gap) + var(--safe-l));width:auto}
- /* A grab bar replaces the chevron; the whole header drags. */
- .sheet-head{padding-top:20px;touch-action:none}.sheet-handle{position:absolute;left:50%;top:0;transform:translateX(-50%);width:72px;height:24px;min-height:0;border:0}.sheet-handle i,.command-panel[data-sheet=full] .sheet-handle i{width:40px;height:4px;border:0;border-radius:2px;background:#c8a773b0;transform:none}
- .command-panel:not([data-tab=orders]){height:var(--sheet-max)}
- /* The province/diplomacy sheet takes priority over the history sheet and camera buttons. */
- .war-room:has(#command-panel:not([hidden])) :is(.world-feed,.map-controls){display:none}
- .map-controls{left:auto;right:calc(var(--gap) + var(--safe-r));flex-direction:column-reverse}
- /* Phones: the collapsed key fits the 56 px camera column; an expanded key narrows the World ticker. */
- .map-controls{align-items:flex-end}.map-key .atlas-modes.collapsed{max-width:56px}.map-key .atlas-modes.collapsed .atlas-key-toggle{width:56px;padding:3px 2px;font-size:9px}
- .war-room:has(.map-key .atlas-modes:not(.collapsed)) .world-feed.collapsed{right:calc(2 * var(--gap) + min(240px,calc(100vw - 100px)) + var(--safe-r))}
- .amount-presets button,.command-footer>button,.panel-close{min-height:44px}
- .order-modes button{min-height:44px}
+ .leaderboard{position:absolute;z-index:10;top:calc(var(--top) + var(--gap));left:calc(var(--gap) + var(--safe-l));right:calc(var(--gap) + var(--safe-r));max-height:calc(100dvh - var(--top) - 3 * var(--gap) - 50px)}
+ .world-feed{position:absolute;z-index:10;left:calc(var(--gap) + var(--safe-l));right:calc(2 * var(--gap) + 52px + var(--safe-r));bottom:calc(var(--gap) + var(--safe-b))}
+ .world-feed:not(.collapsed){z-index:30;right:calc(var(--gap) + var(--safe-r));height:min(62dvh,calc(100dvh - var(--top) - var(--strip-h) - 3 * var(--gap)))}
+ .map-controls{left:auto;right:calc(var(--gap) + var(--safe-r));bottom:calc(var(--gap) + var(--safe-b));flex-direction:column-reverse}
+ .war-room:has(#card:not([hidden])) .map-controls{left:auto}
+ .war-room:has(.world-feed:not(.collapsed):not([hidden])) .map-controls,.war-room:has(#card:not([hidden])) :is(.world-feed,.map-controls){display:none}
+ .card{left:calc(var(--safe-l));right:calc(var(--safe-r));bottom:0;width:auto;max-width:none;max-height:calc(100dvh - var(--top) - var(--strip-h) - 2 * var(--gap));border-radius:12px 12px 0 0;border-bottom:0;padding-bottom:var(--safe-b)}
+ .card-head{touch-action:none;padding-top:12px;position:relative}.card-head::before{content:'';position:absolute;top:4px;left:50%;width:40px;height:4px;margin-left:-20px;border-radius:2px;background:#c8a773a0}
+ .card-close,.card-size,.card-owner{min-height:44px}.card-close,.card-size{width:44px}.amount-presets button,.source-chip{min-height:44px}.card-actions button{min-height:48px}
+ .coach[data-anchor=card-anchor]{left:calc(var(--gap) + var(--safe-l));bottom:calc(60px + var(--gap) + var(--safe-b))}
+ .coach[data-anchor=leaderboard]{top:calc(var(--top) + var(--strip-h) + 2 * var(--gap));right:calc(var(--gap) + var(--safe-r))}
+ .coach[data-anchor=hud-standard]{top:calc(var(--top) + var(--strip-h) + 2 * var(--gap))}
+ /* Never over the card's dock or the ticker: toasts sit under the powers strip. */
+ #toast{bottom:auto;top:calc(var(--top) + var(--strip-h) + 2 * var(--gap));left:calc(var(--gap) + var(--safe-l));right:calc(var(--gap) + var(--safe-r));transform:none;max-width:none}
  .lobby{padding:16px;gap:12px}.lobby form{display:grid;grid-template-columns:1fr;width:100%;flex-basis:100%}.lobby form button{justify-content:center}#host-controls{flex-direction:column}
  .faction-choices{gap:6px}.faction-choices button{padding:10px 3px;gap:6px}.faction-choices b{font-size:12px}.faction-choices small{font-size:9px}.faction-choices .insignia{width:28px;height:34px}
  .chronicle .eyebrow{display:none}
 }
-/* Phones, landscape: compact strip, narrower rail, full-height side panel instead of a card. */
-@media(max-height:499px) and (min-width:760px){
- :root{--hud-h:46px;--gap:8px;--panel-w:320px;--rail-w:260px}
- .hud-menu-button,.hud-rail button{height:36px}.hud-country-name small{display:none}#phase{display:none}#clock{font-size:15px}.stat{height:30px}
- .command-panel{--sheet-max:calc(100dvh - var(--top) - var(--bottom) - 2 * var(--gap))}
- .war-room:has(#command-panel:not([hidden])) .alerts{left:calc(var(--panel-w) + 2 * var(--gap) + var(--safe-l));width:min(340px,calc(100% - var(--panel-w) - var(--rail-w) - 4 * var(--gap) - var(--safe-l) - var(--safe-r)))}
- .war-room:has(#command-panel:not([hidden]):not([data-tab=orders])) .right-rail{display:flex}
-
+@media(max-width:1023px) and (min-width:560px) and (min-height:500px){.card{left:50%;right:auto;width:min(560px,100%);transform:translateX(-50%)}}
+/* Short landscape: the card is a left panel under the powers strip, not a bottom sheet. */
+@media(max-height:499px) and (min-width:560px){
+ :root{--hud-h:44px;--card-w:330px}
+ .hud-standard,.hud-menu-button{height:38px}.attention{height:34px}
+ .card{left:calc(var(--gap) + var(--safe-l));right:auto;top:calc(var(--top) + var(--strip-h) + 2 * var(--gap));bottom:calc(var(--gap) + var(--safe-b));width:var(--card-w);max-height:none;border-radius:0;border-bottom:1px solid var(--glass-edge);transform:none}
+ .card[data-size=full]{height:auto}
+ .card[data-size=peek]{top:auto}
+ .card-head::before{display:none}
+ .war-room:has(#card:not([hidden])) .world-feed{display:none}.war-room:has(#card:not([hidden])) .map-controls{display:flex}
 }
-/* Expand map (expand.js): pseudo-fullscreen that needs no Fullscreen API (iPhone Safari). */
+/* Expand map (expand.js): pseudo-fullscreen that needs no Fullscreen API (iPhone Safari). The HUD stays: it is one row. */
 html.map-expanded-lock,html.map-expanded-lock body{overflow:hidden;overscroll-behavior:none}
-.expand-button{font-weight:700;color:#ffe0a4;border-color:#c8a773}
-/* Live: an immersive map; the HUD strip and bottom navigation step away, overlays stay. */
-.war-room.map-expanded{--hud-h:0px;--nav-h:0px;--top:var(--safe-t);--bottom:var(--safe-b)}
-.war-room.map-expanded .hud-bar{display:none}
 .war-room.map-expanded .expand-button{background:#394343}
-/* Declare war & march: the commit becomes a war action; the confirmation lists the real consequences. */
-#send-army.war-primary{background:#8e2a2e;color:#ffeee4;border-color:#e0806a;box-shadow:inset 0 -2px #4b1216}#send-army.war-primary:hover{background:#a8363a}
+/* Declare war: the confirmation lists the real consequences. */
 .war-confirm{margin-top:10px;display:grid;gap:8px}.war-confirm-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:12px}.war-confirm-row>b{flex-basis:100%;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--gold)}
 .war-confirm-country{display:inline-flex;align-items:center;gap:5px}.war-confirm-country .insignia{width:18px;height:22px}.war-confirm p{margin:0;color:#c4cbbb}
-/* HUD attention badges: unread DM/alliance messages (✉) and decisions waiting for you (⚑). */
-.hud-badge{gap:4px;padding:0 8px;border-left-width:1px}.hud-badge.has-unread{background:#3a2f16;border-color:#ffb454;color:#ffe2a6}.hud-badge.action{background:#3a1d19;border-color:#ff6a4d;color:#ffd9cc}
-.badge-count:empty{display:none}.badge-count{font-weight:800;font-variant-numeric:tabular-nums}
-/* Notices: compact, non-blocking cards for things addressed to you. Beside the rail on wide screens. */
+/* Notices: compact, non-blocking cards for things that affect you, with direct actions. */
 .notice{position:fixed;z-index:55;top:calc(var(--top) + var(--gap));right:calc(var(--rail-w) + 2 * var(--gap) + var(--safe-r));width:min(360px,calc(100vw - 2 * var(--gap)))}
-.notice-card{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 36px 8px 10px;position:relative;background:#132b33f7;border:1px solid #e0bc7c;border-left:4px solid #ffb454;box-shadow:0 10px 28px #000a;color:#f1e7ce;font-size:12px}
-.notice[data-kind=decision] .notice-card{border-left-color:#ff6a4d}
-.notice-flag .insignia{width:22px;height:26px}.notice-words{flex:1;min-width:0;display:flex;flex-direction:column}
+.notice-card{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 36px 8px 10px;position:relative;background:#132b33f7;border:1px solid #e0bc7c;border-left:4px solid var(--offer);box-shadow:0 10px 28px #000a;color:#f1e7ce;font-size:12px}
+.notice[data-kind=decision] .notice-card{border-left-color:var(--war)}
+.notice-flag .insignia{width:22px;height:26px}.notice-flag:empty{display:none}.notice-words{flex:1;min-width:0;display:flex;flex-direction:column}
 .notice-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.notice-detail{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#d0d0bb;font-size:11px}
-.notice-actions{flex-basis:100%;display:flex;gap:6px}.notice-actions button{min-height:32px;padding:3px 10px;font-size:11px}
+.notice-actions{flex-basis:100%;display:flex;gap:6px}.notice-actions button{flex:1;min-height:36px;padding:3px 10px;font-size:12px}
 .notice-close{position:absolute;top:4px;right:4px;width:28px;min-height:28px;padding:0;background:transparent;border-color:transparent}
 /* Big banners are reserved for what affects you; even those stay within 40% of the screen. */
 .declaration,.alliance-seal,.fallen-seal{max-height:40vh;max-width:40vw;overflow:hidden}
 @media(max-width:1099px){.declaration,.alliance-seal,.fallen-seal{max-width:calc(100vw - 2 * var(--gap))}}
-/* Phones: every popup is a compact toast under the HUD (≤72 px), never over the sheet or the commit. */
-@media(max-width:759px),(max-height:499px){
- .notice{top:calc(var(--top) + 6px);left:calc(var(--gap) + var(--safe-l));right:calc(var(--gap) + var(--safe-r));width:auto}
- .notice-card{max-height:72px;overflow:hidden;padding:6px 34px 6px 8px}.notice-card:has(.notice-actions){max-height:none}
- .declaration,.alliance-seal,.fallen-seal{top:calc(var(--top) + 6px);left:calc(var(--gap) + var(--safe-l));right:calc(var(--gap) + var(--safe-r));width:auto;max-width:none;max-height:min(72px,15vh);
+/* Compact: every popup is a toast under the HUD and powers strip (≤72 px unless it carries actions). */
+@media(max-width:1023px),(max-height:499px){
+ .notice{top:calc(var(--top) + var(--strip-h) + 2 * var(--gap));left:calc(var(--gap) + var(--safe-l));right:calc(var(--gap) + var(--safe-r));width:auto}
+ .notice-card{max-height:72px;overflow:hidden;padding:6px 34px 6px 8px}.notice-card:has(.notice-actions){max-height:none}.notice-actions button{min-height:40px}
+ .declaration,.alliance-seal,.fallen-seal{top:calc(var(--top) + var(--strip-h) + 2 * var(--gap));left:calc(var(--gap) + var(--safe-l));right:calc(var(--gap) + var(--safe-r));width:auto;max-width:none;max-height:min(72px,15vh);
   transform:none;animation:toast-in var(--banner-duration,3s) both;padding:8px 12px;display:flex;align-items:center;gap:10px;text-align:left;border-top-width:3px;flex-direction:row}
  .declaration:before{display:none}.declaration span,.alliance-stamp,.fallen-seal span{font-size:8px;letter-spacing:1.4px;margin:0}
  .declaration strong,.alliance-ribbon strong,.fallen-seal strong{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -295,5 +272,4 @@ html.map-expanded-lock,html.map-expanded-lock body{overflow:hidden;overscroll-be
  .fallen-standard .insignia{width:24px;height:28px}.fallen-standard figcaption,.fallen-strike{display:none}
 }
 @keyframes toast-in{0%{opacity:0;transform:translateY(-12px)}8%,85%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-6px)}}
-/* Landscape phones: the order panel runs full height on the left, so toasts start to its right. */
-@media(max-height:499px) and (min-width:760px){body:has(#command-panel:not([hidden])) :is(.notice,.declaration,.alliance-seal,.fallen-seal){left:calc(var(--panel-w) + 2 * var(--gap) + var(--safe-l))}}
+@media(max-height:499px) and (min-width:560px){body:has(#card:not([hidden])) :is(.notice,.declaration,.alliance-seal,.fallen-seal){left:calc(var(--card-w) + 2 * var(--gap) + var(--safe-l))}}

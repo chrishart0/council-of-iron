@@ -169,3 +169,39 @@ export function systemCopy(item, names) {
     default: return { tone: 'broken', icon: 'journal', title: 'Council', detail: '' };
   }
 }
+
+/** v0.8 threads: where a rail item belongs in the cards. A DM or a diplomatic row between two countries
+ * belongs to the other country's card (`dm:<country>`); coalition chat and votes belong to the alliance
+ * card (`alliance:<side>`). Public items belong to no card. Pure, from `commsItems` threads only. */
+export function threadOf(item) {
+  const threads = item?.threads || [];
+  const dm = threads.find(t => t.startsWith('dm:')), alliance = threads.find(t => t.startsWith('alliance:'));
+  if (dm) return { kind: 'country', id: dm.slice(3) };
+  if (alliance) return { kind: 'alliance', id: alliance.slice(9) };
+  return null;
+}
+/** The conversation shown in a country card: DMs and diplomatic rows with that country. */
+export const countryThread = (items, country) => items.filter(i => i.threads?.includes(`dm:${country}`));
+/** The conversation shown in the alliance card: chat and motions of that coalition. */
+export const allianceThread = (items, side) => items.filter(i => i.threads?.includes(`alliance:${side}`));
+
+/** Decisions waiting for this seat: open offers it is a party to and has not accepted (not its own),
+ * war/peace votes of its coalition it has not approved, and peace treaties offered to it. */
+export function decisionsFor(state) {
+  const you = state?.you; if (!you) return [];
+  const offers = (state.proposals || []).filter(q => q.status === 'open' && q.roster.includes(you) && !q.accepted.includes(you))
+    .map(q => ({ kind: 'offer', id: q.id, country: q.creator, proposal: q }));
+  const motions = (state.diplomacy || []).filter(m => m.status === 'voting' && m.fromRoster.includes(you) && !m.fromYes.includes(you) ||
+    m.status === 'offered' && m.toRoster.includes(you) && !m.toYes.includes(you))
+    .map(m => m.status === 'voting' ? { kind: `${m.kind}_vote`, id: m.id, motion: m } : { kind: 'peace_offer', id: m.id, country: m.fromRoster[0], motion: m });
+  return [...offers, ...motions];
+}
+/** The one attention list behind the HUD badge: decisions first, then unread private messages (oldest
+ * first). `read` is a Set of item seqs already seen. Each entry says which card answers it. */
+export function attentionFor(state, items, read = new Set()) {
+  const you = state?.you; if (!you) return [];
+  const decisions = decisionsFor(state).map(d => ({ ...d, card: d.kind.endsWith('_vote') ? { kind: 'alliance' } : { kind: 'country', id: d.country } }));
+  const unread = items.filter(i => i.type === 'message' && i.channel !== 'world' && i.from !== you && !read.has(i.seq))
+    .map(i => ({ kind: 'message', id: i.seq, item: i, card: i.channel === 'dm' ? { kind: 'country', id: i.from } : { kind: 'alliance' } }));
+  return [...decisions, ...unread];
+}

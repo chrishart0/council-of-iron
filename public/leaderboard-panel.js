@@ -18,14 +18,26 @@ const seatType = player => player?.kind === 'bot' || player?.model?.startsWith('
 export class LeaderboardPanel {
   /** `fronts` lists bloc-vs-bloc wars in the teams view; `onFocus(country|null)` fires when a row is
    * hovered or focused, so the map can light up that country's enemies and allies. */
-  constructor({ root, rows, toggle, summary, modes, fronts, onFocus }, names) {
-    Object.assign(this, { root, list: rows, toggle, summary, modes, fronts, onFocus, names });
+  /** v0.8: `onSelect(country)` opens diplomacy for a row (click or Enter); `powers` is a strip of standards
+   * shown while collapsed (phones), one button per other country, marked with its relation to you;
+   * `onFront(front)` frames a war front on the map. */
+  constructor({ root, rows, toggle, summary, modes, fronts, powers, onFocus, onSelect, onFront }, names) {
+    Object.assign(this, { root, list: rows, toggle, summary, modes, fronts, powers, onFocus, onSelect, onFront, names });
     this.mode = 'teams'; this.previous = new Map(); this.arrows = new Map(); this.lastMode = null; this.collapsed = new Set();
     const focusRow = event => { const li = event.target.closest?.('.lb-row'); this.onFocus?.(li ? li.dataset.focus || null : null); };
     rows.addEventListener('mouseover', focusRow); rows.addEventListener('focusin', focusRow);
     rows.addEventListener('mouseleave', () => this.onFocus?.(null));
     rows.addEventListener('focusout', event => { if (!rows.contains(event.relatedTarget)) this.onFocus?.(null); });
+    const choose = event => {
+      const li = event.target.closest('.lb-row');
+      if (!li || event.target.closest('.lb-expand') || li.dataset.kind === 'group') return false;
+      if (li.dataset.focus) this.onSelect?.(li.dataset.focus); return true;
+    };
+    rows.addEventListener('keydown', event => { if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('.lb-row') && choose(event)) event.preventDefault(); });
+    powers?.addEventListener('click', event => { const b = event.target.closest('[data-power]'); if (b) this.onSelect?.(b.dataset.power); });
+    fronts?.addEventListener('click', event => { const b = event.target.closest('[data-front]'); if (b) this.onFront?.(JSON.parse(b.dataset.front)); });
     rows.addEventListener('click', event => {
+      if (choose(event)) return;
       const button = event.target.closest('.lb-expand'); if (!button) return;
       const id = button.closest('.lb-row').dataset.id;
       if (this.collapsed.has(id)) this.collapsed.delete(id); else this.collapsed.add(id);
@@ -64,8 +76,11 @@ export class LeaderboardPanel {
     display.forEach((item, i) => this.fill(this.list.children[i], item, now, board, state));
     const own = board.rows.find(r => r.you), lead = board.rows[0];
     const pick = own || lead;
-    setText(this.summary, pick ? `${own ? 'You' : this.label(lead)} #${pick.rank}${own?.kind === 'alliance' ? ` (${own.name})` : ''} · ${(pick.share * 100).toFixed(1)}% · ${pick.troops} troops` : '');
+    // "You #3" stays visible on phones; the rest is detail (alliance names are text).
+    const head = pick ? `${own ? 'You' : this.label(lead)} #${pick.rank}` : '', rest = pick ? `${own?.kind === 'alliance' ? ` (${own.name})` : ''} · ${(pick.share * 100).toFixed(1)}% · ${pick.troops} troops` : '';
+    if (this.summary.dataset.key !== head + rest) { this.summary.dataset.key = head + rest; const b = node('b', 'lb-rank-me'), span = node('span', 'lb-rest'); b.textContent = head; span.textContent = rest; this.summary.replaceChildren(b, span); }
     this.renderFronts(state);
+    this.renderPowers(state, leaderboard(state, { mode: 'players', you: state.you }));
     return board;
   }
   slot() {
@@ -124,19 +139,43 @@ export class LeaderboardPanel {
     setText(land, `${(row.share * 100).toFixed(1)}%`); land.title = `${row.provinces} of ${board.provinces} provinces`;
     setText(troops, String(row.troops));
   }
+  /** Collapsed strip (phones): every other country's standard, ranked, as a one-tap way into diplomacy. */
+  renderPowers(state, board) {
+    if (!this.powers) return;
+    const offers = (state.proposals || []).filter(q => q.status === 'open' && state.you && q.roster.includes(state.you));
+    const items = board.rows.filter(r => !r.you && !r.eliminated).map(r => {
+      const offer = offers.find(q => q.roster.includes(r.id));
+      const band = this.colors[state.players.find(p => p.id === r.id)?.side];
+      return { id: r.id, relation: offer ? 'offer' : r.relation || '', band: r.relation === 'ally' ? band || '' : '' };
+    });
+    const key = JSON.stringify(items);
+    if (this.powers.dataset.key === key) return;
+    this.powers.dataset.key = key;
+    const words = { enemy: 'at war with you', ally: 'your ally', neutral: 'not at war', offer: 'alliance offer pending' };
+    this.powers.replaceChildren(...items.map(item => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'lb-power'; b.dataset.power = item.id; b.dataset.relation = item.relation;
+      if (item.band) b.style.setProperty('--band', item.band);
+      b.innerHTML = insignia(item.id); // authored SVG only
+      b.setAttribute('aria-label', `${this.names.country(item.id)}${words[item.relation] ? `, ${words[item.relation]}` : ''}: open diplomacy`);
+      b.title = this.names.country(item.id);
+      return b;
+    }));
+  }
   /** Teams view: the war pairs between blocs (names are player text → textContent). */
   renderFronts(state) {
     if (!this.fronts) return;
-    const fronts = this.mode === 'teams' ? warsOf(state).filter(f => f.sides.some(s => s.name)) : [];
+    const fronts = this.mode === 'teams' ? warsOf(state) : []; // every active war, side vs side
     this.fronts.hidden = !fronts.length;
-    const key = JSON.stringify(fronts.map(f => f.sides.map(s => [s.side, s.name])));
+    const key = JSON.stringify([state.you, fronts.map(f => f.sides.map(s => [s.side, s.name, s.countries]))]);
     if (this.fronts.dataset.key === key) return;
     this.fronts.dataset.key = key;
     this.fronts.replaceChildren(...fronts.map(f => {
-      const li = node('li', 'lb-front');
+      const li = node('li', `lb-front${state.you && f.sides.some(x => x.countries.includes(state.you)) ? ' involved' : ''}`);
       const [a, b] = f.sides.map(s => s.name || s.countries.map(this.names.country).join(' + '));
+      const button = node('button', 'lb-front-button'); button.type = 'button'; button.title = 'Show this front on the map';
+      button.dataset.front = JSON.stringify(f.sides.map(s => s.countries));
       const left = node('span', ''), right = node('span', ''), swords = node('b', ''); swords.textContent = '⚔';
-      left.textContent = a; right.textContent = b; li.append(left, swords, right);
+      left.textContent = a; right.textContent = b; button.append(left, swords, right); li.append(button);
       return li;
     }));
   }

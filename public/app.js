@@ -5,41 +5,50 @@ import { faction, insignia, icon, battleSignal } from './presentation.js';
 import { Atlas } from './atlas.js';
 import { escapeHTML as esc, syncOptions, setHTML, operationId, confirmAction } from './ui.js';
 import { WorldFeed, Herald, Notifier, presentHeadline } from './feed.js';
-import { viewerOf, commsItems, systemCopy } from './feed-model.js';
+import { viewerOf, commsItems, systemCopy, threadOf, countryThread, allianceThread, decisionsFor, attentionFor } from './feed-model.js';
 import { LeaderboardPanel } from './leaderboard-panel.js';
 import { ExpandableMap } from './expand.js';
 // Relations and alliance colours: the same DOM-free helpers the atlas and agent tools use.
 import { relationsOf, allianceColors } from './relations.js';
-import { warsOf } from './leaderboard.js';
 import { SoundBoard } from './sound.js';
+/* v0.8 — one map, two nouns. A PROVINCE (troops) opens the order card; a COUNTRY (diplomacy) opens the
+ * country card; your own standard opens your alliance card. Each card has one primary action. */
 const time = n => `${Math.floor(Math.max(0,n)/60).toString().padStart(2,'0')}:${Math.floor(Math.max(0,n)%60).toString().padStart(2,'0')}`;
 const signed = n => `${n>=0?'+':''}${n.toFixed(1)}`;
 let identity;try{identity=JSON.parse(localStorage.getItem('coi.identity'));}catch{identity=null;}
-let map, matchId=null, state=null, cursor=0, history=[], polling=false, tab='orders', source=null, destination=null, toastTimer;
-let review, signalCursor=null, signalTimer;
-let atlas, previewKey='', generation=0, pendingCommand=false, previewVersion=0;
-let pollController=null, inspected=null;
-const attackSelections = new Map();
-let plannedDestination=null, mapReadyFor=null, orderMode='march';
-let spectating=false;
-// One command panel: `tab` picks its content; nothing is open until a province or HUD button asks.
-let panelOpen=false, panelOpener=null;
-const narrow=matchMedia('(max-width:759px)');
-// Phones (either orientation): the atlas key starts collapsed, and collapses again when the screen shrinks.
-const compactScreen=matchMedia('(max-width:759px), (max-height:499px)');
-compactScreen.addEventListener('change',event=>{if(event.matches)atlas?.setLegendCollapsed(true);});
+let map, matchId=null, state=null, cursor=0, history=[], polling=false, toastTimer;
+let review, signalCursor=null;
+let atlas, generation=0, pendingCommand=false, pollController=null, previewKey='', previewVersion=0;
+let spectating=false, mapReadyFor=null;
 let messageCatchupComplete=false;
 const pastSides=new Set(); // coalitions this seat belonged to ("your alliance dissolved" still affects you)
 let worldFeed, herald, standings, expander, notifier;
+// Selection: one or more of your provinces (sources) and a target province; or a moving army.
+let sources=[], target=null, armyId=null;
+// The one context card: { kind: 'province' | 'army' | 'country' | 'alliance', id }.
+let card=null, cardSize='peek', cardOpener=null, proposing=false, railItems=[];
+let fraction=.5;try{const f=Number(localStorage.getItem('coi.fraction'));if(f>0 && f<=1)fraction=f;}catch{}
+const seenThreats=new Set();
+const compact=matchMedia('(max-width:1023px), (max-height:499px)');
 const country = id => map.countries.find(c=>c.id===id);
 const place = id => map.provinces.find(p=>p.id===id);
+const prov = id => state?.provinces.find(p=>p.id===id);
 const sideName = id => state?.sides.find(s=>s.id===id)?.name || id;
 const namedSide = id => country(sideName(id))?.name || sideName(id);
 const myPlayer = () => state?.players.find(p=>p.id===state.you);
+const playerOf = id => state?.players.find(p=>p.id===id);
 const seatType = p => !p ? 'Unclaimed' : p.kind==='bot' || p.model?.startsWith('heuristic-') ? 'BOT' : p.kind==='agent' ? 'AI' : 'HUMAN';
 const atWar = (a,b) => Boolean(a && b && a!==b && (state?.wars || []).includes([a,b].sort().join(':')));
-const mayEnter = (a,b) => !b || state.players.find(p=>p.id===a)?.side===state.players.find(p=>p.id===b)?.side || !state.rules.warRequired || atWar(a,b);
+const sameSide = (a,b) => Boolean(a && b && playerOf(a)?.side===playerOf(b)?.side);
+const mayEnter = (a,b) => !b || sameSide(a,b) || !state.rules.warRequired || atWar(a,b);
+const seated = () => Boolean(state?.you) && !spectating;
+const active = () => seated() && state.status==='running' && myPlayer()?.eliminatedAt===null;
+const neighbours = id => place(id)?.neighbors || [];
 function toast(message,error=false){$('toast').textContent=message;$('toast').className=error?'error':'';$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,6500);}
+/** DOM helper: player text (alliance names, chat) only ever reaches textContent. */
+function el(tag,className,text){const e=document.createElement(tag);if(className)e.className=className;if(text!==undefined)e.textContent=text;return e;}
+function button(label,data={},className=''){const b=el('button',className,label);b.type='button';for(const [k,v] of Object.entries(data))b.dataset[k]=v;return b;}
+const flag=id=>{const s=el('span','flag');s.innerHTML=insignia(id);return s;}; // authored SVG only
 const feedNames={
   country:id=>country(id)?.name || id || 'Nobody',
   short:id=>faction(id).short,
@@ -63,130 +72,82 @@ function renderLeaderboard(){
   const box=$('leaderboard');box.hidden=!state || state.status==='lobby';
   if(!box.hidden)standings.update(state,5);
 }
-/** Decisions waiting for this seat: open offers it has not accepted, and motions it may still vote on. */
-function pendingDecisions(){
-  if(!state?.you)return [];
-  const offers=(state.proposals || []).filter(q=>q.status==='open' && q.roster.includes(state.you) && !q.accepted.includes(state.you)).map(q=>({kind:'offer',id:q.id,q}));
-  const motions=(state.diplomacy || []).filter(m=>m.status==='voting' && m.fromRoster.includes(state.you) && !m.fromYes.includes(state.you) ||
-    m.status==='offered' && m.toRoster.includes(state.you) && !m.toYes.includes(state.you)).map(m=>({kind:m.kind,id:m.id,m}));
-  return [...offers,...motions];
-}
-/** Inline decisions on a diplomatic row (the same actions the Council uses). */
-function decide(item){
-  if(!state?.you)return null;
-  if(item.system==='offer'){
-    const q=state.proposals.find(q=>q.id===item.proposalId);
-    if(!q)return {status:'Closed'};
-    if(q.status==='pending')return {status:`Approved · active at ${time(q.activateAt)}`};
-    if(q.status!=='open')return {status:q.status==='cancelled'?'Closed':'Settled'};
-    const voters=q.roster.filter(id=>state.players.find(p=>p.id===id)?.eliminatedAt===null);
-    const status=`${q.accepted.length}/${voters.length} approvals · ${Math.max(0,q.expiresAt-state.tick)}s left`;
-    if(!q.roster.includes(state.you))return {status};
-    if(q.creator===state.you)return {status,buttons:[{label:'Withdraw',data:{decline:q.id}}]};
-    return q.accepted.includes(state.you)?{status:`${status} · you accepted`}:{status,buttons:[{label:'Accept',data:{accept:q.id},primary:true},{label:'Decline',data:{decline:q.id}}]};
-  }
-  const m=(state.diplomacy || []).find(m=>m.id===item.motionId);
-  if(!m)return {status:'Closed'};
-  if(!['voting','offered'].includes(m.status))return {status:m.status==='enacted'?'Enacted':m.status==='expired'?'Expired':m.status};
-  const source=m.status==='voting' && m.fromRoster.includes(state.you),target=m.status==='offered' && m.toRoster.includes(state.you);
-  const roster=source?m.fromRoster:m.toRoster,yes=source?m.fromYes:m.toYes,need=Math.floor(roster.filter(id=>state.players.find(p=>p.id===id)?.eliminatedAt===null).length/2)+1;
-  const status=`${yes.length}/${need} approvals · ${Math.max(0,m.expiresAt-state.tick)}s left`;
-  if(!(source || target) || yes.includes(state.you))return {status};
-  return {status,buttons:[{label:m.kind==='war'?'Approve war':'Accept peace',data:m.kind==='war'?{voteWar:m.id}:{votePeace:m.id},primary:true}]};
-}
+
+/* ── Read state: per item (a set of seqs per match and seat), never a single cursor. ── */
 const readKey=()=>`coi.read.${matchId}.${state?.you}`;
-let railItems=[],summaryShown=false;
+function loadRead(){try{return new Set(JSON.parse(localStorage.getItem(readKey()) || '[]').filter(Number.isSafeInteger));}catch{return new Set();}}
+function saveRead(){try{localStorage.setItem(readKey(),JSON.stringify([...worldFeed.read].slice(-800)));}catch{}}
+const attention=()=>seated() && state.status!=='lobby'?attentionFor(state,railItems,worldFeed.read):[];
+
+/* ── History rail ── */
+function threatItems(){
+  const me=myPlayer();if(!me || spectating || state.status!=='running')return [];
+  return state.armies.filter(a=>!a.returning && playerOf(a.country)?.side!==me.side && prov(a.to)?.owner===state.you)
+    .map(a=>({id:`t-${a.id}`,seq:cursor,tick:a.departedAt ?? state.tick,type:'threat',country:a.country,to:a.to,amount:a.amount,arrivesAt:a.arrivesAt,threads:['mine'],army:a.id}));
+}
 function renderFeed(live){
   const box=$('world-feed');box.hidden=!state || state.status==='lobby';
   if(box.hidden)return;
-  if(worldFeed.room!==`${matchId}:${state.you}`){ // per match and seat: restore the read cursor
-    worldFeed.room=`${matchId}:${state.you}`;summaryShown=false;
-    try{worldFeed.readSeq=Number(localStorage.getItem(readKey())) || 0;}catch{worldFeed.readSeq=0;}
-  }
+  if(worldFeed.room!==`${matchId}:${state.you}`){worldFeed.room=`${matchId}:${state.you}`;worldFeed.read=loadRead();}
   railItems=commsItems(history,state.dominanceBreaks||[],{you:state.you});
-  const fresh=worldFeed.update(railItems,{live,you:state.you});
-  worldFeed.refreshActions(decide);
-  renderChips();renderReply();renderInbox();
+  const threats=threatItems(),fresh=worldFeed.update([...railItems,...threats.filter(t=>!worldFeed.keys.has(`e${t.id}`))],{live,you:state.you});
   if(live)for(const item of fresh)noticeFor(item);
-  if(!live && messageCatchupComplete && !summaryShown){ // after a reconnect: one summary, never a replay of old toasts
-    summaryShown=true;const unread=unreadMessages().length,waiting=pendingDecisions().length;
-    if(unread || waiting)notifier.push({key:'summary',kind:'summary',title:[unread?`${unread} unread message${unread===1?'':'s'}`:'',waiting?`${waiting} decision${waiting===1?'':'s'} waiting`:''].filter(Boolean).join(' · '),
-      detail:'Open the messages rail to catch up.',buttons:[{label:'View',data:{noticeView:waiting?'action':'inbox'}}]});
-  }
-  // Collapsed rail = a one-line ticker of the latest item (text only; chat is player text).
-  const unread=unreadMessages().at(-1),last=unread?[...$('feed-list').children].find(li=>li.dataset.feedKey===`e${unread.id}`):$('feed-list').lastElementChild;
+  for(const t of threats)seenThreats.add(t.army);
+  renderReply();renderAttention();
+  // Collapsed rail = a one-line ticker of the latest row (text only; chat is player text).
+  const last=[...$('feed-list').children].reverse().find(li=>!li.classList.contains('feed-empty'));
   const words=last?.querySelector('.feed-words b,.feed-chat b');
-  $('feed-ticker').textContent=words?`${unread?'✉ ':''}${words.textContent}: ${last.querySelector('.feed-detail,.feed-text')?.textContent || ''}`:'Headlines · chat · diplomacy';
-}
-const unreadMessages=()=>railItems.filter(i=>i.type==='message' && i.channel!=='world' && i.from!==state?.you && i.seq>worldFeed.readSeq);
-/** HUD ✉ (unread DM + alliance messages) and ⚑ (decisions waiting), visible on every viewport. */
-function renderInbox(){
-  const seated=Boolean(state.you) && !spectating && state.status!=='lobby',unread=unreadMessages().length,waiting=pendingDecisions().length;
-  const inbox=$('inbox-badge'),action=$('action-badge');
-  inbox.hidden=!seated;action.hidden=!seated || !waiting;
-  inbox.classList.toggle('has-unread',unread>0);inbox.querySelector('.badge-count').textContent=unread?String(unread):'';
-  inbox.setAttribute('aria-label',unread?`${unread} unread message${unread===1?'':'s'}: open messages`:'No unread messages: open messages');
-  action.querySelector('.badge-count').textContent=waiting?String(waiting):'';
-  action.setAttribute('aria-label',`${waiting} decision${waiting===1?'':'s'} waiting for you: open them`);
-}
-/** Filter chips: All, World, each alliance channel this seat can read, DMs, and "Needs you". */
-function renderChips(){
-  const me=myPlayer(),sides=new Set(railItems.filter(i=>i.channel==='alliance' && i.side).map(i=>i.side));
-  if(me && !me.side.startsWith('solo:'))sides.add(me.side);
-  const hasDm=railItems.some(i=>i.threads?.includes('dm')) || Boolean(me);
-  const chips=[['all','All'],['world','World'],...[...sides].map(side=>[`alliance:${side}`,namedSide(side),side]),...(hasDm?[['dm','DMs']]:[]),...(pendingDecisions().length?[['action','Needs you']]:[])];
-  const box=$('feed-chips'),key=JSON.stringify([chips,worldFeed.filter]);
-  if(!chips.some(([f])=>f===worldFeed.filter))worldFeed.setFilter('all');
-  if(box.dataset.key===key)return;box.dataset.key=key;
-  box.replaceChildren(...chips.map(([filter,label,side])=>{
-    const b=el('button','feed-chip',label);b.type='button';b.dataset.feedFilter=filter;b.setAttribute('aria-pressed',String(worldFeed.filter===filter)); // alliance names: textContent
-    if(side){const c=allianceColors(state)[side];if(c)b.style.setProperty('--band',c);b.classList.add('alliance');}
-    return b;
-  }));
-}
-/** The reply box posts to the selected channel (All/World → world; your alliance; a DM recipient). */
-function replyChannel(){
-  const f=worldFeed.filter,me=myPlayer();
-  if(f.startsWith('alliance:'))return me && f===`alliance:${me.side}`?{channel:'alliance'}:null;
-  if(f==='dm')return {channel:'dm',to:$('feed-recipient').value};
-  return {channel:'world'};
+  $('feed-ticker').textContent=words?`${words.textContent}: ${last.querySelector('.feed-detail,.feed-text')?.textContent || ''}`:'Headlines · chat · diplomacy';
 }
 function renderReply(){
-  const canSend=Boolean(state.you) && !spectating && state.status==='running',target=replyChannel();
+  const canSend=seated() && state.status==='running';
   $('feed-form').hidden=!canSend;
-  const dm=worldFeed.filter==='dm';$('feed-recipient-label').hidden=!dm;
-  if(dm){const last=railItems.filter(i=>i.channel==='dm').at(-1)?.with;
-    options('feed-recipient',state.players.filter(p=>p.id!==state.you).map(p=>({value:p.id,label:`To ${country(p.id).name}`})),$('feed-recipient').value || last);}
-  const label=!target?'Only current members can post in this alliance channel':target.channel==='alliance'?'Message your alliance…':dm?`Private message…`:'Reply to the world…';
-  $('feed-text').placeholder=label;$('feed-text-label').textContent=label;
-  $('feed-notice').hidden=!(target?.channel==='alliance' && state.rules.revealAllianceChatAfterMatch);
   const delay=Math.max(0,(state.commandBudget?.chatReadyAt || 0)-state.tick);
-  $('feed-send').disabled=!canSend || !target || delay>0 || pendingCommand;$('feed-text').disabled=!target;
+  $('feed-send').disabled=!canSend || delay>0 || pendingCommand;
   $('feed-cooldown').textContent=canSend && delay?`Chat ready in ${delay} game s (shared across channels)`:'';
+}
+/** The single HUD badge: decisions waiting plus unread private messages. */
+function renderAttention(){
+  const items=attention(),b=$('attention');b.hidden=!items.length;
+  $('attention-count').textContent=items.length?String(items.length):'';
+  const first=items[0];
+  b.setAttribute('aria-label',items.length?`${items.length} ${items.length===1?'thing needs':'things need'} you: open ${first.kind==='message'?`the message from ${first.card.kind==='alliance'?'your alliance':country(first.item.from).name}`:first.kind==='offer'?`the alliance offer from ${country(first.country).name}`:first.kind==='peace_offer'?'the peace offer':'the vote'}`:'Nothing needs you');
+  $('hud-standard').dataset.attention=String(items.length);
+}
+function openAttention(){
+  const first=attention()[0];
+  if(!first){openCard('alliance',null,{focus:true});return;}
+  if(first.card.kind==='country')openCard('country',first.card.id,{size:'full',focus:true,compose:first.kind==='message'});
+  else openCard('alliance',null,{size:'full',focus:true,compose:first.kind==='message'});
 }
 /** A compact notice for something addressed to this seat (never for catch-up items). */
 function noticeFor(item){
-  if(!state.you || spectating)return;
+  if(!seated())return;
+  if(item.type==='threat'){
+    if(item.arrivesAt-state.tick<=20)notifier.push({key:`e${item.id}`,kind:'decision',standard:item.country,title:`Incoming: ${item.amount} troops → ${place(item.to).name}`,
+      detail:`${country(item.country).name} arrives in ${Math.max(0,item.arrivesAt-state.tick)}s.`,buttons:[{label:'View',data:{feedProvince:item.to}}]});
+    return;
+  }
   if(item.type==='message' && item.channel!=='world' && item.from!==state.you){
     notifier.push({key:`e${item.id}`,kind:item.channel,standard:item.from,title:`${country(item.from).name}${item.channel==='alliance'?' · alliance':''}`,detail:String(item.text).split('\n')[0],
-      buttons:[{label:'View',data:{noticeView:item.channel==='dm'?'dm':`alliance:${item.side}`}}]});
+      buttons:[item.channel==='dm'?{label:'Reply',data:{openCountry:item.from,compose:'1'},primary:true}:{label:'Open',data:{openAlliance:'1',compose:'1'},primary:true}]});
+    return;
   }
-  const ask=decide(item);
-  if(item.system && ask?.buttons?.length && item.from!==state.you){
-    const copy=systemCopy(item,{...feedNames,players:state.players.length});
-    notifier.push({key:`e${item.id}`,kind:'decision',sticky:true,standard:item.from || item.fromRoster?.[0],title:item.system==='offer'?`Alliance offer from ${country(item.from).name}: ${item.name}`:copy.title,
-      detail:copy.detail,buttons:[...ask.buttons,{label:'View',data:{noticeView:'action'}}]});
-  }
+  if(!item.system || item.from===state.you)return;
+  const decision=decisionsFor(state).find(d=>d.id===(item.proposalId || item.motionId));
+  if(!decision)return;
+  const copy=systemCopy(item,{...feedNames,players:state.players.length});
+  const buttons=decision.kind==='offer'?[{label:'Accept',data:{act:'accept',arg:decision.id},primary:true},{label:'Decline',data:{act:'decline',arg:decision.id}},{label:'View',data:{openCountry:decision.country}}]
+    :decision.kind==='peace_offer'?[{label:'Accept peace',data:{act:'vote-peace',arg:decision.id},primary:true},{label:'View',data:{openCountry:decision.country}}]
+    :[{label:decision.kind==='war_vote'?'Approve war':'Approve peace',data:{act:decision.kind==='war_vote'?'vote-war':'vote-peace',arg:decision.id},primary:true},{label:'View',data:{openAlliance:'1'}}];
+  notifier.push({key:`e${item.id}`,kind:'decision',sticky:true,standard:item.from || item.fromRoster?.[0],title:decision.kind==='offer'?`Alliance offer from ${country(decision.country).name}: ${decision.proposal.name}`:copy.title,detail:copy.detail,buttons});
 }
-function openRail(filter){
-  if(narrow.matches && panelOpen)closePanel(); // on phones the rail is a sheet; it takes over from the order sheet
-  if(!worldFeed.open){worldFeed.setOpen(true);}
-  if(filter)worldFeed.setFilter(filter);
-  const first=[...$('feed-list').children].find(li=>!li.hidden && (filter==='action'?li.dataset.actionable==='true':li.classList.contains('unread')));
-  const list=$('feed-list'),row=first || list.lastElementChild; // scroll the rail only (scrollIntoView could move the locked page)
-  if(row)list.scrollTop=Math.max(0,row.offsetTop-list.offsetTop-8);
-  renderChips();renderReply();
+function openRail(){ // phones: the history is a sheet; it takes over from the card
+  if(compact.matches && card)closeCard();
+  if(!worldFeed.open)worldFeed.setOpen(true);
 }
+
+/* ── Transport ── */
 async function request(path,method='GET',data,token=identity?.token){
   const response=await fetch(path,{method,headers:{...(token?{Authorization:`Bearer ${token}`} : {}),...(data?{'Content-Type':'application/json'}:{})},body:data?JSON.stringify(data):undefined});
   const value=await response.json();if(!response.ok){const error=new Error(value.error || `Request failed (${response.status}).`);error.status=response.status;throw error;}return value;
@@ -212,19 +173,20 @@ async function rooms(){
     const found=data.games.filter(g=>g.status===status);
     return found.length?`<section class="room-group"><h3>${title} <small>${found.length}</small></h3>${found.map(g=>`<div class="room-card"><div><p>${esc(g.name)}</p><small>${g.players.length}/8 SEATS · ${g.speed===1?'30 MIN':'5 MIN'} · ${status==='running'?`${time(g.tick)} elapsed · `:''}${esc(g.id)}</small></div><div class="room-entry-actions">${status==='running' && g.you?`<button data-room="${esc(g.id)}" data-resume="true">Resume</button>`:''}<button data-room="${esc(g.id)}" data-spectate="${status==='running'}">${label} →</button></div></div>`).join('')}</section>`:'';
   }).join(''):'<p class="muted">The chamber is empty. Open the first council.</p>';
-  const standings=await request('/api/standings');
-  $('standings').innerHTML=standings.standings.length?standings.standings.map(p=>`<div class="standing-row"><span>${esc(p.name)} <small class="muted">${p.provisional?'PROVISIONAL':''} · ${p.matches} matches</small></span><b>${signed(p.prestige)}</b></div>`).join(''):'<p class="muted small">No decisive matches recorded yet. Results persist on this server.</p>';
+  const standingsData=await request('/api/standings');
+  $('standings').innerHTML=standingsData.standings.length?standingsData.standings.map(p=>`<div class="standing-row"><span>${esc(p.name)} <small class="muted">${p.provisional?'PROVISIONAL':''} · ${p.matches} matches</small></span><b>${signed(p.prestige)}</b></div>`).join(''):'<p class="muted small">No decisive matches recorded yet. Results persist on this server.</p>';
 }
+function clearSelection(){sources=[];target=null;armyId=null;proposing=false;}
 async function openRoom(id,watch=false){
   generation++;pollController?.abort();review?.destroy();review=null;document.body.classList.remove('reviewing');
-  closePanel();closeMenu();pastSides.clear();spectating=watch;messageCatchupComplete=false;herald.reset();worldFeed.reset();
-  resetPresentation();orderMode='march';matchId=id;mapReadyFor=null;state=null;cursor=0;history=[];source=null;destination=null;inspected=null;previewKey='';notifier.reset();
+  closeCard();closeMenu();pastSides.clear();seenThreats.clear();spectating=watch;messageCatchupComplete=false;herald.reset();worldFeed.reset();
+  resetPresentation();matchId=id;mapReadyFor=null;state=null;cursor=0;history=[];clearSelection();previewKey='';notifier.reset();
   document.body.classList.add('in-game');atlas.world();
   $('home').hidden=true;$('game').hidden=false;$('result').hidden=true;
   const url=new URL(location);url.searchParams.set('match',id);if(watch)url.searchParams.set('spectate','1');else url.searchParams.delete('spectate');url.hash='';window.history.replaceState({},'',url);
   const epoch=generation,loaded=await request(`/api/games/${id}/map`,'GET',undefined,watch?null:identity?.token);
   if(epoch!==generation || matchId!==id)return;
-  map=loaded;initMap();attackSelections.clear();plannedDestination=null;mapReadyFor=id;
+  map=loaded;initMap();mapReadyFor=id;
   await poll();
 }
 async function poll(){
@@ -246,7 +208,7 @@ async function poll(){
     }
     if(!state.hasMore)messageCatchupComplete=true;
     announce(liveDeclarations);sounds.update(state,liveDeclarations,live);
-    setConnection(state.status==='finished'?'Review':'Live');render();renderFeed(live);
+    setConnection(state.status==='finished'?'Review':'Live');render();renderFeed(live);renderCard();coach();
   }catch(e){if(e.name!=='AbortError' && epoch===generation){setConnection('Reconnecting');toast(e.message,true);}}
   finally{if(polling===epoch)polling=false;}
 }
@@ -254,7 +216,7 @@ async function command(action){
   if(!matchId || pendingCommand || spectating || !state?.you)return null;
   pendingCommand=true;const epoch=generation,room=matchId;
   const payload={opId:operationId(),action};
-  if(state)renderOrders();
+  if(state)renderCard();
   try {
     let result;
     // A transport failure can be retried with exactly the same operation ID.
@@ -263,148 +225,116 @@ async function command(action){
     catch(error){if(error.status || epoch!==generation)throw error;result=await request(`/api/games/${room}/actions`,'POST',payload);}
     if(epoch!==generation)return null;
     sounds.order(action);await poll();return result;
-  }finally{pendingCommand=false;if(epoch===generation && state)renderOrders();}
+  }finally{pendingCommand=false;if(epoch===generation && state)renderCard();}
 }
 const safely=fn=>async event=>{if(event?.type==='submit')event.preventDefault();try{await fn(event);}catch(e){toast(e.message,true);}};
+
+/* ── Map ── */
 function initMap(){
   $('faction-parade').innerHTML=map.countries.map(c=>`<span>${insignia(c.id)}<b>${esc(faction(c.id).short)}</b></span>`).join('');
   $('faction-choices').innerHTML=map.countries.map(c=>`<button type="button" data-country-seat="${c.id}" aria-pressed="false">${insignia(c.id)}<b>${esc(faction(c.id).short)}</b><small>${c.start.length} holdings</small></button>`).join('');
-  $('scoreboard').innerHTML=map.countries.map(c=>`<button type="button" class="country-card" data-country-focus="${c.id}" style="--country:${c.color}"></button>`).join('');
   atlas?.destroy();
   const previous=$('map'),replacement=previous.cloneNode(false);previous.replaceWith(replacement);
-  // The atlas key (legend + Political/Diplomacy toggle) mounts in the camera cluster, beside the buttons.
-  atlas=new Atlas(replacement,map,selectProvince,{legend:{placement:'bottom-left',container:$('map-key'),collapsed:compactScreen.matches}});
+  // The map key (legend + Political/Diplomacy toggle) lives in the ☰ menu.
+  atlas=new Atlas(replacement,map,selectProvince,{legend:{placement:'bottom-left',container:$('map-key'),collapsed:false},
+    drag:{start:(id,{counter})=>active() && prov(id)?.owner===state.you && (counter || sources.includes(id)) && freeTroops(id)>0,
+      begin:from=>{sources=[from];target=null;armyId=null;proposing=false;paintMap();},
+      label:(from,to)=>`${amountFor(from)} · ${state.travelTimes?.[from]?.[to] ?? '?'}s`,
+      end:(from,to)=>{sources=[from];target=to;armyId=null;openCard('province',to || from);paintMap();revealUnderCard(to || from);}},
+    onArmy:id=>{const a=state?.armies.find(a=>a.id===id);if(!a)return false;armyId=id;sources=[];target=null;openCard('army',id);paintMap();return true;}});
   $('landing-map').innerHTML=map.provinces.map(p=>`<path d="${p.path}"/>`).join('');
 }
-/** Screen insets (px) covered by the HUD, rail and open panel, so a camera move can centre the target in the
- * map area that is actually visible. Passed as an optional trailing argument; the atlas may ignore it. */
+/** Screen insets (px) covered by the HUD, rail and open card, so a camera move centres the target in the
+ * map area that is actually visible (passed as the atlas's optional trailing argument). */
 function view(){
   const stage=$('stage').getBoundingClientRect(),box=sel=>{const e=document.querySelector(sel);return e?.checkVisibility()?e.getBoundingClientRect():null;};
-  const hud=box('.hud-bar'),rail=box('.right-rail') || box('#world-feed:not(.collapsed)'),panel=box('#command-panel'),nav=box('#hud-rail');
-  const bottom=Math.max(nav && nav.top>stage.height/2?stage.bottom-nav.top:0,panel && panel.width>stage.width*.8?stage.bottom-panel.top:0);
-  return {insets:{top:hud?hud.bottom-stage.top:0,right:rail && rail.left>stage.width/2?stage.right-rail.left:0,
-    left:panel && panel.width<=stage.width*.8?panel.right-stage.left:0,bottom}};
+  const hud=box('.hud-bar'),board=box('#leaderboard'),rail=compact.matches?null:box('.right-rail'),panel=box('#card'),ticker=box('#world-feed');
+  const sheet=panel && panel.width>stage.width*.8;
+  const top=Math.max(hud?hud.bottom-stage.top:0,compact.matches && board?board.bottom-stage.top:0);
+  const bottom=Math.max(sheet?stage.bottom-panel.top:0,compact.matches && ticker && ticker.top>stage.height/2?stage.bottom-ticker.top:0);
+  return {insets:{top,right:rail && rail.left>stage.width/2?stage.right-rail.left:0,left:panel && !sheet?panel.right-stage.left:0,bottom}};
 }
-function focusCountry(){if(state?.you)atlas.home(state.you,view());}
-function selectProvince(id,modifiers={}){
-  if(!state)return;
-  const p=state.provinces.find(p=>p.id===id);inspected=id;
-  const own=p.owner===state.you && state.you;
-  if(own && (modifiers.shiftKey || !source || source===id)){
-    source=source===id && !modifiers.shiftKey?null:id;destination=null;
-    if(source)$('amount').value=Math.max(1,Math.floor(availableTroops()/2));
-  }else if(source && place(source).neighbors.includes(id))destination=id;
-  else if(own){source=id;destination=null;$('amount').value=Math.max(1,Math.floor(availableTroops()/2));}
-  // The map is the selector: a province click opens its context panel (never in the lobby).
-  if(state.status==='running')openPanel('orders');
-  renderOrders();paintMap();$('orders-tab').scrollTop=0;
-}
-function availableTroops(){
-  const p=state?.provinces.find(p=>p.id===source);
-  const reserved=state?.commandBudget?.reserved.filter(o=>['move','develop'].includes(o.type) && o.from===source).reduce((n,o)=>n+o.amount,0) || 0;
-  return Math.max(0,(p?.troops || 0)-reserved-1);
+/** Home: your country, close enough on phones to drag from a province counter. */
+function focusCountry(){if(state?.you)atlas.home(state.you,{...view(),width:compact.matches?Math.max(120,$('stage').clientWidth/2.8):undefined});}
+/** Phones: if the bottom sheet now covers the chosen province, pan (no zoom) so it sits above the sheet. */
+function revealUnderCard(id){
+  requestAnimationFrame(()=>{
+    const marker=document.querySelector(`#marker-${CSS.escape(id)} .counter-body`),box=$('card');if(!marker || box.hidden)return;
+    const m=marker.getBoundingClientRect(),c=box.getBoundingClientRect();
+    if(m.bottom>c.top-8 && m.left<c.right && m.right>c.left)atlas.inset(place(id),view().insets);
+  });
 }
 function paintMap(){
-  if(!state)return;atlas.update(state,source,destination);
+  if(!state)return;
+  atlas.update(state,sources[0] || null,target);
+  const plan=card?.kind==='province' && target && sources.length?orderPlan():null;
+  atlas.setDraft(plan?{sources,to:target,label:plan.arrowLabel}:null);
 }
-function closeMenu(focus=false){
-  if($('hud-menu').hidden)return;
-  $('hud-menu').hidden=true;$('menu-button').setAttribute('aria-expanded','false');if(focus)$('menu-button').focus();
+function freeTroops(id) {
+  const p=prov(id);
+  const reserved=(state.commandBudget?.reserved || []).filter(o=>o.from===id && ['move','transit','develop'].includes(o.type)).reduce((n,o)=>n+o.amount,0);
+  return Math.max(0,(p?.troops || 0)-reserved-1);
 }
-function openMenu(){$('hud-menu').hidden=false;$('menu-button').setAttribute('aria-expanded','true');$('hud-menu').querySelector('button').focus();}
-const SHEETS=['peek','half','full'];
-function setSheet(size){
-  const panel=$('command-panel');panel.dataset.sheet=size;panel.style.height='';
-  const next=SHEETS[(SHEETS.indexOf(size)+1)%SHEETS.length];
-  $('sheet-handle').setAttribute('aria-label',`Panel size: ${size}. Press to ${next==='peek'?'collapse':'expand'}; arrow keys resize.`);
+const amountFor=id=>{const free=freeTroops(id);return free>0?Math.max(1,Math.floor(free*fraction)):0;};
+
+/** Tap/click/Enter on a province. Tap-tap fallback of the drag: your province, then a neighbour.
+ * With a target chosen, tapping more of your provinces beside it adds (or removes) them as sources. */
+function selectProvince(id,modifiers={}){
+  if(!state)return;
+  const p=prov(id),mine=active() && p.owner===state.you;
+  armyId=null;proposing=false;
+  if(modifiers.shiftKey && mine){sources=[id];target=null;}
+  else if(target===id || (!target && sources.length===1 && sources[0]===id)){closeCard({restoreFocus:false});return;}
+  else if(target && mine && neighbours(id).includes(target)){
+    sources=sources.includes(id)?sources.filter(s=>s!==id):[...sources,id];
+    if(!sources.length)sources=[id];
+  }
+  else if(sources.length===1 && !target && neighbours(sources[0]).includes(id))target=id;
+  else if(mine){sources=[id];target=null;}
+  else{
+    // Target first: the best-placed of your neighbouring provinces is proposed as the source.
+    const donors=active()?state.provinces.filter(q=>q.owner===state.you && neighbours(q.id).includes(id) && freeTroops(q.id)>0).sort((a,b)=>freeTroops(b.id)-freeTroops(a.id)):[];
+    sources=donors.length?[donors[0].id]:[];target=id;
+  }
+  openCard('province',target || sources[0] || id);paintMap();revealUnderCard(target || sources[0] || id);
+  if(modifiers.keyboard && target && !$('primary')?.disabled)$('primary')?.focus();
 }
-function syncPanelButtons(){
-  for(const button of document.querySelectorAll('#hud-rail [data-tab]'))button.setAttribute('aria-expanded',String(panelOpen && tab===button.dataset.tab));
-}
-/** Open the command panel on `name`. `focus` moves focus into it (HUD buttons); map clicks never steal focus. */
-function openPanel(name,{focus=false,size}={}){
-  const panel=$('command-panel'),wasOpen=panelOpen;
-  if(focus && !panel.contains(document.activeElement))panelOpener=document.activeElement;
-  if(tab!==name)$(`${name}-tab`).scrollTop=0;
-  tab=name;panelOpen=true;panel.hidden=false;panel.dataset.tab=name;
-  for(const current of ['orders','council'])$(`${current}-tab`).hidden=current!==name;
-  // Diplomacy reads best tall; a map selection starts as a peek so the map stays visible.
-  setSheet(size || (name==='orders'?(wasOpen?panel.dataset.sheet:state?.you?'peek':'half'):'full'));
-  syncPanelButtons();
-  if(state){renderPanelTitle();renderCommandFooter();}
-  if(focus)$('panel-title').focus();
-}
-function closePanel({restoreFocus=false}={}){
-  const panel=$('command-panel'),inside=panel.contains(document.activeElement);
-  if(!panelOpen)return;
-  panelOpen=false;panel.hidden=true;syncPanelButtons();
-  if(tab==='orders'){source=null;destination=null;inspected=null;if(state){renderOrders();paintMap();}}
-  if((restoreFocus || inside) && panelOpener?.isConnected && panelOpener.checkVisibility())panelOpener.focus();
-  panelOpener=null;
-}
-function togglePanel(name){if(panelOpen && tab===name)closePanel({restoreFocus:true});else openPanel(name,{focus:true,size:name==='orders'?'half':undefined});}
-function renderPanelTitle(){
-  $('panel-title').textContent=tab==='council'?'Council':place(source || inspected)?.name || 'Orders';
-}
-function renderOrders(){
-  const scroll=$('orders-tab').scrollTop;
-  const mode=orderMode;
-  $('command-panel').dataset.orderMode=mode;
-  $('order-modes').hidden=false;
-  for(const button of document.querySelectorAll('[data-order-mode]'))button.setAttribute('aria-pressed',String(button.dataset.orderMode===mode));
-  const owned=state.provinces.filter(p=>p.owner===state.you && state.you);
-  if(source && !owned.some(p=>p.id===source)){source=null;destination=null;}
-  options('source',[{value:'',label:owned.length?'Choose your province…':'No controlled provinces'},...owned.map(p=>({value:p.id,label:`${place(p.id).name} · ${p.troops} troops`}))],source || '');
-  const neighbors=source?place(source).neighbors:[];
-  if(destination && !neighbors.includes(destination))destination=null;
-  options('destination',[{value:'',label:'Choose a connected destination…'},...neighbors.map(id=>{const p=state.provinces.find(p=>p.id===id);return{value:id,label:`${place(id).name} · ${p.troops} · ${country(p.owner)?.name || 'Neutral'}`};})],destination || '');
-  $('commander-title').textContent=country(state.you)?.name || 'Observer';
-  setHTML($('commander-insignia'),insignia(state.you));
-  renderPanelTitle();
-  const active=state.status==='running' && myPlayer()?.eliminatedAt===null;
-  const available=availableTroops(),amount=Number($('amount').value),valid=Number.isSafeInteger(amount) && amount>0 && amount<=available;
-  const recovery=state.commandBudget?.nextRecoveryAt;
-  $('budget').textContent=state.commandBudget?`${state.commandBudget.remaining}/3 commands available${recovery!==null && recovery!==undefined?` · next in ${Math.max(0,recovery-state.tick)}s`:''}`:'Join a country in the lobby to play.';
-  const canCommand=active && source && !pendingCommand && state.commandBudget?.remaining>0;
-  const destinationOwner=state.provinces.find(p=>p.id===destination)?.owner;
-  // A target you may not attack yet: declare war and march in one order (solo), or call your coalition's vote.
-  const war=warPlan(destinationOwner),send=$('send-army');send.dataset.war=war?.mode || '';send.classList.toggle('war-primary',Boolean(war));
-  send.disabled=!destination || pendingCommand || (war?.mode==='vote'?!active:war?.mode==='voting' || !canCommand || !valid);
-  send.textContent=pendingCommand?'Sending order…':war?.mode==='declare'?`Declare war & march ${valid?amount:''} →`.replace('  ',' '):war?.mode==='vote'?`Call war vote on ${country(destinationOwner).name} →`:
-    war?.mode==='voting'?`War vote open · ${war.motion.fromYes.length}/${war.need} approvals`:valid && destination?`Commit ${amount} troops →`:'Commit army →';
-  $('amount').max=available;$('amount-slider').max=Math.max(1,available);$('amount-slider').value=Math.min(amount,Math.max(1,available));
-  $('amount-slider').disabled=!source || available===0;
-  for(const button of document.querySelectorAll('[data-fraction]'))button.disabled=!source || available===0;
-  const p=state.provinces.find(p=>p.id===source),target=state.provinces.find(p=>p.id===destination);
-  const friend=target?.owner && state.players.find(x=>x.id===target.owner)?.side===myPlayer()?.side;
-  $('set-route').disabled=!canCommand || !friend || p?.route===destination;
-  $('clear-route').disabled=!canCommand || !p?.route;
-  $('route-status').textContent=p?.route?`New recruits → ${place(p.route).name}. ${available} uncommitted troops remain here.`:'No local recruitment arrow set.';
-  const reserves=(state.insights?.routeReserves || []).filter(v=>v.available>=10).sort((a,b)=>b.available-a.available).slice(0,3);
-  setHTML($('route-reserves'), reserves.length?`<div class="route-reserve-note"><b>Reserves staying at arrow sources</b>${reserves.map(v=>`<p>${esc(place(v.province).name)}: ${v.available} available, not automatically forwarded.<br><button data-reserve-from="${v.province}" data-reserve-to="${v.to}">Draft transfer → ${esc(place(v.to).name)}</button></p>`).join('')}<small>A draft does not issue an order. Leave enough troops to defend.</small></div>`:'');
-  const inspectedId=destination || inspected || source, waves=state.armies.filter(a=>a.to===inspectedId).sort((a,b)=>a.arrivesAt-b.arrivesAt);
-  const previousBattle=history.filter(e=>e.type==='battle' && e.province===inspectedId).at(-1);
-  $('incoming-waves').hidden=!inspectedId;
-  if(inspectedId){const battle=state.battles?.find(b=>b.province===inspectedId);
-    setHTML($('incoming-waves'),`<h3>${esc(place(inspectedId).name)} · incoming waves</h3>${battle?`<p><b>Battle in progress</b> · ${state.armies.filter(a=>a.engaged && a.to===inspectedId).reduce((n,a)=>n+a.amount,0)} attackers against ${state.provinces.find(p=>p.id===inspectedId)?.troops || 0} defenders. Reinforcements and recalls can still change the fight.</p>`:''}${waves.length?waves.slice(0,4).map(a=>`<p>${a.amount} ${esc(country(a.country).name)} · ${a.returning?'returning':'marching'} · arrives ${time(a.arrivesAt)} (${a.arrivesAt-state.tick}s)</p>`).join(''):'<p>No armies committed to this destination.</p>'}${waves.length>4?`<p>Plus ${waves.length-4} later armies.</p>`:''}${previousBattle?`<p>Last battle ${time(previousBattle.tick)}: ${previousBattle.troops} survivors; ${esc(country(previousBattle.owner)?.name || 'neutral')} held afterward.</p>`:''}`);}
-  const inspectedProvince=state.provinces.find(p=>p.id===(inspected || source));
-  setHTML($('province-readout'),p?`<div><span>AVAILABLE</span><strong>${available}</strong></div><div><span>GARRISON</span><strong>${p.troops}</strong></div><div><span>RECRUIT IN</span><strong>${p.nextRecruit===null?'—':Math.max(0,p.nextRecruit-state.tick)+'s'}</strong></div>`:inspectedProvince?`<p><b>${esc(place(inspectedProvince.id).name)}</b><br>${esc(country(inspectedProvince.owner)?.name || 'Uncontrolled')} · ${inspectedProvince.troops} troops</p>`:'<p><b>Your next decision starts on the map.</b><br>Select a province you own, then a neighboring target. Nothing moves until you commit.</p>');
-  renderRelationBanner();
-  renderDevelopment(p,canCommand);
-  renderCoordination(owned,active);
-  renderTransit(active);
-  renderMarches(active);
-  renderCommandFooter();
-  if(mode==='march')updatePreview();
-  $('orders-tab').scrollTop=scroll;
-}
+
+/* ── Orders ── */
 /** How attacking `owner` works for this seat: null when a normal march is allowed. */
 function warPlan(owner){
   const me=myPlayer();if(!owner || !me || mayEnter(state.you,owner))return null;
   const team=state.players.filter(p=>p.side===me.side),motion=(state.diplomacy || []).find(m=>m.kind==='war' && m.status==='voting' && m.fromRoster.includes(state.you) && m.toRoster.includes(owner));
   const need=Math.floor(team.filter(p=>p.eliminatedAt===null).length/2)+1;
   return {mode:team.length===1?'declare':motion?'voting':'vote',motion,need,team:team.map(p=>p.id),
-    enemies:state.players.filter(p=>p.side===state.players.find(x=>x.id===owner)?.side).map(p=>p.id)};
+    enemies:state.players.filter(p=>p.side===playerOf(owner)?.side).map(p=>p.id)};
+}
+/** Everything the order card shows for the current sources → target, and its one primary action. */
+function orderPlan(){
+  const tp=prov(target),owner=tp?.owner || null,name=place(target).name,who=owner?faction(owner).short:null;
+  const parts=sources.map(from=>({from,free:freeTroops(from),amount:amountFor(from),travel:state.travelTimes?.[from]?.[target] ?? 0}));
+  const total=parts.reduce((n,s)=>n+s.amount,0),travel=Math.max(0,...parts.map(s=>s.travel)),war=warPlan(owner);
+  const relation=!owner?'unclaimed':owner===state.you?'own':sameSide(state.you,owner)?'ally':war?'neutral':state.rules.warRequired?'enemy':'open';
+  const words={unclaimed:['UNCLAIMED','No declaration needed.'],own:['YOUR PROVINCE','Move troops within your land.'],ally:['ALLIED',`Troops you send become ${who}’s.`],
+    enemy:['AT WAR','You can attack.'],open:['HOSTILE','This room needs no declaration: you can attack.'],
+    neutral:['NOT AT WAR',war?.mode==='declare'?`Sending troops declares war on ${who}${war.enemies.length>1?' and its allies':''}.`:war?.mode==='voting'?`War vote open: ${war.motion.fromYes.length}/${war.need} approvals, ${Math.max(0,war.motion.expiresAt-state.tick)}s left.`:'Your alliance must vote for war before anyone attacks.']}[relation];
+  const budget=state.commandBudget?.remaining ?? 0,recovery=state.commandBudget?.nextRecoveryAt;
+  let label,kind='send',danger=false,disabled=!active() || pendingCommand;
+  if(relation==='own' || relation==='ally')label=`Reinforce ${name} with ${total}`;
+  else if(war?.mode==='declare'){label=`Declare war on ${who} & send ${total}`;kind='declare';danger=true;}
+  else if(war?.mode==='vote'){label=`Call war vote on ${who}`;kind='vote';danger=true;}
+  else if(war?.mode==='voting'){label=`War vote open · ${war.motion.fromYes.length}/${war.need} approvals`;kind='voting';disabled=true;}
+  else if(owner)label=`Attack ${name} with ${total}`;
+  else label=`Send ${total} → ${name}`;
+  let why='';
+  if(kind!=='vote' && kind!=='voting'){
+    if(!sources.length){disabled=true;why=`None of your provinces borders ${name}.`;}
+    else if(!total){disabled=true;why='No free troops: one must stay home.';}
+    else if(budget<=0){disabled=true;why=`Command limit reached${recovery!=null?`: next order in ${Math.max(0,recovery-state.tick)}s`:''}.`;}
+  }
+  if(pendingCommand)label='Sending order…';
+  const preview=sources.length && kind!=='vote' && kind!=='voting'?`${total} vs ${tp.troops} ${relation==='own' || relation==='ally'?'there now':'defenders'} · arrives in ${travel+1}s (${time(state.tick+travel+1)})`:'';
+  return {parts,total,travel,war,relation,words,label,kind,danger,disabled,why,preview,owner,arrowLabel:`${total} · ${travel+1}s`};
 }
 /** "Declare war on X?" with the real consequences: the whole target side, and who votes for a coalition. */
 function confirmWar(owner,amount,plan){
@@ -412,230 +342,324 @@ function confirmWar(owner,amount,plan){
   const extra=el('div','war-confirm');extra.append(list(plan.mode==='declare'?'You will be at war with':'Your coalition would be at war with',plan.enemies));
   if(plan.enemies.length>1)extra.append(el('p','small',`${country(owner).name}’s allies join the war against you.`));
   if(plan.mode==='declare'){
-    extra.append(el('p','small','You are independent: the declaration takes effect at once and the march is sent in the same order. If the march cannot be sent, no war is declared.'));
-    return confirmAction({title:`Declare war on ${country(owner).name}?`,message:`March ${amount} troops from ${place(source).name} to ${place(destination).name} and declare war.`,accept:`Declare war & march ${amount} troops`,extra});
+    extra.append(el('p','small','You are independent: the declaration takes effect at once and the troops are sent in the same order. If they cannot be sent, no war is declared.'));
+    return confirmAction({title:`Declare war on ${country(owner).name}?`,message:amount?`Send ${amount} troops to ${place(target)?.name} and declare war.`:'Both sides may attack each other from now on.',accept:amount?`Declare war & send ${amount}`:'Declare war',extra});
   }
   extra.append(list('Your coalition votes',plan.team));
-  extra.append(el('p','small',`A majority (${plan.need} of ${plan.team.length}) must approve within ${state.rules.diplomacyLife ?? 60} game seconds. No troops march now; once war is approved, March works normally. Your allies are drawn in.`));
+  extra.append(el('p','small',`A majority (${plan.need} of ${plan.team.length}) must approve within ${state.rules.diplomacyLife ?? 60} game seconds. No troops march now; once war is approved, sending works normally. Your allies are drawn in.`));
   return confirmAction({title:`Call a war vote on ${country(owner).name}?`,message:'Your coalition decides together.',accept:'Call war vote',extra});
 }
-function freeTroops(id) {
-  const p=state.provinces.find(p=>p.id===id);
-  const reserved=(state.commandBudget?.reserved || []).filter(o=>o.from===id && ['move','transit','develop'].includes(o.type)).reduce((n,o)=>n+o.amount,0);
-  return Math.max(0,(p?.troops || 0)-reserved-1);
-}
-function renderTransit(active){
-  const sourceProvince=state.provinces.find(p=>p.id===source);
-  const vias=sourceProvince && myPlayer()?.side ? map.provinces.find(p=>p.id===source)?.neighbors.filter(id=>{
-    const owner=state.provinces.find(p=>p.id===id)?.owner;
-    return owner && owner!==state.you && state.players.find(p=>p.id===owner)?.side===myPlayer().side;
-  }) || [] : [];
-  $('transit-panel').hidden=orderMode!=='march' || !vias.length || !active;
-  if($('transit-panel').hidden)return;
-  options('transit-via',vias.map(id=>({value:id,label:place(id).name})),$('transit-via').value);
-  const via=$('transit-via').value;
-  const destinations=(map.provinces.find(p=>p.id===via)?.neighbors || []).filter(id=>id!==source && mayEnter(state.you,state.provinces.find(p=>p.id===id)?.owner));
-  options('transit-to',destinations.map(id=>({value:id,label:`${place(id).name} · ${country(state.provinces.find(p=>p.id===id)?.owner)?.name || 'Neutral'}`})),$('transit-to').value);
-  const amount=Number($('transit-amount').value);
-  $('transit-send').disabled=!destinations.length || pendingCommand || !state.commandBudget?.remaining || !Number.isSafeInteger(amount) || amount<1 || amount>freeTroops(source);
-}
-function renderDevelopment(p,canCommand) {
-  const panel=$('development-panel');panel.hidden=orderMode!=='develop' || !p;
-  if(panel.hidden)return;
-  const level=p.development,cost=state.rules.developmentCosts[level],duration=state.rules.developmentTicks[level];
-  $('industry-level').textContent=`Industry ${'ⅠⅡⅢ'[level-1]} · ${level*60/state.rules.recruit} recruits / min`;
-  const queued=state.commandBudget?.reserved.some(o=>o.type==='develop' && o.from===p.id);
-  $('development-status').textContent=p.developing?`Level ${p.developing.level} completes in ${Math.max(0,p.developing.completesAt-state.tick)} game seconds. Capture destroys unfinished work.`:
-    queued?'Investment reserved; construction starts next tick.':level===state.rules.maxDevelopment?'Fully developed. Completed industry passes to whoever captures this province.':
-    `Invest ${cost} local manpower; build for ${duration}s. Gain +1 recruit every ${state.rules.recruit}s. No second currency.`;
-  const forecast=developmentForecast(state,p.id);
-  $('development-payback').hidden=!forecast;
-  if(forecast)$('development-payback').textContent=`${forecast.alreadyInvested?'Investment already spent. ':''}Earliest manpower payback: ${time(forecast.paybackAt)} game time (${time(forecast.secondsToPayback)} from now). Up to ${forecast.additionalRecruits} extra recruits by 30:00; net ${signed(forecast.netBeforeDeadline)} after this upgrade’s cost. ${forecast.paysBackBeforeDeadline?'':'This will not repay before the deadline. '}${forecast.assumption}`;
-  $('develop-province').hidden=level===state.rules.maxDevelopment;
-  $('develop-province').disabled=!canCommand || queued || Boolean(p.developing) || freeTroops(p.id)<cost;
-  $('develop-province').textContent=`Develop · ${cost ?? 0} manpower`;
-}
-function renderCoordination(owned,active) {
-  const panel=$('coordination-panel');panel.hidden=orderMode!=='coordinate';
-  if(panel.hidden)return;
-  if(plannedDestination!==destination){$('attack-plan').textContent='';attackSelections.clear();plannedDestination=destination;if(source)attackSelections.set(source,{percent:Number($('group-percent').value)});}
-  const donors=destination?owned.filter(p=>place(p.id).neighbors.includes(destination)):[];
-  for(const id of attackSelections.keys())if(!donors.some(p=>p.id===id))attackSelections.delete(id);
-  $('coordinate-target').textContent=destination?`Target: ${place(destination).name}`:'Choose a target in the Orders controls first.';
-  const editing=document.activeElement?.closest('#attack-sources');
-  if(!editing)setHTML($('attack-sources'),donors.map(p=>{
-    const selection=attackSelections.get(p.id),available=freeTroops(p.id),amount=selection?.amount ?? Math.floor(available*(selection?.percent ?? Number($('group-percent').value))/100);
-    return `<div class="attack-source"><label><input type="checkbox" data-attack-source="${p.id}" ${selection?'checked':''}><span>${esc(place(p.id).name)}<small>${available} available · ${state.travelTimes[p.id][destination]}s travel</small></span></label><input type="number" data-attack-amount="${p.id}" value="${amount}" min="1" max="${available}" aria-label="Troops from ${esc(place(p.id).name)}" ${selection?'':'disabled'}></div>`;
-  }).join('') || '<p class="small muted">No connected source provinces selected.</p>');
-  const selected=[...attackSelections].filter(([id])=>donors.some(p=>p.id===id));
-  const maxTravel=selected.length?Math.max(...selected.map(([id])=>state.travelTimes[id][destination])):0;
-  const earliest=state.tick+1+maxTravel;
-  const total=selected.reduce((n,[id,value])=>n+(value.amount ?? Math.floor(freeTroops(id)*value.percent/100)),0);
-  const warBlocked=destination && !mayEnter(state.you,state.provinces.find(p=>p.id===destination)?.owner);
-  $('attack-summary').textContent=warBlocked?'Declare war in the Council before attacking this country.':selected.length?`${selected.length} sources · ${total} troops · earliest arrival ${time(earliest)}. Nearby sources wait before dispatch. Waiting troops remain vulnerable at home.`:'Choose the provinces that will take part.';
-  const valid=selected.every(([id,value])=>{const amount=value.amount ?? Math.floor(freeTroops(id)*value.percent/100);return Number.isSafeInteger(amount)&&amount>0&&amount<=freeTroops(id);});
-  if(selected.length && !valid)$('attack-summary').textContent='Each selected source needs a positive, available troop amount. Adjust the draft or uncheck that source.';
-  $('coordinate-commit').disabled=!active || !selected.length || !valid || warBlocked || pendingCommand || !state.commandBudget?.remaining;
-  $('coordinate-preview').disabled=!active || !selected.length || warBlocked || pendingCommand;
-}
-function attackAction() {
-  const sources=[...attackSelections].map(([from,amount])=>({from,...amount}));
-  const requested=$('shared-arrival').value.trim();let arriveAt;
-  if(requested){
-    if(!/^\d{1,2}:\d{2}$/.test(requested))throw new Error('Use game-clock MM:SS for a shared arrival, or leave it blank.');
-    const [minutes,seconds]=requested.split(':').map(Number);if(seconds>59)throw new Error('Seconds must be 00–59.');
-    arriveAt=minutes*60+seconds;
-  }
-  return {type:'attack',to:destination,sources,...(arriveAt!==undefined?{arriveAt}:{})};
-}
-function renderMarches(active) {
-  const canRecall=active && !pendingCommand && state.commandBudget?.remaining;
-  const moving=state.armies.filter(a=>a.country===state.you).sort((a,b)=>a.arrivesAt-b.arrivesAt);
-  const reserved=state.commandBudget?.reserved || [];
-  const recallButton=(id,label)=>`<button type="button" data-recall="${id}" ${canRecall?'':'disabled'}>${label}</button>`;
-  const queued=reserved.map(o=>`<div class="march-row"><span>${o.type==='recall'?'Recall queued':o.type==='develop'?'Construction queued':`${o.amount || ''} · ${esc(place(o.from)?.name || '')}`}<small>${o.executeAt-state.tick}s until ${o.type==='move'?'departure':'execution'}</small></span>${o.type==='move'?recallButton(o.id,'Cancel'):''}</div>`).join('');
-  const groups=[...new Set([...moving,...reserved].filter(a=>a.groupId&&!a.returning).map(a=>a.groupId))];
-  const groupControls=groups.filter(id=>[...moving,...reserved].filter(a=>a.groupId===id&&!a.returning).length>1).map(id=>`<div class="march-row"><span>Coordinated attack<small>${esc(id)}</small></span>${recallButton(id,'Recall group')}</div>`).join('');
-  const marches=moving.map(a=>`<div class="march-row ${a.returning?'returning':''}"><button class="march-focus" data-focus="${a.to}"><b>${a.amount}</b> ${a.returning?'↶':'→'} ${esc(place(a.to).name)}<small>${a.returning?'Returning · ':''}arrives ${time(a.arrivesAt)} · ${Math.max(0,a.arrivesAt-state.tick)}s</small></button>${!a.returning?recallButton(a.id,'Recall'):''}</div>`).join('');
-  setHTML($('march-list'),queued || marches?`<h3>Committed orders <span>${moving.length+reserved.length}</span></h3><div class="march-scroll">${groupControls}${queued}${marches}</div><p class="small muted">Recall turns an army around next tick. The return trip is not instant; a captured home must be retaken.</p>`:'');
+async function sendOrder(){
+  const plan=orderPlan();if(plan.disabled)return;
+  if(plan.kind==='vote'){if(!await confirmWar(plan.owner,0,plan.war))return;const r=await command({type:'declare_war',country:plan.owner});if(r)toast(r.status==='enacted'?'War declared.':'War vote opened for your coalition.');return;}
+  if(plan.kind==='declare' && !await confirmWar(plan.owner,plan.total,plan.war))return;
+  const declare=plan.kind==='declare'?{declareWar:true}:{};
+  // One order, one opId: declare war and march together, or neither (the engine validates both).
+  const parts=plan.parts.filter(s=>s.amount>0),to=target;
+  const action=parts.length===1?{type:'move',from:parts[0].from,to,amount:parts[0].amount,...declare}:{type:'attack',to,sources:parts.map(s=>({from:s.from,amount:s.amount})),...declare};
+  const r=await command(action);if(!r)return;
+  toast(`${plan.kind==='declare'?'War declared. ':''}Sent ${plan.total} → ${place(to).name}. Arrives ${time(r.arrivesAt ?? r.executeAt+plan.travel)}.`);
+  closeCard();
 }
 async function updatePreview(){
-  if(!source || !destination || !state){previewKey='';previewVersion++;$('preview').textContent='Select a source and destination to see the current-garrison result.';return;}
-  const amount=Number($('amount').value),key=[matchId,state.tick,source,destination,amount].join('|');
-  if(key===previewKey)return;previewKey=key;const version=++previewVersion,epoch=generation;
+  const box=$('order-details');if(!box)return;
+  if(sources.length!==1 || !target){previewKey='';box.textContent=sources.length>1?'Several sources: they wait at home and arrive together.':'';return;}
+  const amount=amountFor(sources[0]),key=[matchId,state.tick,sources[0],target,amount].join('|');
+  if(key===previewKey || !amount)return;previewKey=key;const version=++previewVersion,epoch=generation;
   try{
-    const result=await request(`/api/games/${matchId}/preview?from=${source}&to=${destination}&amount=${amount}`);
+    const result=await request(`/api/games/${matchId}/preview?from=${sources[0]}&to=${target}&amount=${amount}`);
     if(key!==previewKey || version!==previewVersion || epoch!==generation)return;
-    $('preview').innerHTML=`${esc(result.summary)}<small>${result.remaining} uncommitted troops stay home · ${result.travelTicks}s travel · arrives ${time(result.arrivesAt)}${result.reserved?` · ${result.reserved} already reserved`:''}. ${result.incoming.length} known incoming armies. Future orders and recruitment can change the result.</small>`;
-  }catch(e){if(key===previewKey && version===previewVersion && epoch===generation)$('preview').textContent=e.message;}
+    $('order-details').innerHTML=`${esc(result.summary)}<small>${result.remaining} uncommitted troops stay home · ${result.travelTicks}s travel · arrives ${time(result.arrivesAt)}${result.reserved?` · ${result.reserved} already reserved`:''}. ${result.incoming.length} known incoming armies. Future orders and recruitment can change the result.</small>`;
+  }catch(e){if(key===previewKey && version===previewVersion && epoch===generation)$('order-details').textContent=e.message;}
 }
-function forecastHTML(f) {
-  return `<div class="coalition-forecast"><strong>${f.economy}/${f.totalEconomy} industry (${f.threshold} for victory) after admission</strong><br>${f.wouldDraw?'Every starting player: negotiated draw, not a win.':f.wouldStartHold?`Already above the threshold. Activation would start a fresh ${state.rules.hold}s victory hold.`:`${f.remaining} more industry needed to start the victory hold.`}<table><caption class="sr-only">Each member’s new prize share</caption><tbody>${f.members.map(p=>`<tr><td>${esc(country(p.country).name)}<br>${p.keepsMaturity?'Keeps earned tenure':'Maturity resets'}</td><td>${p.maximumShare.toFixed(1)} maximum points<br>${signed(p.fullMaturityPrestige)} Prestige at full maturity</td></tr>`).join('')}</tbody></table><small>${esc(f.assumption)}</small></div>`;
+
+/* ── The context card ── */
+function openCard(kind,id=null,{size,focus=false,compose=false}={}){
+  const box=$('card'),same=card?.kind===kind && card?.id===id;
+  if(focus && !box.contains(document.activeElement))cardOpener=document.activeElement;
+  if(kind!=='province' && kind!=='army'){sources=[];target=null;armyId=kind==='army'?id:null;}
+  if(kind!=='country' || !same)proposing=false;
+  card={kind,id};box.hidden=false;
+  const allied=myPlayer() && !myPlayer().side.startsWith('solo:');
+  cardSize=size || (same?cardSize:kind==='country' || kind==='alliance' && allied?'full':'peek');
+  if(compact.matches && worldFeed.open)worldFeed.setOpen(false); // phones: one sheet at a time
+  renderCard();
+  if(kind==='country' || kind==='alliance')atlas?.setRelationFocus?.(kind==='country'?id:state?.you || null);
+  if(compose && !$('composer').hidden)$('composer-text').focus({preventScroll:true});
+  else if(focus)$('card-title').focus({preventScroll:true});
 }
-function renderCouncil(){
-  const me=myPlayer(),team=state.sides.find(s=>s.id===me?.side),projection=state.projections.find(p=>p.country===state.you);
-  $('coalition-info').innerHTML=me?`<p><b>${esc(namedSide(me.side))}</b></p>${team.members.map(id=>{const p=state.projections.find(p=>p.country===id);return`<div class="coalition-member"><span>${esc(country(id).name)}</span><span>${Math.round(p.maturity*100)}% earned<br><small>${signed(p.projectedPrestige)} if victorious</small></span></div>`;}).join('')}<p class="small muted">Maximum slice: ${projection.maximumShare.toFixed(1)} points. Unearned points disappear; they are not redistributed.</p>`:'<p class="muted">Observers cannot negotiate formal membership.</p>';
-  const independent=state.players.filter(p=>p.id!==state.you && p.eliminatedAt===null && p.side.startsWith('solo:'));
-  options('ally-choice',independent.map(p=>({value:p.id,label:`${country(p.id).name} · ${p.name}`})),$('ally-choice').value);
-  $('alliance-form').hidden=!me || me.eliminatedAt!==null || !independent.length;
-  const candidate=$('ally-choice').value;
-  setHTML($('admission-cost'),me && candidate?forecastHTML(coalitionForecast(state,[...team.members,candidate],me.side.startsWith('solo:')?null:me.side)):'');
-  $('leave-alliance').hidden=!me || me.side.startsWith('solo:') || me.eliminatedAt!==null;
-  const awaiting=(state.diplomacy || []).filter(m=>m.status==='voting' && m.fromRoster.includes(state.you) && !m.fromYes.includes(state.you) ||
-    m.status==='offered' && m.toRoster.includes(state.you) && !m.toYes.includes(state.you)).length;
-  const matters=state.proposals.filter(q=>q.status==='open' && q.roster.includes(state.you) && !q.accepted.includes(state.you)).length+awaiting;
-  $('offer-count').textContent=matters || '';
-  const offerHTML=state.proposals.filter(q=>q.roster.includes(state.you) || q.status==='pending').map(q=>{
-    const voters=q.roster.filter(id=>state.players.find(p=>p.id===id).eliminatedAt===null);
-    const slice=100*state.players.length/q.roster.length;
-    return `<div class="offer"><strong>${esc(q.name)}</strong><p>${q.roster.map(id=>esc(country(id).name)).join(' + ')}</p><p class="offer-terms">${q.roster.length===state.players.length?'All players joining means a draw, not a win.':`Maximum slice: ${slice.toFixed(1)} points each. New membership starts at 0% earned.`}</p>${forecastHTML(coalitionForecast(state,q.roster,q.coalition,q.activateAt ?? state.tick+state.rules.notice))}<small>${q.status==='pending'?`Active in ${q.activateAt-state.tick}s`:`${q.accepted.length}/${voters.length} approvals · expires in ${q.expiresAt-state.tick}s`}</small>${q.status==='open' && q.roster.includes(state.you)?`<div class="button-row">${!q.accepted.includes(state.you)?`<button class="primary" data-accept="${esc(q.id)}">Accept terms</button>`:''}<button data-decline="${esc(q.id)}">${q.creator===state.you?'Withdraw':'Decline'}</button></div>`:''}</div>`;
-  }).join('')+state.departures.map(d=>`<p class="notice">${esc(country(d.country).name)} leaves in ${d.activateAt-state.tick}s.</p>`).join('');
-  setHTML($('offers'),offerHTML);
-  const opponents=state.players.filter(p=>p.id!==state.you && p.eliminatedAt===null && p.side!==me?.side);
-  options('diplomacy-target',opponents.map(p=>({value:p.id,label:country(p.id).name})),$('diplomacy-target').value);
-  const opponent=$('diplomacy-target').value,war=atWar(state.you,opponent);
-  $('declare-war').disabled=!me || me.eliminatedAt!==null || state.status!=='running' || !opponent || war || pendingCommand;
-  $('offer-peace').disabled=!me || me.eliminatedAt!==null || state.status!=='running' || !opponent || !war || pendingCommand;
-  $('war-status').innerHTML=me?`<p class="small">${opponents.filter(p=>atWar(state.you,p.id)).length?`At war with ${opponents.filter(p=>atWar(state.you,p.id)).map(p=>esc(country(p.id).name)).join(', ')}.`:'Your side is at peace.'}</p>`:'<p class="small muted">Join a country to negotiate war and peace.</p>';
-  const motions=(state.diplomacy || []).map(m=>{
-    const from=m.fromRoster.map(id=>country(id)?.name||id).join(' + '),to=m.toRoster.map(id=>country(id)?.name||id).join(' + ');
-    const source=m.status==='voting' && m.fromRoster.includes(state.you),target=m.status==='offered' && m.toRoster.includes(state.you);
-    const roster=source?m.fromRoster:m.toRoster,yes=source?m.fromYes:m.toYes;
-    const need=Math.floor(roster.filter(id=>state.players.find(p=>p.id===id)?.eliminatedAt===null).length/2)+1;
-    const label=m.kind==='war'?'War declaration':'Peace treaty';
-    return `<article class="diplomacy-motion"><strong>${label}</strong><p>${esc(from)} → ${esc(to)}</p><small>${m.status==='voting'?'Coalition vote':'Awaiting treaty acceptance'} · ${yes.length}/${need} approvals · ${Math.max(0,m.expiresAt-state.tick)}s left</small>${(source||target)&&!yes.includes(state.you)?`<button class="primary" data-vote-${m.kind}="${esc(m.id)}">${m.kind==='war'?'Approve declaration':'Accept peace'}</button>`:''}</article>`;
-  }).join('');
-  setHTML($('diplomacy-motions'),motions);
+function closeCard({restoreFocus=false}={}){
+  const box=$('card'),inside=box.contains(document.activeElement);
+  if(!card){clearSelection();if(state)paintMap();return;}
+  card=null;box.hidden=true;clearSelection();atlas?.setRelationFocus?.(null);
+  if(state)paintMap();
+  if((restoreFocus || inside) && cardOpener?.isConnected && cardOpener.checkVisibility())cardOpener.focus();
+  cardOpener=null;
 }
-/** DOM helper for new relation UI: player text (alliance names) only ever reaches textContent. */
-function el(tag,className,text){const e=document.createElement(tag);if(className)e.className=className;if(text!==undefined)e.textContent=text;return e;}
-function standards(ids){const span=el('span','chip-flags');span.innerHTML=ids.slice(0,3).map(insignia).join('');if(ids.length>3)span.append(el('small','',`+${ids.length-3}`));return span;} // authored SVG only
-const allianceOf=id=>{const side=state.players.find(p=>p.id===id)?.side;return side && !side.startsWith('solo:')?state.sides.find(s=>s.id===side):null;};
-const formingOf=id=>(state.proposals || []).find(q=>q.status==='pending' && q.roster.includes(id));
-/** HUD: who is with you (alliance colour) and who you are at war with, visible without opening anything. */
-function renderRelations(){
-  const me=myPlayer(),ally=$('ally-chip'),war=$('war-chip'),running=state.status==='running';
-  ally.hidden=!me || !running;war.hidden=!running;
-  const key=JSON.stringify([state.you,state.sides,state.wars,(state.proposals || []).filter(q=>q.status==='pending').map(q=>[q.id,q.roster,q.name,q.activateAt]),state.rules.warRequired]);
-  if(war.dataset.key===key)return;war.dataset.key=key;
-  if(me){
-    const alliance=allianceOf(me.id),forming=!alliance && formingOf(me.id);
-    const members=(alliance?alliance.members:forming?forming.roster:[]).filter(id=>id!==me.id);
-    const colors=allianceColors(state),color=alliance?colors[alliance.id]:forming?colors[forming.id]:null;
-    ally.dataset.state=alliance?'active':forming?'forming':'independent';ally.dataset.allies=members.join(',');
-    if(color)ally.style.setProperty('--band',color);else ally.style.removeProperty('--band');
-    ally.replaceChildren(el('span','chip-label',alliance?'Allied':forming?'Forming':'Independent'),...(members.length?[standards(members)]:[]),...(alliance || forming?[el('small','chip-name',(alliance || forming).name)]:[]));
-    ally.setAttribute('aria-label',alliance?`Allied in ${alliance.name} with ${members.map(id=>country(id).name).join(', ')}. Open the Council.`:forming?`Forming ${forming.name} with ${members.map(id=>country(id).name).join(', ')}; active in ${Math.max(0,forming.activateAt-state.tick)} game seconds. Open the Council.`:'Independent: no allies. Open the Council.');
+function setCardSize(size){cardSize=size;renderCard();}
+/** Build the card's parts. Each part re-renders only when its content key changes, so focus, the
+ * slider and a half-typed message survive polling. */
+function part(id,key,build){const e=$(id);if(e.dataset.key===key)return e;e.dataset.key=key;e.replaceChildren(...[build()].flat().filter(Boolean));return e;}
+function relationOf(id){
+  if(!state.you || spectating)return playerOf(id)?.eliminatedAt!=null?'fallen':'watch';
+  if(id===state.you)return 'you';
+  const p=playerOf(id);if(!p)return 'unclaimed';if(p.eliminatedAt!=null)return 'fallen';
+  if(sameSide(state.you,id))return 'ally';
+  if(relationsOf(state,state.you).enemies.includes(id))return state.rules.warRequired?'war':'open';
+  return (state.proposals || []).some(q=>q.status==='open' && q.roster.includes(state.you) && q.roster.includes(id))?'offer':'neutral';
+}
+const RELATION_WORDS={you:'YOU',ally:'ALLIED',war:'AT WAR',open:'HOSTILE',neutral:'NEUTRAL',offer:'ALLIANCE OFFER PENDING',fallen:'FALLEN',watch:'',unclaimed:'UNCLAIMED'};
+function ownerButton(id){
+  if(!id)return el('span','card-owner','No owner');
+  const b=button('',{openCountry:id},'card-owner');b.append(flag(id),el('span','',country(id).name));
+  const rel=relationOf(id);if(RELATION_WORDS[rel] && rel!=='you')b.append(el('b',`rel rel-${rel}`,RELATION_WORDS[rel]));
+  b.append(el('span','card-owner-go','›'));b.setAttribute('aria-label',`${country(id).name}${rel!=='you' && RELATION_WORDS[rel]?`, ${RELATION_WORDS[rel].toLowerCase()}`:''}: open diplomacy`);
+  return b;
+}
+function renderCard(){
+  const box=$('card');
+  if(!card || !state || state.status==='lobby'){if(card && state?.status==='lobby')closeCard();return;}
+  if(card.kind==='army' && !state.armies.some(a=>a.id===card.id)){closeCard();return;}
+  box.dataset.kind=card.kind;box.dataset.size=cardSize;box.dataset.relation='';
+  $('card-size').setAttribute('aria-expanded',String(cardSize==='full'));$('card-size').setAttribute('aria-label',cardSize==='full'?'Show less':'Show more');
+  const view={province:provinceCard,army:armyCard,country:countryCard,alliance:allianceCard}[card.kind]();
+  part('card-flag',JSON.stringify(view.flag),()=>view.flag?flag(view.flag):null);
+  $('card-title').textContent=view.title;
+  part('card-sub',JSON.stringify(view.subKey ?? view.sub),()=>view.sub);
+  part('card-status',JSON.stringify(view.statusKey ?? view.status),()=>view.status);
+  box.dataset.relation=view.relation || '';
+  $('card-size').hidden=!view.more;
+  $('card-body').hidden=cardSize!=='full' || !view.more;
+  if(!$('card-body').hidden)view.more();
+  // Dock: sources and amount (orders), a message box (diplomacy), then the actions.
+  const order=view.order;
+  $('sources').hidden=!order || order.parts.length<2 && !order.hint;
+  if(order)part('sources',JSON.stringify([order.parts.map(s=>[s.from,s.amount]),order.hint]),()=>[...(order.parts.length>1?order.parts.map(s=>{const b=button('',{removeSource:s.from},'source-chip');b.append(el('b','',String(s.amount)),el('span','',place(s.from).name),el('i','','×'));b.setAttribute('aria-label',`Remove ${place(s.from).name} (${s.amount} troops)`);return b;}):[]),...(order.hint?[el('small','sources-hint',order.hint)]:[])]);
+  $('amount-control').hidden=!order || order.kind==='vote' || order.kind==='voting' || !order.parts.length;
+  if(order){
+    const pct=Math.round(fraction*100);if(document.activeElement!==$('amount-slider'))$('amount-slider').value=String(pct);
+    $('amount-out').textContent=`${order.total} troops · ${pct}%`;
+    for(const b of document.querySelectorAll('[data-fraction]'))b.setAttribute('aria-pressed',String(Math.abs(Number(b.dataset.fraction)-fraction)<.001));
   }
-  const enemies=me?relationsOf(state,me.id).enemies:[],fronts=warsOf(state);
-  war.dataset.state=me?(enemies.length?'war':'peace'):(fronts.length?'war':'peace');war.dataset.enemies=enemies.join(',');
-  // Legacy rooms have no declarations: every non-ally is hostile (relations.js, like the engine).
-  const openRoom=!state.rules.warRequired;
-  const label=me?(enemies.length?(openRoom?'Open war':'At war'):'At peace'):openRoom?'Open war':fronts.length?`${fronts.length} ${fronts.length===1?'war':'wars'}`:'No wars';
-  war.replaceChildren(el('span','chip-swords',enemies.length || !me && (fronts.length || openRoom)?'⚔':'☮'),el('span','chip-label',label),...(enemies.length?[standards(enemies)]:[]));
-  war.setAttribute('aria-label',`${me && enemies.length?`At war with ${enemies.map(id=>country(id).name).join(', ')}`:label}${openRoom?' (this room needs no declaration to attack)':''}. Open the list of wars.`);
-}
-/** Council → Wars: every active war as side ⚔ side, with its start and your involvement. */
-function renderWars(){
-  const fronts=warsOf(state),list=$('war-list');
-  const key=JSON.stringify([fronts,state.you,history.length && history.filter(e=>e.type==='war_declared').length]);
-  if(list.dataset.key===key)return;list.dataset.key=key;
-  const declared=history.filter(e=>e.type==='war_declared');
-  const sideText=s=>s.name || s.countries.map(id=>country(id)?.name || id).join(' + ');
-  list.replaceChildren(...fronts.map(f=>{
-    const [a,b]=f.sides,li=el('li','war-front'),button=el('button','war-front-button');button.type='button';
-    button.dataset.frontA=a.countries.join(',');button.dataset.frontB=b.countries.join(',');button.dataset.pairs=f.pairs.map(pair=>pair.join(':')).join(' ');
-    const since=f.pairs.map(([x,y])=>declared.filter(e=>e.fromRoster.includes(x) && e.toRoster.includes(y) || e.fromRoster.includes(y) && e.toRoster.includes(x)).at(-1)?.tick).filter(t=>t!==undefined);
-    const involved=state.you && [...a.countries,...b.countries].includes(state.you);
-    const side=s=>{const span=el('span','war-side');span.append(standards(s.countries),el('span','war-names',sideText(s)));return span;};
-    button.append(side(a),el('b','war-swords','⚔'),side(b));
-    const meta=el('small','war-meta',since.length?`since ${time(Math.min(...since))}`:'at war');
-    if(involved)meta.append(el('strong','war-you',' · you are involved'));
-    button.append(meta);button.title='Show this front on the map';li.append(button);
-    if(involved)li.classList.add('involved');return li;
-  }));
-  if(!fronts.length)list.append(el('li','war-empty',state.rules.warRequired?'No wars: every country is at peace.':'This room needs no declaration: any non-ally may attack.'));
-}
-/** The selected province's owner relation, in the context card (visible even when peeking). */
-function renderRelationBanner(){
-  const banner=$('relation-banner'),id=destination || (inspected && inspected!==source?inspected:null) || (!state.you?inspected:null);
-  const p=state.provinces.find(v=>v.id===id),owner=p?.owner || null;
-  if(!p || owner && owner===state.you){banner.hidden=true;banner.dataset.key='';return;}
-  const me=myPlayer(),alliance=owner?allianceOf(owner):null,enemies=me?relationsOf(state,me.id).enemies:[];
-  const kind=!me?'watch':!owner?'unclaimed':state.players.find(x=>x.id===owner)?.side===me.side?'ally':enemies.includes(owner)?(state.rules.warRequired?'enemy':'open'):'neutral';
-  const [title,detail]={watch:[owner?'OWNER':'UNCLAIMED',''],unclaimed:['UNCLAIMED','No declaration needed to march in.'],ally:['ALLIED','Reinforce or pass through; troops you send become theirs.'],
-    enemy:['AT WAR','You can attack.'],neutral:['NOT AT WAR',myPlayer() && state.players.filter(x=>x.side===myPlayer().side).length>1?'Your coalition must vote for war before you can attack.':'Use “Declare war & march” to attack.'],open:['HOSTILE','This room needs no declaration: you can attack.']}[kind];
-  const vote=kind==='neutral'?warPlan(owner):null;
-  const voteText=vote?.mode==='voting'?`War vote open: ${vote.motion.fromYes.length}/${vote.need} approvals, ${Math.max(0,vote.motion.expiresAt-state.tick)}s left.`:'';
-  const key=JSON.stringify([id,owner,kind,alliance?.id,alliance?.name,voteText]);banner.hidden=false;
-  if(banner.dataset.key===key)return;banner.dataset.key=key;banner.dataset.relation=kind;
-  const dot=el('i','alliance-dot');if(alliance)dot.style.setProperty('--band',allianceColors(state)[alliance.id]);
-  const who=el('span','relation-owner',`${place(id).name} · ${owner?country(owner).name:'no owner'}`);
-  if(alliance)who.append(' · ',dot,el('span','',alliance.name));
-  banner.replaceChildren(el('b','relation-kind',title),...(detail?[el('span','relation-detail',voteText || detail)]:[]),who);
-  if(kind==='neutral'){const b=el('button','relation-action','War council →');b.type='button';b.dataset.warCouncil=owner;banner.append(b);}
-}
-function frontProvinces(a,b){
-  const left=new Set(a),right=new Set(b),ids=[];
-  for(const p of state.provinces){
-    if(!left.has(p.owner) && !right.has(p.owner))continue;
-    const other=left.has(p.owner)?right:left;
-    if(place(p.id).neighbors.some(n=>other.has(state.provinces.find(q=>q.id===n)?.owner)))ids.push(p.id);
+  $('order-preview').hidden=!order || !(order.preview || order.why);
+  if(order)$('order-preview').textContent=order.why || order.preview;
+  const composer=view.composer;
+  $('composer').hidden=!composer || cardSize!=='full';
+  if(composer){
+    $('composer').dataset.channel=composer.channel;$('composer').dataset.to=composer.to || '';
+    $('composer-text').placeholder=composer.placeholder;$('composer-label').textContent=composer.placeholder;
+    const delay=Math.max(0,(state.commandBudget?.chatReadyAt || 0)-state.tick);
+    $('composer-send').disabled=delay>0 || pendingCommand;$('composer-note').textContent=delay?`Chat ready in ${delay} game s`:composer.note || '';
   }
-  return ids.length?ids:[...a,...b].map(id=>state.provinces.find(p=>p.owner===id)?.id || country(id)?.start[0]).filter(Boolean);
+  part('card-actions',JSON.stringify(view.actions.map(a=>[a.label,a.act,a.arg,a.primary,a.danger,a.disabled,a.id])),()=>view.actions.map(a=>{
+    const b=button(a.label,{act:a.act,...(a.arg!==undefined?{arg:a.arg}:{})},`${a.primary?'primary':''}${a.danger?' danger':''}`);
+    if(a.id)b.id=a.id;b.disabled=Boolean(a.disabled);return b;}));
+  $('card-dock').hidden=$('sources').hidden && $('amount-control').hidden && $('order-preview').hidden && $('composer').hidden && !view.actions.length;
+  if(card.kind==='province')paintMapDraftOnly();
 }
-function renderScoreboard(){
-  for(const c of map.countries){
-    const p=state.players.find(p=>p.id===c.id),land=state.provinces.filter(v=>v.owner===c.id),projection=state.projections.find(v=>v.country===c.id);
-    const troops=land.reduce((n,v)=>n+v.troops,0)+state.armies.filter(a=>a.country===c.id).reduce((n,a)=>n+a.amount,0);
-    const button=$('scoreboard').querySelector(`[data-country-focus="${c.id}"]`);
-    button.classList.toggle('mine',c.id===state.you);
-    const alliance=p?allianceOf(c.id):null;button.dataset.band=alliance?'active':'';if(alliance)button.style.setProperty('--band',allianceColors(state)[alliance.id]);else button.style.removeProperty('--band');
-    button.title=`${c.name} · ${seatType(p)} · ${p?.displayName || p?.name || 'Unclaimed'} · ${p?namedSide(p.side):'Neutral'} · ${land.length} provinces · ${troops} troops${projection?` · ${signed(projection.projectedPrestige)} Prestige if victorious`:''}`;
-    button.setAttribute('aria-label',`Inspect ${button.title}`);
-    setHTML(button,`${insignia(c.id)}<span class="country-summary"><b>${esc(faction(c.id).short)}</b><span class="country-metrics">${icon('land')}${land.length} ${icon('troops')}${troops}</span><small>${p?`${seatType(p)} · ${esc(p.eliminatedAt!==null?'Eliminated':p.side.startsWith('solo:')?'Independent':namedSide(p.side))}`:'Unclaimed'}</small></span>`);
+function paintMapDraftOnly(){const plan=target && sources.length?orderPlan():null;atlas.setDraft(plan?{sources,to:target,label:plan.arrowLabel}:null);}
+function detailsHTML(html){const d=el('div','card-more');d.innerHTML=html;return d;} // callers escape every name
+function provinceCard(){
+  const id=target || sources[0] || card.id,p=prov(id);
+  if(!p){return {title:'',actions:[]};}
+  const owner=p.owner,mine=owner===state.you && state.you;
+  const base={flag:owner,title:place(id).name};
+  if(target && (sources.length || !mine)){
+    const plan=orderPlan(),waiting=[...new Set(state.provinces.filter(q=>q.owner===state.you && !sources.includes(q.id) && neighbours(q.id).includes(target) && freeTroops(q.id)>0).map(q=>place(q.id).name))];
+    const hint=!active() || !sources.length || plan.kind==='vote' || plan.kind==='voting'?'':waiting.length?`Tap ${waiting.slice(0,2).join(' or ')}${waiting.length>2?' …':''} to send from there too.`:'';
+    const status=el('div','card-relation');status.append(el('b',`rel rel-${plan.relation}`,plan.words[0]),el('span','',plan.words[1]));
+    return {...base,title:place(target).name,
+      sub:[owner?ownerButton(owner):el('span','card-meta','Unclaimed'),el('span','card-meta',`${p.troops} troops${sources.length?` · from ${sources.length===1?place(sources[0]).name:`${sources.length} provinces`}`:''}`)],subKey:[owner,relationOf(owner),p.troops,sources],
+      status,statusKey:[plan.relation,plan.words],relation:plan.relation,
+      order:active()?{...plan,hint}:null,
+      actions:active()?[{label:plan.label,act:'send',primary:true,danger:plan.danger,disabled:plan.disabled,id:'primary'}]:[],
+      more:()=>moreProvince(target,true)};
   }
+  const battle=state.battles?.find(b=>b.province===id);
+  const status=el('div','card-relation');
+  if(battle)status.append(el('b','rel rel-war','BATTLE'),el('span','',`${state.armies.filter(a=>a.engaged && a.to===id).reduce((n,a)=>n+a.amount,0)} attackers against ${p.troops} defenders.`));
+  else if(mine && active())status.append(el('span','card-hint',freeTroops(id)>0?'Drag to a neighbour — or tap one — to send troops.':'Only one troop here: it must stay home.'));
+  else if(!mine && !spectating && state.you)status.append(el('span','card-hint',`None of your provinces borders ${place(id).name}.`));
+  const actions=[];
+  if(mine && active() && p.development<state.rules.maxDevelopment){
+    const cost=state.rules.developmentCosts[p.development],queued=state.commandBudget?.reserved.some(o=>o.type==='develop' && o.from===id);
+    actions.push({label:p.developing?`Building level ${p.developing.level} · ${Math.max(0,p.developing.completesAt-state.tick)}s`:queued?'Construction queued':`Develop · ${cost} troops`,act:'develop',arg:id,disabled:Boolean(p.developing) || queued || freeTroops(id)<cost || pendingCommand || !state.commandBudget?.remaining,id:'develop-province'});
+  }
+  if(mine && active()){
+    // Troops that left (or are about to leave) this province: recall them from here too.
+    const outgoing=[...(state.commandBudget?.reserved || []).filter(o=>o.type==='move' && o.from===id).map(o=>({id:o.id,amount:o.amount,to:o.to,queued:true})),
+      ...state.armies.filter(a=>a.country===state.you && a.from===id && !a.returning).map(a=>({id:a.id,amount:a.amount,to:a.to}))];
+    for(const o of outgoing.slice(0,2))actions.push({label:`${o.queued?'Cancel':'Recall'} ${o.amount} → ${place(o.to).name}`,act:'recall',arg:o.id,disabled:pendingCommand || !state.commandBudget?.remaining});
+  }
+  return {...base,sub:[owner && !mine?ownerButton(owner):el('span','card-meta',mine?'Your province':'Unclaimed'),el('span','card-meta',`${p.troops} troops${owner?` · industry ${'ⅠⅡⅢⅣⅤ'[p.development-1] || p.development}`:''}`)],subKey:[owner,relationOf(owner),p.troops,p.development,mine],
+    status,statusKey:[battle && [battle.province,p.troops],mine,freeTroops(id)>0,state.armies.filter(a=>a.engaged && a.to===id).length],relation:mine?'own':'',actions,more:()=>moreProvince(id,false)};
 }
+/** "More": the advanced details under the expanded card. */
+function moreProvince(id,order){
+  const p=prov(id),mine=p.owner===state.you && state.you,src=sources[0];
+  const waves=state.armies.filter(a=>a.to===id).sort((a,b)=>a.arrivesAt-b.arrivesAt);
+  const lastBattle=history.filter(e=>e.type==='battle' && e.province===id).at(-1);
+  const key=JSON.stringify([id,order,src,sources,state.tick,fraction,state.commandBudget,mine && p.troops]);
+  const body=$('card-body');if(body.dataset.key===key)return;body.dataset.key=key;
+  const scroll=body.scrollTop,openDetails=[...body.querySelectorAll('details[open]')].map(d=>d.dataset.part);
+  let html='';
+  if(order){
+    html+=`<p id="order-details" class="order-details">${sources.length>1?'Several sources: nearer ones wait at home so everyone arrives together.':'Checking the current garrison…'}</p>`;
+    if(sources.length>1)html+=`<label class="arrive-label">Shared arrival, game clock (optional)<input id="shared-arrival" placeholder="Earliest · or MM:SS" inputmode="numeric" maxlength="5"></label>`;
+    const friend=p.owner && sameSide(p.owner,state.you),srcP=prov(src);
+    if(active() && src && sources.length===1 && friend)html+=`<details data-part="route"><summary>Recruitment arrow ${srcP?.route?'· set':''}</summary><p class="small muted">New recruits in ${esc(place(src).name)} walk to ${esc(place(id).name)} automatically. Existing troops stay.</p><div class="button-row"><button id="set-route" data-act="route" data-arg="${esc(id)}" ${srcP?.route===id || !state.commandBudget?.remaining?'disabled':''}>Set arrow → ${esc(place(id).name)}</button><button id="clear-route" class="quiet" data-act="route" data-arg="" ${srcP?.route?'':'disabled'}>Clear</button></div><p id="route-status" class="small">${srcP?.route?`New recruits → ${esc(place(srcP.route).name)}.`:'No recruitment arrow set.'}</p></details>`;
+    const vias=active() && src && sources.length===1 && myPlayer()?.side?neighbours(src).filter(v=>{const o=prov(v)?.owner;return o && o!==state.you && sameSide(o,state.you) && neighbours(v).includes(id);}):[];
+    if(vias.length && !mayEnter(state.you,p.owner)===false && p.owner!==state.you)html+=`<p class="small muted">Tip: to pass through an ally, send to their province first; transit orders stay available to agents.</p>`;
+  }else if(mine){
+    const reserved=(state.commandBudget?.reserved || []).filter(o=>o.from===id).reduce((n,o)=>n+o.amount,0);
+    html+=`<div class="province-readout"><div><span>FREE</span><strong>${freeTroops(id)}</strong></div><div><span>GARRISON</span><strong>${p.troops}</strong></div><div><span>RECRUIT IN</span><strong>${p.nextRecruit===null?'—':Math.max(0,p.nextRecruit-state.tick)+'s'}</strong></div></div>${reserved?`<p class="small muted">${reserved} troops reserved for queued orders.</p>`:''}`;
+    if(p.route)html+=`<p class="small">Recruitment arrow: new recruits → ${esc(place(p.route).name)}. <button data-act="route-clear" data-arg="${esc(id)}" class="quiet">Clear</button></p>`;
+    const f=developmentForecast(state,id);
+    if(f)html+=`<p id="development-payback" class="development-payback">${f.alreadyInvested?'Investment already spent. ':''}Develop to level ${f.level} for ${f.cost} troops. Earliest payback ${time(f.paybackAt)} game time; up to ${f.additionalRecruits} extra recruits by 30:00 (net ${signed(f.netBeforeDeadline)}). ${f.paysBackBeforeDeadline?'':'This will not repay before the deadline. '}${esc(f.assumption)}</p>`;
+    const reserves=(state.insights?.routeReserves || []).filter(v=>v.province===id && v.available>=10);
+    for(const v of reserves)html+=`<p class="small">${v.available} free troops wait here; recruits walk to ${esc(place(v.to).name)}. <button data-act="draft" data-arg="${esc(v.province)}" data-to="${esc(v.to)}">Draft transfer →</button></p>`;
+  }
+  html+=`<h3>${esc(place(id).name)} · incoming</h3>${waves.length?waves.slice(0,4).map(a=>`<p class="small">${a.amount} ${esc(country(a.country).name)} · ${a.returning?'returning':'marching'} · arrives ${time(a.arrivesAt)} (${Math.max(0,a.arrivesAt-state.tick)}s)</p>`).join(''):'<p class="small muted">No armies on the way.</p>'}${waves.length>4?`<p class="small">Plus ${waves.length-4} later armies.</p>`:''}${lastBattle?`<p class="small muted">Last battle ${time(lastBattle.tick)}: ${lastBattle.troops} survivors; ${esc(country(lastBattle.owner)?.name || 'neutral')} held afterward.</p>`:''}`;
+  if(active())html+=marchesHTML();
+  html+=`<details class="rules-details" data-part="rules"><summary>Rules of engagement</summary><p>Leave one troop behind. Travel time follows distance. Recall turns an army around at its actual position. Attack an occupied enemy only after war is declared. Battles take several dice rounds; ties favour defenders. Troops sent to an ally become theirs. Three commands per ten game seconds; an attack from several provinces counts as one.</p></details>`;
+  if(active() && order===false && mine)html+=`<label class="keyboard-select">Keyboard: send to<select id="destination"><option value="">Choose a neighbour…</option>${neighbours(id).map(n=>`<option value="${esc(n)}">${esc(place(n).name)} · ${prov(n).troops} · ${esc(country(prov(n).owner)?.name || 'Unclaimed')}</option>`).join('')}</select></label>`;
+  body.innerHTML=html;body.scrollTop=scroll;
+  for(const d of body.querySelectorAll('details'))if(openDetails.includes(d.dataset.part))d.open=true;
+  if(order)updatePreview();
+}
+function marchesHTML(){
+  const moving=state.armies.filter(a=>a.country===state.you).sort((a,b)=>a.arrivesAt-b.arrivesAt),reserved=state.commandBudget?.reserved || [];
+  if(!moving.length && !reserved.length)return '';
+  const can=!pendingCommand && state.commandBudget?.remaining;
+  const recall=(id,label)=>`<button type="button" data-recall="${esc(id)}" ${can?'':'disabled'}>${label}</button>`;
+  const groups=[...new Set([...moving,...reserved].filter(a=>a.groupId && !a.returning).map(a=>a.groupId))].filter(id=>[...moving,...reserved].filter(a=>a.groupId===id && !a.returning).length>1);
+  return `<h3>Your orders <span class="count">${moving.length+reserved.length}</span></h3><div class="march-list">${groups.map(id=>`<div class="march-row"><span>Attack together<small>${esc(id)}</small></span>${recall(id,'Recall group')}</div>`).join('')}${reserved.map(o=>`<div class="march-row"><span>${o.type==='recall'?'Recall queued':o.type==='develop'?'Construction queued':`${o.amount || ''} · ${esc(place(o.from)?.name || '')} → ${esc(place(o.to)?.name || '')}`}<small>${Math.max(0,o.executeAt-state.tick)}s until ${o.type==='move'?'departure':'execution'}</small></span>${o.type==='move'?recall(o.id,'Cancel'):''}</div>`).join('')}${moving.map(a=>`<div class="march-row ${a.returning?'returning':''}"><button class="march-focus" data-feed-province="${esc(a.to)}"><b>${a.amount}</b> ${a.returning?'↶':'→'} ${esc(place(a.to).name)}<small>${a.returning?'Returning · ':''}arrives ${time(a.arrivesAt)} · ${Math.max(0,a.arrivesAt-state.tick)}s</small></button>${a.returning?'':recall(a.id,'Recall')}</div>`).join('')}</div>`;
+}
+function armyCard(){
+  const a=state.armies.find(a=>a.id===card.id),mine=a.country===state.you && active();
+  const status=el('div','card-relation');status.append(el('b',`rel ${a.returning?'rel-ally':'rel-war'}`,a.returning?'RETURNING':a.engaged?'IN BATTLE':'MARCHING'),el('span','',`${place(a.from).name} → ${place(a.to).name} · arrives in ${Math.max(0,a.arrivesAt-state.tick)}s (${time(a.arrivesAt)})`));
+  const group=a.groupId && state.armies.filter(x=>x.groupId===a.groupId && !x.returning).length>1;
+  return {flag:a.country,title:`${a.amount} ${faction(a.country).short} troops`,sub:[ownerButton(a.country)],subKey:[a.country,relationOf(a.country)],status,statusKey:[a.returning,a.engaged,a.arrivesAt,state.tick],relation:'',
+    actions:mine && !a.returning?[{label:'Recall',act:'recall',arg:a.id,primary:true,disabled:pendingCommand || !state.commandBudget?.remaining,id:'primary'},...(group?[{label:'Recall whole attack',act:'recall',arg:a.groupId}]:[])]:[]};
+}
+function countryCard(){
+  const id=card.id,p=playerOf(id),c=country(id),rel=relationOf(id),me=myPlayer();
+  const land=state.provinces.filter(v=>v.owner===id),troops=land.reduce((n,v)=>n+v.troops,0)+state.armies.filter(a=>a.country===id).reduce((n,a)=>n+a.amount,0);
+  const side=p && !p.side.startsWith('solo:')?state.sides.find(s=>s.id===p.side):null;
+  const status=el('div','card-relation big');status.append(el('b',`rel rel-${rel}`,RELATION_WORDS[rel] || c.name));
+  const strength=el('span','card-strength',`${troops} troops · ${land.length} provinces (${(100*land.length/state.provinces.length).toFixed(1)}%)`);
+  status.append(strength);
+  if(side){const s=el('span','card-bloc');const dot=el('i','alliance-dot');dot.style.setProperty('--band',allianceColors(state)[side.id]);s.append(dot,el('span','',`${side.name}: ${side.members.map(m=>country(m).name).join(', ')}`));status.append(s);}
+  const enemies=p?relationsOf(state,id).enemies:[];
+  if(enemies.length)status.append(el('span','card-wars',`At war with ${enemies.map(e=>e===state.you?'you':country(e).name).join(', ')}`));
+  const actions=[],can=active() && p && p.eliminatedAt===null && id!==state.you;
+  const offer=(state.proposals || []).find(q=>q.status==='open' && state.you && q.roster.includes(state.you) && q.roster.includes(id));
+  const peaceOffer=(state.diplomacy || []).find(m=>m.kind==='peace' && m.status==='offered' && m.toRoster.includes(state.you) && m.fromRoster.includes(id));
+  const war=warPlan(id);
+  let note='';
+  if(can){
+    if(offer){
+      const forecast=coalitionForecast(state,offer.roster,offer.coalition),mine=forecast.members.find(m=>m.country===state.you);
+      note=`${offer.name}: ${offer.roster.map(r=>country(r).name).join(' + ')} · ${offer.accepted.length}/${offer.roster.length} approvals · ${Math.max(0,offer.expiresAt-state.tick)}s left. ${offer.accepted.includes(state.you)?'':`Your maximum share: ${mine.maximumShare.toFixed(1)} points; ${mine.keepsMaturity?'you keep your earned tenure':'your maturity restarts at zero'}. ${forecast.economy}/${forecast.threshold} industry together.`}`;
+      if(offer.accepted.includes(state.you))actions.push({label:offer.creator===state.you?'Withdraw offer':'Withdraw approval',act:'decline',arg:offer.id});
+      else actions.push({label:'Accept alliance',act:'accept',arg:offer.id,primary:true,disabled:pendingCommand,id:'primary'},{label:'Decline',act:'decline',arg:offer.id,disabled:pendingCommand});
+    }else if(peaceOffer)actions.push({label:'Accept peace',act:'vote-peace',arg:peaceOffer.id,primary:true,disabled:pendingCommand,id:'primary'});
+    else if(rel==='war')actions.push({label:(state.players.filter(x=>x.side===me.side).length>1?'Call peace vote':'Offer peace'),act:'peace',arg:id,primary:true,disabled:pendingCommand,id:'primary'});
+    else if(rel==='ally'){actions.push({label:'Message',act:'compose',primary:true,id:'primary'},{label:'Leave alliance',act:'leave',danger:true,disabled:pendingCommand || state.departures?.some(d=>d.country===state.you)});}
+    else if(rel==='neutral' || rel==='open'){
+      const canPropose=p.side.startsWith('solo:') && !(state.proposals || []).some(q=>q.status==='pending' && (q.roster.includes(id) || q.roster.includes(state.you)));
+      if(canPropose)actions.push({label:proposing?'Send alliance offer':'Propose alliance',act:proposing?'send-offer':'propose',primary:true,disabled:pendingCommand,id:'primary'});
+      else note=side?`${c.name} is in ${side.name}. Ask a member to invite you, or talk first.`:'A membership change is already pending.';
+      if(rel==='neutral' && war?.mode!=='voting')actions.push({label:war?.mode==='vote'?`Call war vote`:'Declare war',act:'declare',arg:id,danger:true,disabled:pendingCommand});
+      if(war?.mode==='voting')note=`War vote open: ${war.motion.fromYes.length}/${war.need} approvals.`;
+      if(!canPropose)actions.unshift({label:'Message',act:'compose',primary:!actions.some(a=>a.primary),id:actions.some(a=>a.primary)?undefined:'primary'});
+    }
+  }
+  if(note)status.append(el('small','card-note',note));
+  const sub=[el('span','card-meta',p?`${seatType(p)} · ${p.displayName || p.name}`:'Unclaimed')];
+  return {flag:id,title:c.name,sub,subKey:[p?.displayName,p?.name,seatType(p)],status,statusKey:[rel,troops,land.length,side?.id,side?.name,side?.members,enemies,note],relation:rel,
+    composer:can?{channel:'dm',to:id,placeholder:`Message ${c.name}…`,note:'Only you and they can read this.'}:null,
+    more:seated() && id!==state.you?()=>renderThread(countryThread(railItems,id),`No messages with ${c.name} yet.${can?' Say hello below.':''}`,proposing?proposalForm(id):null):null,actions};
+}
+function proposalForm(id){
+  const me=myPlayer(),joining=me.side.startsWith('solo:');
+  const f=coalitionForecast(state,[...state.players.filter(p=>p.side===me.side).map(p=>p.id),id],joining?null:me.side);
+  const box=el('div','proposal');
+  if(joining){
+    const label=el('label','', 'Alliance name');const input=el('input');input.id='coalition-name';input.maxLength=40;input.value=$('coalition-name')?.value || `${faction(state.you).short}–${faction(id).short} Pact`;label.append(input);box.append(label);
+  }else box.append(el('p','small',`${country(id).name} would join ${namedSide(me.side)}; every member must accept.`));
+  box.append(el('p','small muted',`Together: ${f.economy}/${f.threshold} industry to win. Each member’s maximum share: ${f.members[0].maximumShare.toFixed(1)} points. Sending is your approval; the alliance starts ${state.rules.notice} game seconds after everyone accepts.`));
+  return box;
+}
+function allianceCard(){
+  const me=myPlayer();
+  if(!me || spectating){return {title:'Spectating',status:el('div','card-relation',''),actions:[]};}
+  const side=!me.side.startsWith('solo:')?state.sides.find(s=>s.id===me.side):null,forming=(state.proposals || []).find(q=>q.status==='pending' && q.roster.includes(state.you));
+  const team=state.sides.find(s=>s.id===me.side),projection=state.projections.find(p=>p.country===state.you),enemies=relationsOf(state,state.you).enemies;
+  const status=el('div','card-relation big');
+  status.append(el('b',`rel ${side?'rel-ally':'rel-neutral'}`,side?'ALLIANCE':forming?'FORMING':'INDEPENDENT'));
+  status.append(el('span','card-strength',`${team?.economy ?? 0}/${state.economyThreshold} industry to win${projection?` · ${signed(projection.projectedPrestige)} Prestige if you win`:''}`));
+  if(forming)status.append(el('small','card-note',`${forming.name} starts at ${time(forming.activateAt)}.`));
+  const wars=el('div','card-wars');
+  wars.append(el('span','',enemies.length?'At war with ':'At peace with everyone.'),...enemies.map(e=>{const b=button(country(e).name,{openCountry:e},'link');return b;}));
+  status.append(wars);
+  const members=side?side.members:[];
+  const list=el('div','card-members');
+  if(!side)status.append(el('small','card-note','You are independent. Select a country — a standard on the leaderboard or a province’s owner — to propose an alliance.'));
+  for(const m of members){const b=button('',{openCountry:m},'member');b.append(flag(m),el('span','',country(m).name));const pr=state.projections.find(p=>p.country===m);if(pr)b.append(el('small','',`${Math.round(pr.maturity*100)}% earned`));if(m===state.you)b.disabled=true;list.append(b);}
+  status.append(list);
+  const votes=decisionsFor(state).filter(d=>d.kind.endsWith('_vote'));
+  const actions=votes.map((d,i)=>({label:`${d.kind==='war_vote'?'Approve war on':'Approve peace with'} ${d.motion.toRoster.map(id=>country(id).name).join(' + ')}`,act:d.kind==='war_vote'?'vote-war':'vote-peace',arg:d.id,primary:i===0,id:i===0?'primary':undefined,danger:d.kind==='war_vote',disabled:pendingCommand}));
+  if(side && active())actions.push({label:'Leave alliance',act:'leave',danger:true,disabled:pendingCommand || state.departures?.some(d=>d.country===state.you)});
+  const empty=side?'No alliance messages yet.':'You are independent. Select a country — on the leaderboard or a province’s owner — to propose an alliance.';
+  return {flag:state.you,title:side?side.name:country(state.you).name,sub:[el('span','card-meta',side?`${side.members.length} members · your alliance`:'Your country · no alliance')],subKey:[side?.id,side?.members.length],
+    status,statusKey:[side?.id,side?.name,members,team?.economy,state.economyThreshold,projection?.projectedPrestige,forming?.id,enemies,state.projections.map(p=>p.maturity)],relation:side?'ally':'',
+    composer:side && active()?{channel:'alliance',placeholder:'Message your alliance…',note:state.rules.revealAllianceChatAfterMatch?'Alliance chat becomes public in the replay after the match ends.':'Only members can read this.'}:null,
+    more:side?()=>renderThread(allianceThread(railItems,side.id),empty):null,actions};
+}
+/** A conversation inside a card: chat and diplomatic rows (text only). Shown rows count as read. */
+function renderThread(items,empty,extra=null){
+  const body=$('card-body'),key=JSON.stringify([items.map(i=>i.seq),empty,Boolean(extra),card?.id]);
+  if(body.dataset.key!==key){
+    body.dataset.key=key;
+    const list=el('ol','thread');
+    for(const item of items.slice(-40)){
+      const li=el('li',`thread-row${item.from===state.you?' mine':''}`);li.dataset.seq=String(item.seq);
+      if(item.type==='message'){const head=el('header');head.append(flag(item.from),el('b','',item.from===state.you?'You':country(item.from).name),el('time','',time(item.tick)));li.append(head,el('p','thread-text',item.text));}
+      else{const copy=systemCopy(item,{...feedNames,players:state.players.length});li.classList.add('thread-system');li.append(el('b','',copy.title),el('span','',` · ${time(item.tick)} · ${copy.detail}`));}
+      list.append(li);
+    }
+    body.replaceChildren(...(extra?[extra]:[]),...(items.length?[list]:[el('p','thread-empty',empty)]));
+    list.scrollTop=list.scrollHeight;
+  }
+  // Seen in an open, expanded card = read (per item).
+  const fresh=worldFeed.markRead(items.filter(i=>i.from!==state.you).map(i=>i.seq));
+  if(fresh.length)renderAttention();
+}
+
+/* ── HUD ── */
+function renderHud(){
+  const me=myPlayer(),team=state.sides.find(s=>s.id===me?.side);
+  const land=state.provinces.filter(p=>p.owner===state.you && state.you);
+  const troops=land.reduce((n,p)=>n+p.troops,0)+state.armies.filter(a=>a.country===state.you).reduce((n,a)=>n+a.amount,0);
+  $('commander-title').textContent=country(state.you)?.name || (state.status==='running'?'Spectating':'Observer');
+  setHTML($('commander-insignia'),insignia(state.you));
+  $('commander-side').textContent=me?(me.eliminatedAt!==null?'Eliminated':me.side.startsWith('solo:')?'Independent':namedSide(me.side)):'';
+  $('hud-standard').disabled=!me || spectating;
+  $('hud-standard').setAttribute('aria-label',me && !spectating?`${country(state.you).name}: your alliance and diplomacy`:'Spectating');
+  const stat=(name,label,value,title)=>`<span class="stat" title="${esc(title)}">${icon(name)}<span class="sr-only">${esc(label)} </span><b>${value}</b></span>`;
+  const holdings=state.you?land.length:state.provinces.filter(p=>p.owner).length,forces=state.you?troops:state.provinces.reduce((n,p)=>n+p.troops,0);
+  setHTML($('operations'),stat('military',state.you?'Forces':'Troops on the map',forces,state.you?'Your troops: garrisons and armies':'All garrisoned troops')+
+    stat('land',state.you?'Holdings':'Provinces held',`${holdings}<small>/${state.provinces.length}</small>`,`${state.you?'Your holdings':'Provinces held by all powers'}: ${holdings} of ${state.provinces.length}`));
+  const dominant=Object.entries(state.dominance)[0];
+  document.querySelector('.campaign-bar').classList.toggle('victory-warning',Boolean(dominant) && state.status==='running');
+  $('victory-status').setAttribute('role','timer');$('victory-status').setAttribute('aria-live','off');
+  const economy=team?.economy ?? 0;
+  $('victory-status').textContent=dominant && state.status==='running'?`${namedSide(dominant[0])} wins in ${state.rules.hold-(state.tick-dominant[1])}s unless stopped`:
+    me?`Industry ${economy}/${state.economyThreshold} · hold ${state.rules.hold}s to win`:`${state.economyThreshold} industry held ${state.rules.hold}s wins`;
+}
+
+/* ── Rendering ── */
 function describe(e){
   const c=id=>country(id)?.name || id;
   switch(e.type){
@@ -668,226 +692,178 @@ function describe(e){
 }
 function renderResult(){
   if(!state.outcome){$('result').hidden=true;return;}
-  $('result').hidden=false;document.body.classList.add('reviewing');placeSound();
+  $('result').hidden=false;document.body.classList.add('reviewing');placeSound();closeCard();
   if(!review || review.id!==state.id){review?.destroy();review=new AfterAction($('result'),state,map);}
 }
-function renderOperations(){
-  const me=myPlayer(),team=state.sides.find(s=>s.id===me?.side),projection=state.projections.find(p=>p.country===state.you);
-  const land=state.provinces.filter(p=>p.owner===state.you && state.you),leader=[...state.sides].sort((a,b)=>b.economy-a.economy)[0];
-  const troops=land.reduce((n,p)=>n+p.troops,0)+state.armies.filter(a=>a.country===state.you).reduce((n,a)=>n+a.amount,0);
-  // CK3-style resource bar: icon + value; the label is for assistive technology and the tooltip.
-  const stat=(name,label,value,title,extra='',kind='')=>`<span class="stat ${kind}" title="${esc(title)}">${icon(name)}<span class="sr-only">${esc(label)} </span><b>${value}</b>${extra}</span>`;
-  const economy=team?.economy || leader?.economy || 0,sideLabel=namedSide(team?.id || leader?.id) || 'No allegiance';
-  const holdings=state.you?land.length:state.provinces.filter(p=>p.owner).length,forces=state.you?troops:state.provinces.reduce((n,p)=>n+p.troops,0);
-  setHTML($('operations'),stat('land',state.you?'Holdings':'Provinces held',`${holdings}<small>/${state.provinces.length}</small>`,`${state.you?'Your holdings':'Provinces held by all powers'}: ${holdings} of ${state.provinces.length}`)+
-    stat('troops',state.you?'Forces':'Troops on the map',forces,state.you?'Your troops: garrisons and armies':'All garrisoned troops')+
-    stat('economy',`Industry, ${sideLabel}`,`${economy}<small>/${state.economyThreshold}</small>`,`${team?'Your allegiance':'Economic lead'} ${sideLabel}: ${economy} of ${state.economyThreshold} industry needed to start the victory hold`,`<i class="stat-bar"><i style="width:${Math.min(100,100*economy/Math.max(1,state.economyThreshold))}%"></i></i>`)+
-    (projection?stat('prestige','Prestige on win',signed(projection.projectedPrestige),`Prestige if your side wins · ${Math.round(projection.maturity*100)}% earned`,'','prestige'):''));
-  $('commander-side').textContent=me?(me.eliminatedAt!==null?'Eliminated':namedSide(me.side)):state.status==='running'?'Watching live':'';
-  const stopped=state.dominanceBreaks?.at(-1);
-  $('countdown-break').hidden=!stopped || state.tick-stopped.tick>60 || state.status!=='running';
-  if(stopped)$('countdown-break').textContent=`${time(stopped.tick)} · ${namedSide(stopped.side)}’s victory countdown stopped. ${stopped.reason} ${stopped.economy}/${stopped.threshold} industry afterward.`;
-  const hostile=state.armies.filter(a=>me && state.players.find(p=>p.id===a.country)?.side!==me.side && land.some(p=>p.id===a.to)).sort((a,b)=>a.arrivesAt-b.arrivesAt);
-  $('threats').hidden=!hostile.length || state.status!=='running';
-  if(hostile.length)setHTML($('threats'),`<span>↘ ${hostile.length} incoming ${hostile.length===1?'army':'armies'}</span>${hostile.slice(0,2).map(a=>`<button data-focus="${a.to}">${a.amount} → ${esc(place(a.to).name)} <b>${a.arrivesAt-state.tick}s</b></button>`).join('')}`);
-}
 function resetPresentation(){
-  signalCursor=null;clearTimeout(signalTimer);clearTimeout(toastTimer);$('toast').hidden=true;$('battle-signal').hidden=true;
+  signalCursor=null;clearTimeout(toastTimer);$('toast').hidden=true;
   toggleJournal(false);
 }
 function toggleJournal(open){
   $('war-journal').hidden=!open;$('journal-toggle').setAttribute('aria-expanded',String(open));
 }
-function renderPresentation(){
-  const dominant=Object.entries(state.dominance)[0];
-  document.querySelector('.campaign-bar').classList.toggle('victory-warning',Boolean(dominant) && state.status==='running');
-  $('victory-status').setAttribute('role','timer');$('victory-status').setAttribute('aria-live','off');
-  for(const button of $('faction-choices').querySelectorAll('button')){
-    const id=button.dataset.countrySeat,occupied=state.players.some(p=>p.id===id);
-    button.disabled=occupied;button.setAttribute('aria-pressed',String($('country-choice').value===id));
-    const occupant=state.players.find(p=>p.id===id);button.title=occupant?`${seatType(occupant)} · ${occupant.displayName || occupant.name}`:startingSummary(country(id));
-    button.querySelector('small').textContent=occupant?`${seatType(occupant)} · ${occupant.displayName || occupant.name}`:`${country(id).start.length} holdings`;
-  }
+/** Fresh completed battles of this seat (Secured, Lost, Line held): a compact toast, never replayed. */
+function battleNotices(){
   const signal=signalCursor===null?null:battleSignal(state,history.filter(e=>e.id>signalCursor));
   signalCursor=cursor;
-  if(signal){
-    const banner=$('battle-signal');banner.dataset.tone=signal.tone;
-    setHTML(banner,`${icon('military')}<div><span>${esc(signal.title)} · ${time(signal.tick)}</span><strong>${esc(place(signal.province).name)}</strong><small>${signal.troops} troops remain after the battle</small></div><button data-focus="${signal.province}">View</button><button data-dismiss-signal aria-label="Dismiss battle notice">×</button>`);
-    banner.hidden=false;clearTimeout(signalTimer);signalTimer=setTimeout(()=>{banner.hidden=true;},6000);
+  if(signal && seated())notifier.push({key:`battle-${signal.tick}-${signal.province}`,kind:signal.tone==='lost'?'decision':'battle',title:`${signal.title} · ${place(signal.province).name}`,
+    detail:`${signal.troops} troops remain after the battle · ${time(signal.tick)}`,buttons:[{label:'View',data:{feedProvince:signal.province}}]});
+}
+function renderLobby(){
+  for(const b of $('faction-choices').querySelectorAll('button')){
+    const id=b.dataset.countrySeat,occupant=state.players.find(p=>p.id===id);
+    b.disabled=Boolean(occupant);b.setAttribute('aria-pressed',String($('country-choice').value===id));
+    b.title=occupant?`${seatType(occupant)} · ${occupant.displayName || occupant.name}`:startingSummary(country(id));
+    b.querySelector('small').textContent=occupant?`${seatType(occupant)} · ${occupant.displayName || occupant.name}`:`${country(id).start.length} holdings`;
   }
+  $('lobby').hidden=state.status!=='lobby';$('join-form').hidden=Boolean(state.you);
+  options('country-choice',map.countries.filter(c=>!state.players.some(p=>p.id===c.id)).map(c=>({value:c.id,label:c.name})),$('country-choice').value);
+  $('host-controls').hidden=!state.isHost;$('fill-bots').disabled=state.players.length===8;$('start-match').disabled=state.players.length<2 || !state.you;
+  const selected=country($('country-choice').value);
+  $('starting-holdings').textContent=state.you?'':startingSummary(selected);
+  $('join-form').querySelector('button').disabled=!selected;
+  $('lobby-note').textContent=state.you?`You command ${country(state.you).name}. ${state.isHost?'Invite players, attach agents, or add practice bots. You control when play begins.':'Waiting for the host to start.'}`:'You are observing. Choose an open country above to join.';
 }
-function renderCommandFooter(){
-  const mode=orderMode;
-  $('command-footer').hidden=!panelOpen || tab!=='orders' || state.status!=='running' || !state.you;
-  $('send-army').hidden=mode!=='march';$('coordinate-commit').hidden=mode!=='coordinate';
-  const p=state.provinces.find(p=>p.id===source);
-  $('develop-province').hidden=mode!=='develop' || !p || p.development===state.rules.maxDevelopment;
-  $('commit-context').textContent=source?`${place(source).name}${destination && mode!=='develop'?' → '+place(destination).name:''}`:'Select a province on the map';
-}
-/** One sound control: in the HUD during a live room, in the masthead on the home page and in review. */
+/** One sound control: in the ☰ menu during a live room, in the masthead on the home page and in review. */
 function placeSound(){
   const slot=matchId && !document.body.classList.contains('reviewing')?$('hud-sound-slot'):$('masthead-sound-slot');
   if($('sound-control').parentElement!==slot)slot.append($('sound-control'));
 }
 function render(){
   if(!state)return;
-  document.body.classList.toggle('spectating',state.status==='running' && !state.you);
-  $('spectator-note').hidden=state.status!=='running' || Boolean(state.you);
+  document.body.classList.toggle('spectating',state.status==='running' && (!state.you || spectating));
   document.body.dataset.status=state.status;
-  $('orders-label').hidden=state.status!=='running' || !state.you;
-  if(state.status!=='running')closePanel();
-  renderPresentation();
+  if(state.status!=='running' && card)closeCard();
   document.querySelector('.scenario-note').textContent=map.notice;
   $('game-name').textContent=state.name;$('lobby-room').textContent=state.name;$('room-label').textContent=`COUNCIL ${state.id.toUpperCase()} · ${state.eligible?'LEAGUE':'EXPERIMENTAL'} · ${state.players.length}/8 SEATS`;
-  $('lobby').hidden=state.status!=='lobby';$('join-form').hidden=Boolean(state.you);
-  options('country-choice',map.countries.filter(c=>!state.players.some(p=>p.id===c.id)).map(c=>({value:c.id,label:c.name})),$('country-choice').value);
-  $('host-controls').hidden=!state.isHost;$('fill-bots').disabled=state.players.length===8;$('start-match').disabled=state.players.length<2 || !state.you;
-  const selectedCountry=country($('country-choice').value);
-  $('starting-holdings').textContent=state.you?'':startingSummary(selectedCountry);
-  $('join-form').querySelector('button').disabled=!selectedCountry;
-  $('lobby-note').textContent=state.you?`You command ${country(state.you).name}. ${state.isHost?'Invite players, attach agents, or add practice bots. You control when play begins.':'Waiting for the host to start.'}`:'You are observing. Choose an open country above to join.';
-  $('phase').textContent=state.status==='lobby'?'ASSEMBLING':state.status==='finished'?'CONCLUDED':state.you?'IN SESSION':'SPECTATING';
+  renderLobby();
+  $('phase').textContent=state.status==='lobby'?'ASSEMBLING':state.status==='finished'?'CONCLUDED':seated()?'IN SESSION':'SPECTATING';
   $('clock').textContent=`${time(state.tick)} / 30:00`;$('pace-badge').textContent=state.speed===1?'STANDARD · 1×':`QUICK · ${state.speed}×`;
-  const dominant=Object.entries(state.dominance)[0];
-  $('victory-status').textContent=dominant && state.status==='running'?`${namedSide(dominant[0])} wins in ${state.rules.hold-(state.tick-dominant[1])}s unless stopped`:`60% of active industry (${state.economyThreshold}) · hold ${state.rules.hold} game seconds`;
-  placeSound();
-  renderOrders();paintMap();renderCouncil();renderWars();renderRelations();renderScoreboard();renderResult();renderOperations();renderLeaderboard();
+  placeSound();battleNotices();
+  paintMap();renderHud();renderResult();renderLeaderboard();
   $('events').innerHTML=history.map(e=>({e,description:describe(e)})).filter(x=>x.description).slice(-30).reverse().map(({e,description})=>`<div class="event"><time>${time(e.tick)}</time>${esc(description)}</div>`).join('');
 }
-async function home(){resetPresentation();sounds.leave();review?.destroy();review=null;closePanel();closeMenu();expander.set(false,{fromBrowser:true});document.body.classList.remove('reviewing','spectating');generation++;pollController?.abort();document.body.classList.remove('in-game');matchId=null;state=null;spectating=false;herald.reset();worldFeed.reset();messageCatchupComplete=false;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');placeSound();await rooms();}
+async function home(){resetPresentation();sounds.leave();review?.destroy();review=null;closeCard();closeMenu();expander.set(false,{fromBrowser:true});document.body.classList.remove('reviewing','spectating');generation++;pollController?.abort();document.body.classList.remove('in-game');matchId=null;state=null;spectating=false;herald.reset();worldFeed.reset();notifier.reset();messageCatchupComplete=false;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');placeSound();await rooms();}
+
+/* ── First-match coach marks: three tips, dismissible, stored per browser. ── */
+const COACH=[['card-anchor','Drag from your province to a neighbour to attack — or tap your province, then the target. One button sends.'],
+  ['leaderboard','Tap a country — a standard here, a leaderboard row or a province’s owner — to talk, ally or declare war.'],
+  ['hud-standard','Your standard opens your alliance. The ⚑ beside it counts what needs you: tap it to answer.']];
+let coachStep=-1;
+function coachDone(){try{return localStorage.getItem('coi.coach')==='done';}catch{return true;}}
+function coach(){
+  if(coachStep>=0 || coachDone() || !state || state.status!=='running' || !active() || !messageCatchupComplete)return;
+  coachStep=0;showCoach();
+}
+function showCoach(){
+  const box=$('coach');if(coachStep<0 || coachStep>=COACH.length){box.hidden=true;return;}
+  const [anchor,text]=COACH[coachStep];box.hidden=false;box.dataset.anchor=anchor;
+  $('coach-step').textContent=`Tip ${coachStep+1} of ${COACH.length}`;$('coach-text').textContent=text;$('coach-next').textContent=coachStep===COACH.length-1?'Got it':'Next';
+}
+function endCoach(){coachStep=COACH.length;$('coach').hidden=true;try{localStorage.setItem('coi.coach','done');}catch{}}
+$('coach-next').addEventListener('click',()=>{coachStep++;if(coachStep>=COACH.length)endCoach();else showCoach();});
+$('coach-skip').addEventListener('click',endCoach);
+$('coach-replay').addEventListener('click',()=>{closeMenu();try{localStorage.removeItem('coi.coach');}catch{}coachStep=-1;coach();});
+
+/* ── Card actions ── */
+async function perform(act,arg,b){
+  switch(act){
+    case 'send':return sendOrder();
+    case 'develop':{
+      const p=prov(arg),cost=state.rules.developmentCosts[p.development],f=developmentForecast(state,arg);
+      if(!await confirmAction({title:`Develop ${place(arg).name}?`,message:`Spend ${cost} troops from this garrison. ${f?`Earliest payback ${time(f.paybackAt)}; ${f.paysBackBeforeDeadline?'it repays before the deadline':'it will not repay before the deadline'}.`:''} Unfinished construction is lost on capture; completed industry can be captured.`,accept:`Invest ${cost} troops`}))return;
+      const r=await command({type:'develop',from:arg});if(r)toast(`Investment committed. Completion at ${time(r.completesAt)}.`);return;
+    }
+    case 'recall':{const r=await command({type:'recall',id:arg});if(r){toast('Recall queued. The troops turn around at their actual position.');if(card?.kind==='army')closeCard();}return;}
+    case 'route':{const r=await command({type:'route',from:sources[0],to:arg || null});if(r)toast(arg?'Recruitment arrow queued.':'Arrow removal queued.');return;}
+    case 'route-clear':{const r=await command({type:'route',from:arg,to:null});if(r)toast('Arrow removal queued.');return;}
+    case 'draft':{sources=[arg];target=b.dataset.to;fraction=1;openCard('province',target);paintMap();toast('Transfer drafted; review the garrison before sending.');return;}
+    case 'compose':setCardSize('full');$('composer-text').focus();return;
+    case 'propose':proposing=true;setCardSize('full');$('card-body').dataset.key='';renderCard();$('coalition-name')?.focus();$('coalition-name')?.select();return;
+    case 'send-offer':{
+      const id=card.id,name=$('coalition-name')?.value || `${faction(state.you).short}–${faction(id).short} Pact`;
+      const r=await command({type:'propose',country:id,name});if(r){proposing=false;$('card-body').dataset.key='';toast(`Offer sent to ${country(id).name}. You have approved it; the alliance starts after they accept and the notice passes.`);renderCard();}return;
+    }
+    case 'accept':{const r=await command({type:'accept',proposalId:arg});if(r)toast(r.status==='pending'?`Alliance agreed: it starts at ${time(r.activateAt)}.`:'Terms accepted; waiting for the other members.');return;}
+    case 'decline':{const r=await command({type:'decline',proposalId:arg});if(r)toast('Offer closed.');return;}
+    case 'declare':{
+      const plan=warPlan(arg);if(!plan)return;
+      if(!await confirmWar(arg,0,plan))return;
+      const r=await command({type:'declare_war',country:arg});if(r)toast(r.status==='enacted'?`War declared on ${country(arg).name}.`:'War vote opened for 60 game seconds.');return;
+    }
+    case 'peace':{const r=await command({type:'offer_peace',country:arg});if(r)toast(r.status==='offered'?'Peace treaty sent.':'Coalition vote to send peace opened.');return;}
+    case 'vote-war':{const r=await command({type:'vote_war',motionId:arg});if(r)toast(r.status==='enacted'?'War declared.':'War vote recorded.');return;}
+    case 'vote-peace':{const r=await command({type:'vote_peace',motionId:arg});if(r)toast(r.status==='enacted'?'Peace agreed; attacking troops are returning.':'Peace vote recorded.');return;}
+    case 'leave':{if(!await confirmAction({title:'Leave your alliance?',message:'Departure takes effect after 30 game seconds. Your earned share resets to zero in your new allegiance. Armies use the allegiance in force when they arrive. Recall takes time; it does not restore troops instantly.',accept:'Announce departure'}))return;const r=await command({type:'leave'});if(r)toast('Departure announced. Your independent maturity clock restarts on departure.');return;}
+    default:return;
+  }
+}
+
+/* ── Wiring ── */
 $('create-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('display-name').value);const g=await request('/api/games','POST',{name:$('room-name').value,preset:$('preset').value});await openRoom(g.id);}));
 $('join-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('join-name').value);await request(`/api/games/${matchId}/join`,'POST',{country:$('country-choice').value,kind:'human'});await poll();toast('Your seat is reserved.');}));
 $('fill-bots').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/bots`,'POST',{});await poll();}));
 $('start-match').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/start`,'POST',{});await poll();toast('The council is in session.');}));
-$('move-form').addEventListener('submit',safely(async()=>{
-  const amount=Number($('amount').value),owner=state.provinces.find(p=>p.id===destination)?.owner,plan=warPlan(owner);
-  if(plan?.mode==='voting')return;
-  if(plan && !await confirmWar(owner,amount,plan))return;
-  if(plan?.mode==='vote'){const r=await command({type:'declare_war',country:owner});if(r)toast(r.status==='enacted'?'War declared.':'War vote opened for your coalition.');return;}
-  // One order, one opId: declare war and march together, or neither (the engine validates both).
-  const r=await command({type:'move',from:source,to:destination,amount,...(plan?{declareWar:true}:{})});if(!r)return;
-  toast(`${plan?'War declared. ':''}Army committed. Departure ${time(r.executeAt)}; arrival ${time(r.arrivesAt ?? r.executeAt+state.rules.travel)}.`);
-}));
-$('source').addEventListener('change',()=>{source=$('source').value || null;destination=null;inspected=source;$('amount').value=Math.max(1,Math.floor(availableTroops()/2));renderOrders();paintMap();});
-$('destination').addEventListener('change',()=>{destination=$('destination').value || null;renderOrders();paintMap();});
-$('amount').addEventListener('input',()=>{if(state)renderOrders();});
-$('amount-slider').addEventListener('input',()=>{$('amount').value=$('amount-slider').value;if(state)renderOrders();});
-$('transit-via').addEventListener('change',()=>{if(state)renderTransit(true);});
-$('transit-amount').addEventListener('input',()=>{if(state)renderTransit(true);});
-$('transit-send').addEventListener('click',safely(async()=>{
-  const result=await command({type:'transit',from:source,path:[$('transit-via').value,$('transit-to').value],amount:Number($('transit-amount').value)});
-  if(result)toast(`Transit committed. Final arrival ${time(result.arrivesAt)}.`);
-}));
-$('country-choice').addEventListener('change',()=>{const c=country($('country-choice').value);$('starting-holdings').textContent=startingSummary(c);if(state)renderPresentation();});
-$('set-route').addEventListener('click',safely(async()=>{await command({type:'route',from:source,to:destination});toast('Recruitment arrow queued.');}));
-$('clear-route').addEventListener('click',safely(async()=>{await command({type:'route',from:source,to:null});toast('Arrow removal queued.');}));
-$('ally-choice').addEventListener('change',()=>{if(state)renderCouncil();});
-$('alliance-form').querySelector('button').textContent='Offer & approve alliance';
-$('alliance-form').addEventListener('submit',safely(async()=>{
-  const target=$('ally-choice').value,name=$('coalition-name').value;if(!target)return;
-  const candidate=country(target).name,joining=myPlayer()?.side.startsWith('solo:');
-  const message=joining?`Sending this offer is your approval to join ${candidate} in ${name}. If they accept, the alliance activates after ${state.rules.notice} game seconds; you will not receive a second approval prompt.`:`Sending this offer is your approval for ${candidate} to join your coalition. Other members and the candidate must also accept. Membership activates after ${state.rules.notice} game seconds; you will not receive a second approval prompt.`;
-  if(!await confirmAction({title:`Approve alliance offer to ${candidate}?`,message,accept:'Approve & send offer'}))return;
-  await command({type:'propose',country:target,name});toast('Offer delivered. You have approved it; membership changes after all parties accept and the notice expires.');
-}));
-$('diplomacy-target').addEventListener('change',renderCouncil);
-$('declare-war').addEventListener('click',safely(async()=>{
-  const target=$('diplomacy-target').value;if(!target)return;
-  if(!await confirmAction({title:`Declare war on ${country(target).name}?`,message:'This makes both sides hostile. Coalition members must approve a majority vote within 60 game seconds before the declaration takes effect.',accept:'Declare war'}))return;
-  const result=await command({type:'declare_war',country:target});if(result)toast(result.status==='enacted'?'War declared.':'War vote opened for 60 game seconds.');
-}));
-$('offer-peace').addEventListener('click',safely(async()=>{
-  const target=$('diplomacy-target').value;if(!target)return;
-  const result=await command({type:'offer_peace',country:target});if(result)toast(result.status==='offered'?'Peace treaty sent.':'Coalition vote to send peace opened.');
-}));
-$('leave-alliance').addEventListener('click',safely(async()=>{if(!await confirmAction({title:'Leave your coalition?',message:'Departure takes effect after 30 game seconds. Your earned share resets to zero in your new allegiance. Armies use the allegiance in force when they arrive. Recall takes time; it does not restore troops instantly.',accept:'Announce departure'}))return;await command({type:'leave'});toast('Departure announced. Your independent maturity clock restarts on departure.');}));
-$('develop-province').addEventListener('click',safely(async()=>{
-  const p=state.provinces.find(p=>p.id===source),cost=state.rules.developmentCosts[p.development];
-  if(!await confirmAction({title:`Develop ${place(source).name}?`,message:`Spend ${cost} troops from this garrison. ${$('development-payback').textContent} Unfinished construction is lost on capture; completed industry can be captured.`,accept:'Invest manpower'}))return;
-  const result=await command({type:'develop',from:source});if(result)toast(`Investment committed. Completion at ${time(result.completesAt)}.`);
-}));
-$('group-percent').addEventListener('change',()=>{for(const id of attackSelections.keys())attackSelections.set(id,{percent:Number($('group-percent').value)});renderOrders();});
-$('attack-sources').addEventListener('change',event=>{
-  const id=event.target.dataset.attackSource;
-  if(id){if(event.target.checked)attackSelections.set(id,{percent:Number($('group-percent').value)});else attackSelections.delete(id);event.target.blur();renderOrders();}
-});
-$('attack-sources').addEventListener('input',event=>{const id=event.target.dataset.attackAmount;if(id)attackSelections.set(id,{amount:Number(event.target.value)});});
-$('coordinate-preview').addEventListener('click',safely(async()=>{
-  const plan=await request(`/api/games/${matchId}/plan`,'POST',attackAction());
-  $('attack-plan').textContent=`Shared arrival ${time(plan.arrivesAt)}. `+plan.sources.map(s=>`${place(s.from).name}: ${s.amount} depart ${time(s.executeAt)}`).join(' · ');
-}));
-$('coordinate-commit').addEventListener('click',safely(async()=>{
-  const result=await command(attackAction());if(result){$('attack-plan').textContent=`Accepted ${result.groupId}: all sources arrive ${time(result.arrivesAt)}.`;toast(`Coordinated attack committed for ${time(result.arrivesAt)}.`);}
-}));
+$('country-choice').addEventListener('change',()=>{const c=country($('country-choice').value);$('starting-holdings').textContent=startingSummary(c);if(state)renderLobby();});
+$('amount-slider').addEventListener('input',()=>{fraction=Math.max(.01,Math.min(1,Number($('amount-slider').value)/100));try{localStorage.setItem('coi.fraction',String(fraction));}catch{}if(state){renderCard();paintMapDraftOnly();}});
 $('feed-form').addEventListener('submit',safely(async()=>{
-  const text=$('feed-text').value,target=replyChannel();if(!text.trim() || !target)return;
-  const result=await command({type:'chat',...target,text});if(result)$('feed-text').value='';
+  const text=$('feed-text').value;if(!text.trim())return;
+  const r=await command({type:'chat',channel:'world',text});if(r)$('feed-text').value='';
+}));
+$('composer').addEventListener('submit',safely(async()=>{
+  const text=$('composer-text').value,channel=$('composer').dataset.channel;if(!text.trim() || !channel)return;
+  const r=await command({type:'chat',channel,...(channel==='dm'?{to:$('composer').dataset.to}:{}),text});if(r)$('composer-text').value='';
 }));
 $('feed-toggle').addEventListener('click',()=>{
-  const open=!worldFeed.open;worldFeed.setOpen(open);
+  const open=!worldFeed.open;if(open)openRail();else worldFeed.setOpen(false);
   try{localStorage.setItem('coi.feed',open?'open':'collapsed');}catch{}
 });
 $('lb-toggle').addEventListener('click',()=>{
   const open=!standings.open;standings.setOpen(open);
   try{localStorage.setItem('coi.leaderboard',open?'open':'collapsed');}catch{}
 });
-for(const button of document.querySelectorAll('[data-lb-mode]'))button.addEventListener('click',()=>{standings.setMode(button.dataset.lbMode);if(state)renderLeaderboard();});
+for(const b of document.querySelectorAll('[data-lb-mode]'))b.addEventListener('click',()=>{standings.setMode(b.dataset.lbMode);if(state)renderLeaderboard();});
 $('back').addEventListener('click',safely(home));$('refresh-rooms').addEventListener('click',safely(rooms));
-for(const button of document.querySelectorAll('[data-share]'))button.addEventListener('click',safely(async()=>{closeMenu();try{await navigator.clipboard.writeText(location.href);toast('Room link copied. It contains no credentials.');}catch{prompt('Copy this room link. It contains no credentials:',location.href);}}));
+for(const b of document.querySelectorAll('[data-share]'))b.addEventListener('click',safely(async()=>{closeMenu();try{await navigator.clipboard.writeText(location.href);toast('Room link copied. It contains no credentials.');}catch{prompt('Copy this room link. It contains no credentials:',location.href);}}));
 const changeIdentity=safely(async()=>{closeMenu();const name=prompt('Create a separate local player identity. Existing results stay with the old identity. Enter a new display name:');if(name?.trim()){await ensureIdentity(name,true);if(matchId)await poll();}});
 $('account-button').addEventListener('click',changeIdentity);$('menu-identity').addEventListener('click',changeIdentity);
 $('zoom-in').onclick=()=>atlas.zoom(.7);$('zoom-out').onclick=()=>atlas.zoom(1.4);
-$('world-view').onclick=()=>atlas.world();$('europe-view').onclick=()=>atlas.europe();$('home-view').onclick=focusCountry;
-// Expand map: an immersive live map (HUD strip and nav hidden) that also works where the Fullscreen API does
-// not (iPhone Safari); real fullscreen of the whole page is requested where available.
-expander=new ExpandableMap($('stage'),$('map-expand'),{label:'map',target:document.documentElement,escape:false,onChange:on=>{
+$('world-view').onclick=()=>{closeMenu();atlas.world();};$('europe-view').onclick=()=>{closeMenu();atlas.europe();};$('home-view').onclick=focusCountry;
+// Expand map: real fullscreen where available, a CSS pseudo-fullscreen otherwise (iPhone Safari).
+expander=new ExpandableMap($('stage'),$('map-expand'),{label:'map',target:document.documentElement,escape:false,iconOnly:true,onChange:on=>{
   $('fullscreen-toggle').setAttribute('aria-pressed',String(on));$('fullscreen-toggle').textContent=on?'Exit expanded map':'Expand map (full screen)';
-  requestAnimationFrame(()=>{atlas?.layout();measureStack();});
+  requestAnimationFrame(()=>atlas?.layout());
 }});
 $('fullscreen-toggle').addEventListener('click',()=>{closeMenu();expander.toggle();});
+function closeMenu(focus=false){
+  if($('hud-menu').hidden)return;
+  $('hud-menu').hidden=true;$('menu-button').setAttribute('aria-expanded','false');if(focus)$('menu-button').focus();
+}
+function openMenu(){$('hud-menu').hidden=false;$('menu-button').setAttribute('aria-expanded','true');$('hud-menu').querySelector('button').focus();}
 $('menu-button').addEventListener('click',()=>{if($('hud-menu').hidden)openMenu();else closeMenu(true);});
-$('panel-close').addEventListener('click',()=>closePanel({restoreFocus:true}));
-// Bottom sheet (narrow screens): the handle cycles peek → half → full; arrows resize; drag snaps.
-$('sheet-handle').addEventListener('click',()=>{if(sheetDrag?.moved)return;const i=SHEETS.indexOf($('command-panel').dataset.sheet);setSheet(SHEETS[(i+1)%SHEETS.length]);});
-$('sheet-handle').addEventListener('keydown',event=>{
-  const i=SHEETS.indexOf($('command-panel').dataset.sheet);
-  if(event.key==='ArrowUp'){event.preventDefault();setSheet(SHEETS[Math.min(2,i+1)]);}
-  if(event.key==='ArrowDown'){event.preventDefault();setSheet(SHEETS[Math.max(0,i-1)]);}
-});
+$('card-close').addEventListener('click',()=>closeCard({restoreFocus:true}));
+$('card-size').addEventListener('click',()=>setCardSize(cardSize==='full'?'peek':'full'));
+$('hud-standard').addEventListener('click',()=>{if(card?.kind==='alliance')closeCard({restoreFocus:true});else openCard('alliance',null,{focus:true});});
+$('attention').addEventListener('click',openAttention);
+// Phones: drag the sheet's head down to close it, up to expand it.
 let sheetDrag=null;
-$('command-panel').querySelector('.sheet-head').addEventListener('pointerdown',event=>{
-  if(!narrow.matches || event.target.closest('#panel-close,#order-modes'))return;
-  const panel=$('command-panel');sheetDrag={y:event.clientY,height:panel.getBoundingClientRect().height,moved:false};
-});
-$('command-panel').querySelector('.sheet-head').addEventListener('pointermove',event=>{
-  if(!sheetDrag)return;const dy=event.clientY-sheetDrag.y;
-  // Capture only once it is a drag, so a plain tap still clicks the handle or close button.
-  if(!sheetDrag.moved && Math.abs(dy)>6){sheetDrag.moved=true;event.currentTarget.setPointerCapture(event.pointerId);}
-  if(sheetDrag.moved)$('command-panel').style.height=`${Math.max(60,sheetDrag.height-dy)}px`;
-});
-$('command-panel').querySelector('.sheet-head').addEventListener('pointerup',()=>{
-  if(!sheetDrag)return;const drag=sheetDrag,panel=$('command-panel');
-  if(drag.moved){
-    const height=panel.getBoundingClientRect().height,max=parseFloat(getComputedStyle(panel).maxHeight)||innerHeight;
-    const peek=panel.querySelector('.sheet-head').offsetHeight+($('command-footer').hidden?0:$('command-footer').offsetHeight);
-    if(height<peek*.6)closePanel();
-    else setSheet([['peek',peek],['half',max*.5],['full',max]].sort((a,b)=>Math.abs(a[1]-height)-Math.abs(b[1]-height))[0][0]);
-  }
-  setTimeout(()=>{sheetDrag=null;});
-});
-$('command-panel').querySelector('.sheet-head').addEventListener('pointercancel',()=>{sheetDrag=null;$('command-panel').style.height='';});
+$('card').querySelector('.card-head').addEventListener('pointerdown',event=>{if(!compact.matches || event.target.closest('button'))return;sheetDrag={y:event.clientY};});
+$('card').querySelector('.card-head').addEventListener('pointerup',event=>{if(!sheetDrag)return;const dy=event.clientY-sheetDrag.y;sheetDrag=null;if(dy>40){if(cardSize==='full')setCardSize('peek');else closeCard();}else if(dy<-40)setCardSize('full');});
 document.addEventListener('keydown',event=>{
-  if(!state || document.body.classList.contains('reviewing') || event.ctrlKey || event.metaKey || event.altKey || event.target.closest('input,select,textarea,dialog') || $('confirm-dialog').open)return;
-  // Escape closes the top-most overlay: menu, then war log, then the command panel (and its selection).
-  if(event.key==='Escape'){
-    if(herald.dismiss()){}
+  if(!state || document.body.classList.contains('reviewing') || event.ctrlKey || event.metaKey || event.altKey || $('confirm-dialog').open)return;
+  const typing=event.target.closest('input,select,textarea,dialog');
+  // Escape closes the top-most layer: coach tip, banner, menu, war log, card (and its selection), expanded map.
+  if(event.key==='Escape' && (!typing || event.target.closest('#card'))){
+    if(!$('coach').hidden)endCoach();
+    else if(herald.dismiss()){}
     else if(!$('hud-menu').hidden)closeMenu(true);
-    else if(!$('war-journal').hidden){toggleJournal(false);$('journal-toggle').focus();}
-    else if(panelOpen)closePanel({restoreFocus:true});
+    else if(!$('war-journal').hidden){toggleJournal(false);$('menu-button').focus();}
+    else if(card)closeCard({restoreFocus:true});
     else if(expander.on)expander.set(false);
-    else{source=null;destination=null;inspected=null;renderOrders();paintMap();}
+    else{clearSelection();paintMap();}
     return;
   }
+  if(typing)return;
   if(event.key.toLowerCase()==='j'){toggleJournal($('war-journal').hidden);return;}
   if(event.key.toLowerCase()==='c')focusCountry();
   if(event.key==='m')atlas.setMapMode(atlas.mode==='diplomacy'?'political':'diplomacy');  // Shift+M is the sound mute
@@ -897,70 +873,48 @@ document.addEventListener('keydown',event=>{
 document.addEventListener('pointerdown',event=>{
   if(!$('hud-menu').hidden && !event.target.closest('#hud-menu,#menu-button'))closeMenu();
 });
+document.addEventListener('change',event=>{
+  if(event.target.id==='destination' && event.target.value){selectProvince(event.target.value,{keyboard:true});}
+});
 document.addEventListener('click',safely(async event=>{
-  const button=event.target.closest('button');if(!button)return;
-  if(button.id==='journal-toggle')toggleJournal($('war-journal').hidden);
-  if(button.id==='journal-close'){toggleJournal(false);$('journal-toggle').focus();}
-  if(button.hasAttribute('data-dismiss-signal')){$('battle-signal').hidden=true;$('orders-label').focus();}
-  if(button.dataset.countrySeat){$('country-choice').value=button.dataset.countrySeat;$('country-choice').dispatchEvent(new Event('change'));atlas.home(button.dataset.countrySeat);}
-  if(button.dataset.countryFocus){const id=button.dataset.countryFocus;const focus=state.provinces.filter(p=>p.owner===id).sort((a,b)=>b.troops-a.troops)[0]?.id || country(id).start[0];atlas.focus(focus,view());inspected=focus;source=null;destination=null;orderMode='march';openPanel('orders');renderOrders();paintMap();$('orders-tab').scrollTop=0;}
-  if(button.dataset.reserveFrom){source=button.dataset.reserveFrom;destination=button.dataset.reserveTo;inspected=source;orderMode='march';$('amount').value=freeTroops(source);openPanel('orders');renderOrders();paintMap();toast('Transfer drafted; review the garrison before committing.');}
-  if(button.dataset.orderMode){orderMode=button.dataset.orderMode;if(orderMode!=='march' && $('command-panel').dataset.sheet==='peek')setSheet('half');renderOrders();$('orders-tab').scrollTop=0;}
-  if(button.dataset.room)await openRoom(button.dataset.room,button.dataset.spectate==='true');
-  if(button.dataset.home)await home();
-  if(button.dataset.fraction){$('amount').value=Math.max(1,Math.floor(availableTroops()*Number(button.dataset.fraction)));renderOrders();}
-  if(button.dataset.focus){atlas.focus(button.dataset.focus,view());inspected=button.dataset.focus;if(state.status==='running')openPanel('orders');renderOrders();}
-  if(button.dataset.feedProvince){atlas.focus(button.dataset.feedProvince,view());inspected=button.dataset.feedProvince;renderOrders();paintMap();}
-  if(button.dataset.feedCountry)atlas.home(button.dataset.feedCountry,view());
-  if(button.dataset.decline){await command({type:'decline',proposalId:button.dataset.decline});toast('Offer declined.');}
-  if(button.dataset.voteWar){const result=await command({type:'vote_war',motionId:button.dataset.voteWar});if(result)toast(result.status==='enacted'?'War declared.':'War vote recorded.');}
-  if(button.dataset.votePeace){const result=await command({type:'vote_peace',motionId:button.dataset.votePeace});if(result)toast(result.status==='enacted'?'Peace agreed; attacking troops are returning.':'Peace vote recorded.');}
-  if(button.dataset.recall){const result=await command({type:'recall',id:button.dataset.recall});if(result)toast('Recall queued. Marching troops return from their actual position.');}
-  if(button.dataset.accept){
-    const offer=state.proposals.find(q=>q.id===button.dataset.accept);if(!offer)return;
-    const f=coalitionForecast(state,offer.roster,offer.coalition),mine=f.members.find(p=>p.country===state.you);
-    if(!await confirmAction({title:`Join ${offer.name}?`,message:`${f.economy}/${f.totalEconomy} industry combined; ${f.threshold} needed. ${f.wouldDraw?'This would end in a negotiated draw.':f.wouldStartHold?'This would start a fresh victory hold after activation.':`${f.remaining} more industry needed for a victory hold.`} Your maximum slice becomes ${mine.maximumShare.toFixed(1)} points (${signed(mine.fullMaturityPrestige)} Prestige at full maturity). ${mine.keepsMaturity?'Your existing tenure remains.':'Your maturity restarts at zero.'} Industry and ownership may change before approval and the 30-second notice complete.`,accept:'Accept these terms'}))return;
-    await command({type:'accept',proposalId:offer.id});toast('Terms accepted.');
-  }
-  if(button.dataset.tab && button.closest('#hud-rail'))togglePanel(button.dataset.tab);
-  if(button.dataset.openPanel)openPanel(button.dataset.openPanel,{focus:true});
-  if(button.dataset.feedFilter){worldFeed.setFilter(button.dataset.feedFilter);renderChips();renderReply();}
-  if(button.hasAttribute('data-open-inbox'))openRail(unreadMessages()[0]?.channel==='alliance'?`alliance:${unreadMessages()[0].side}`:unreadMessages().length?'dm':'all');
-  if(button.hasAttribute('data-open-actions'))openRail('action');
-  if(button.dataset.noticeView)openRail(button.dataset.noticeView==='inbox'?'all':button.dataset.noticeView);
-  if(button.hasAttribute('data-open-wars')){openPanel('council',{focus:true});$('council-tab').scrollTop=0;}
-  if(button.dataset.frontA){atlas.fit(frontProvinces(button.dataset.frontA.split(','),button.dataset.frontB.split(',')),view());}
-  if(button.dataset.warCouncil){
-    const target=button.dataset.warCouncil;openPanel('council',{focus:true});
-    if([...$('diplomacy-target').options].some(o=>o.value===target)){$('diplomacy-target').value=target;renderCouncil();}
-    $('council-tab').scrollTop=document.querySelector('.war-council').offsetTop-$('council-tab').offsetTop; // never scrollIntoView: it would scroll the clipped stage too
-    if(!$('declare-war').disabled)$('declare-war').focus();
-  }
-
+  const b=event.target.closest('button');if(!b)return;
+  if(b.id==='journal-toggle'){closeMenu();toggleJournal($('war-journal').hidden);}
+  if(b.id==='journal-close'){toggleJournal(false);$('menu-button').focus();}
+  if(b.dataset.countrySeat){$('country-choice').value=b.dataset.countrySeat;$('country-choice').dispatchEvent(new Event('change'));atlas.home(b.dataset.countrySeat);}
+  if(b.dataset.room)await openRoom(b.dataset.room,b.dataset.spectate==='true');
+  if(b.dataset.home)await home();
+  if(b.dataset.fraction){fraction=Number(b.dataset.fraction);try{localStorage.setItem('coi.fraction',String(fraction));}catch{}renderCard();paintMapDraftOnly();}
+  if(b.dataset.removeSource){sources=sources.filter(s=>s!==b.dataset.removeSource);renderCard();paintMap();}
+  if(b.dataset.feedProvince && state){const id=b.dataset.feedProvince;atlas.focus(id,view());if(state.status==='running'){armyId=null;proposing=false;const mine=active() && prov(id)?.owner===state.you;sources=mine?[id]:[];target=mine?null:id;if(!mine)selectProvince(id);else{openCard('province',id);paintMap();}}}
+  if(b.dataset.feedCountry && state)openCard('country',b.dataset.feedCountry);
+  if(b.dataset.openCountry && state){openCard('country',b.dataset.openCountry,{focus:!b.closest('#card'),compose:b.dataset.compose==='1',size:b.dataset.compose==='1'?'full':undefined});}
+  if(b.dataset.openAlliance && state)openCard('alliance',null,{focus:true,compose:b.dataset.compose==='1',size:'full'});
+  if(b.dataset.recall)await perform('recall',b.dataset.recall,b);
+  if(b.dataset.act)await perform(b.dataset.act,b.dataset.arg,b);
+  if(b.dataset.feedFilter){worldFeed.setFilter(b.dataset.feedFilter);for(const chip of document.querySelectorAll('[data-feed-filter]'))chip.setAttribute('aria-pressed',String(chip===b));}
 }));
 for(const element of document.querySelectorAll('[data-icon]'))element.innerHTML=icon(element.dataset.icon);
 worldFeed=new WorldFeed({list:$('feed-list'),unread:$('feed-unread'),toggle:$('feed-toggle'),body:$('feed-body'),jump:$('feed-jump')},feedNames);
-standings=new LeaderboardPanel({root:$('leaderboard'),rows:$('lb-rows'),toggle:$('lb-toggle'),summary:$('lb-summary'),modes:[...document.querySelectorAll('[data-lb-mode]')],fronts:$('lb-fronts'),
-  onFocus:id=>atlas?.setRelationFocus?.(id)},feedNames);
+// Private rows link to the card that answers them.
+worldFeed.link=item=>{
+  if(!state?.you || spectating)return null;
+  const thread=threadOf(item);if(!thread)return null;
+  if(thread.kind==='country')return {key:'openCountry',value:thread.id,label:'Open ›',aria:`Open ${country(thread.id)?.name || 'country'}`};
+  return {key:'openAlliance',value:'1',label:'Open ›',aria:'Open your alliance'};
+};
+worldFeed.onRead=()=>{saveRead();if(state)renderAttention();};
+standings=new LeaderboardPanel({root:$('leaderboard'),rows:$('lb-rows'),toggle:$('lb-toggle'),summary:$('lb-summary'),modes:[...document.querySelectorAll('[data-lb-mode]')],fronts:$('lb-fronts'),powers:$('lb-powers'),
+  onFocus:id=>{if(card?.kind!=='country')atlas?.setRelationFocus?.(id);},
+  onSelect:id=>{if(!state)return;if(id===state.you && seated())openCard('alliance',null,{focus:true});else openCard('country',id,{focus:true});if(compact.matches)standings.setOpen(false);},
+  onFront:([a,b])=>{const ids=state.provinces.filter(p=>a.includes(p.owner) && place(p.id).neighbors.some(n=>b.includes(prov(n)?.owner)) || b.includes(p.owner) && place(p.id).neighbors.some(n=>a.includes(prov(n)?.owner))).map(p=>p.id);
+    atlas.fit(ids.length?ids:[...a,...b].map(id=>state.provinces.find(p=>p.owner===id)?.id).filter(Boolean),view());}},feedNames);
 {let saved=null;try{saved=localStorage.getItem('coi.leaderboard');}catch{}
-  standings.setOpen(saved?saved==='open':!matchMedia('(max-width:759px), (max-height:499px)').matches);}
+  standings.setOpen(saved?saved==='open':!compact.matches);}
 herald=new Herald({declaration:$('declaration'),alliance:$('alliance-seal'),fallen:$('fallen-seal')});
 notifier=new Notifier($('notice'));
-worldFeed.onRead=seq=>{try{localStorage.setItem(readKey(),String(seq));}catch{}for(const li of $('feed-list').querySelectorAll('.unread'))if(Number(li.dataset.seq)<=seq)li.classList.remove('unread');if(state)renderInbox();};
 const sounds=new SoundBoard($('sound-control'));
 {let saved=null;try{saved=localStorage.getItem('coi.feed');}catch{}
-  worldFeed.setOpen(saved?saved==='open':!narrow.matches);}
+  worldFeed.setOpen(saved?saved==='open':!compact.matches);}
+compact.addEventListener('change',event=>{if(event.matches){standings.setOpen(false);if(card)worldFeed.setOpen(false);}});
 try{map=await request('/map.json','GET',undefined,null);initMap();showIdentity();const params=new URL(location).searchParams,initial=params.get('match');if(initial)await openRoom(initial,params.get('spectate')==='1');else await rooms();setConnection(state?.status==='finished'?'Review':'Live');}catch(e){toast(e.message,true);}
-// Overlays size themselves around the leaderboard and the top alert stack (e.g. the order card's max height).
-// Overlays size themselves around the alert stack and leaderboard (e.g. the order card's max height).
-function measureStack(){
-  const stage=$('stage');
-  stage.style.setProperty('--lb-h',`${Math.round($('leaderboard').getBoundingClientRect().height)}px`);
-  const alerts=$('alerts').getBoundingClientRect(),board=$('leaderboard').getBoundingClientRect(); // read after --lb-h moved the alerts
-  stage.style.setProperty('--alerts-bottom',`${Math.round(alerts.bottom)}px`);
-  stage.style.setProperty('--stack-bottom',`${Math.round(Math.max(alerts.bottom,board.bottom))}px`);
-}
-const stackObserver=new ResizeObserver(measureStack);
-for(const element of [$('alerts'),$('leaderboard')])stackObserver.observe(element);
-addEventListener('resize',measureStack);
 setInterval(()=>{if(matchId)poll();},750);

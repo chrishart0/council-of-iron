@@ -41,6 +41,10 @@ export class Atlas {
    *  container: element to mount the key in instead of the map container, collapsed: boolean }. */
   constructor(svg, map, onSelect, options = {}) {
     this.svg = svg; this.map = map; this.onSelect = onSelect;
+    // Optional host hooks (v0.8): `drag: { start(id, { counter }) → boolean (no side effects), begin(from), end(from, to|null), label(from, to) → string }`
+    // turns a drag that starts on one of the host's provinces into an order arrow instead of a pan;
+    // `onArmy(id) → boolean` handles a tap on a moving army (true = handled, no tooltip).
+    this.dragHooks = options.drag || null; this.onArmy = options.onArmy || null; this.draftState = null;
     this.positionsById = Object.fromEntries(map.provinces.map(p => [p.id, { x: p.x, y: p.y }]));
     this.places = new Map(map.provinces.map(p => [p.id, p]));
     this.rings = new Map(map.provinces.map(p => [p.id, provinceRings(p.path)]));
@@ -131,7 +135,7 @@ export class Atlas {
     // counters → battles → effects (copied) → moving armies, drawn once above every copy.
     const copies = layer => [-WORLD, WORLD].map(x => node('use', { href: `#${layer.id}`, x, class: 'world-copy', 'aria-hidden': 'true', ...(layer === this.base ? {} : { 'pointer-events': 'none' }) }));
     svg.append(...copies(this.base), this.base, ...copies(this.lines), this.lines, this.allianceNames, this.countryNames, this.leaders, markers, this.clusterLayer, this.battleLayer,
-      ...copies(this.fx), this.fx, this.marches);
+      ...copies(this.fx), this.fx, this.draftLayer = node('g', { class: 'order-draft', 'pointer-events': 'none', 'aria-hidden': 'true' }), this.marches);
     this.tooltip = document.createElement('div'); this.tooltip.className = 'atlas-tooltip'; this.tooltip.hidden = true; svg.parentElement.append(this.tooltip);
     // Map-mode toggle and legend: plain DOM, text only via textContent.
     const legendOptions = options?.legend || {};
@@ -158,7 +162,7 @@ export class Atlas {
     svg.addEventListener('pointerdown', event => this.down(event));
     svg.addEventListener('pointermove', event => this.move(event));
     svg.addEventListener('pointerup', event => this.up(event));
-    svg.addEventListener('pointercancel', event => { this.pointers.delete(event.pointerId); this.gesture = null; this.dragged = true; });
+    svg.addEventListener('pointercancel', event => { if (this.gesture?.command) this.endDraft(null); this.pointers.delete(event.pointerId); this.gesture = null; this.dragged = true; });
     svg.addEventListener('pointerleave', () => { this.tooltip.hidden = true; this.hoverCountry(null); });
     if (!svg.hasAttribute('tabindex')) svg.setAttribute('tabindex', 0);
     svg.addEventListener('keydown', event => {
@@ -169,7 +173,7 @@ export class Atlas {
       const cluster = event.target.closest('[data-cluster]')?.dataset.cluster;
       const id = event.target.closest('[data-province]')?.dataset.province;
       if (cluster) { event.preventDefault(); this.fit(cluster.split(',')); }
-      else if (id) { event.preventDefault(); onSelect(id, { shiftKey: event.shiftKey }); }
+      else if (id) { event.preventDefault(); onSelect(id, { shiftKey: event.shiftKey, keyboard: true }); }
     });
     this.resize = new ResizeObserver(() => this.applyView()); this.resize.observe(svg);
     this.applyView();
@@ -192,7 +196,10 @@ export class Atlas {
     if (this.pointers.size === 1) {
       this.gesture = { x: event.clientX, y: event.clientY, vx: this.view.x, vy: this.view.y,
         ...this.hit(event), shiftKey: event.shiftKey, target: event.button === 2 }; this.dragged = false;
-    } else { this.dragged = true; this.gesture = null; this.pinchDistance = this.distance(); }
+      // A drag from the host's own province draws an order arrow instead of panning.
+      const g = this.gesture;
+      if (g.id && !g.army && event.button === 0 && this.dragHooks?.start?.(g.id, { counter: Boolean(event.target.closest?.('.map-counter')) })) g.command = g.id;
+    } else { if (this.gesture?.command) this.endDraft(null); this.dragged = true; this.gesture = null; this.pinchDistance = this.distance(); }
     if (!this.gesture?.army) this.tooltip.hidden = true;
   }
   distance() { const [a, b] = this.pointers.values(); return b ? Math.hypot(a.x - b.x, a.y - b.y) : 0; }
@@ -207,6 +214,7 @@ export class Atlas {
     if (!this.gesture) return;
     const dx = event.clientX - this.gesture.x, dy = event.clientY - this.gesture.y;
     if (Math.abs(dx) + Math.abs(dy) > 6) this.dragged = true;
+    if (this.gesture.command) { if (this.dragged) this.dragTo(event.clientX, event.clientY); return; }
     if (this.dragged) {
       const scale = this.svg.getScreenCTM()?.a || 1;
       this.view.x = this.gesture.vx - dx / scale; this.view.y = this.gesture.vy - dy / scale; this.applyView();
@@ -215,6 +223,10 @@ export class Atlas {
   up(event) {
     const gesture = this.gesture; this.pointers.delete(event.pointerId);
     if (this.svg.hasPointerCapture(event.pointerId)) this.svg.releasePointerCapture(event.pointerId);
+    if (gesture?.command && this.dragged) {
+      this.dragTo(event.clientX, event.clientY); const to = this.dragging?.to ?? null;
+      this.endDraft(gesture.command, to); if (!this.pointers.size) this.gesture = null; return;
+    }
     // Double tap zooms 2× at the tap; the first tap already selected, the second does not.
     if (event.pointerType === 'touch' && !this.dragged && gesture) {
       const now = performance.now(), last = this.lastTap;
@@ -223,7 +235,8 @@ export class Atlas {
       }
       this.lastTap = { t: now, x: event.clientX, y: event.clientY };
     }
-    if (!this.dragged && gesture?.army) this.showArmy(gesture.army, { left: event.clientX - 14, top: event.clientY + 65, width: 0 });
+    if (!this.dragged && gesture?.army && this.onArmy?.(gesture.army)) { this.tooltip.hidden = true; }
+    else if (!this.dragged && gesture?.army) this.showArmy(gesture.army, { left: event.clientX - 14, top: event.clientY + 65, width: 0 });
     else if (!this.dragged && gesture?.cluster) this.fit(gesture.cluster.split(','));
     else if (!this.dragged && gesture?.id) this.onSelect(gesture.id, { shiftKey: gesture.shiftKey, target: gesture.target });
     if (!this.pointers.size) this.gesture = null;
@@ -314,10 +327,24 @@ export class Atlas {
   }
   world() { this.view = { x: 0, y: 0, w: 1280, h: 680 }; this.applyView(); }
   europe() { this.view = { x: 595, y: 105, w: 210, h: 111.6 }; this.applyView(); }
-  focus(id) { const p = this.places.get(id); if (!p) return; this.view = { x: p.x - 195, y: p.y - 104, w: 390, h: 208 }; this.applyView(); }
-  home(country) { const c = this.countries.get(country); if (c) this.focus(c.start[0]); }
+  /** Optional trailing `{ insets: {top,right,bottom,left} px, width: map units }`: centre the target in the
+   * part of the screen the host's overlays leave uncovered; `width` sets the zoom (default 390 units). */
+  focus(id, { insets, width } = {}) {
+    const p = this.places.get(id); if (!p) return;
+    const w = width || 390; this.view = { x: p.x - w / 2, y: p.y - w * 104 / 390, w, h: w * 208 / 390 }; this.applyView(); this.inset(p, insets);
+  }
+  home(country, options) { const c = this.countries.get(country); if (c) this.focus(c.start[0], options); }
+  /** Shift the view so a map point sits in the centre of the uncovered screen area. */
+  inset(point, insets) {
+    if (!insets) return;
+    const rect = this.svg.getBoundingClientRect(), px = rect.width / this.view.w;
+    if (!(px > 0)) return;
+    const { top = 0, right = 0, bottom = 0, left = 0 } = insets;
+    if (left + right >= rect.width * .8 || top + bottom >= rect.height * .8) return;
+    this.view.x = point.x - ((left + (rect.width - right)) / 2) / px; this.view.y = point.y - ((top + (rect.height - bottom)) / 2) / px; this.applyView();
+  }
   /** Zoom so every listed province anchor is in view (a cluster's members). */
-  fit(ids) {
+  fit(ids, options) {
     const points = ids.map(id => this.places.get(id)).filter(Boolean);
     if (!points.length) return;
     const xs = points.map(p => points[0].x + wrapDelta(p.x - points[0].x)), ys = points.map(p => p.y), pad = Math.max(40, (Math.max(...xs) - Math.min(...xs)) * .2, (Math.max(...ys) - Math.min(...ys)) * .3);
@@ -325,7 +352,7 @@ export class Atlas {
     // Always zoom in at least one step, so a click on a merged counter is never a dead end.
     const width = Math.min(w, this.view.w * .7), h = width * 680 / 1280;
     this.view = { x: (Math.min(...xs) + Math.max(...xs)) / 2 - width / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 - h / 2, w: width, h };
-    this.applyView();
+    this.applyView(); this.inset({ x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 }, options?.insets);
   }
   /** 'political' (country colours) or 'diplomacy' (relations to the focus country). */
   setMapMode(mode) {
@@ -590,12 +617,14 @@ export class Atlas {
     this.byId = new Map(state.provinces.map(p => [p.id, p]));
     const me = state.players.find(p => p.id === state.you), sides = new Map(state.players.map(p => [p.id, p.side]));
     const neighbors = this.places.get(source)?.neighbors || [];
+    // Provinces of the viewer that a hostile army is marching on get a red ring (v0.8: no alert stack).
+    const threatened = new Set(me ? state.armies.filter(a => !a.returning && sides.get(a.country) !== me.side).map(a => a.to).filter(id => state.provinces.some(p => p.id === id && p.owner === state.you)) : []);
     for (const p of state.provinces) {
       const shape = this.shapes.get(p.id), marker = this.markers.get(p.id);
       if (!shape) continue;
       const role = p.id === source ? 'selected' : p.id === destination ? 'destination' : neighbors.includes(p.id) ? 'neighbor' : '';
-      shape.setAttribute('class', `province ${role}${p.owner ? ' occupied' : ''}`);
-      marker.group.setAttribute('class', `map-counter ${role}${p.owner === state.you && state.you ? ' owned' : ''}`);
+      shape.setAttribute('class', `province ${role}${p.owner ? ' occupied' : ''}${threatened.has(p.id) ? ' threatened' : ''}`);
+      marker.group.setAttribute('class', `map-counter ${role}${p.owner === state.you && state.you ? ' owned' : ''}${threatened.has(p.id) ? ' threatened' : ''}`);
       marker.disc.setAttribute('stroke', this.countries.get(p.owner)?.color || NEUTRAL);
       marker.stripe.setAttribute('fill', this.countries.get(p.owner)?.color || NEUTRAL);
       const width = counterWidth(p.troops); marker.disc.setAttribute('width', width); marker.disc.setAttribute('x', -width / 2); marker.stripe.setAttribute('x', -width / 2);
@@ -656,6 +685,7 @@ export class Atlas {
       entry.group.setAttribute('aria-label', `${this.countries.get(army.country)?.name || 'Army'}: ${army.amount} troops, ${this.places.get(army.from)?.name} to ${this.places.get(army.to)?.name}${army.returning ? ', returning' : ''}`);
     }
     this.paintBattles(state);
+    this.paintDraft();
     this.layout();
     if (!this.frame && !this.reducedMotion && state.status === 'running') this.frame = requestAnimationFrame(() => this.animate());
   }
@@ -969,6 +999,52 @@ export class Atlas {
       const blocked = counters.some(q => sx + r > q.x && sx - r < q.x + q.w && sy + r > q.y && sy - r < q.y + q.h);
       if (entry.blocked !== blocked) { entry.blocked = blocked; entry.group.classList.toggle('tap-blocked', blocked); }
     }
+  }
+  /** Order arrows (v0.8): `{ sources: [id], to: id|null, label }` drawn from each source to the target,
+   * or null. During a drag the atlas draws its own arrow to the pointer, snapped to adjacent targets. */
+  setDraft(draft) { this.draftState = draft && draft.sources?.length ? draft : null; this.paintDraft(); }
+  paintDraft() {
+    const layer = this.draftLayer; if (!layer) return;
+    layer.replaceChildren();
+    const drag = this.dragging, draft = drag ? { sources: [drag.from], to: drag.to, point: drag.to ? null : drag.point, label: drag.label } : this.draftState;
+    this.svg.classList.toggle('command-drag', Boolean(drag));
+    if (!draft) return;
+    const px = this.svg.getScreenCTM()?.a || 1, target = draft.to ? this.places.get(draft.to) : draft.point;
+    if (!target) return;
+    const first = this.places.get(draft.sources[0]); if (!first) return;
+    const tx = draft.to ? this.near(target.x) : target.x, ty = target.y;
+    for (const id of draft.sources) {
+      const s = this.places.get(id); if (!s) continue;
+      const sx = tx + wrapDelta(s.x - tx), len = Math.hypot(tx - sx, ty - s.y), back = draft.to ? Math.min(len * .35, 12 / px) : 0;
+      const ex = len ? tx - (tx - sx) * back / len : tx, ey = len ? ty - (ty - s.y) * back / len : ty;
+      layer.append(node('path', { class: `draft-arrow${draft.to ? ' snapped' : ''}`, d: `M${sx},${s.y}L${ex},${ey}`, 'marker-end': `url(#${this.prefix}march-head)` }));
+    }
+    if (draft.label) {
+      const g = node('g', { class: 'draft-label', transform: `translate(${tx} ${ty - 18 / px}) scale(${1 / px})` });
+      const text = node('text', { y: 4 }); text.textContent = draft.label; // host-authored (numbers and times), never player text
+      const w = draft.label.length * 6.4 + 12; g.append(node('rect', { x: -w / 2, y: -9, width: w, height: 18, rx: 3 }), text); layer.append(g);
+    }
+  }
+  /** Pointer position during an order drag: snap to the adjacent province under (or within 28 px of) it. */
+  dragTo(clientX, clientY) {
+    const from = this.gesture?.command; if (!from) return;
+    if (!this.dragging) this.dragHooks?.begin?.(from);
+    const neighbors = this.places.get(from)?.neighbors || [], point = this.coordinates(clientX, clientY), px = this.svg.getScreenCTM()?.a || 1;
+    const el = document.elementFromPoint(clientX, clientY);
+    let to = el?.closest?.('[data-province]')?.dataset.province || null;
+    const cluster = el?.closest?.('[data-cluster]')?.dataset.cluster;
+    if (!to && cluster) to = cluster.split(',').find(id => neighbors.includes(id)) || null;
+    if (!to && this.svg.contains(el)) to = this.provinceAt(point);
+    if (!neighbors.includes(to)) {
+      to = null; let best = 28 / px;
+      for (const id of neighbors) { const q = this.places.get(id), d = Math.hypot(point.x - (point.x + wrapDelta(q.x - point.x)), point.y - q.y); if (d < best) { best = d; to = id; } }
+    }
+    this.dragging = { from, to, point, label: to ? this.dragHooks?.label?.(from, to) || '' : '' };
+    this.paintDraft();
+  }
+  endDraft(from, to = null) {
+    const was = this.dragging; this.dragging = null; this.paintDraft();
+    if (from && was) this.dragHooks?.end?.(from, to);
   }
   destroy() {
     if (this.frame) cancelAnimationFrame(this.frame); this.frame = null;

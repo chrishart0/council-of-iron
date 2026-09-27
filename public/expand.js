@@ -8,8 +8,8 @@ export class ExpandableMap {
   /** `onChange(on)` lets the host re-fit its atlas (the camera centre is kept by the viewBox). `target` is
    * what real fullscreen is requested on (default: the container); `escape: false` when the host owns
    * Escape ordering (the live match closes its menu and panels first). */
-  constructor(container, button, { onChange = () => {}, label = 'map', target = container, escape = true } = {}) {
-    Object.assign(this, { container, button, onChange, label, target });
+  constructor(container, button, { onChange = () => {}, label = 'map', target = container, escape = true, iconOnly = false } = {}) {
+    Object.assign(this, { container, button, onChange, label, target, iconOnly });
     this.on = false;
     this.click = () => this.toggle();
     this.fullscreen = () => { if (this.on && !document.fullscreenElement && this.requested) this.set(false, { fromBrowser: true }); };
@@ -39,7 +39,7 @@ export class ExpandableMap {
   render() {
     this.button.setAttribute('aria-pressed', String(this.on));
     this.button.setAttribute('aria-label', this.on ? `Exit expanded ${this.label} (Escape)` : `Expand ${this.label} to fill the screen`);
-    this.button.textContent = this.on ? '✕ Exit' : '⤢ Expand';
+    this.button.textContent = this.iconOnly ? (this.on ? '✕' : '⤢') : this.on ? '✕ Exit' : '⤢ Expand';
   }
   destroy() {
     this.set(false, { fromBrowser: true });

@@ -148,3 +148,28 @@
 .feed-actions button{min-height:30px;padding:3px 10px;font-size:11px}.feed-status{font-size:10px;color:#cdbfae;flex-basis:100%}
 .feed-recipient{margin:0;flex-basis:100%}.feed-recipient select{min-height:30px;margin:0;padding:3px 6px;font-size:12px}
 .feed-notice:not([hidden]){flex-basis:100%;display:block;color:#e6cf97;font-size:10px}
+
+/* v0.8: rows link to the card that answers them; leaderboard rows open diplomacy; a powers strip on phones. */
+.feed-open{flex:none;margin-left:6px;min-height:26px;padding:1px 8px;font-size:10px;border-radius:13px;background:#1c3640;border-color:#c8a77380;color:#f1d59c}
+.feed-system>div .feed-open{margin-left:auto}
+.feed-threat{--tone:var(--feed-war)}
+.lb-row:not(.lb-group){cursor:pointer}
+.lb-powers{display:none}
+.lb-front-button{display:flex;gap:6px;align-items:baseline;width:100%;min-width:0;min-height:26px;padding:2px 4px;background:transparent;border:0;font-size:10px;color:inherit;text-align:left}
+.lb-front-button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}.lb-front-button span:last-child{text-align:right}.lb-front-button b{color:#ff7a5c}
+.lb-front.involved .lb-front-button{color:#ffd9cc;font-weight:700}
+@media(max-width:1023px),(max-height:499px){
+ .leaderboard.collapsed{align-self:stretch}
+ .leaderboard.collapsed .lb-head{height:var(--strip-h,44px)}
+ .leaderboard.collapsed .lb-toggle{flex:none;width:auto;padding:0 8px}.leaderboard.collapsed .lb-toggle b{display:none}
+ .leaderboard.collapsed .lb-summary{max-width:64px}
+ .leaderboard.collapsed .lb-powers{display:flex;flex:1;min-width:0;align-items:center;gap:2px;overflow-x:auto;scrollbar-width:none;padding:0 2px}
+ .lb-power{position:relative;flex:1 0 38px;max-width:48px;height:40px;min-height:0;padding:0;display:grid;place-items:center;background:#13262d;border-color:#65706a66;border-radius:3px}
+ .lb-power .insignia{width:22px;height:26px}
+ .lb-power[data-relation=enemy]{background:#3a1d19;border-color:#ff6a4d;box-shadow:inset 0 -3px #ff6a4d}
+ .lb-power[data-relation=ally]{border-color:var(--band,#6cb8ff);box-shadow:inset 0 -3px var(--band,#6cb8ff)}
+ .lb-power[data-relation=offer]{background:#3a2f16;border-color:#ffb454;box-shadow:inset 0 -3px #ffb454}
+ .lb-toggle,.lb-modes button{min-height:40px}
+}
+.lb-rank-me{color:#f6dca6}
+@media(max-width:1023px),(max-height:499px){.leaderboard.collapsed .lb-summary{max-width:none}.leaderboard.collapsed .lb-rest{display:none}}

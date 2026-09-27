@@ -15,9 +15,12 @@ while(g.tick<480){while(fixture.actions[index]?.tick===g.tick){const a=fixture.a
 app.games.set(g.id,g);app.store.save(g);
 const finished=replay().game;finished.id='ui-review';finished.name='The Atlantic campaign';app.games.set(finished.id,finished);app.store.save(finished);
 // A second recorded position with real phased battles (formal war rules), for the map suite.
-const w=createGame({id:'ui-war',name:'The Rhine front',hostId:profiles.britain.id},MAP);
-for(const c of MAP.countries)join(w,MAP,{country:c.id,name:profiles[c.id].name,profileId:profiles[c.id].id,kind:'agent'});
-start(w);
+// The same position is also created as separate task rooms for the v0.8 walkthroughs (phone, desktop),
+// so those scripted players never disturb the map/relations assertions in 'ui-war'.
+const warRoom=(id,name)=>{const room=createGame({id,name,hostId:profiles.britain.id},MAP);
+  for(const c of MAP.countries)join(room,MAP,{country:c.id,name:profiles[c.id].name,profileId:profiles[c.id].id,kind:'agent'});start(room);return room;};
+const w=warRoom('ui-war','The Rhine front');
+const taskRooms=Object.fromEntries(['ui-tasks-m','ui-tasks-d'].map(id=>[id,warRoom(id,'The Rhine front · walkthrough')]));
 // Britain (the browser seat) also declares war on the USA at tick 0: no armies move on that front, so the
 // recorded battles are unchanged, but the viewer has a real war for the v0.7 relation UI.
 const warOrders={0:[['britain',{type:'declare_war',country:'usa'}],['russia',{type:'declare_war',country:'ottoman'}],['russia',{type:'move',from:'ukraine',to:'east-anatolia',amount:10}],['germany',{type:'declare_war',country:'france'}]],
@@ -26,14 +29,25 @@ const warOrders={0:[['britain',{type:'declare_war',country:'usa'}],['russia',{ty
   56:[['britain',{type:'move',from:'scotland',to:'ireland',amount:6}]],
   40:[['britain',{type:'move',from:'england',to:'low-countries',amount:8}],['france',{type:'move',from:'occitania',to:'iberia',amount:8}],['germany',{type:'move',from:'saxony',to:'balkans',amount:8}]]};
 // Tick 50: an approved alliance still inside its activation delay (a "forming" bloc).
-const pact=()=>{const q=act(w,MAP,'usa',{type:'propose',country:'japan',name:'Pacific Pact'},'ui-war-pact');act(w,MAP,'japan',{type:'accept',proposalId:q.proposalId},'ui-war-pact-accept');};
-const stepWar=to=>{while(w.tick<to){for(const [country,action] of warOrders[w.tick]||[])act(w,MAP,country,action,`ui-war-${w.tick}-${country}-${action.type}`);if(w.tick===50)pact();tick(w);}};
-stepWar(55);app.games.set(w.id,w);app.store.save(w);
+const pact=room=>{const q=act(room,MAP,'usa',{type:'propose',country:'japan',name:'Pacific Pact'},`${room.id}-pact`);act(room,MAP,'japan',{type:'accept',proposalId:q.proposalId},`${room.id}-pact-accept`);};
+const stepRoom=(room,to)=>{while(room.tick<to){for(const [country,action] of warOrders[room.tick]||[])act(room,MAP,country,action,`${room.id}-${room.tick}-${country}-${action.type}`);if(room.tick===50)pact(room);tick(room);}};
+const stepWar=to=>stepRoom(w,to);
+for(const room of [w,...Object.values(taskRooms)]){stepRoom(room,55);app.games.set(room.id,room);app.store.save(room);}
 app.server.listen(0,'127.0.0.1',()=>console.log(JSON.stringify({url:`http://127.0.0.1:${app.server.address().port}`,identity:profiles.britain})));
 for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>app.close().then(()=>process.exit(0)));
 
 // A private test-process channel, never a route on the game server.
-createInterface({input:process.stdin}).on('line',line=>{
+createInterface({input:process.stdin}).on('line',input=>{
+  // `@room command` addresses a task room with the same commands as the war room (dm, offer, ally, war N).
+  let line=input,room=w;
+  if(input.startsWith('@')){const [id,...rest]=input.slice(1).split(' ');room=taskRooms[id];if(!room)throw new Error('Unknown task room');line=rest.join(' ');}
+  const reply=extra=>{app.store.save(room);console.log(JSON.stringify({tick:room.tick,...extra}));};
+  if(room!==w){
+    if(line.startsWith('dm ')){const [,from,to,...words]=line.split(' ');act(room,MAP,from,{type:'chat',channel:'dm',to,text:words.join(' ')},`${room.id}-dm-${room.tick}-${from}-${to}`);return reply({});}
+    if(line.startsWith('offer ')){const [,from,to,...name]=line.split(' ');const r=act(room,MAP,from,{type:'propose',country:to,name:name.join(' ') || 'Iron Triangle'},`${room.id}-offer-${room.tick}-${from}-${to}`);return reply({proposalId:r.proposalId});}
+    if(line.startsWith('war ')){const to=Number(line.slice(4));if(!Number.isSafeInteger(to)||to<room.tick||to>200)throw new Error('Invalid task room tick');stepRoom(room,to);return reply({});}
+    throw new Error('Unknown task room command');
+  }
   // Test-only: another seat in the war room sends a DM or an alliance offer (the same act() path as any client).
   if(line.startsWith('dm ')){const [,from,to,...words]=line.split(' ');act(w,MAP,from,{type:'chat',channel:'dm',to,text:words.join(' ')},`ui-war-dm-${w.tick}-${from}-${to}`);app.store.save(w);console.log(JSON.stringify({tick:w.tick}));return;}
   if(line.startsWith('offer ')){const [,from,to]=line.split(' ');const r=act(w,MAP,from,{type:'propose',country:to,name:'Iron Triangle'},`ui-war-offer-${w.tick}-${from}-${to}`);app.store.save(w);console.log(JSON.stringify({tick:w.tick,proposalId:r.proposalId}));return;}
