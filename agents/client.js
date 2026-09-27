@@ -49,7 +49,8 @@ export class CouncilClient {
   action(action,opId=randomUUID()) { return this.request(this.gamePath('/actions'),'POST',{action,opId}); }
   preview(from,to,amount) {return this.request(this.gamePath(`/preview?${new URLSearchParams({from,to,amount})}`));}
   list() {return this.request('/api/games','GET',undefined,'');}
-  map() {return this.request('/map.json','GET',undefined,'');}
+  map() {return this.request(this.match ? this.gamePath('/map') : '/map.json','GET',undefined,'');}
+  plan(action) {return this.request(this.gamePath('/plan'),'POST',action);}
   start() {return this.request(this.gamePath('/start'),'POST',{});}
   bots() {return this.request(this.gamePath('/bots'),'POST',{});}
   standings() {return this.request('/api/standings','GET',undefined,'');}

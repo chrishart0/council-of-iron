@@ -1,5 +1,14 @@
 # Operating the prototype
 
+## v0.3 upgrade and scenario retention
+
+Back up SQLite normally, then update the source and restart. Do **not** delete your database. A small idempotent schema migration tags existing results `classic-64`. Existing snapshots keep the original map, fixed travel/no-recall rules, tokens, private logs and results. New rooms default to `imperial-1910-v3`, with rules, coordinates and travel times frozen into their snapshots.
+
+Default standings show only the industrial scenario; old standings remain available using `/api/standings?scenario=classic-64`. Both remain in personal result history. Different scenarios are filtered **before** the last-20 window is computed. Old classic games may still be created explicitly through the API. The browser and agent map endpoint resolves each room's map, rather than repainting old provinces using the new global default.
+
+`public/map.json` is retained unchanged. `public/imperial-map.json` is checked in; runtime needs no Python/Shapely installation. The optional authoring script uses pinned Shapely2.1.2 in verification, splitting the existing public-domain geometry. Changing an already published scenario's geometry later requires a new scenario ID/retained asset, not silently overwriting it for existing saves.
+
+
 ## Supported deployment
 
 One Node process, one local SQLite database, a small number of trusted participants. Default bind: `127.0.0.1:3000`. Set `HOST`, `PORT` and `PUBLIC_ORIGIN` for LAN or a reverse proxy. The origin should be only scheme, host and optional port, with no path or trailing slash. Host and cross-origin checks are deliberate; an unexpected host returns 403 rather than silently exposing a locally running agent’s game.

@@ -16,6 +16,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS results (game_id TEXT NOT NULL, profile_id TEXT NOT NULL,
         country TEXT NOT NULL, prestige REAL NOT NULL, eligible INTEGER NOT NULL,
         draw INTEGER NOT NULL, finished_at INTEGER NOT NULL, PRIMARY KEY(game_id,profile_id));`);
+    if (!this.db.prepare('PRAGMA table_info(results)').all().some(c=>c.name==='scenario'))
+      this.db.exec("ALTER TABLE results ADD COLUMN scenario TEXT NOT NULL DEFAULT 'classic-64'");
   }
   credential(profileId, gameId = null) {
     const token = randomBytes(32).toString('base64url');
@@ -38,19 +40,19 @@ export class Store {
       this.db.prepare('INSERT OR REPLACE INTO games VALUES (?,?)').run(g.id, JSON.stringify(g));
       if (g.outcome) for (const s of g.outcome.scores) {
         const p = g.players.find(p => p.id === s.country);
-        this.db.prepare('INSERT OR IGNORE INTO results VALUES (?,?,?,?,?,?,?)').run(
-          g.id, p.profileId, p.id, s.prestige, Number(g.eligible), Number(g.outcome.draw), Date.now());
+        this.db.prepare('INSERT OR IGNORE INTO results (game_id,profile_id,country,prestige,eligible,draw,finished_at,scenario) VALUES (?,?,?,?,?,?,?,?)').run(
+          g.id, p.profileId, p.id, s.prestige, Number(g.eligible), Number(g.outcome.draw), Date.now(), g.scenario || 'classic-64');
       }
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
-  standings(eligible = false) {
+  standings(eligible = false, scenario = 'imperial-1910-v3') {
     return this.db.prepare(`WITH recent AS (
       SELECT *, ROW_NUMBER() OVER (PARTITION BY profile_id ORDER BY finished_at DESC,game_id) AS n
-      FROM results WHERE eligible=? AND draw=0)
+      FROM results WHERE eligible=? AND scenario=? AND draw=0)
       SELECT p.id,p.name,AVG(r.prestige) AS prestige,COUNT(*) AS matches
       FROM recent r JOIN profiles p ON p.id=r.profile_id WHERE r.n<=20
-      GROUP BY p.id ORDER BY prestige DESC`).all(Number(eligible)).map(p => ({ ...p, provisional: p.matches < 10 }));
+      GROUP BY p.id ORDER BY prestige DESC`).all(Number(eligible),scenario).map(p => ({ ...p, provisional: p.matches < 10 }));
   }
   history(profileId) {
     return this.db.prepare('SELECT * FROM results WHERE profile_id=? ORDER BY finished_at DESC LIMIT 50').all(profileId);

@@ -1,3 +1,4 @@
+import { journeyPoint } from './movement.js';
 /** Presentation only: the server decides every movement, battle and ownership change. */
 const NS = 'http://www.w3.org/2000/svg';
 function node(tag, attributes = {}) {
@@ -9,6 +10,7 @@ const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 export class Atlas {
   constructor(svg, map, onSelect) {
     this.svg = svg; this.map = map; this.onSelect = onSelect;
+    this.positionsById=Object.fromEntries(map.provinces.map(p=>[p.id,{x:p.x,y:p.y}]));
     this.places = new Map(map.provinces.map(p => [p.id, p]));
     this.countries = new Map(map.countries.map(c => [c.id, c]));
     this.view = { x: 0, y: 0, w: 1280, h: 680 };
@@ -41,7 +43,8 @@ export class Atlas {
       const group=node('g',{id:`marker-${p.id}`,'data-province':p.id,tabindex:0,role:'button',class:'map-counter'});
       const disc=node('circle',{r:10});const text=node('text',{y:.5,class:'counter-value',id:`troops-${p.id}`});
       const label=node('text',{y:-17,class:'province-name'});label.textContent=p.name;
-      group.append(disc,text,label);markers.append(group);this.markers.set(p.id,{group,disc,text,label});
+      const industry=node('text',{y:21,class:'industry-label'});group.append(industry);
+      group.append(disc,text,label);markers.append(group);this.markers.set(p.id,{group,disc,text,label,industry});
     }
     svg.append(markers);
     this.tooltip=document.createElement('div');this.tooltip.className='atlas-tooltip';this.tooltip.hidden=true;svg.parentElement.append(this.tooltip);
@@ -110,7 +113,7 @@ export class Atlas {
     if(!p){this.tooltip.hidden=true;return;}
     this.tooltip.replaceChildren();
     const title=document.createElement('strong');title.textContent=this.places.get(id).name;
-    const detail=document.createElement('span');detail.textContent=`${this.countries.get(p.owner)?.name || 'Uncontrolled'} · ${p.troops} troops`;
+    const detail=document.createElement('span');detail.textContent=`${this.countries.get(p.owner)?.name || 'Uncontrolled'} · ${p.troops} troops${this.state.rules.distanceMovement?` · industry ${p.development}`:''}`;
     this.tooltip.append(title,detail);this.tooltip.hidden=false;
     const rect=this.svg.parentElement.getBoundingClientRect();
     this.tooltip.style.left=`${clamp(event.clientX-rect.left+14,8,rect.width-260)}px`;
@@ -170,6 +173,7 @@ export class Atlas {
       marker.group.setAttribute('class',`map-counter ${role}${p.owner===state.you && state.you?' owned':''}`);
       marker.disc.setAttribute('stroke',this.countries.get(p.owner)?.color || '#a5a28c');
       marker.text.textContent=p.troops;
+      marker.industry.textContent=state.rules.distanceMovement && p.owner ? `${'ⅠⅡⅢ'[(p.development || 1)-1]}${p.developing?' ↑':''}`:'';
       marker.group.setAttribute('aria-label',`${this.places.get(p.id).name}, ${p.troops} troops, ${this.countries.get(p.owner)?.name || 'uncontrolled'}`);
     }
     for(const edge of this.seas.children)edge.classList.toggle('selected-connection',edge.dataset.edge.split('|').includes(source));
@@ -196,11 +200,10 @@ export class Atlas {
     const elapsed=this.reducedMotion || this.state.status!=='running'?0:Math.min(2,(performance.now()-this.receivedAt)/1000)*this.state.speed;
     const scale=1/(this.svg.getScreenCTM()?.a || 1);
     for(const army of this.state.armies) {
-      const a=this.places.get(army.from),b=this.places.get(army.to);
-      let dx=b.x-a.x;if(dx>640)dx-=1280;if(dx< -640)dx+=1280;
-      const fraction=clamp((this.state.tick+elapsed-army.departedAt)/(army.arrivesAt-army.departedAt),0,.995);
-      this.armies.get(army.id)?.group.setAttribute('transform',`translate(${(a.x+dx*fraction+1280)%1280} ${a.y+(b.y-a.y)*fraction}) scale(${scale})`);
+      const point=journeyPoint(army,this.positionsById,Math.min(this.state.tick+elapsed,army.arrivesAt-.01));
+      this.armies.get(army.id)?.group.setAttribute('transform',`translate(${point.x} ${point.y}) scale(${scale})`);
     }
   }
+  destroy(){if(this.frame)cancelAnimationFrame(this.frame);this.frame=null;this.resize.disconnect();this.tooltip.remove();}
   animate(){this.frame=null;this.positions();if(this.state?.status==='running')this.frame=requestAnimationFrame(()=>this.animate());}
 }

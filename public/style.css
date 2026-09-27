@@ -168,3 +168,36 @@ footer{display:flex;justify-content:space-between;gap:15px;margin:0 3vw;padding:
  footer{font-size:8px;letter-spacing:.4px;margin-inline:4vw}.standing-row{font-size:11px}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+
+/* Industrial planning uses the same restrained command surface as diplomacy. */
+.development-panel{border:1px solid var(--line);background:#ddd1ab18;padding:14px;margin-top:20px;border-radius:3px}
+.development-panel .eyebrow{font-size:9px}.development-panel h3{font-size:18px}.development-panel button{width:100%;font-size:12px}
+.production{font-size:9px;color:var(--muted);margin-top:5px;font-variant-numeric:tabular-nums}
+.coordination-panel{padding-top:18px}.coordination-panel summary{font-size:12px}.coordination-panel input,.coordination-panel select{font-size:12px}
+.attack-source{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.attack-source label{display:flex;align-items:center;flex:1;min-width:0;margin:0;gap:8px;letter-spacing:0;color:var(--ink)}
+.attack-source input[type=checkbox]{width:16px;height:16px;flex:none;margin:0}.attack-source small{display:block;color:var(--muted);font-size:9px;font-weight:400}
+.attack-source input[type=number]{width:65px;flex:none;padding:6px;margin:0}.attack-source span{overflow-wrap:anywhere}
+#shared-arrival{font-variant-numeric:tabular-nums}.coordination-panel>label{margin-top:13px}
+.march-scroll{max-height:300px;overflow:auto}.march-row{display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);padding:9px 0;font-size:11px}
+.march-row>span,.march-row>.march-focus{flex:1;min-width:0}.march-row small{display:block;color:var(--muted);font-size:9px}
+.march-row>button{padding:6px 8px;font-size:10px}.march-row>.march-focus{border:0;text-align:left;padding:0}.march-row.returning{border-left:2px solid var(--gold);padding-left:8px}
+#map .industry-label{fill:#ebd5a2;font:700 9px var(--sans);paint-order:stroke;stroke:#172d35;stroke-width:2px;pointer-events:none;text-anchor:middle}
+
+/* Three explicit decisions, one shared source selector. Never bury coordinated play. */
+#orders-tab{overflow-anchor:none}
+.order-modes{display:flex;gap:4px;margin:0 0 15px;padding:4px;background:#e4dfd2;border-radius:4px}
+.order-modes button{flex:1;border:0;font-size:11px;padding:8px 6px;border-radius:3px}
+.order-modes button[aria-pressed=true]{background:var(--ink);color:var(--panel)}
+#orders-tab:not([data-order-mode=march]) #move-form>label[for=amount],
+#orders-tab:not([data-order-mode=march]) #move-form .amount-row,
+#orders-tab:not([data-order-mode=march]) #amount-slider,
+#orders-tab:not([data-order-mode=march]) #preview,
+#orders-tab:not([data-order-mode=march]) #send-army,
+#orders-tab:not([data-order-mode=march]) .standing-order,
+#orders-tab[data-order-mode=develop] .destination-label{display:none}
+#orders-tab[data-order-mode=coordinate] .province-readout{display:none}
+.coordination-panel,.development-panel{border:0;padding-top:0;margin-top:8px}
+.coordination-panel h3{margin-bottom:12px}
+#attack-plan{border-left:2px solid var(--gold);padding-left:9px}
+#attack-plan:empty{border:0;padding:0}

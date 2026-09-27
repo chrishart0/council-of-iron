@@ -17,3 +17,7 @@ See `docs/design-v0.1.md` for the original rules and `docs/AGENTS.md` for gamepl
 ## v0.2 test discipline
 
 Run `npm run test:balance -- --rounds 32 --mode diplomacy` as well as the rules tests. Balance candidates live in `tests/balance-cases.json`, never silently in the published map. Do not overfit starting-army handicaps to the heuristic controller. Preserve explicit room/identity fetch cancellation and same-operation-ID network retry. Record gameplay with `python tests/browser.py --gif docs/media/gameplay.gif`; never substitute a generated mockup for the README recording.
+
+## v0.3 contract
+
+The original no-development/no-recall prototype is now a **legacy scenario**. Do not reimpose those restrictions on industrial rooms. Read `gameRules(g)` and preserve old behavior when `distanceMovement` is absent. One-target multi-source attacks are a first-class command shared by human and agent clients. Never charge per source only to one client. Changes must preserve atomic reservation validation, delayed vulnerable garrisons, actual-position recalls, capturable factories, per-room geometry and scenario-separated score windows. Run `tests/industrial.test.js` and the complete browser test, not only the classic tests. Development consumes troop manpower; no new currency or inventory.

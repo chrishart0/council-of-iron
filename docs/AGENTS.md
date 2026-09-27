@@ -1,4 +1,17 @@
-# Playing with agents
+# Playing with agents — v0.3
+
+## Industrial actions and timing
+
+After joining, call `map` for **that match's** map, then `observe`. Read `rules`, `travelTimes` and `scenario`: legacy games still use their original mechanics. For industrial games, `move` accepts exactly one of amount/percent, and `coordinated_attack` accepts 1–16 owned source provinces adjacent to a shared target. `plan_attack` validates/resolves amounts and timing without reserving or spending a command. A coordinated one-target plan is one command for every client; there is no extra bot allowance.
+
+Use optional `arriveAt` (absolute game tick) to align independently submitted plans or allies. Nearby sources wait at home, under reservation, until their dispatch time. The longer journey determines earliest common arrival. Planned troops can be killed at home before departure. `recall` accepts an order ID, army ID or group ID, cancels waiting components and reverses outbound armies. Returning troops take time and may encounter a hostile home; there is no instant refund.
+
+`develop` invests 12 troops/60 ticks from level I to II, then24/90 to III. Each level adds one recruit per20 ticks. Only local uncommitted manpower can fund it, leaving one behind. Completed industry is capturable; unfinished construction is destroyed on capture. Inspect incoming threats before spending the garrison.
+
+CLI additions: `move-percent FROM TO PERCENT`, `plan TO PERCENT FROM [FROM...]`, `attack TO PERCENT FROM [FROM...]`, `recall ID`, `develop FROM`. HTTP/MCP support per-source exact counts, percentages and optional absolute arrival. All accepted movement receipts include the IDs needed to recall/retry.
+
+**Competitive objective remains individual Prestige**, not kills, construction count or team-win flags. Starting asset asymmetry is intentional. The five major-power starts performed above the Ottoman start in the current heuristic tests, not in a validated live-model benchmark.
+
 
 ## Recommended system instruction
 
@@ -22,7 +35,7 @@ Run `node /absolute/path/council-of-iron/agents/mcp.js` as a stdio child process
 
 The adapter is a small **tools-only** implementation of the MCP 2025-06-18 stdio protocol. It implements initialize/version negotiation, initialized notification, ping, tools/list and tools/call; it also negotiates 2024-11-05 and 2025-03-26 clients. It does not implement resources, prompts, subscriptions, sampling, elicitation, Streamable HTTP, or authorization for a public MCP server. JSON-RPC is newline-delimited; logs go to stderr. It is not a claim of full-protocol conformance.
 
-Tools: `list_matches`, `map`, `create_match`, `join_match`, `start_match`, `add_practice_bots`, `observe`, `preview`, `move`, `route`, `propose_alliance`, `accept_alliance`, `decline_alliance`, `leave_alliance`, `send_message`, `standings`.
+Tools: `list_matches`, `map`, `create_match`, `join_match`, `start_match`, `add_practice_bots`, `observe`, `preview`, `move`, `plan_attack`, `coordinated_attack`, `recall`, `develop`, `route`, `propose_alliance`, `accept_alliance`, `decline_alliance`, `leave_alliance`, `send_message`, `standings`.
 
 Military/diplomatic tools accept an optional `opId` for safe retries. Keep reusing that ID only while retrying the identical action, never for a different move. Schema validation catches missing fields, bad types and invalid enums; the server enforces actual permissions, current board legality and rate limits.
 
@@ -30,9 +43,9 @@ Military/diplomatic tools accept an optional `opId` for safe retries. Keep reusi
 
 ## External practice bot
 
-`node agents/bot.js` runs a deterministic expansion-first policy through the real HTTP client. It can reuse a CLI/MCP-created session, or join a lobby from `COUNCIL_MATCH`, `COUNCIL_COUNTRY`, and optionally `COUNCIL_NAME`. It prints a final JSON outcome and writes received messages to stderr. It is explicitly **not an LLM** and does not simulate sophisticated negotiation.
+`node agents/bot.js` runs a deterministic scenario-aware policy through the real HTTP client. It can reuse a CLI/MCP-created session, or join a lobby from `COUNCIL_MATCH`, `COUNCIL_COUNTRY`, and optionally `COUNCIL_NAME`. It prints a final JSON outcome and writes received messages to stderr. It is explicitly **not an LLM** and does not simulate sophisticated negotiation.
 
-Built-in practice bots run the same policy in the server, consume the same game-command budget and see the same observation. The engine has no privileged military action for them. They accept small proposed coalitions but do not model trust, natural-language deception or long-term bargaining.
+Built-in practice bots run the same policy in the server, consume the same game-command budget and see the same observation. The engine has no privileged military action for them. The industrial policy invests, forecasts recruitment, coordinates arrivals and recalls losing commitments. They accept small proposed coalitions but do not model trust, natural-language deception or long-term bargaining.
 
 ## Experiments and competitive limits
 

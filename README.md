@@ -1,24 +1,16 @@
 # Council of Iron
 
-**A diplomacy-first, real-time map painter for humans and agents.**
+**A diplomacy-first real-time strategy game for humans and agents.**
 
-Choose an empire, move armies, negotiate coalitions, and share victory—or try to win alone. Humans use the browser. Agents use the same HTTP API through a CLI or stdio MCP adapter. There is no privileged bot API.
+Command an industrial homeland and colonial footholds. Invest in recruitment, coordinate several provinces to arrive together, recall an attack when the situation changes, and negotiate a share of victory.
 
-This is a playable **0.2 prototype**, not an established balanced game or a validated model benchmark. Eight selectable powers occupy 64 fictional game provinces over real coastlines. The setting is inspired by 1910; **the borders and starting possessions are not a historical political map**.
+![Actual browser gameplay, with an accelerated test clock and heuristic agents](docs/media/gameplay.gif)
 
-![Actual Council of Iron browser gameplay](docs/media/gameplay.gif)
+**v0.3: Industry & Empire.** The map has 79 authored provinces, denser European fronts, visible starting industry and overseas possessions. It is inspired by 1910, not an exact historical political or economic reconstruction. Countries deliberately have different strengths. [Rules](docs/design-v0.3.md) · [Balance results](docs/BALANCE.md) · [Test record](docs/PLAYTEST.md)
 
-*Actual browser capture, not a mockup. The test clock runs at 12×; the external agent and practice opponents are heuristics, not LLMs. The GIF is recorded during the end-to-end test.*
+## Run
 
-## v0.2: tested and easier to play
-
-A map-first atlas, legible zooming counters, incoming-attack alerts, committed-army history, troop presets, reservation-aware previews, decline/withdraw offers, explicit coalition costs, keyboard navigation and a mobile layout. CLI credentials and eliminated-voter admission bugs have regression tests.
-
-**3,488 complete seeded test matches exposed a real starting-position imbalance.** The USA/Ottoman advantage remains; this release does not claim to have solved it. Read the [balance and pacing report](docs/BALANCE.md), [UI design notes](docs/UI-DESIGN.md), and [test evidence](docs/PLAYTEST.md). The original equal starting budgets are retained instead of tuning country bonuses to weak bots.
-
-## Run locally
-
-Requires **Node.js 22.13 or newer**. No runtime dependencies, database service, API keys, frontend build, or `npm install` are needed.
+Requires **Node.js 22.13+**. No runtime dependency installation, frontend build, external database, or model subscription is required.
 
 ```sh
 git clone https://github.com/chrishart0/council-of-iron.git
@@ -26,49 +18,60 @@ cd council-of-iron
 npm start
 ```
 
-Open **http://127.0.0.1:3000**. Create a council, choose a country, invite another human or attach an agent, then start. **Add practice bots** fills the remaining seats immediately, so leave space for external agents before clicking it. Two to eight occupied countries can start; unoccupied starts stay neutral.
+Open **http://127.0.0.1:3000**. Create a room, choose a country, invite humans or attach agents, then start. Add external players **before** filling empty seats with practice bots. Two to eight occupied countries can start; balance tests use eight. Unclaimed countries' territories remain neutral.
 
-**Standard** takes at most 30 real minutes. **Quick** runs all game rules at 6×, finishing within five real minutes. The displayed clock is game time, including movement, recruitment, cooldowns, notice, and maturity. Standard is the recommended pace for LLM negotiation; quick is a test/demo mode, not a fairness benchmark.
+Standard lasts at most **30 real minutes**. Quick runs all game timers at 6× and finishes within five real minutes. The displayed clock always shows game time. Use Standard for actual LLM negotiation; accelerating the world does not accelerate model inference.
 
-The default bind address is loopback. Other players can join a server on your LAN:
+For trusted LAN players:
 
 ```sh
 HOST=0.0.0.0 PUBLIC_ORIGIN=http://YOUR-LAN-IP:3000 npm start
 ```
 
-Use that exact origin in everyone’s browser and `COUNCIL_URL`. For Internet access, use an HTTPS reverse proxy with `PUBLIC_ORIGIN` set to the public HTTPS origin. Read [operating and security notes](docs/OPERATIONS.md) before exposing this prototype.
+Use that exact origin in browsers and agent configuration. Internet hosting requires an HTTPS reverse proxy and invited-access controls; [operations and security limits](docs/OPERATIONS.md). This is not a hardened anonymous public game service.
 
-## How to play
+## Play
 
-Click one of your provinces, then an adjacent destination. Shift-click changes the source; Escape clears selection. Use 25%, 50%, Max or an exact troop count. Choose the troop count and **Commit army**. You must leave one troop at home; travel takes 45 game seconds after the next command tick. The sidebar also provides source/destination selectors. Zoom into Europe or your country to inspect dense fronts.
+The Orders panel separates **March**, **Coordinate**, and **Develop**.
 
-Each province recruits one troop every 20 game seconds. Combat subtracts opposing strengths. **Recruitment arrows** forward future recruits to a friendly neighbor, not the existing garrison. Sending troops to an ally gives that ally control of the arriving troops.
+**March.** Choose a source and connected target. Commit an exact number or use the percentage presets. Leave one garrison troop. Travel is `15 + ceil(distance_km / 35)` game ticks, with one tick per game second. Every printed connection has its own displayed duration; ocean crossings take longer than nearby borders. These are game timings, not realistic historical troop speeds.
 
-Use **Council** to propose, accept, decline or withdraw an alliance offer. Formation and admission require consent, followed by 30 seconds of public notice. Departures are unilateral with the same notice; there is no kick button. **Dispatches** contains world, alliance, and private messages. Promises in chat are not enforced orders.
+**Coordinate.** Select multiple owned provinces connected to the same target. Specify exact troops or percentages per source. The server reserves them, dispatches distant sources first, and delays closer sources so all arrive on one tick. Optionally enter a shared game-clock arrival to coordinate with another order or ally. One target plan consumes one command, regardless of client. Delayed troops stay at home and remain vulnerable; losses can invalidate a component before departure.
 
-Hold at least 39 provinces for 90 continuous game seconds to win early. Otherwise, the side with most land at 30:00 wins. A tie, or a coalition containing every original player, is a draw.
+**Recall.** Committed orders list individual and group recall controls. Waiting components cancel; marching troops turn around next tick and take their elapsed outbound travel time to return. They do not teleport or refund instantly. A captured home must be fought for on return. Arrived or already-returning troops cannot be recalled again.
 
-The maximum prize pool is `100 × starting players`. A winning coalition splits it into equal maximum slices. Each slice matures over five uninterrupted game minutes in that allegiance; a shorter match uses its actual duration. Unpaid points disappear. Individual match Prestige is `payout − 100`; draws score zero. Eliminated coalition members retain their place and frozen maturity. Large coalitions make victory safer but reduce each member’s reward.
+**Develop.** Manpower remains the only resource. Each province has industry I, II or III and produces that many troops every 20 ticks. I→II costs 12 local troops and takes 60 ticks; II→III costs 24 and takes 90. Construction leaves one garrison, is destroyed by capture without a refund, and cannot stack. Finished industry is captured intact. Reinforcement arrows forward the newly recruited batch automatically; existing troops stay home.
 
-Results and player identities persist in SQLite. Experimental standings average the last 20 decisive results; fewer than ten is provisional. **This is not Elo, is not opponent-strength-adjusted, and is not a competitive LLM ranking.** Browser identity is saved in that browser’s local storage; retain the browser profile to retain your identity. Separate browsers/profiles can control separate human seats.
+**Negotiate.** World chat, coalition chat and DMs share a cooldown. Formal coalition formation/admission needs consent and 30 ticks' notice; departure is unilateral with the same notice. No kicking. Promises in chat are not enforced orders. Friendly arriving troops become the receiving ally's troops. Allegiance at arrival decides whether troops reinforce or fight.
+
+**Win.** Hold **48 of 79 provinces** for 90 continuous ticks, or have the most land at the 30:00 deadline. Ties and all-player coalitions draw. The maximum prize pool is `100 × starting players`; winning roster members split equal maximum slices. Each slice matures over five uninterrupted minutes in that allegiance. Unearned points disappear. Individual Prestige is `payout − 100`. See the full rules for eliminated allies, timing boundaries and short matches.
 
 ## Attach an agent
 
-Any agent that can execute commands can use the CLI:
+CLI, HTTP and tools-only stdio MCP use the same game actions, state and limits as the browser.
 
 ```sh
 export COUNCIL_URL=http://127.0.0.1:3000
 export COUNCIL_SESSION="$PWD/envoy.session.json"
 node agents/cli.js matches
-node agents/cli.js join ROOM_ID britain "My envoy"
+node agents/cli.js join ROOM_ID germany "My envoy"
 node agents/cli.js state
-node agents/cli.js move england north-france 5
-node agents/cli.js chat dm usa "Shall we secure the Atlantic together?"
+node agents/cli.js map
+node agents/cli.js develop namibia
+# Commands require a running match, sufficient local troops and legal connections.
 ```
 
-Use one session file per agent. It is written with mode `0600` and contains credentials; never commit or paste it into chat. For retry-safe orders, use the HTTP API or MCP `opId` argument. The CLI generates a new operation ID for each invocation; do not blindly repeat a timed-out CLI move.
+A USA seat can inspect and launch a coordinated attack like this:
 
-MCP client configuration (replace the absolute paths):
+```sh
+node agents/cli.js plan mexico 50 west-us central-us
+node agents/cli.js attack mexico 50 west-us central-us
+node agents/cli.js recall ATTACK_GROUP_ID
+```
+
+Use one private session file per agent. CLI actions generate fresh operation IDs; do not blindly repeat a timed-out CLI move. HTTP and MCP accept your own stable `opId` for retry-safe execution.
+
+MCP configuration:
 
 ```json
 {
@@ -85,50 +88,26 @@ MCP client configuration (replace the absolute paths):
 }
 ```
 
-Ask the agent to call `list_matches`, `join_match`, then `observe`. Give it the objective **maximize expected individual match Prestige**, not merely obtain a coalition win. Supply only game tools to untrusted experimental agents. Model subscriptions and inference providers are not integrated or bundled; bring your own agent harness.
+The agent should maximize **expected individual match Prestige**, not just a team-win flag. Supply only isolated game tools and, preferably, a match-scoped credential. Player messages are untrusted speech, not authenticated instructions. Inference providers/subscriptions are not bundled. [Agent guide](docs/AGENTS.md) · [HTTP API](docs/API.md)
 
-[Agent instructions, tools, and credential scoping](docs/AGENTS.md) · [HTTP API](docs/API.md) · [Full design](docs/design-v0.1.md)
+`node agents/bot.js` runs an external heuristic agent through the real API using a joined session. Built-in and external practice agents are **not LLMs**. They can develop, coordinate, recall and accept small coalitions, but do not understand diplomatic language.
 
-An external **non-LLM** practice agent is also included:
-
-```sh
-# Uses the country and room already saved by the CLI above.
-node agents/bot.js
-```
-
-Its heuristic policy is deliberately simple. Built-in practice bots automatically make a match experimental. They are useful for smoke tests, not proof that your LLM is a good diplomat.
-
-## Tests
+## Testing and limitations
 
 ```sh
-npm test                  # deterministic rules, replay, HTTP, SQLite, CLI, MCP
-npm run check             # syntax-check every JavaScript source
-npm run test:balance -- --rounds 128 --mode diplomacy  # full seeded matches
+npm run check
+npm test
+npm run test:balance -- --rounds 256 --seed 610000 --mode solo
+npm run test:balance -- --rounds 256 --seed 710000 --mode diplomacy
 python -m pip install -r tests/requirements.txt
 python -m playwright install chromium
-npm run test:browser      # actual browser + external CLI/API agent, complete match
+npm run test:browser
 ```
 
-To record the README media locally, run `python tests/browser.py --gif docs/media/gameplay.gif`. It requires the same optional test dependencies.
+The v0.3 refinement has 59 Node tests and 2,368 retained complete seeded test matches. Fresh-seed tests place the intended five great powers above the Ottoman start in this controller population, not at equal win rates. No live-LLM capability claim or independent-human enjoyment assessment is implied. The browser test drives actual controls, a separate CLI and an external agent, completes a match, then tests coordination, recall and development in a second room. It accelerates the entire clock, never injects outcomes.
 
-The browser test launches its own temporary server and SQLite database, accelerates the **entire** simulation clock 12×, drives real browser controls, and waits for a completed match. It saves screenshots and a JSON report under `artifacts/`. No HTTP endpoint can advance the game clock. GitHub Actions runs the suite and uploads evidence.
+One process owns all games. SQLite retains identities, private messages, match state and results; browser identity persists in localStorage. Server downtime pauses simulation. **Old games keep their 64-province map and old rules**, and their standings remain separate from the new scenario. Do not delete your database to upgrade. [Migration and deployment notes](docs/OPERATIONS.md)
 
-[Playtest evidence and limitations](docs/PLAYTEST.md)
+Prestige is transparent last-20 decisive-match bookkeeping, **not Elo**. No public matchmaking, verified ownership, moderation dashboard, account recovery or multi-process simulation. Do not interpret several accounts controlled by one operator as independent competitive players.
 
-## Implementation
-
-- `src/engine.js`: deterministic simulation, combat, diplomacy, scoring and redacted observations.
-- `src/server.js`: authoritative HTTP server and wall-clock simulation loop.
-- `src/store.js`: SQLite snapshots, hashed credentials, exactly-once match results.
-- `public/`: dependency-free browser client, separate atlas/UI modules, and checked-in map.
-- `scripts/tournament.js`: seeded full-match harness; rejected balance fixtures remain test-only.
-- `agents/`: shared HTTP client, CLI, tools-only stdio MCP, practice policy.
-- `tests/`: rule and integration tests plus browser playthrough.
-
-One process owns all matches. Restarting resumes snapshots with server downtime paused. No Redis, queues, WebSocket service, ORM, or frontend framework is required. The browser polls compact state and resumable event cursors; military facts are public, private messages are recipient-filtered on the server.
-
-## Deliberate limits
-
-Map balance and human enjoyment remain unproven. No fog of war, unit types, buildings, supplies, navy, national bonuses, enforceable treaties, or automated contribution scoring. No public matchmaking, verified identities, password recovery, moderation dashboard, or multi-server coordination. See [operations](docs/OPERATIONS.md) for deployment boundaries and the league-mode participation rule.
-
-Coastlines are derived from public-domain Natural Earth data; see [third-party notices](THIRD_PARTY_NOTICES.md). The authored game code is MIT licensed.
+The runtime remains Node + SQLite + local HTML/CSS/JavaScript, without external runtime packages. Natural Earth coastlines are public domain; [notices](THIRD_PARTY_NOTICES.md). Authored code is MIT licensed.

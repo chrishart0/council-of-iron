@@ -1,0 +1,140 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { createGame, join, start, act, tick, observe, attackPlan, gameRules, reservedTroops } from '../src/engine.js';
+import { journeyPoint, distanceKm } from '../public/movement.js';
+const map = JSON.parse(readFileSync(new URL('../public/imperial-map.json',import.meta.url)));
+const country = (g,id) => g.players.find(p=>p.id===id);
+const province = (g,id) => g.provinces.find(p=>p.id===id);
+function game(){const g=createGame({id:'industrial',name:'Industrial',hostId:'usa'},map);
+  for(const c of map.countries)join(g,map,{profileId:c.id,name:c.id,country:c.id});start(g);return g;}
+let id=0;const action=(g,p,a,opId=`n-${++id}`)=>act(g,map,p,a,opId);
+const advance=(g,n)=>{for(let i=0;i<n;i++)tick(g);};
+const total=g=>g.provinces.reduce((n,p)=>n+p.troops,0)+g.armies.reduce((n,a)=>n+a.amount,0);
+test('industrial map has more European provinces, colonial footholds and explicit asymmetric industry',()=>{
+  assert.ok(map.provinces.length>64);const g=game();assert.equal(province(g,'namibia').owner,'germany');
+  assert.equal(province(g,'north-india').owner,'britain');assert.equal(province(g,'indochina').owner,'france');
+  assert.ok(province(g,'ruhr').development>province(g,'namibia').development);
+  assert.equal(gameRules(g).threshold,Math.ceil(map.provinces.length*.6));
+  const byId=new Map(map.provinces.map(p=>[p.id,p]));let seen=new Set(['england']);
+  for(let i=0;i<map.provinces.length;i++)seen=new Set([...seen,...[...seen].flatMap(id=>byId.get(id).neighbors)]);
+  assert.equal(seen.size,map.provinces.length);
+  for(const p of map.provinces)for(const n of p.neighbors){assert.ok(byId.get(n).neighbors.includes(p.id));assert.equal(g.travelTimes[p.id][n],g.travelTimes[n][p.id]);}
+});
+test('distance movement takes longer overseas and crosses the antimeridian by the short direction',()=>{
+  const g=game();assert.ok(g.travelTimes.england['east-us']>g.travelTimes.england['north-france']);
+  assert.ok(distanceKm({lon:179,lat:0},{lon:-179,lat:0})<230);
+  const r=action(g,'usa',{type:'move',from:'west-us',to:'mexico',percent:50});
+  const available=province(g,'west-us').troops-1;assert.equal(r.orders[0].amount,Math.floor(available/2));
+  tick(g);assert.equal(g.armies[0].arrivesAt,1+g.travelTimes['west-us'].mexico);
+});
+test('multi-source plan validates atomically, reserves exact amounts, dispatches later sources, arrives together',()=>{
+  const g=game(),to='mexico';const sources=['west-us','central-us'];
+  assert.ok(sources.every(from=>map.provinces.find(p=>p.id===from).neighbors.includes(to)));
+  const before=JSON.stringify(g);
+  assert.throws(()=>action(g,'usa',{type:'attack',to,sources:[{from:sources[0],amount:5},{from:'england',amount:5}]}),/not own/);
+  assert.equal(JSON.stringify(g),before);
+  const plan=attackPlan(g,map,'usa',{to,sources:sources.map(from=>({from,amount:5}))});
+  assert.notEqual(plan.sources[0].executeAt,plan.sources[1].executeAt);
+  const receipt=action(g,'usa',{type:'attack',to,sources:sources.map(from=>({from,amount:5}))});
+  assert.equal(observe(g,'usa').commandBudget.remaining,2);assert.equal(reservedTroops(g,'usa','central-us'),5);
+  advance(g,receipt.arrivesAt-1);assert.equal(g.armies.filter(a=>a.groupId===receipt.groupId).length,2);
+  tick(g);const battle=g.events.find(e=>e.type==='battle'&&e.province===to);
+  assert.equal(battle.arrivals.length,2);assert.equal(province(g,to).troops,8);
+});
+test('duplicate sources, mixed units, impossible percentages and too-early/late synchronized arrivals are rejected',()=>{
+  const g=game(),s={from:'west-us',amount:5};
+  for(const sources of [[s,s],[{...s,percent:50}],[{from:'west-us',percent:0}],[{from:'west-us',percent:101}],[{from:'west-us',percent:.001}]])
+    assert.throws(()=>action(g,'usa',{type:'attack',to:'mexico',sources}));
+  for(const arriveAt of [1,1801,999999])assert.throws(()=>action(g,'usa',{type:'attack',to:'mexico',sources:[s],arriveAt}));
+});
+test('recalling an outbound army reverses at its actual position and returns no troops instantly',()=>{
+  const g=game();const r=action(g,'usa',{type:'move',from:'west-us',to:'mexico',amount:8});advance(g,11);
+  const army=g.armies[0],expectedPoint=journeyPoint(army,g.positions,12),before=province(g,'west-us').troops;
+  action(g,'usa',{type:'recall',id:army.id});assert.equal(province(g,'west-us').troops,before);tick(g);
+  assert.equal(army.returning,true);assert.deepEqual(army.startPoint,expectedPoint);assert.equal(army.arrivesAt,23);
+  advance(g,10);assert.equal(g.armies.length,1);tick(g);assert.equal(g.armies.length,0);assert.equal(province(g,'mexico').owner,null);
+  assert.equal(province(g,'west-us').troops,12+3);assert.equal(r.groupId,army.groupId);
+});
+test('a coordinated recall cancels waiting components and reverses already-dispatched armies',()=>{
+  const g=game();const r=action(g,'usa',{type:'attack',to:'mexico',sources:[{from:'west-us',amount:5},{from:'central-us',amount:5}]});
+  tick(g);assert.equal(g.armies.length,1);assert.equal(g.orders.length,1);
+  action(g,'usa',{type:'recall',id:r.groupId});tick(g);
+  assert.equal(g.orders.filter(o=>o.groupId===r.groupId).length,0);assert.equal(g.armies.length,1);assert.equal(g.armies[0].returning,true);
+  tick(g);assert.equal(g.armies.length,0);
+});
+test('recall can cancel before departure, cannot control opponents, and is retry safe',()=>{
+  const g=game();const r=action(g,'usa',{type:'move',from:'west-us',to:'mexico',amount:5});
+  assert.throws(()=>action(g,'britain',{type:'recall',id:r.groupId}),e=>e.status===403);
+  const recall={type:'recall',id:r.groupId};const a=action(g,'usa',recall,'stable');assert.deepEqual(action(g,'usa',recall,'stable'),a);
+  tick(g);assert.equal(g.armies.length,0);assert.equal(province(g,'west-us').troops,12);
+});
+test('returning army must fight if its home was captured; it never teleports to another province',()=>{
+  const g=game();action(g,'usa',{type:'move',from:'west-us',to:'mexico',amount:8});advance(g,5);
+  const army=g.armies[0];province(g,'west-us').owner='japan';province(g,'west-us').troops=3;
+  action(g,'usa',{type:'recall',id:army.id});tick(g);advance(g,5);
+  assert.equal(province(g,'west-us').owner,'usa');assert.equal(province(g,'west-us').troops,5);
+});
+test('development spends reserved manpower, builds over time, increases production and caps at three',()=>{
+  const g=game(),p=province(g,'namibia');p.troops=40;
+  const r=action(g,'germany',{type:'develop',from:p.id});assert.equal(p.troops,40);assert.equal(reservedTroops(g,'germany',p.id),12);
+  assert.throws(()=>action(g,'germany',{type:'develop',from:p.id}),/underway/);
+  tick(g);assert.equal(p.troops,28);assert.equal(p.development,1);assert.equal(p.developing.completesAt,r.completesAt);
+  advance(g,60);assert.equal(p.development,2);assert.equal(p.developing,null);const before=p.troops;
+  advance(g,19);assert.equal(p.troops,before+2);
+  action(g,'germany',{type:'develop',from:p.id});advance(g,91);assert.equal(p.development,3);
+  assert.throws(()=>action(g,'germany',{type:'develop',from:p.id}),/fully developed/);
+});
+test('capture preserves completed factories but destroys an unfinished investment without a refund',()=>{
+  const g=game(),p=province(g,'namibia');p.troops=15;
+  action(g,'germany',{type:'develop',from:p.id});tick(g);assert.equal(g.economy.invested,12);
+  g.armies.push({id:'invader',country:'usa',from:'west-us',to:p.id,amount:10,departedAt:0,arrivesAt:2});tick(g);
+  assert.equal(p.owner,'usa');assert.equal(p.developing,null);assert.equal(p.development,1);
+  const ruhr=province(g,'ruhr');ruhr.troops=0;g.armies.push({id:'second',country:'usa',from:'west-us',to:ruhr.id,amount:10,departedAt:0,arrivesAt:3});tick(g);
+  assert.equal(ruhr.development,3);assert.equal(ruhr.owner,'usa');
+});
+test('delayed dispatch revalidates a lost source without creating troops',()=>{
+  const g=game();const earliest=attackPlan(g,map,'usa',{to:'mexico',sources:[{from:'west-us',amount:5}]}).earliest;
+  const r=action(g,'usa',{type:'move',from:'west-us',to:'mexico',amount:5,arriveAt:earliest+30});
+  province(g,'west-us').owner='britain';advance(g,31);
+  assert.equal(g.armies.length,0);assert.ok(g.events.some(e=>e.type==='order_failed'&&e.orderId===r.orderId));
+});
+test('save/reload during scheduled attacks, recall and construction produces the same state',()=>{
+  const g=game();province(g,'namibia').troops=30;
+  action(g,'germany',{type:'develop',from:'namibia'});
+  const r=action(g,'usa',{type:'attack',to:'mexico',sources:[{from:'west-us',amount:5},{from:'central-us',amount:5}]});advance(g,6);
+  action(g,'usa',{type:'recall',id:r.groupId});const loaded=JSON.parse(JSON.stringify(g));
+  advance(g,100);advance(loaded,100);assert.deepEqual(loaded,g);
+});
+
+test('recall received before the arrival tick wins that boundary; after arrival it is rejected',()=>{
+  const g=game();const sent=action(g,'usa',{type:'move',from:'west-us',to:'mexico',amount:5});
+  advance(g,sent.arrivesAt-1);action(g,'usa',{type:'recall',id:sent.orderId});tick(g);
+  assert.equal(province(g,'mexico').owner,null);assert.equal(g.armies[0].returning,true);
+  const other=game();const next=action(other,'usa',{type:'move',from:'west-us',to:'mexico',amount:5});
+  advance(other,next.arrivesAt);assert.equal(province(other,'mexico').owner,'usa');
+  assert.throws(()=>action(other,'usa',{type:'recall',id:next.orderId}),e=>e.status===409);
+});
+test('lost waiting garrisons can invalidate part of a group, without invalidating other components or duplicating troops',()=>{
+  const g=game();const r=action(g,'usa',{type:'attack',to:'mexico',sources:[{from:'west-us',amount:5},{from:'central-us',amount:5}]});
+  const delayed=r.orders.find(o=>o.executeAt>1);province(g,delayed.from).troops=2;
+  advance(g,r.arrivesAt);assert.equal(province(g,'mexico').troops,3);
+  assert.ok(g.events.some(e=>e.type==='order_failed'&&e.orderId===delayed.id));
+});
+test('a complete industrial match replays exactly, including construction, grouped dispatch and recalls',async()=>{
+  const {controller,STYLES}=await import('./simulation.js');
+  const g=game(),bots=new Map(g.players.map((p,i)=>[p.id,controller(map,77123+i,STYLES[i%STYLES.length])]));
+  while(g.status==='running'){
+    if(g.tick%10===0)for(const p of g.players){const a=bots.get(p.id)(observe(g,p.id,g.sequence));if(a)action(g,p.id,a);}
+    tick(g);
+  }
+  assert.ok(g.actionLog.some(a=>a.action.type==='develop'));
+  assert.ok(g.actionLog.some(a=>a.action.type==='attack'&&a.action.sources.length>1));
+  assert.ok(g.actionLog.some(a=>a.action.type==='recall'));
+  const replay=game();let index=0;
+  while(replay.status==='running'){
+    while(g.actionLog[index]?.tick===replay.tick){const a=g.actionLog[index++];act(replay,map,a.country,a.action,a.opId);}
+    tick(replay);
+  }
+  assert.deepEqual(replay,g);
+});

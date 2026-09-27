@@ -1,6 +1,6 @@
 {
   "name": "council-of-iron",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "A diplomacy-first real-time strategy game for humans and agents.",

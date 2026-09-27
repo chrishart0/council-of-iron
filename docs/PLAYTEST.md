@@ -1,3 +1,23 @@
+# v0.3 refinement test record
+
+The current implementation adds an industrial 79-province scenario, local manpower investment, distance-based travel, atomic multi-source attack scheduling, timed recalls and a browser mode for each decision. The original map and saved-game behavior are preserved instead of silently migrating old matches to new rules.
+
+**59 Node tests pass locally**, including new timing-boundary and full-modern-replay regressions. Syntax checks pass. The current refinement retained **2,368 complete heuristic simulation matches**; [balance report](BALANCE.md) and [machine-readable summary](testing/v03-summary.json). Counts exclude interrupted attempts and repeated CI verification. No live LLMs or independent-human enjoyment testing.
+
+A complete local browser/CLI/API-agent run passed on the first industrial candidate using the explicit managed-browser HTTP bridge. It tested the new coordination, recall and construction controls in a second room. The **final scenario and three-mode UI also passed** the complete local bridge playthrough with no captured page errors. It produced 65 actual rendered GIF frames, including coordinated planning, group recall and investment. The final run included 421 battles and 969 manual army departures. Native verification is recorded separately when executed; the bridge is not proof of native origin/CSP behavior.
+
+Local Chromium blocks URL navigation under its managed policy. The bridge uses actual Chromium rendering and the unchanged modules, forwarding fetch through the Python test process to the real local HTTP server. It does not modify browser policy or prove native navigation/origin/CSP behavior. The ordinary CI test uses real browser HTTP. Every accelerated browser run scales the whole simulation, not just movement or the deadline.
+
+## Refinements caught by testing
+
+The first scenario overpowered Germany and left Britain weak; later fresh-seed F validation rejected another candidate. The final candidate uses visible province assets, not an altered score formula. Multi-source controls initially sat too far down a long Orders pane; March/Coordinate/Develop are now explicit modes. The new movement model required removing old no-recall warnings, using per-game map retrieval, updating bot arrival forecasts, handling reservations for both development and delayed troops, and separating old/new standings. GUI group recall, captured-home returns, build interruption, invalid-source atomicity and persistence all have focused tests.
+
+## Native v0.3 verification
+
+The [native publication run](https://github.com/chrishart0/council-of-iron/actions/runs/36295149158) passed all 59 Node tests, reproduced both 256-match fresh-seed holdouts with identical aggregate results, and completed the actual-browser/external-agent playthrough. Coordinated arrivals, timed group recall and completed industry investment were exercised. The README GIF was recorded from this native run. [Machine-readable receipt](testing/v03-native-ci.json).
+
+## Historical v0.2 test record
+
 # Playtest record — v0.2
 
 ## Local verification, 26 September 2026 (America/New_York)

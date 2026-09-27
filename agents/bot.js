@@ -6,7 +6,7 @@ try {
   const country=process.env.COUNCIL_COUNTRY || client.session.country;
   if(!country || !client.match)throw new Error('Set COUNCIL_MATCH and COUNCIL_COUNTRY, or reuse a joined session.');
   if(!client.explicitToken && (!client.session.seatToken || client.session.country!==country || client.session.match!==client.match))
-    await client.join(client.match,country,process.env.COUNCIL_NAME || `${country} external bot`,'heuristic-v1','expansion-first');
+    await client.join(client.match,country,process.env.COUNCIL_NAME || `${country} external bot`,'heuristic-adaptive-v3','expansion-first');
   const map=await client.map();let cursor=0;
   console.error(`External practice agent joined ${client.match} as ${country}. This is not an LLM.`);
   while(true){

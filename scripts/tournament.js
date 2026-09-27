@@ -11,16 +11,19 @@ import { random, controller, STYLES } from '../tests/simulation.js';
 const args = process.argv.slice(2);
 const option = (key, fallback) => args.includes(key) ? args[args.indexOf(key) + 1] : fallback;
 if (args.includes('--help')) {
-  console.log('node scripts/tournament.js --rounds 128 --seed 1000 --map public/map.json --mode solo|diplomacy --out artifacts/tournament.json [--variant v01|CASE_NAME] [--engine src/engine.js]');
+  console.log('node scripts/tournament.js --rounds 128 --seed 1000 --map public/map.json --mode solo|diplomacy --out artifacts/tournament.json [--variant v01|CASE_NAME] [--engine src/engine.js] [--policy mixed|no-build|no-sync|no-recall]');
   process.exit(0);
 }
 const rounds = Number(option('--rounds', 64)), seedStart = Number(option('--seed', 1000));
 if (!Number.isSafeInteger(rounds) || rounds < 1 || rounds > 10000 || !Number.isSafeInteger(seedStart)) throw new Error('Invalid rounds or seed.');
+const policy = option('--policy', 'mixed');
+const restrictions = {mixed:{},'no-build':{develop:false},'no-sync':{coordinated:false},'no-recall':{recall:false}};
+if(!Object.hasOwn(restrictions,policy))throw new Error('Unknown policy restriction.');
 const mode = option('--mode', 'solo');
 if (!['solo', 'diplomacy'].includes(mode)) throw new Error('Unknown mode.');
 const enginePath = resolve(option('--engine', 'src/engine.js'));
 const { createGame, join, start, act, tick, observe, RuleError } = await import(pathToFileURL(enginePath));
-const mapBytes = readFileSync(option('--map', 'public/map.json')), map = JSON.parse(mapBytes);
+const mapBytes = readFileSync(option('--map', 'public/imperial-map.json')), map = JSON.parse(mapBytes);
 const variant = option('--variant', 'v01');
 const cases = JSON.parse(readFileSync(new URL('../tests/balance-cases.json', import.meta.url)));
 if (!Object.hasOwn(cases, variant)) throw new Error('Unknown balance variant. See tests/balance-cases.json.');
@@ -45,7 +48,7 @@ function run(seed) {
   for (let i = 0; i < countries.length; i++) {
     const c = countries[i], style = STYLES[(i + seed) % STYLES.length];
     join(g, map, {profileId:c.id, name:c.id, country:c.id, kind:'agent'});
-    controllers.set(c.id, controller(map, seed * 97 + i * 7919, style));
+    controllers.set(c.id, controller(map, seed * 97 + i * 7919, style, restrictions[policy]));
     cadence.set(c.id, [5, 10, 15][(i + Math.floor(seed / 4)) % 3]);
   }
   // Fixture construction happens before the match, never during gameplay.
@@ -53,10 +56,11 @@ function run(seed) {
   for (const c of map.countries) if (c.startTroops !== undefined)
     for (const p of g.provinces.filter(p=>p.owner===c.id)) p.troops=c.startTroops;
   start(g); let moves = 0, battles = 0, casualties = 0, recruited = 0, rejected = 0, serial = 0;
+  let developments = 0, recalls = 0, synchronized = 0;
   let firstBattle = null, firstElimination = null, alliances = 0, departures = 0;
   const checkpoints = {};
   const command = (id, action) => {
-    try { act(g, map, id, action, `s-${++serial}`); if (action.type === 'move') moves++; }
+    try { act(g, map, id, action, `s-${++serial}`); if (['move','attack'].includes(action.type)) moves++; if (action.type==='develop') developments++; if (action.type==='recall') recalls++; if(action.type==='attack'&&action.sources.length>1)synchronized++; }
     catch (e) { if (!(e instanceof RuleError)) throw e; rejected++; }
   };
   while (g.status === 'running') {
@@ -80,7 +84,8 @@ function run(seed) {
         if (action) command(p.id, action);
       }
     }
-    const oldTotal = total(g), oldEvents = g.events.length;
+    const oldTotal = total(g), oldEvents = g.events.length, oldInvested = g.economy?.invested || 0;
+    const expectedLevels = new Map(g.provinces.map(p=>[p.id,p.developing?.completesAt<=g.tick+1 ? p.developing.level : p.development || 1]));
     const dueRecruits = g.provinces.filter(p => p.owner && p.nextRecruit <= g.tick+1).map(p=>p.id);
     tick(g);
     const events = g.events.slice(oldEvents), captured = new Set(); let lost = 0;
@@ -94,8 +99,8 @@ function run(seed) {
       if (e.type === 'alliance_activated') alliances++;
       if (e.type === 'departed') departures++;
     }
-    const born = dueRecruits.filter(id=>!captured.has(id)).length; recruited += born; casualties += lost;
-    invariant(total(g) === oldTotal + born - lost, 'troop conservation', g);
+    const born = dueRecruits.filter(id=>!captured.has(id)).reduce((n,id)=>n+(g.rules?.distanceMovement?expectedLevels.get(id):1),0); recruited += born; casualties += lost;
+    invariant(total(g) === oldTotal + born - lost - ((g.economy?.invested || 0) - oldInvested), 'troop conservation', g);
     invariant(g.provinces.every(p=>Number.isSafeInteger(p.troops) && p.troops>=0), 'negative or noninteger garrison',g);
     invariant(g.armies.every(a=>Number.isSafeInteger(a.amount) && a.amount>0 && a.arrivesAt>g.tick), 'invalid moving army',g);
     invariant(g.tick<=1800, 'deadline overrun',g);
@@ -110,17 +115,17 @@ function run(seed) {
     prestige:Object.fromEntries(outcome.scores.map(s=>[s.country,s.prestige])),
     eliminatedAt:Object.fromEntries(g.players.map(p=>[p.id,p.eliminatedAt])),
     styles:Object.fromEntries(g.players.map((p,i)=>[p.id,STYLES[(i+seed)%STYLES.length].name])),
-    cadence:Object.fromEntries(cadence),moves,battles,casualties,recruited,rejected,firstBattle,firstElimination,alliances,departures,checkpoints};
+    cadence:Object.fromEntries(cadence),developments,recalls,synchronized,moves,battles,casualties,recruited,rejected,firstBattle,firstElimination,alliances,departures,checkpoints};
 }
 for(let n=0;n<rounds;n++) {
   results.push(run(seedStart+n));
   if((n+1)%8===0) console.error(`${mode}: ${n+1}/${rounds} matches; ${((performance.now()-began)/1000).toFixed(1)}s`);
 }
 const mean = values => values.reduce((a,b)=>a+b,0)/values.length;
-const summary = {rounds,mode,variant,seedStart,seedEnd:seedStart+rounds-1,
+const summary = {rounds,mode,variant,policy,seedStart,seedEnd:seedStart+rounds-1,
   mapSha256:createHash('sha256').update(mapBytes).digest('hex'), engineSha256:createHash('sha256').update(readFileSync(enginePath)).digest('hex'),
   draws:results.filter(r=>r.draw).length,meanDuration:mean(results.map(r=>r.tick)),meanFirstBattle:mean(results.filter(r=>r.firstBattle!==null).map(r=>r.firstBattle)),
-  meanMoves:mean(results.map(r=>r.moves)),meanBattles:mean(results.map(r=>r.battles)),
+  meanMoves:mean(results.map(r=>r.moves)),meanDevelopments:mean(results.map(r=>r.developments)),meanRecalls:mean(results.map(r=>r.recalls)),meanSynchronized:mean(results.map(r=>r.synchronized)),meanBattles:mean(results.map(r=>r.battles)),
   meanFirstElimination:mean(results.filter(r=>r.firstElimination!==null).map(r=>r.firstElimination)),
   meanPrestige:Object.fromEntries(map.countries.map(c=>[c.id,mean(results.map(r=>r.prestige[c.id]))])),
   eliminatedByMinute5:Object.fromEntries(map.countries.map(c=>[c.id,results.filter(r=>r.eliminatedAt[c.id]!==null && r.eliminatedAt[c.id]<=300).length])),

@@ -11,7 +11,12 @@ const help=`Council of Iron CLI (Node 22.13+)
   bots                               Fill empty seats with practice bots
   state [EVENT_CURSOR]              Observe board and your diplomatic inbox
   map                                Province IDs, connections, and countries
-  move FROM TO AMOUNT                Commit an adjacent army
+  move FROM TO AMOUNT                Commit an adjacent army; distance-based travel
+  move-percent FROM TO PERCENT        Commit % of currently uncommitted troops
+  attack TO PERCENT FROM [FROM...]   Coordinate sources to arrive together
+  plan TO PERCENT FROM [FROM...]     Preview shared arrival; does not issue orders
+  recall ARMY_OR_GROUP_ID            Cancel waiting orders; march outbound troops home
+  develop FROM                       Invest local manpower in province industry
   route FROM TO|clear                Set or clear a recruitment arrow
   preview FROM TO AMOUNT             Preview against the current garrison
   propose COUNTRY [COALITION_NAME]   Offer coalition membership
@@ -38,6 +43,13 @@ try {
     case 'state':result=await client.observe(Number(args[0] || 0));break;
     case 'map':result=await client.map();break;
     case 'move':result=await client.action({type:'move',from:args[0],to:args[1],amount:Number(args[2])});break;
+    case 'move-percent':result=await client.action({type:'move',from:args[0],to:args[1],percent:Number(args[2])});break;
+    case 'attack': case 'plan': {
+      const action={type:'attack',to:args[0],sources:args.slice(2).map(from=>({from,percent:Number(args[1])}))};
+      result=command==='plan'?await client.plan(action):await client.action(action);break;
+    }
+    case 'recall':result=await client.action({type:'recall',id:args[0]});break;
+    case 'develop':result=await client.action({type:'develop',from:args[0]});break;
     case 'route':result=await client.action({type:'route',from:args[0],to:args[1]==='clear'?null:args[1]});break;
     case 'preview':result=await client.preview(args[0],args[1],Number(args[2]));break;
     case 'propose':result=await client.action({type:'propose',country:args[0],name:args[1] || 'The Accord'});break;

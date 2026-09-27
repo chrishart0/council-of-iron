@@ -1,3 +1,4 @@
+import { chooseIndustrial } from '../agents/industrial-policy.js';
 /** Seeded test controllers. No hidden state or privileged army actions.
  * These deliberately simple heuristics are NOT language models or human substitutes.
  */
@@ -13,9 +14,10 @@ export const STYLES = [
   { name: 'cautious', neutral: 30, fraction: .85, reserve: 2 },
   { name: 'opportunist', neutral: 12, fraction: .58, reserve: 1 },
 ];
-export function controller(map, seed, style) {
+export function controller(map, seed, style, overrides = {}) {
   const rng = random(seed), geometry = new Map(map.provinces.map(p => [p.id, p]));
   return state => {
+    if (state.rules.distanceMovement) return chooseIndustrial(state, map, state.you, { ...style, rng, develop: style.name !== 'aggressor', coordinated: style.name !== 'opportunist', recall: style.name !== 'aggressor', investFirst: style.name === 'cautious', ...overrides });
     const me = state.players.find(p => p.id === state.you);
     if (!me || me.eliminatedAt !== null || !state.commandBudget?.remaining) return null;
     const board = new Map(state.provinces.map(p => [p.id, p]));
