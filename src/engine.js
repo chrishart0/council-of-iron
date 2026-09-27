@@ -86,6 +86,8 @@ export function start(g) {
   g.status = 'running';
   for (const p of g.provinces) if (p.owner) p.nextRecruit = gameRules(g).recruit;
   event(g, 'started', { countries: g.players.map(p => p.id), speed: g.speed });
+  // Preserve the exact opening for public after-action reconstruction. Never exported.
+  g.reviewOrigin = structuredClone(g);
 }
 function running(g) { requireRule(g.status === 'running', 'The match is not running.', 409); }
 function mapProvince(map, id) { return map.provinces.find(p => p.id === id); }
@@ -473,7 +475,15 @@ function victory(g) {
 }
 export function tick(g) {
   if (g.status !== 'running') return;
+  const before = { ...g.dominance }, affiliations = new Map(g.players.map(p => [p.id, p.side]));
   g.tick++; applyMembership(g); executeOrders(g); resolveArrivals(g); recruit(g); victory(g);
+  // Public feedback, separate from adjudication/event IDs so existing replays stay exact.
+  for (const [side, since] of Object.entries(before)) if (g.dominance[side] !== since) {
+    const changed = g.players.some(p => (affiliations.get(p.id) === side) !== (p.side === side));
+    (g.dominanceBreaks ||= []).push({ tick: g.tick, side, provinces: sides(g).find(s => s.id === side)?.provinces ?? 0,
+      reason: changed ? 'Membership changed; the hold restarts.' : 'Territory fell below the victory threshold.' });
+    g.dominanceBreaks = g.dominanceBreaks.slice(-20);
+  }
 }
 /** A viewer gets only public events and inbox messages addressed to that seat at SEND time. */
 export function observe(g, country = null, after = 0, limit = 200) {
@@ -494,6 +504,7 @@ export function observe(g, country = null, after = 0, limit = 200) {
   return { id: g.id, name: g.name, status: g.status, tick: g.tick, speed: g.speed, rules: gameRules(g), scenario: g.scenario || 'classic-64', travelTimes: g.travelTimes,
     eligible: g.eligible, you: country, players: g.players.map(({ profileId, orderTicks, lastChat, ...p }) => p),
     provinces: g.provinces, armies: g.armies, sides: sides(g), projections: score(g),
+    dominanceBreaks: g.dominanceBreaks || [],
     proposals: g.proposals.filter(q => q.status === 'pending' || q.status === 'open' && q.roster.includes(country))
       .map(({ signature, ...q }) => q), departures: g.departures, dominance: g.dominance,
     commandBudget: p ? { remaining: gameRules(g).orderLimit - p.orderTicks.filter(t => t > g.tick-gameRules(g).orderWindow).length,

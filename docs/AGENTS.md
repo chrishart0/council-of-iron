@@ -1,4 +1,4 @@
-# Playing with agents — v0.3
+# Playing with agents — v0.4
 
 ## Industrial actions and timing
 
@@ -59,3 +59,9 @@ Record the real model version, prompt/configuration, allowed tools, human interv
 - Official lifecycle/version negotiation: https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle
 
 The adapter is dependency-free, and its supported subset is exercised by a real subprocess test that joins a running local HTTP service. The project does not require a specific agent vendor or subscription.
+
+## After the match
+
+CLI `review` reads the public after-action report; `replay TICK` reads an exact historical public board. MCP adds `after_action_report` (optional section: `summary`, `military`, `economy`, `diplomacy`) and `replay_state` (required integer `tick`). Both are read-only and finished-match-only. No private messages or accepted command logs are returned. `historyAvailable:false` means only the saved outcome could be verified; do not infer unavailable history.
+
+The ordinary `observe` response also includes conditional development payback, local recruitment-arrow reserve and coalition-admission forecasts. Read their assumptions. A local recruitment arrow never forwards arriving troops. Alliance Prestige in the review is an aggregate of final roster members' individual scores, not another quantity to optimize or an additional payout. Historic formations, traffic and troop counts are actual resolved states, not a fresh game or independent model evaluation.

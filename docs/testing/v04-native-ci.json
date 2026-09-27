@@ -1,0 +1,116 @@
+{
+  "date": "2026-09-27",
+  "workflow": "https://github.com/chrishart0/council-of-iron/actions/runs/36300841635",
+  "baseCommit": "6062d8c5400269d633987e089cb5f0b2a44aef35",
+  "status": "passed",
+  "transport": "native-browser-http",
+  "nodeTestsPassed": 80,
+  "repeatedSmokeGames": 64,
+  "gameplayRulesChanged": false,
+  "fullBrowserAssertions": [
+    "Human browser created room and joined USA through UI.",
+    "Separate CLI process joined Britain; six practice bots filled seats; host started eight-seat match.",
+    "Browser and CLI committed armies; browser set a standing reinforcement route.",
+    "Browser proposed coalition; CLI accepted; public notice elapsed; both shared the coalition and payout projection.",
+    "Leaving an alliance requires explicit confirmation; Escape leaves membership untouched.",
+    "Reading the wire clears the unread badge; an unsent draft survives live polling.",
+    "Private diplomacy delivered both ways; spectator API excluded DMs; HTML in agent speech rendered as text, not executable markup.",
+    "Browser-issued attack captured Mexico after travel and combat; world and Europe zoom rendered.",
+    "Same-seat reconnect restored country and private inbox without duplicate orders.",
+    "390-pixel mobile layout displayed controls without horizontal page overflow.",
+    "Completed live match opened player/alliance review, scrubbable playback and all report tabs; CLI review and historical board agreed.",
+    "Wall-clock match reached a final result; browser and external agent observed identical final scores.",
+    "Persistent experimental standings included the browser player after returning to the lobby.",
+    "A second room starts with the same browser identity; map targeting, Max, Shift-source selection and keyboard tabs work.",
+    "Browser previewed and committed a two-source synchronized attack, then recalled the group with real return time.",
+    "Browser funded, confirmed and completed province development using naturally recruited manpower."
+  ],
+  "reviewBrowserAssertions": [
+    "Finished room opens Overview: all eight player scores and three alliance aggregates; live commands are hidden.",
+    "Forward/backward scrubbing matches exact API troop states and ownership; province inspector and zoom work.",
+    "Play, pause, rate change, keyboard slider, event jumps, opening/final controls and automatic end-of-replay stop work.",
+    "Military/economy comparison charts filter by country; battle links seek exact history; diplomacy shows membership intervals and broken holds.",
+    "Keyboard tab navigation and 390px layouts pass; tables scroll within their panels, not the document.",
+    "Classic draw renders correctly, malicious coalition name stays inert, and unverifiable legacy history fails closed while scores remain visible.",
+    "Leaving and reopening reviews releases playback state; watching history does not alter the match or scores."
+  ],
+  "fullBrowserOutcome": {
+    "winningSide": "solo:france:0",
+    "reason": "domination",
+    "tick": 1697,
+    "draw": false,
+    "scores": [
+      {
+        "country": "usa",
+        "maturity": 1,
+        "maximumShare": 400,
+        "projectedPrestige": 300,
+        "payout": 0,
+        "prestige": -100
+      },
+      {
+        "country": "britain",
+        "maturity": 1,
+        "maximumShare": 400,
+        "projectedPrestige": 300,
+        "payout": 0,
+        "prestige": -100
+      },
+      {
+        "country": "france",
+        "maturity": 1,
+        "maximumShare": 800,
+        "projectedPrestige": 700,
+        "payout": 800,
+        "prestige": 700
+      },
+      {
+        "country": "germany",
+        "maturity": 1,
+        "maximumShare": 800,
+        "projectedPrestige": 700,
+        "payout": 0,
+        "prestige": -100
+      },
+      {
+        "country": "russia",
+        "maturity": 1,
+        "maximumShare": 800,
+        "projectedPrestige": 700,
+        "payout": 0,
+        "prestige": -100
+      },
+      {
+        "country": "ottoman",
+        "maturity": 1,
+        "maximumShare": 800,
+        "projectedPrestige": 700,
+        "payout": 0,
+        "prestige": -100
+      },
+      {
+        "country": "qing",
+        "maturity": 1,
+        "maximumShare": 800,
+        "projectedPrestige": 700,
+        "payout": 0,
+        "prestige": -100
+      },
+      {
+        "country": "japan",
+        "maturity": 1,
+        "maximumShare": 800,
+        "projectedPrestige": 700,
+        "payout": 0,
+        "prestige": -100
+      }
+    ]
+  },
+  "gif": {
+    "path": "docs/media/after-action.gif",
+    "frames": 37,
+    "bytes": 5244491,
+    "sha256": "827c06e60d61a9a3acee5ae4f39d98d7f168cdde6f54c7c21536438c44433a18"
+  },
+  "limitations": "Automated browser controls and heuristic/recorded opponents. Recorded-game review is not an independent match or live-LLM test."
+}

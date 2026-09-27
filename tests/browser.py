@@ -7,17 +7,18 @@ interaction and server integration, NOT browser networking/CSP/navigation.
 No browser policy is modified. CI uses normal mode, never the bridge.
 """
 import argparse
-import base64
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.error
 import urllib.request
 from playwright.sync_api import sync_playwright, expect
+from browser_helpers import load_bridge
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -25,6 +26,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--bridge', action='store_true')
     parser.add_argument('--gif', help='Write an actual browser-capture GIF to this path.')
+    parser.add_argument('--review-gif', help='Also record the focused after-action review as a GIF.')
     parser.add_argument('--executable', default=os.environ.get('BROWSER_EXECUTABLE'))
     parser.add_argument('--artifacts', default=str(ROOT / 'artifacts'))
     args = parser.parse_args()
@@ -50,16 +52,6 @@ def main():
                 result = subprocess.run(['node','agents/cli.js',*arguments],cwd=ROOT,env={**os.environ,'COUNCIL_URL':url,'COUNCIL_SESSION':str(Path(tmp)/'agent.session.json'),'COUNCIL_TOKEN':'','COUNCIL_MATCH':''},capture_output=True,text=True,timeout=20)
                 assert result.returncode == 0, result.stderr
                 return json.loads(result.stdout)
-            def bridge_fetch(payload):
-                path = payload['path']
-                assert path.startswith('/') and not path.startswith('//'), 'Bridge is restricted to this local game server.'
-                options=payload.get('options') or {}
-                request=urllib.request.Request(url+path,method=options.get('method','GET'),headers=options.get('headers') or {},data=options['body'].encode() if options.get('body') is not None else None)
-                try:
-                    with urllib.request.urlopen(request,timeout=15) as response:
-                        return {'status':response.status,'body':response.read().decode()}
-                except urllib.error.HTTPError as error:
-                    return {'status':error.code,'body':error.read().decode()}
             with sync_playwright() as playwright:
                 launch={'headless':True}
                 if args.executable: launch['executable_path']=args.executable
@@ -70,29 +62,7 @@ def main():
                     if not args.bridge:
                         page.goto(url + (f'/?match={match}' if match else '/'))
                     else:
-                        page.expose_function('__localHttp',bridge_fetch)
-                        html=(ROOT/'public/index.html').read_text()
-                        html=re.sub(r'<script[^>]+src="/app.js"[^>]*></script>','',html)
-                        html=re.sub(r'<link[^>]+href="/style.css"[^>]*>','',html)
-                        page.set_content(html)
-                        page.add_style_tag(content=(ROOT/'public/style.css').read_text())
-                        page.evaluate('''saved => {
-                            const storage = saved || {};
-                            Object.defineProperty(window,'localStorage',{value:{getItem:k=>storage[k]??null,setItem:(k,v)=>storage[k]=v,removeItem:k=>delete storage[k]}});
-                            window.__testStorage=storage;
-                            history.replaceState=()=>{};
-                            if(!crypto.randomUUID)crypto.randomUUID=()=>[...crypto.getRandomValues(new Uint8Array(16))].map(n=>n.toString(16).padStart(2,'0')).join('');
-                            window.fetch=async(path,options={})=>{const r=await window.__localHttp({path,options});return {ok:r.status>=200&&r.status<300,status:r.status,json:async()=>JSON.parse(r.body)};};
-                        }''',saved or {})
-                        app_source=(ROOT/'public/app.js').read_text()
-                        for module in ['atlas.js','ui.js']:
-                            module_source=(ROOT/'public'/module).read_text()
-                            if module=='atlas.js':
-                                movement_url='data:text/javascript;base64,'+base64.b64encode((ROOT/'public/movement.js').read_bytes()).decode()
-                                module_source=module_source.replace("'./movement.js'",repr(movement_url))
-                            data_url='data:text/javascript;base64,'+base64.b64encode(module_source.encode()).decode()
-                            app_source=app_source.replace(f"'./{module}'",repr(data_url))
-                        page.add_script_tag(type='module',content=app_source)
+                        load_bridge(page,url,saved)
                         expect(page.locator('#connection')).to_have_text('Live')
                         if match: page.locator(f'[data-room="{match}"]').click()
                     expect(page.locator('#connection')).to_have_text('Live')
@@ -218,7 +188,26 @@ def main():
                     if not batch['hasMore']: break
                 report['events']={kind:sum(e['type']==kind for e in public_events) for kind in ['battle','army_departed','alliance_activated']}
                 expect(page.locator('#result')).to_contain_text('Experimental result recorded')
+                expect(page.locator('#aar-player-scores tbody tr')).to_have_count(8)
+                after_action=cli('review')
+                assert after_action['historyAvailable']
+                assert after_action['outcome']==result['outcome']
                 page.screenshot(path=str(artifacts/'05-result.png'),full_page=True)
+                page.locator('#aar-tab-replay').click()
+                expect(page.locator('#replay-stage')).to_be_visible()
+                page.locator('#replay-slider').fill(str(result['tick']))
+                assert int(page.locator('#replay-stage').get_attribute('data-tick'))==result['tick']
+                assert cli('replay',str(result['tick']))['tick']==result['tick']
+                page.locator('[data-aar-transport="start"]').click()
+                expect(page.locator('#replay-stage')).to_have_attribute('data-tick','0')
+                page.locator('#replay-play').click()
+                page.wait_for_timeout(350)
+                page.locator('#replay-play').click()
+                assert int(page.locator('#replay-slider').input_value())>0
+                for report_tab in ['military','economy','diplomacy','overview']:
+                    page.locator(f'#aar-tab-{report_tab}').click()
+                    expect(page.locator(f'#aar-{report_tab}')).to_be_visible()
+                report['assertions'].append('Completed live match opened player/alliance review, scrubbable playback and all report tabs; CLI review and historical board agreed.')
                 stdout,stderr=bot.communicate(timeout=20);assert bot.returncode==0,stderr
                 assert json.loads(stdout)['scores']==result['outcome']['scores']
                 report['assertions'].append('Wall-clock match reached a final result; browser and external agent observed identical final scores.')
@@ -277,6 +266,7 @@ def main():
                 page.locator('#source').select_option('alaska')
                 expect(page.locator('#development-panel')).to_be_visible()
                 expect(page.locator('#develop-province')).to_be_enabled(timeout=15000)
+                expect(page.locator('#development-payback')).to_contain_text('payback')
                 page.locator('#develop-province').click()
                 expect(page.locator('#confirm-dialog')).to_contain_text('Spend 12 troops')
                 page.locator('#confirm-dialog [value="confirm"]').click()
@@ -315,5 +305,11 @@ def main():
             server.terminate();server.wait(timeout=10)
             (artifacts/'browser-report.json').write_text(json.dumps(report,indent=2))
     print(json.dumps(report,indent=2))
+    # Keep the focused historical-review checks in the existing CI entry point.
+    review_command=[sys.executable,str(ROOT/'tests/review-browser.py'),'--artifacts',str(artifacts/'review')]
+    if args.bridge:review_command.append('--bridge')
+    if args.executable:review_command.extend(['--executable',args.executable])
+    if args.review_gif:review_command.extend(['--gif',args.review_gif])
+    subprocess.run(review_command,cwd=ROOT,check=True)
 
 if __name__=='__main__':main()

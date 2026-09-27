@@ -21,3 +21,9 @@ Run `npm run test:balance -- --rounds 32 --mode diplomacy` as well as the rules 
 ## v0.3 contract
 
 The original no-development/no-recall prototype is now a **legacy scenario**. Do not reimpose those restrictions on industrial rooms. Read `gameRules(g)` and preserve old behavior when `distanceMovement` is absent. One-target multi-source attacks are a first-class command shared by human and agent clients. Never charge per source only to one client. Changes must preserve atomic reservation validation, delayed vulnerable garrisons, actual-position recalls, capturable factories, per-room geometry and scenario-separated score windows. Run `tests/industrial.test.js` and the complete browser test, not only the classic tests. Development consumes troop manpower; no new currency or inventory.
+
+## v0.4 review contract
+
+The public replay/report is not the private action log. Keep public fields allowlisted, refuse live-match history requests, verify reconstruction against the saved final military state and score, and fail closed with saved scores intact if legacy history cannot be proved. Preserve materialized public archives across restart. Playback has no command capability. Per-country combat kills are not defined for shared battles; do not fabricate an attribution. Alliance score is the sum of final-member Prestige, not a new reward.
+
+Run all Node tests plus `python tests/browser.py` (now includes the focused recorded-match review browser suite). The 630-tick handplay golden replay must still match without changing production balance. Read-only reserve/admission/development forecasts must be available to both browser and agent clients and clearly state assumptions. Map instances must have distinct SVG IDs and scoped selectors; hidden live and review maps must never paint each other.

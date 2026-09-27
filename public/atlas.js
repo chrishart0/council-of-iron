@@ -14,12 +14,14 @@ export class Atlas {
     this.places = new Map(map.provinces.map(p => [p.id, p]));
     this.countries = new Map(map.countries.map(c => [c.id, c]));
     this.view = { x: 0, y: 0, w: 1280, h: 680 };
+    this.shapes = new Map(); this.prefix = svg.id === 'map' ? '' : `${svg.id}-`;
     this.markers = new Map(); this.armies = new Map(); this.pointers = new Map();
     this.reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
     svg.replaceChildren();
     const defs = node('defs');
     defs.innerHTML = '<radialGradient id="ocean-light"><stop stop-color="#25434b"/><stop offset="1" stop-color="#102932"/></radialGradient><marker id="march-head" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7" fill="#f2d59b"/></marker>';
-    svg.append(defs, node('rect', { x: -1800, y: -1000, width: 4800, height: 3000, fill: 'url(#ocean-light)' }));
+    defs.innerHTML = defs.innerHTML.replaceAll('ocean-light', `${this.prefix}ocean-light`).replaceAll('march-head', `${this.prefix}march-head`);
+    svg.append(defs, node('rect', { x: -1800, y: -1000, width: 4800, height: 3000, fill: `url(#${this.prefix}ocean-light)` }));
     const grid = node('g', { class: 'atlas-grid', 'pointer-events': 'none' });
     for (let x = 0; x <= 1280; x += 105) grid.append(node('path', { d: `M${x},-800V1600` }));
     for (let y = 0; y <= 680; y += 92) grid.append(node('path', { d: `M-1500,${y}H2800` }));
@@ -32,16 +34,16 @@ export class Atlas {
     for(const edge of map.edges.filter(e=>e.sea)) this.seas.append(node('path',{d:this.path(edge.from,edge.to),'data-edge':`${edge.from}|${edge.to}`}));
     svg.append(this.seas);this.territories=node('g');
     for(const p of map.provinces) {
-      const shape=node('path',{d:p.path,id:`province-${p.id}`,'data-province':p.id,class:'province',fill:'#b9b6a3'});
-      this.territories.append(shape);
+      const shape=node('path',{d:p.path,id:`${this.prefix}province-${p.id}`,'data-province':p.id,class:'province',fill:'#b9b6a3'});
+      this.territories.append(shape);this.shapes.set(p.id,shape);
     }
     svg.append(this.territories);
     this.connections=node('g',{'pointer-events':'none'});this.routes=node('g',{'pointer-events':'none'});this.marches=node('g',{'pointer-events':'none'});
     svg.append(this.connections,this.routes,this.marches);
     const markers=node('g');
     for(const p of map.provinces) {
-      const group=node('g',{id:`marker-${p.id}`,'data-province':p.id,tabindex:0,role:'button',class:'map-counter'});
-      const disc=node('circle',{r:10});const text=node('text',{y:.5,class:'counter-value',id:`troops-${p.id}`});
+      const group=node('g',{id:`${this.prefix}marker-${p.id}`,'data-province':p.id,tabindex:0,role:'button',class:'map-counter'});
+      const disc=node('circle',{r:10});const text=node('text',{y:.5,class:'counter-value',id:`${this.prefix}troops-${p.id}`});
       const label=node('text',{y:-17,class:'province-name'});label.textContent=p.name;
       const industry=node('text',{y:21,class:'industry-label'});group.append(industry);
       group.append(disc,text,label);markers.append(group);this.markers.set(p.id,{group,disc,text,label,industry});
@@ -166,7 +168,7 @@ export class Atlas {
     const me=state.players.find(p=>p.id===state.you),sides=new Map(state.players.map(p=>[p.id,p.side]));
     const neighbors=this.places.get(source)?.neighbors || [];
     for(const p of state.provinces) {
-      const shape=document.getElementById(`province-${p.id}`),marker=this.markers.get(p.id);
+      const shape=this.shapes.get(p.id),marker=this.markers.get(p.id);
       shape.setAttribute('fill',this.countries.get(p.owner)?.color || '#aaa994');
       const role=p.id===source?'selected':p.id===destination?'destination':neighbors.includes(p.id)?'neighbor':'';
       shape.setAttribute('class',`province ${role}${p.owner?' occupied':''}`);
@@ -178,9 +180,9 @@ export class Atlas {
     }
     for(const edge of this.seas.children)edge.classList.toggle('selected-connection',edge.dataset.edge.split('|').includes(source));
     this.connections.replaceChildren();
-    for(const id of neighbors)this.connections.append(node('path',{d:this.path(source,id),class:id===destination?'target-connection':'adjacent-connection',...(id===destination?{'marker-end':'url(#march-head)'}:{})}));
+    for(const id of neighbors)this.connections.append(node('path',{d:this.path(source,id),class:id===destination?'target-connection':'adjacent-connection',...(id===destination?{'marker-end':`url(#${this.prefix}march-head)`}:{})}));
     this.routes.replaceChildren();
-    for(const p of state.provinces)if(p.route && (p.owner===state.you || p.id===source))this.routes.append(node('path',{d:this.path(p.id,p.route),class:'recruit-connection','marker-end':'url(#march-head)'}));
+    for(const p of state.provinces)if(p.route && (p.owner===state.you || p.id===source))this.routes.append(node('path',{d:this.path(p.id,p.route),class:'recruit-connection','marker-end':`url(#${this.prefix}march-head)`}));
     const ids=new Set(state.armies.map(a=>a.id));
     for(const [id,entry] of this.armies)if(!ids.has(id)){entry.group.remove();this.armies.delete(id);}
     for(const army of state.armies) {

@@ -6,7 +6,9 @@ Command an industrial homeland and colonial footholds. Invest in recruitment, co
 
 ![Actual browser gameplay, with an accelerated test clock and heuristic agents](docs/media/gameplay.gif)
 
-**v0.3: Industry & Empire.** The map has 79 authored provinces, denser European fronts, visible starting industry and overseas possessions. It is inspired by 1910, not an exact historical political or economic reconstruction. Countries deliberately have different strengths. [Rules](docs/design-v0.3.md) · [Balance results](docs/BALANCE.md) · [Test record](docs/PLAYTEST.md)
+**v0.4: After-action review.** Finished rooms now open a score-first review with player and alliance results, exact map history, military/economy charts and a public diplomatic timeline. Live recruitment, industry and admission controls explain their consequences before you commit. No balance values changed.
+
+**Industry & Empire** remains the scenario. The map has 79 authored provinces, denser European fronts, visible starting industry and overseas possessions. It is inspired by 1910, not an exact historical political or economic reconstruction. Countries deliberately have different strengths. [Rules](docs/design-v0.3.md) · [Balance results](docs/BALANCE.md) · [Test record](docs/PLAYTEST.md)
 
 ## Run
 
@@ -45,6 +47,20 @@ The Orders panel separates **March**, **Coordinate**, and **Develop**.
 **Negotiate.** World chat, coalition chat and DMs share a cooldown. Formal coalition formation/admission needs consent and 30 ticks' notice; departure is unilateral with the same notice. No kicking. Promises in chat are not enforced orders. Friendly arriving troops become the receiving ally's troops. Allegiance at arrival decides whether troops reinforce or fight.
 
 **Win.** Hold **48 of 79 provinces** for 90 continuous ticks, or have the most land at the 30:00 deadline. Ties and all-player coalitions draw. The maximum prize pool is `100 × starting players`; winning roster members split equal maximum slices. Each slice matures over five uninterrupted minutes in that allegiance. Unearned points disappear. Individual Prestige is `payout − 100`. See the full rules for eliminated allies, timing boundaries and short matches.
+
+## Review the campaign
+
+Finish a game or choose **Review** beside a completed room. Five tabs separate the results:
+
+- **Overview:** every player's Prestige, earned share, payout, final territory and troops, plus each final alliance's combined results. Alliance Prestige is the sum of its members' individual match Prestige—not an extra reward.
+- **Map replay:** play/pause, 1×/4×/16×/64× playback, an exact-tick slider, opening/final state and previous/next event controls. Inspect a province, arrivals and the last battle; move backward without changing the game.
+- **Military, Economy, Diplomacy:** filter country comparison charts, inspect the battle ledger, compare investment/recruitment and follow membership intervals and interrupted victory countdowns. Battle and event links jump to the corresponding map state.
+
+![Actual browser capture of the recorded match review; single-controller test, not independent agents](docs/media/after-action.gif)
+
+Only public military history and activated alliances appear. **Private messages and private offers do not become public after the game.** Existing compatible completed matches reconstruct once; if their recorded state cannot be verified exactly, their saved scores remain available and history is explicitly withheld. No database deletion or new match is required to inspect compatible old games. See [review definitions and limits](docs/AFTER-ACTION.md).
+
+**Live feedback improvements.** Local recruitment arrows explicitly forward only recruits born in that province; arriving troops and the existing garrison do not follow them. Reserve notices can draft an ordinary transfer for your approval. Coalition offers preview combined territory, the victory threshold and each member's maximum share. Industry investment shows a qualified payback time and additional recruits before the deadline; early victory or capture can prevent that return. Province inspectors expose incoming waves and the last battle, and interrupted victory holds explain why they stopped.
 
 ## Attach an agent
 
@@ -111,3 +127,5 @@ One process owns all games. SQLite retains identities, private messages, match s
 Prestige is transparent last-20 decisive-match bookkeeping, **not Elo**. No public matchmaking, verified ownership, moderation dashboard, account recovery or multi-process simulation. Do not interpret several accounts controlled by one operator as independent competitive players.
 
 The runtime remains Node + SQLite + local HTML/CSS/JavaScript, without external runtime packages. Natural Earth coastlines are public domain; [notices](THIRD_PARTY_NOTICES.md). Authored code is MIT licensed.
+
+The standard browser test also runs the focused after-action suite. Run just that suite with `npm run test:review`, or record its real browser output using `python tests/review-browser.py --gif docs/media/after-action.gif`. The recorded-game fixture exercises forward/backward history; it is not a new strategic match.

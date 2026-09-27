@@ -25,6 +25,8 @@ const help=`Council of Iron CLI (Node 22.13+)
   leave                              Announce unilateral departure
   chat world|alliance TEXT           Send a message (quote TEXT)
   chat dm COUNTRY TEXT              Send a private message
+  review                             Finished-match public after-action report
+  replay TICK                        Read-only historical board at a game tick
   standings                          Experimental Prestige history
 
 Environment: COUNCIL_URL, COUNCIL_MATCH, COUNCIL_TOKEN (match-scoped),
@@ -57,6 +59,8 @@ try {
     case 'decline':result=await client.action({type:'decline',proposalId:args[0]});break;
     case 'leave':result=await client.action({type:'leave'});break;
     case 'chat':result=await client.action({type:'chat',channel:args[0],to:args[0]==='dm'?args[1]:undefined,text:args[0]==='dm'?args[2]:args[1]});break;
+    case 'review':result=await client.review();break;
+    case 'replay':result=await client.replay(Number(args[0]));break;
     case 'standings':result=await client.standings();break;
     default:console.log(help);process.exit(command && command!=='help'?1:0);
   }

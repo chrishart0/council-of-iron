@@ -1,3 +1,21 @@
+# v0.4 review and feedback verification — 27 September 2026
+
+The after-action feature and live explanatory controls do not change the industrial/classic battle, movement, recruitment, scoring or country-balance rules. The original 343-action hands-on match still reproduces its event digest and final result.
+
+Local verification: **80 Node tests passed**, including exact public replay comparison at every tick from 0 through 630, all 75 private messages excluded, saved outcome/alliance sum reconciliation, troop ledger, classic/legacy behavior, lifecycle/privacy/scope checks, phase-aware forecasts and persistence. JavaScript syntax checks passed.
+
+The full browser-plus-external-HTTP-agent playthrough passed with the new review workflow at completion. A focused recorded-match browser run separately checked all five tabs, exact slider states, playback, backwards seeks, event links, filtered charts, multiple maps without ID collisions, 390-pixel layouts, unsafe display text, score-only fallback and reopen behavior. No captured page errors occurred.
+
+**Local Chromium navigation is restricted by the execution environment**, so those two local runs used the explicitly documented in-memory module render/Python HTTP bridge. They exercised actual server requests and DOM behavior, not native browser navigation/CSP. The native publication verification is recorded separately only when it actually completes. No live LLM or independent human participant was used, and replaying a recorded game is not another balance sample.
+
+See [feature/report definitions](AFTER-ACTION.md) and the machine-readable evidence in `docs/testing/v04-local.json`.
+
+## Native v0.4 verification
+
+The [native publication run](https://github.com/chrishart0/council-of-iron/actions/runs/36300841635) passed all 80 Node tests and reproduced 64 seeded smoke games. It completed the actual-browser/external-agent playthrough and focused after-action suite, including exact backward scrubbing, report tabs, privacy, mobile layouts and legacy fallback. The README review GIF was captured from this native run. [Machine-readable receipt](testing/v04-native-ci.json).
+
+## Earlier verification records
+
 # v0.3 refinement test record
 
 The current implementation adds an industrial 79-province scenario, local manpower investment, distance-based travel, atomic multi-source attack scheduling, timed recalls and a browser mode for each decision. The original map and saved-game behavior are preserved instead of silently migrating old matches to new rules.

@@ -6,6 +6,9 @@ import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { Store } from './store.js';
 import { act, attackPlan, createGame, join, observe, preview, start, tick, RuleError, requireRule, text } from './engine.js';
+import { buildReview, unavailableReview } from './review.js';
+import { replayReader } from '../public/replay-model.js';
+import { operationalInsights } from '../public/insights.js';
 import { choose } from '../agents/policy.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -19,6 +22,10 @@ const staticFiles = new Map([
   ['/atlas.js', ['public/atlas.js', 'text/javascript; charset=utf-8']],
   ['/ui.js', ['public/ui.js', 'text/javascript; charset=utf-8']],
   ['/style.css', ['public/style.css', 'text/css; charset=utf-8']],
+  ['/review.js', ['public/review.js', 'text/javascript; charset=utf-8']],
+  ['/review.css', ['public/review.css', 'text/css; charset=utf-8']],
+  ['/replay-model.js', ['public/replay-model.js', 'text/javascript; charset=utf-8']],
+  ['/insights.js', ['public/insights.js', 'text/javascript; charset=utf-8']],
   ['/movement.js', ['public/movement.js', 'text/javascript; charset=utf-8']],
   ['/map.json', ['public/imperial-map.json', 'application/json']],
 ]);
@@ -38,6 +45,19 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
   const store = new Store(dbPath), games = new Map(store.load().map(g=>[g.id,g]));
   const fractions = new Map(), ipBudgets = new Map();
   let previous = performance.now();
+  const replayReaders = new Map(); // At most four decoded public records in memory.
+  function afterAction(g) {
+    requireRule(g.status === 'finished' && g.outcome, 'After-action review is available only when the match is finished.', 409);
+    if (!g.afterAction) {
+      try { g.afterAction = buildReview(g, mapFor(g)); }
+      catch (error) {
+        console.error('Review reconstruction withheld:', g.id, error.message);
+        g.afterAction = unavailableReview(g, 'This match could not be reconstructed exactly. Final scores are intact; no approximate replay is shown.');
+      }
+      save(g);
+    }
+    return g.afterAction;
+  }
   function save(g) { store.save(g); }
   function runBots(g) {
     if (g.tick % 5 !== 0) return;
@@ -49,7 +69,8 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
   }
   function step(g, count) {
     for (let i=0;i<count && g.status==='running';i++) { tick(g); if(g.status==='running') runBots(g); }
-    save(g);
+    if (g.status === 'finished') afterAction(g);
+    else save(g);
   }
   const server = createServer(async (req,res) => {
     res.setHeader('Cache-Control','no-store');
@@ -80,7 +101,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         let bucket=ipBudgets.get(ip); if(!bucket || now-bucket.at>60000) {bucket={at:now,count:0};ipBudgets.set(ip,bucket);}
         requireRule(++bucket.count<=1200,'Transport request limit exceeded.',429);
       }
-      if(path==='/api/health' && req.method==='GET') return json(res,200,{ok:true,version:'0.3.0'});
+      if(path==='/api/health' && req.method==='GET') return json(res,200,{ok:true,version:'0.4.0'});
       if(path==='/api/players' && req.method==='POST') {
         const data=await body(req); return json(res,201,store.register(text(data.name,'Player name',40)));
       }
@@ -102,7 +123,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
           speed:PRESETS[data.preset || 'standard'],eligible:league},scenario);
         games.set(g.id,g);save(g);return json(res,201,{id:g.id});
       }
-      const match=path.match(/^\/api\/games\/([a-zA-Z0-9-]+)(?:\/(join|start|bots|actions|preview|plan|map))?$/);
+      const match=path.match(/^\/api\/games\/([a-zA-Z0-9-]+)(?:\/(join|start|bots|actions|preview|plan|map|review|replay))?$/);
       if(match) {
         const g=games.get(match[1]);requireRule(g,'Room not found.',404);
         const endpoint=match[2], gameMap=mapFor(g);
@@ -113,11 +134,26 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
           const p=identity && g.players.find(p=>p.profileId===identity.id);
           const after=Number(url.searchParams.get('after') || 0);
           requireRule(Number.isSafeInteger(after) && after>=0,'Invalid event cursor.');
-          return json(res,200,{...observe(g,p?.id || null,after),isHost:identity?.id===g.hostId});
+          const view = observe(g,p?.id || null,after);
+          return json(res,200,{...view, insights:operationalInsights(view), isHost:identity?.id===g.hostId});
+        }
+        if (['review', 'replay'].includes(endpoint) && req.method === 'GET') {
+          if (identity) auth(g.id);
+          const data = afterAction(g);
+          if (endpoint === 'review') return json(res, 200, data.report);
+          requireRule(data.replay, data.report.historyError || 'Replay unavailable.', 409);
+          if (!url.searchParams.has('tick')) return json(res, 200, data.replay);
+          const raw = url.searchParams.get('tick'), at = Number(raw);
+          requireRule(/^\d+$/.test(raw) && Number.isSafeInteger(at) && at >= 0 && at <= g.tick, `Replay tick must be from 0 to ${g.tick}.`);
+          if (!replayReaders.has(g.id)) {
+            if (replayReaders.size >= 4) replayReaders.delete(replayReaders.keys().next().value);
+            replayReaders.set(g.id, replayReader(data.replay));
+          }
+          return json(res, 200, replayReaders.get(g.id)(at));
         }
         if(endpoint==='map' && req.method==='GET') {
           if(identity) auth(g.id);
-          return json(res,200,gameMap);
+          return json(res,200,g.afterAction?.replay?.map || gameMap);
         }
         if(endpoint==='plan' && req.method==='POST') {
           const p=seat(), data=await body(req);

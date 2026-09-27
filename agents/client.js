@@ -46,6 +46,8 @@ export class CouncilClient {
   }
   gamePath(suffix='') {if(!this.match)throw new Error('Join a match or set COUNCIL_MATCH first.');return `/api/games/${this.match}${suffix}`;}
   observe(after=0) { return this.request(this.gamePath(`?after=${after}`)); }
+  review() {return this.request(this.gamePath('/review'));}
+  replay(tick) {return this.request(this.gamePath(`/replay?tick=${encodeURIComponent(tick)}`));}
   action(action,opId=randomUUID()) { return this.request(this.gamePath('/actions'),'POST',{action,opId}); }
   preview(from,to,amount) {return this.request(this.gamePath(`/preview?${new URLSearchParams({from,to,amount})}`));}
   list() {return this.request('/api/games','GET',undefined,'');}

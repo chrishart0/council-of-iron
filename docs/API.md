@@ -1,4 +1,4 @@
-# HTTP API — v0.3
+# HTTP API — v0.4
 
 All paths are relative to `COUNCIL_URL`. Send JSON with `Content-Type: application/json` and credentials in `Authorization: Bearer TOKEN`, never URLs or chat. Errors use `{ "error": "reason" }` and an appropriate 400/401/403/404/409/429 status.
 
@@ -98,3 +98,19 @@ Industry I→II costs12/takes60 ticks; II→III costs24/takes90. A build spends 
 Original `classic-64` rooms retain amount-only fixed-45-tick moves and have no attack-group/recall/develop actions. Query the room's rules rather than assuming the newest defaults. Classic and industrial score windows are separate; result history retains both.
 
 Server downtime pauses matches. SQLite saves snapshots, accepted actions and private messages. Administrators can read that database; there is no public unredacted log endpoint. No client can advance time, backdate a command or select speed after creation. See [rules](design-v0.3.md) for detailed tick order and [operations](OPERATIONS.md) for deployment boundaries.
+
+## After-action review (finished matches only)
+
+| Method | Path | Result |
+|---|---|---|
+| GET | `/api/games/ROOM/review` | Immutable public report: outcome, individual scores, final alliances with aggregate Prestige/payout, metrics, series, battles, membership intervals and public turning points |
+| GET | `/api/games/ROOM/replay` | Verified public sparse replay, format version 1, containing match map, rules, duration and exact-tick changes |
+| GET | `/api/games/ROOM/replay?tick=N` | Public historical military state at integer simulation tick `N`, inclusive from 0 to finish |
+
+Lobby/running requests return 409. Out-of-range, negative, fractional or malformed tick parameters return 400. A finished record whose history cannot be verified retains a valid score report with `historyAvailable:false` and `historyError`; replay returns 409. Repeated reads and server restarts use the persisted materialized archive. The archived map is also served by the match-map route when available.
+
+These are public read-only endpoints, but any supplied credential must still be valid and scoped appropriately. Reports/replays do **not** contain private chat, private offers, actionLog, profile IDs, credentials, receipts or waiting orders. Historic public military state uses the then-current alliance membership, not the final roster.
+
+Alliance Prestige is the sum of final members' individual match Prestige, never a second reward. Military/economy series are sampled every ten ticks plus finish; map replay and peaks use every resolved tick. Total casualties are not arbitrarily attributed as individual kills in shared battles. See `docs/AFTER-ACTION.md` for exact definitions.
+
+The normal authenticated observation now includes `insights.developments`, `insights.routeReserves` and `insights.admissions`, with the same conditional forecasts shown to browser players, and `dominanceBreaks` (the latest 20 stopped-hold notices). Forecasts are explanations of visible state, not privileged orders or predictions of opponents. Spectators get empty own-seat insight arrays. No action budget, battle, payout or scenario rule changed.
