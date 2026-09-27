@@ -1,0 +1,22 @@
+name: Command table source
+on:
+  push:
+    branches: [command-table-v05-workbench]
+    paths: [.github/workflows/ui-workbench.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fe2ebd4957afad81965f9531a88dfacd8321cc26
+          persist-credentials: false
+      - run: git archive --format=tar HEAD > /tmp/council-ui-source.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: council-ui-source
+          path: /tmp/council-ui-source.tar
+          retention-days: 3
