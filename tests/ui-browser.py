@@ -5,6 +5,7 @@ import argparse,io,json,os,re,subprocess
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
 from browser_helpers import load_bridge
+from ui_tasks import walkthrough
 ROOT=Path(__file__).resolve().parents[1]
 
 # Reads what the live map actually shows and compares it with the public room state.
@@ -37,9 +38,7 @@ MAP_AUDIT='''async room => {
 
 # v0.7 full-screen contract: the map is the viewport; floating overlays never overlap each other.
 LAYOUT='''() => {
-  const names={'#hud':'HUD','#menu-button':'menu button','#hud-rail':'panel buttons','#spectator-note':'spectator note','#threats':'threats',
-    '#council-alert':'council alert','#battle-signal':'battle notice','#countdown-break':'countdown','#leaderboard':'leaderboard',
-    '#world-feed':'world feed','#map-controls':'map controls','#command-panel':'command panel','#lobby':'lobby'};
+  const names={'#hud':'HUD','#leaderboard':'leaderboard','#world-feed':'history','#map-controls':'map controls','#card':'card','#lobby':'lobby','#coach':'coach tip'};
   const boxes=[];
   for(const [selector,name] of Object.entries(names)){
     const e=document.querySelector(selector);if(!e || !e.checkVisibility())continue;
@@ -54,18 +53,18 @@ LAYOUT='''() => {
     map:[map.left,map.top,map.width,map.height],viewport:[innerWidth,innerHeight],
     scroll:[document.documentElement.scrollWidth,document.documentElement.scrollHeight,scrollY]};
 }'''
-# The March commit must be on screen, unobstructed and outside any scrolling region.
+# The card's primary action must be on screen, unobstructed and outside any scrolling region.
 COMMIT='''() => {
-  const button=document.querySelector('#send-army'),r=button.getBoundingClientRect();
+  const button=document.querySelector('#primary'),r=button.getBoundingClientRect();
   const hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);let scroller=null;
   for(let e=button.parentElement;e;e=e.parentElement){const o=getComputedStyle(e).overflowY;if((o==='auto' || o==='scroll') && e.scrollHeight>e.clientHeight+1){scroller=e.id || e.className;break;}}
-  return {visible:button.checkVisibility(),inView:r.top>=0 && r.left>=0 && r.bottom<=innerHeight+.5 && r.right<=innerWidth+.5,hit:button.contains(hit),scroller,form:button.getAttribute('form')};
+  return {visible:button.checkVisibility(),inView:r.top>=0 && r.left>=0 && r.bottom<=innerHeight+.5 && r.right<=innerWidth+.5,hit:button.contains(hit),scroller,primaries:document.querySelectorAll('#card .primary').length};
 }'''
 layout_log=[]
 # Share of the viewport where the map is not under any HTML overlay (4 px grid sample).
 UNCOVERED='''() => {
   // Camera buttons and the atlas key are measured part by part: the cluster's bounding box includes empty map.
-  const rects=[];for(const s of ['.hud-bar','#hud-rail','#alerts>*','#leaderboard','#world-feed','.camera-buttons>button','#map-key .atlas-modes>*','#command-panel'])
+  const rects=[];for(const s of ['.hud-bar','#leaderboard','#world-feed','.map-controls>button','#card','#coach'])
     for(const e of document.querySelectorAll(s)){if(!e.checkVisibility())continue;const r=e.getBoundingClientRect();if(r.width && r.height)rects.push(r);}
   let free=0,all=0;for(let y=2;y<innerHeight;y+=4)for(let x=2;x<innerWidth;x+=4){all++;if(!rects.some(r=>x>=r.left && x<r.right && y>=r.top && y<r.bottom))free++;}
   return free/all;
@@ -82,23 +81,34 @@ def check_layout(page,label):
     return result
 def check_commit(page,label):
     result=page.evaluate(COMMIT)
-    assert result['visible'] and result['inView'] and result['hit'] and result['scroller'] is None and result['form']=='move-form',(label,result)
-def ensure_orders(page,size=None):
-    if page.locator('#orders-label').get_attribute('aria-expanded')!='true':page.locator('#orders-label').click()
-    for _ in range(3):
-        if size is None or page.locator('#command-panel').get_attribute('data-sheet')==size:break
-        page.locator('#sheet-handle').click()
-    if size:expect(page.locator('#command-panel')).to_have_attribute('data-sheet',size)
+    assert result['visible'] and result['inView'] and result['hit'] and result['scroller'] is None and result['primaries']==1,(label,result)
+def click_at(page,locator):
+    box=locator.bounding_box();page.mouse.click(box['x']+box['width']/2,box['y']+box['height']/2)
+def select(page,source,target=None,size=None):
+    """v0.8 order card by map taps (tap-tap): Home, your province, then its neighbour."""
+    page.keyboard.press('Escape');page.locator('#home-view').click();page.wait_for_timeout(150)
+    click_at(page,page.locator(f'#marker-{source} .counter-body'))
+    if target:click_at(page,page.locator(f'#marker-{target} .counter-body'))
+    expect(page.locator('#card')).to_have_attribute('data-kind','province')
+    if size and page.locator('#card').get_attribute('data-size')!=size:page.locator('#card-size').click()
+    if size:expect(page.locator('#card')).to_have_attribute('data-size',size)
+COACH_DONE='localStorage.setItem("coi.coach","done");'  # first-match tips are covered by coach_checks
+def menu(page,open=True):
+    """v0.8: views, sound, war log, map key and room actions live in the ☰ menu."""
+    if page.locator('#hud-menu').is_visible()!=open:page.locator('#menu-button').click()
+    if open:expect(page.locator('#hud-menu')).to_be_visible()
+def camera(page,view):
+    menu(page);page.locator(f'#{view}-view').click();expect(page.locator('#hud-menu')).to_be_hidden()
 def go_back(page):
     # Live rooms keep 'All rooms' in the HUD menu; the after-action review has its own home button.
-    if page.locator('#menu-button').is_visible():page.locator('#menu-button').click();page.locator('#back').click()
+    if page.locator('#menu-button').is_visible():menu(page);page.locator('#back').click()
     else:page.locator('[data-home]').first.click()
 
 audit=[]
 def audit_zooms(page,room,label,views):
     levels=set()
     for name,steps in views:
-        page.locator('#world-view' if name=='world' else '#europe-view').click()
+        camera(page,name)
         for _ in range(steps):page.locator('#zoom-out').click()
         page.wait_for_timeout(120)
         result=page.evaluate(MAP_AUDIT,room);levels.add(result['lod'])
@@ -124,7 +134,7 @@ def drag_map(page,dx):
 
 def wrap_checks(page,report,capture):
     # Horizontal wraparound on the live map (room ui-war, 1366×768 and 390px).
-    page.set_viewport_size({'width':1366,'height':768});page.locator('#world-view').click();page.locator('#zoom-in').click();page.wait_for_timeout(150)
+    page.set_viewport_size({'width':1366,'height':768});camera(page,'world');page.locator('#zoom-in').click();page.wait_for_timeout(150)
     for direction in [1,-1]:
         start=view_box(page);px=page.evaluate('document.querySelector("#map").getScreenCTM().a');travelled=0
         while abs(travelled)<1280*1.3:
@@ -137,7 +147,7 @@ def wrap_checks(page,report,capture):
         for _ in range(9):page.keyboard.press('ArrowRight' if direction>0 else 'ArrowLeft')
         vb=view_box(page);assert 0<=vb[0]+vb[2]/2<1280,vb
     # Centre on the dateline seam: the left half of the screen is the repeated copy (x < 0).
-    page.locator('#world-view').click();page.wait_for_timeout(100)
+    camera(page,'world');page.wait_for_timeout(100)
     drag_map(page,page.locator('#map').bounding_box()['width']/2);page.locator('#zoom-in').click();page.wait_for_timeout(150)
     x,y,w,h=view_box(page);assert abs(((x+w/2)+640)%1280-640)<40,(x,w)
     page.keyboard.press('Escape')
@@ -149,7 +159,7 @@ def wrap_checks(page,report,capture):
         const e=document.elementFromPoint(p.x,p.y);if(e&&e.matches('use.world-copy'))return {x:p.x,y:p.y};}
       return null;}''')
     assert spot,'no clickable repeated-copy point over Australia'
-    page.mouse.click(spot['x'],spot['y']);expect(page.locator('#panel-title')).to_have_text('Australia')
+    page.mouse.click(spot['x'],spot['y']);expect(page.locator('#card-title')).to_have_text('Australia')
     page.keyboard.press('Escape')  # close the card so later drags start on the map
     capture('14-dateline.png',700)
     result=page.evaluate(MAP_AUDIT,'ui-war')
@@ -164,7 +174,7 @@ def wrap_checks(page,report,capture):
     ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
     assert page.locator('#map use.world-copy').count()==6  # base, lines and effects, each repeated at ±1 world
     page.set_viewport_size({'width':390,'height':844});page.wait_for_timeout(150)
-    page.locator('#world-view').click();drag_map(page,-page.locator('#map').bounding_box()['width']*1.5);page.wait_for_timeout(100)
+    camera(page,'world');drag_map(page,-page.locator('#map').bounding_box()['width']*1.5);page.wait_for_timeout(100)
     x,y,w,h=view_box(page);assert 0<=x+w/2<1280 and w<=1280.5
     result=page.evaluate(MAP_AUDIT,'ui-war');assert not result['badSums'] and not result['missing'] and not result['overlaps'],result
     page.set_viewport_size({'width':1366,'height':768})
@@ -191,7 +201,7 @@ RELATIONS_AUDIT='''async room => {
     sea:[...svg.querySelectorAll('.sea-fronts [data-sea-front]')].map(e=>e.dataset.seaFront).sort(),expectedSea,blocs,
     badTicks:ticks.filter(t=>t.shown!==Boolean(t.expected)||t.expected&&t.fill!==t.expected).map(t=>t.id),
     labels:[...svg.querySelectorAll('.alliance-name')].map(g=>g.dataset.bloc),
-    legend:[...document.querySelectorAll('.atlas-legend')].filter(l=>svg.parentElement.contains(l)).map(l=>l.textContent).join('|')};
+    legend:[...document.querySelectorAll('.atlas-legend')].filter(l=>svg.parentElement.contains(l)||(svg.id==='map'&&l.closest('#map-key'))).map(l=>l.textContent).join('|')};
 }'''
 
 ARMY_AUDIT='''() => {
@@ -212,7 +222,7 @@ def relations_checks(page,report,capture):
     page.set_viewport_size({'width':1366,'height':768})
     # Alliances in the default political view (legacy recorded match with three coalitions).
     go_back(page);page.locator('[data-room="ui-fixture"][data-resume]').click()
-    expect(page.locator('#commander-title')).to_have_text('British Empire');page.locator('#world-view').click();page.wait_for_timeout(200)
+    expect(page.locator('#commander-title')).to_have_text('British Empire');camera(page,'world');page.wait_for_timeout(200)
     first=page.evaluate(RELATIONS_AUDIT,'ui-fixture')
     assert len(first['blocs'])==3,first['blocs']
     for b in first['blocs']:
@@ -241,27 +251,25 @@ def relations_checks(page,report,capture):
     assert forming['count']==1 and forming['members']=='japan,usa' and forming['el'],forming
     el=forming['el'];assert el['id']==forming['id'] and el['members']==forming['members'] and el['provinces']==forming['provinces'] and el['stroke']==forming['color'] and el['dash']!='none' and el['inBase'],forming
     assert 'Pacific Pact · forming' in audit['legend'],audit['legend']
-    # Key placement (default bottom-left inside the visible map) and collapse to a single chip.
-    chip=page.locator('.atlas-modes').first;expect(chip).to_have_class(re.compile('at-bottom-left'))
-    mb,cb=page.locator('#map').bounding_box(),chip.bounding_box()
-    assert cb['x']>=mb['x'] and cb['x']+cb['width']<=mb['x']+mb['width']+1 and cb['y']+cb['height']<=mb['y']+mb['height']+1,(mb,cb)
-    page.locator('.atlas-key-toggle').first.click();expect(chip).to_have_class(re.compile('collapsed'))
-    expect(page.locator('.atlas-legend').first).to_be_hidden();expect(page.locator('.atlas-mode-toggle').first).to_be_hidden()
-    assert chip.bounding_box()['height']<40
-    page.locator('.atlas-key-toggle').first.click();expect(page.locator('.atlas-legend').first).to_be_visible()
-    toggle=page.locator('.war-room .atlas-mode-toggle').first  # v0.7: the key is mounted in the camera cluster
+    # v0.8: the map key (legend + Political/Diplomacy toggle) lives in the ☰ menu, off the map.
+    def key():
+        menu(page)
+        if page.locator('.menu-key').get_attribute('open') is None:page.locator('.menu-key summary').click()
+        expect(page.locator('#map-key .atlas-legend')).to_be_visible()
+    key();assert page.locator('.war-room .atlas-modes').count()==0
+    toggle=page.locator('#map-key .atlas-mode-toggle')
     fills=lambda:page.evaluate('''async()=>{const s=await (await fetch('/api/games/ui-war')).json();return s.provinces.map(p=>[p.id,p.owner,document.querySelector('#province-'+p.id).getAttribute('fill')]);}''')
     toggle.click();expect(page.locator('#map')).to_have_attribute('data-mode','diplomacy')
     enemies={b if a=='britain' else a for a,b in (w.split(':') for w in page.evaluate("fetch('/api/games/ui-war').then(r=>r.json())")['wars']) if 'britain' in (a,b)}
     assert enemies=={'usa'},enemies  # the fixture's Britain–USA declaration (v0.7 relation UI)
     for pid,owner,fill in fills():
         assert fill==('#d9b45a' if owner=='britain' else '#6d716a' if not owner else '#b8483c' if owner in enemies else '#8f8d80'),(pid,owner,fill)
-    expect(page.locator('.atlas-legend').first).to_contain_text('Relations of British Empire')
-    page.locator('#world-view').click();capture('16-diplomacy-mode.png',900)
-    toggle.click();expect(page.locator('#map')).to_have_attribute('data-mode','political')
+    expect(page.locator('#map-key .atlas-legend')).to_contain_text('Relations of British Empire')
+    camera(page,'world');capture('16-diplomacy-mode.png',900)
+    key();toggle.click();menu(page,False);expect(page.locator('#map')).to_have_attribute('data-mode','political')
     for pid,owner,fill in fills():
         if owner=='germany':assert fill=='#8e8b7d',(pid,fill)
-    page.locator('#europe-view').click();page.wait_for_timeout(150)
+    camera(page,'europe');page.wait_for_timeout(150)
     box=page.locator('#marker-bavaria .counter-body').bounding_box();page.mouse.move(box['x']+box['width']/2,box['y']+box['height']/2);page.wait_for_timeout(450)
     expect(page.locator('#map')).to_have_attribute('data-outline-focus','germany')
     assert page.locator('#map .relation-enemy').get_attribute('d') and not page.locator('#map .relation-ally').get_attribute('d')
@@ -269,13 +277,13 @@ def relations_checks(page,report,capture):
     report['assertions'].append('Formal wars draw a front on exactly the land borders between warring owners (sea links only without land contact) and list the wars in the legend; diplomacy mode recolours focus/ally/enemy/neutral and back; hovering a country outlines its enemies and allies.')
     # Moving armies are the top layer and no name label covers them.
     for view,steps in [('europe',0),('europe',1),('europe',2),('world',0)]:
-        page.locator('#'+view+'-view').click()
+        camera(page,view)
         for _ in range(steps):page.locator('#zoom-out').click()
         page.wait_for_timeout(200);army=page.evaluate(ARMY_AUDIT)
         assert army['last'] and army['afterEverything'] and army['inCopies']==0,army
         assert not army['covered'],(view,steps,army)
         if view=='europe' and steps==0:assert army['visible']>=2,army
-    page.locator('#europe-view').click();page.wait_for_timeout(150)
+    camera(page,'europe');page.wait_for_timeout(150)
     page.locator('#map .moving-army:not(.engaged)').first.focus()
     expect(page.locator('.atlas-tooltip').first).to_contain_text('→');expect(page.locator('.atlas-tooltip').first).to_contain_text('troops')
     capture('17-armies-on-top.png',900)
@@ -333,7 +341,7 @@ BATTLE_AUDIT='''async () => {
 }'''
 
 def battle_checks(page,server,report,capture):
-    page.set_viewport_size({'width':1366,'height':768});page.locator('#europe-view').click();page.wait_for_timeout(700)
+    page.set_viewport_size({'width':1366,'height':768});camera(page,'europe');page.wait_for_timeout(700)
     def check(label):
         rows=page.evaluate(BATTLE_AUDIT);assert rows,label
         for r in rows:
@@ -366,7 +374,7 @@ def map_checks(page,server,report,capture):
     assert levels=={'far','mid','near'},levels
     assert any(a['mergedCounters'] for a in audit if '(far)' in a['view']) and any(a['mergedCounters'] for a in audit if '(mid)' in a['view']),audit
     report['mapAudit']=audit
-    page.set_viewport_size({'width':1366,'height':768});page.locator('#world-view').click();page.wait_for_timeout(100)
+    page.set_viewport_size({'width':1366,'height':768});camera(page,'world');page.wait_for_timeout(100)
     before=float(page.locator('#map').get_attribute('viewBox').split()[2])
     # A merged counter that is not under a floating overlay (the map runs beneath the HUD and rail).
     index=page.evaluate("()=>[...document.querySelectorAll('#map .map-cluster')].findIndex(c=>{const r=c.getBoundingClientRect();return c.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));})")
@@ -381,7 +389,7 @@ def map_checks(page,server,report,capture):
         page.set_viewport_size({'width':w,'height':h});page.wait_for_timeout(150)
         if w<760 and page.locator('#feed-toggle').get_attribute('aria-expanded')=='true':page.locator('#feed-toggle').click()
         audit_zooms(page,'ui-war',f'war {w}',views)
-    page.set_viewport_size({'width':1366,'height':768});page.locator('#europe-view').click()
+    page.set_viewport_size({'width':1366,'height':768});camera(page,'europe')
     server.stdin.write('war 56\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==56
     expect(page.locator('#map .round-loss').first).to_be_attached(timeout=6000)
     capture('13-battle-round.png',600)
@@ -389,32 +397,33 @@ def map_checks(page,server,report,capture):
 
 HOSTILE_ALLIANCE='<b onclick="x()">Iron & "Pact"</b>'
 def inbox_checks(page,server,context,url,report,capture):
-    """Messages and decisions addressed to this seat are impossible to miss, and never replayed as toasts."""
-    page.set_viewport_size({'width':1366,'height':768})
+    """One attention badge: decisions + unread private messages, read per item, never replayed as toasts."""
+    page.set_viewport_size({'width':1366,'height':768});page.keyboard.press('Escape')
     if page.locator('#feed-toggle').get_attribute('aria-expanded')=='true':page.locator('#feed-toggle').click()  # a row visible in the open rail counts as read
-    for line in ['dm germany britain Our armies should talk before the Rhine burns.','offer qing france']:
+    for line in ['dm russia britain An older note from Petersburg.','dm germany britain Our armies should talk before the Rhine burns.','offer qing france']:
         server.stdin.write(line+'\n');server.stdin.flush();json.loads(server.stdout.readline())
-    expect(page.locator('#inbox-badge .badge-count')).to_have_text('1',timeout=5000)
-    expect(page.locator('#action-badge .badge-count')).to_have_text('1')
-    expect(page.locator('#notice')).to_contain_text('German Empire',timeout=5000)  # the DM toast names its sender
-    expect(page.locator('#notice')).to_contain_text('Alliance offer',timeout=6000);expect(page.locator('#notice [data-accept]')).to_be_visible()
+    badge=page.locator('#attention-count')
+    expect(badge).to_have_text('3',timeout=5000)  # 2 unread DMs + 1 offer waiting for this seat
+    expect(page.locator('#notice')).to_contain_text('Alliance offer',timeout=8000);expect(page.locator('#notice [data-act="accept"]')).to_be_visible()
     capture('19-offer-toast.png')
     page.reload();expect(page.locator('#commander-title')).to_have_text('British Empire')
-    expect(page.locator('#notice')).to_contain_text('1 unread message · 1 decision waiting',timeout=6000)
-    expect(page.locator('#action-badge .badge-count')).to_have_text('1');expect(page.locator('#inbox-badge .badge-count')).to_have_text('1')
-    page.wait_for_timeout(1600);assert 'German Empire' not in page.locator('#notice').inner_text(),'old toasts are not replayed'
-    page.locator('#notice [data-notice-close]').click()
-    page.locator('#action-badge').click();expect(page.locator('[data-feed-filter="action"]')).to_have_attribute('aria-pressed','true')
-    row=page.locator('#feed-list [data-kind="system-offer"][data-actionable="true"]').last;expect(row).to_be_visible()
-    row.locator('[data-accept]').click();expect(page.locator('#confirm-dialog')).to_be_visible();page.locator('#confirm-dialog [value="confirm"]').click()
-    expect(page.locator('#feed-list [data-kind="system-offer"]').last).to_contain_text('you accepted',timeout=5000);expect(page.locator('#action-badge')).to_be_hidden()
-    page.locator('#inbox-badge').click();expect(page.locator('#feed-list .feed-chat[data-channel="dm"]').last).to_be_visible()
-    expect(page.locator('#inbox-badge .badge-count')).to_have_text('',timeout=5000)
+    expect(badge).to_have_text('3',timeout=5000)
+    page.wait_for_timeout(1600);expect(page.locator('#notice')).to_be_hidden()  # no summary, no replayed toasts
+    # Per item: reading Germany's (newer) DM must not mark Russia's (older) one read.
+    page.locator('#lb-rows .lb-row[data-id="germany"]').click();expect(page.locator('#card-body')).to_contain_text('before the Rhine burns')
+    expect(badge).to_have_text('2',timeout=5000);page.keyboard.press('Escape')
+    page.reload();expect(badge).to_have_text('2',timeout=5000)  # read state persists per item
+    page.locator('#attention').click()  # first: the decision, in the offering country's card
+    expect(page.locator('#card')).to_have_attribute('data-kind','country');expect(page.locator('#primary')).to_have_text('Accept alliance')
+    page.locator('#primary').click();expect(badge).to_have_text('1',timeout=5000)
+    page.locator('#attention').click();expect(page.locator('#card-title')).to_have_text('Russian Empire')
+    expect(page.locator('#composer-text')).to_be_focused();expect(page.locator('#attention')).to_be_hidden(timeout=5000)
+    page.keyboard.press('Escape');page.keyboard.press('Escape')
     spectator=context.new_page();spectator.goto(url+'/?match=ui-war&spectate=1');expect(spectator.locator('#phase')).to_have_text('SPECTATING')
     spectator.wait_for_timeout(800)
     assert spectator.locator('#feed-list .feed-chat[data-channel="dm"],#feed-list [data-kind="system-offer"]').count()==0
-    expect(spectator.locator('#inbox-badge')).to_be_hidden();expect(spectator.locator('#action-badge')).to_be_hidden();spectator.close()
-    report['assertions'].append('Inbox: a DM from another seat raises ✉ 1 and a toast naming the sender; an alliance offer that needs this seat raises ⚑ 1 and a toast with Accept; after a reload both badges persist with one summary toast and no replayed toasts; accepting from the rail row works and updates it; opening the DM clears ✉; a spectator sees none of these private items.')
+    expect(spectator.locator('#attention')).to_be_hidden();spectator.close()
+    report['assertions'].append('One attention badge: two DMs from different countries and an alliance offer read 3; a reload keeps it without any summary or replayed toast; reading the newer DM (in its country card) leaves the older one unread (per-item read state, persisted); the badge opens the offer first (Accept in the offering country’s card), then the remaining DM with the message box focused; a spectator sees none of these private items.')
 
 TOAST_SIZE='''() => {
   const out={};for(const id of ['declaration','notice']){const e=document.getElementById(id);e.hidden=false;
@@ -430,15 +439,11 @@ BAND_COLORS='''async side=>{
     feed:[...document.querySelectorAll('#feed-list [data-kind="alliance"]')].map(r=>[r.dataset.side,getComputedStyle(r).borderLeftColor])};
 }'''
 def relation_checks(page,server,report,capture):
-    """v0.7 relations in the recorded war room: Britain (this seat) declared war on the USA at tick 0."""
-    page.set_viewport_size({'width':1366,'height':768});page.wait_for_timeout(150)
+    """Relations in the recorded war room: Britain (this seat) declared war on the USA at tick 0."""
+    page.set_viewport_size({'width':1366,'height':768});page.wait_for_timeout(150);page.keyboard.press('Escape')
     state=page.evaluate("fetch('/api/games/ui-war').then(r=>r.json())");wars=set(state['wars'])
     at_war=lambda a,b:':'.join(sorted([a,b])) in wars
     assert 'britain:usa' in wars and len(wars)==3,wars
-    chip=page.locator('#war-chip')
-    expect(chip).to_have_attribute('data-state','war');expect(chip).to_have_attribute('data-enemies','usa')
-    expect(chip).to_have_attribute('aria-label',re.compile('At war with United States'))
-    expect(page.locator('#ally-chip')).to_have_attribute('data-state','independent')
     rows=page.locator('#lb-rows .lb-row');assert rows.count()>=5
     for i in range(rows.count()):
         row=rows.nth(i);cid=row.get_attribute('data-id');countries=row.get_attribute('data-countries').split(',')
@@ -446,67 +451,51 @@ def relation_checks(page,server,report,capture):
         assert row.get_attribute('data-relation')==expected,(cid,row.get_attribute('data-relation'))
         assert row.locator('.lb-rel').text_content()==('⚔' if expected=='enemy' else '')
     check_layout(page,'1366x768 war room')
-    # The Wars view: from the chip by keyboard; exactly the observation's war pairs.
-    chip.focus();page.keyboard.press('Enter')
-    expect(page.locator('#command-panel')).to_have_attribute('data-tab','council');expect(page.locator('#wars-view')).to_be_visible()
-    expect(page.locator('#panel-title')).to_be_focused()
-    fronts=page.locator('#war-list .war-front-button');shown=set()
-    for i in range(fronts.count()):shown|=set(fronts.nth(i).get_attribute('data-pairs').split())
-    assert shown==wars,(shown,wars)
-    involved=page.locator('#war-list .war-front.involved')
-    expect(involved).to_have_count(1);expect(involved).to_contain_text('United States');expect(involved).to_contain_text('since 00:00')
+    # Wars live in the leaderboard: every front, the one involving you marked; a click frames it on the map.
+    fronts=page.locator('#lb-fronts .lb-front');expect(fronts).to_have_count(3)
+    involved=page.locator('#lb-fronts .lb-front.involved');expect(involved).to_have_count(1);expect(involved).to_contain_text('United States')
     before=page.locator('#map').get_attribute('viewBox');involved.locator('button').click()
     assert page.locator('#map').get_attribute('viewBox')!=before
-    check_layout(page,'1366x768 wars view');capture('17-wars.png')
-    page.keyboard.press('Escape')
-    # Context card: the target owner's relation. A British source next to the USA, then next to France.
-    board=page.evaluate("fetch('/api/games/ui-war/map').then(r=>r.json())")
-    owner={p['id']:p['owner'] for p in state['provinces']}
-    def border(enemy):
-        for p in board['provinces']:
-            if owner.get(p['id'])!='britain':continue
-            for n in p['neighbors']:
-                if owner.get(n)==enemy:return p['id'],n
-    for enemy,relation,words in [('usa','enemy','AT WAR'),('france','neutral','NOT AT WAR')]:
-        src,dst=border(enemy);ensure_orders(page,'half')
-        page.locator('#source').select_option(src);page.locator('#destination').select_option(dst)
-        expect(page.locator('#relation-banner')).to_have_attribute('data-relation',relation);expect(page.locator('#relation-banner')).to_contain_text(words)
-        ensure_orders(page,'peek');expect(page.locator('#relation-banner')).to_be_visible();check_layout(page,f'relation {relation} peek')
-    page.locator('#relation-banner .relation-action').click()
-    expect(page.locator('#command-panel')).to_have_attribute('data-tab','council')
-    expect(page.locator('#diplomacy-target')).to_have_value('france');expect(page.locator('#declare-war')).to_be_focused()
-    expect(page.locator('#relation-banner')).to_be_hidden()  # the relation line belongs to the order card only
-    page.keyboard.press('Escape')
-    # Declare war & march (solo): one confirmed order declares the war and reserves the march, or neither.
-    src,dst=border('france');ensure_orders(page,'half');page.locator('#source').select_option(src);page.locator('#destination').select_option(dst)
-    send=page.locator('#send-army');expect(send).to_have_attribute('data-war','declare');expect(send).to_contain_text('Declare war & march')
-    send.click();dialog=page.locator('#confirm-dialog');expect(dialog).to_be_visible();expect(dialog).to_contain_text('Declare war on French Republic?')
+    capture('17-wars.png')
+    # Country cards: the relation in big words and the one obvious next action.
+    for cid,words,primary in [('usa','AT WAR','Offer peace'),('france','NEUTRAL','Propose alliance')]:
+        page.locator(f'#lb-rows .lb-row[data-id="{cid}"]').click()
+        expect(page.locator('#card-status')).to_contain_text(words);expect(page.locator('#primary')).to_have_text(primary)
+        check_layout(page,f'country {cid}');check_commit(page,f'country {cid}');page.keyboard.press('Escape')
+    # Order card: the target owner's relation, and the owner line opens that country.
+    board=page.evaluate("fetch('/api/games/ui-war/map').then(r=>r.json())");owner={p['id']:p['owner'] for p in state['provinces']}
+    select(page,'england','north-france')
+    expect(page.locator('#card')).to_have_attribute('data-relation','neutral');expect(page.locator('#card-status')).to_contain_text('NOT AT WAR')
+    check_layout(page,'relation neutral peek')
+    page.locator('#card-sub .card-owner').click();expect(page.locator('#card-title')).to_have_text('French Republic');page.keyboard.press('Escape')
+    # Declare war & march (solo, keyboard): one confirmed order declares the war and reserves the march, or neither.
+    select(page,'england','north-france')
+    send=page.locator('#primary');expect(send).to_contain_text('Declare war on France & send')
+    send.focus();page.keyboard.press('Enter');dialog=page.locator('#confirm-dialog');expect(dialog).to_be_visible();expect(dialog).to_contain_text('Declare war on French Republic?')
     expect(dialog.locator('.war-confirm')).to_contain_text('French Republic');expect(dialog.locator('[value="cancel"]')).to_be_focused()
     page.keyboard.press('Escape');expect(dialog).to_be_hidden()
     assert 'britain:france' not in page.evaluate("fetch('/api/games/ui-war').then(r=>r.json())")['wars'],'Cancel keeps the peace'
-    banners=page.evaluate('()=>{window.__banners=[];const seen=new Set();new MutationObserver(()=>{for(const e of document.querySelectorAll("#declaration:not([hidden]),#alliance-seal:not([hidden]),#fallen-seal:not([hidden])"))if(e.dataset.seq&&!seen.has(e.dataset.seq)){seen.add(e.dataset.seq);window.__banners.push(e.textContent);}}).observe(document.body,{subtree:true,attributes:true,attributeFilter:["hidden","data-seq"]});return 0;}')
+    page.evaluate('()=>{window.__banners=[];const seen=new Set();new MutationObserver(()=>{for(const e of document.querySelectorAll("#declaration:not([hidden]),#alliance-seal:not([hidden]),#fallen-seal:not([hidden])"))if(e.dataset.seq&&!seen.has(e.dataset.seq)){seen.add(e.dataset.seq);window.__banners.push(e.textContent);}}).observe(document.body,{subtree:true,attributes:true,attributeFilter:["hidden","data-seq"]});return 0;}')
     send.focus();page.keyboard.press('Enter');expect(dialog).to_be_visible();page.keyboard.press('Tab')
-    expect(dialog.locator('[value="confirm"]')).to_be_focused();expect(dialog.locator('[value="confirm"]')).to_contain_text('Declare war & march')
+    expect(dialog.locator('[value="confirm"]')).to_be_focused();expect(dialog.locator('[value="confirm"]')).to_contain_text('Declare war & send')
     page.keyboard.press('Enter');expect(dialog).to_be_hidden()
     expect(page.locator('#feed-list [data-kind="war"]').last).to_contain_text('French Republic',timeout=5000)
     state=page.evaluate("fetch('/api/games/ui-war').then(r=>r.json())");assert 'britain:france' in state['wars'],state['wars']
     mine=page.evaluate("fetch('/api/games/ui-war',{headers:{Authorization:'Bearer '+JSON.parse(localStorage.getItem('coi.identity')).token}}).then(r=>r.json())")
-    assert any(o['type']=='move' and o['from']==src and o['to']==dst for o in mine['commandBudget']['reserved']),mine['commandBudget']
+    assert any(o['type']=='move' and o['from']=='england' and o['to']=='north-france' for o in mine['commandBudget']['reserved']),mine['commandBudget']
     page.wait_for_timeout(1200);assert page.evaluate('window.__banners.length')==1 and 'WAR DECLARED' in page.evaluate('window.__banners[0]'),page.evaluate('window.__banners')
-    report['assertions'].append('Declare war & march (solo, keyboard only): a neutral target turns the commit into “Declare war & march”; the confirmation names the whole target side with Cancel focused; Escape keeps the peace; confirming declares the war and reserves the march in one order, adds the war row to the rail and shows exactly one banner (it affects this seat).')
-    page.keyboard.press('Escape')
-    report['assertions'].append('Relations (recorded war room, Britain at war with the USA): the HUD war chip names exactly the viewer’s enemies; every leaderboard row’s relation marker matches the public war list; the Wars view opens from the chip by keyboard, lists exactly the observation’s war pairs, marks the one involving the viewer and focuses the map on its front; the context card states AT WAR or NEUTRAL for the target owner and links to the war council.')
-    # Alliances: forming (dashed) during the notice, then active in the alliance colour; the name stays text.
-    if page.locator('#council-label').get_attribute('aria-expanded')!='true':page.locator('#council-label').click()
-    page.locator('#ally-choice').select_option('qing');page.locator('#coalition-name').fill(HOSTILE_ALLIANCE)  # Japan is in the fixture's forming Pacific Pact
-    page.locator('#alliance-form button').click();expect(page.locator('#confirm-dialog')).to_contain_text('Sending this offer is your approval')
-    page.locator('#confirm-dialog [value="confirm"]').click();expect(page.locator('#offers')).to_contain_text(HOSTILE_ALLIANCE)
+    report['assertions'].append('Declare war & march (solo, keyboard): a neutral target makes the one primary read “Declare war on France & send N”; the confirmation names the whole target side with Cancel focused; Escape keeps the peace; confirming declares the war and reserves the march in one order, adds the war row to the rail and shows exactly one banner (it affects this seat).')
+    report['assertions'].append('Relations (recorded war room, Britain at war with the USA): every leaderboard row’s relation marker matches the public war list; the leaderboard lists exactly the war fronts, marks the one involving the viewer and frames it on the map; country cards state AT WAR / NEUTRAL with Offer peace / Propose alliance as the primary; the order card states the target owner’s relation and its owner line opens that country’s card.')
+    # Alliances from the country card: forming (dashed) during the notice, then active in the alliance colour; the name stays text.
+    page.locator('#lb-rows .lb-row[data-id="qing"]').click();expect(page.locator('#primary')).to_have_text('Propose alliance')
+    page.locator('#primary').click();page.locator('#coalition-name').fill(HOSTILE_ALLIANCE);page.locator('#primary').click()
+    expect(page.locator('#card-status')).to_contain_text('ALLIANCE OFFER PENDING')
     server.stdin.write('ally qing\n');server.stdin.flush();assert json.loads(server.stdout.readline())['status']=='pending'
-    expect(page.locator('#ally-chip')).to_have_attribute('data-state','forming',timeout=5000)
+    expect(page.locator('#card-status')).to_contain_text('ALLIANCE FORMING',timeout=5000)
     expect(page.locator('#lb-rows .lb-row[data-id="britain"]')).to_have_attribute('data-band','forming')  # your row is always listed
+    page.keyboard.press('Escape')
     server.stdin.write('war 90\n');server.stdin.flush();json.loads(server.stdout.readline())
-    ally=page.locator('#ally-chip');expect(ally).to_have_attribute('data-state','active',timeout=5000)
-    expect(ally).to_have_attribute('data-allies','qing');expect(ally).to_have_attribute('aria-label',re.compile('Allied in .*Pact.* with Qing'))
+    expect(page.locator('#commander-side')).to_have_text(HOSTILE_ALLIANCE,timeout=5000)
     state=page.evaluate("fetch('/api/games/ui-war').then(r=>r.json())")
     side=next(p['side'] for p in state['players'] if p['id']=='britain');assert next(p['side'] for p in state['players'] if p['id']=='qing')==side
     expect(page.locator('#lb-rows .lb-row[data-band="active"]').first).to_be_visible()
@@ -516,19 +505,14 @@ def relation_checks(page,server,report,capture):
     assert colors['feed'] and colors['feed'][-1]==[side,colors['expected'][side]],colors
     assert page.locator('b[onclick]').count()==0
     expect(page.locator('#feed-list [data-kind="alliance"]').last).to_contain_text(HOSTILE_ALLIANCE)
-    check_layout(page,'1366x768 alliance active');capture('18-alliance-relations.png')
-    # Coalition member: a neutral target asks for a war vote instead of marching.
-    state=page.evaluate("fetch('/api/games/ui-war').then(r=>r.json())");owner={p['id']:p['owner'] for p in state['provinces']};wars=set(state['wars'])
-    allies={p['id'] for p in state['players'] if p['side']==side}
-    target=next(((p['id'],n) for p in board['provinces'] if owner.get(p['id'])=='britain' for n in p['neighbors']
-        if owner.get(n) and owner.get(n) not in allies and ':'.join(sorted(['britain',owner.get(n)])) not in wars),None)
-    assert target,'no neutral neighbour for the coalition vote case'
-    ensure_orders(page,'half');page.locator('#source').select_option(target[0]);page.locator('#destination').select_option(target[1])
-    expect(page.locator('#send-army')).to_have_attribute('data-war','vote');expect(page.locator('#send-army')).to_contain_text('Call war vote on')
-    page.keyboard.press('Escape')
-    report['assertions'].append('As a coalition member the same commit reads “Call war vote on …” (no march is sent without the vote).')
+    page.locator('#hud-standard').click();expect(page.locator('#card-title')).to_have_text(HOSTILE_ALLIANCE);expect(page.locator('#card-status')).to_contain_text('Qing')
+    check_layout(page,'1366x768 alliance active');capture('18-alliance-relations.png');page.keyboard.press('Escape')
+    # Coalition member: war on a neutral country is a vote, never a march.
+    page.locator('#lb-rows .lb-row[data-id="germany"]').click()
+    expect(page.locator('#card-actions')).to_contain_text('Call war vote');page.keyboard.press('Escape')
+    report['assertions'].append('As a coalition member, war on a neutral country is offered as “Call war vote” (no march is sent without the vote).')
     expect(page.locator('#map .map-effect')).to_have_count(0,timeout=6000)  # the live alliance effect ends before the effect-scope check
-    report['assertions'].append('Alliances: a new coalition shows as forming (dashed) in the HUD chip and leaderboard during its notice, then active with the ally’s standard; leaderboard bands and the alliance feed row use the same colour as the shared allianceColors helper (relations.js, also used by the map blocs); a hostile alliance name renders only as text.')
+    report['assertions'].append('Alliances from the country card: Propose alliance → name → Send; the card then reads ALLIANCE OFFER PENDING, then ALLIANCE FORMING (dashed band in the leaderboard) during the notice, then active in the HUD, the leaderboard and the alliance card; bands and the alliance feed row use the same colour as the shared allianceColors helper (relations.js, also used by the map blocs); a hostile alliance name renders only as text.')
 
 # iPhone Safari has no element Fullscreen API: simulate it, so only the CSS pseudo-fullscreen can work.
 NO_FULLSCREEN_API='Object.defineProperty(Document.prototype,"fullscreenEnabled",{get:()=>false,configurable:true});'
@@ -536,7 +520,7 @@ VIEW_CENTRE='()=>{const [x,y,w,h]=document.querySelector("#review-map").getAttri
 def expand_checks(browser,url,identity,report,out):
     for w,h in [(390,844),(844,390)]:
         context=browser.new_context(viewport={'width':w,'height':h},is_mobile=True,has_touch=True,device_scale_factor=2)
-        context.add_init_script(NO_FULLSCREEN_API);context.add_init_script('localStorage.setItem("coi.identity",'+json.dumps(json.dumps(identity))+');')
+        context.add_init_script(NO_FULLSCREEN_API);context.add_init_script('localStorage.setItem("coi.identity",'+json.dumps(json.dumps(identity))+');'+COACH_DONE)
         page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
         # Replay map (after-action review).
         page.goto(url+'/?match=ui-review');expect(page.locator('#aar-player-scores tbody tr')).to_have_count(8)
@@ -568,20 +552,20 @@ def expand_checks(browser,url,identity,report,out):
         # Live map.
         page.goto(url+'/?match=ui-fixture');expect(page.locator('#commander-title')).to_have_text('British Empire')
         live=page.locator('#map-expand');expect(live).to_be_visible()
-        live.click();expect(page.locator('#stage')).to_have_class(re.compile('map-expanded'));expect(page.locator('.hud-bar')).to_be_hidden()
+        live.click();expect(page.locator('#stage')).to_have_class(re.compile('map-expanded'));expect(page.locator('.hud-bar')).to_be_visible()  # v0.8: the HUD is one row and stays
         assert page.locator('#map').bounding_box()=={'x':0,'y':0,'width':w,'height':h}
         expect(page.locator('#leaderboard')).to_be_visible();check_layout(page,f'{w}x{h} expanded live map')
         page.screenshot(path=str(out/f'20-expanded-live-{w}x{h}.png'))
         page.keyboard.press('Escape');expect(page.locator('#stage')).not_to_have_class(re.compile('map-expanded'))
         expect(page.locator('.hud-bar')).to_be_visible();expect(live).to_be_focused()
         # Popups on phones are compact toasts under the HUD, never over the order sheet or its commit.
-        page.locator('#orders-label').click();page.locator('#source').select_option(index=1)
-        sheet=page.locator('#command-panel').bounding_box();commit=page.locator('#send-army').bounding_box();sizes=page.evaluate(TOAST_SIZE)
+        select(page,'england','low-countries')
+        sheet=page.locator('#card').bounding_box();commit=page.locator('#primary').bounding_box();sizes=page.evaluate(TOAST_SIZE)
         for name,r in sizes.items():
             assert r['height']<=min(72,h*.15)+.5 and r['top']>=0,(w,h,name,r)
             for other in [sheet,commit]:assert r['bottom']<=other['y'] or r['top']>=other['y']+other['height'] or r['right']<=other['x'] or r['left']>=other['x']+other['width'],(w,h,name,r,other)
         page.keyboard.press('Escape')
-        page.locator('#menu-button').click();expect(page.locator('#fullscreen-toggle')).to_be_visible()  # never hidden without the Fullscreen API
+        menu(page);expect(page.locator('#fullscreen-toggle')).to_be_visible()  # never hidden without the Fullscreen API
         page.locator('#fullscreen-toggle').click();expect(page.locator('#stage')).to_have_class(re.compile('map-expanded'));live.click()
         manifest=page.evaluate("fetch('/manifest.webmanifest').then(async r=>({type:r.headers.get('content-type'),body:await r.json()}))")
         assert manifest['type']=='application/manifest+json' and manifest['body']['display']=='fullscreen' and 'standalone' in manifest['body']['display_override'],manifest
@@ -681,7 +665,7 @@ audio_fetches=lambda page:page.evaluate("performance.getEntriesByType('resource'
 def sound_settings_checks(page,context,url,report,bridge):
     # Controls: mute, volume sliders, reduced sound; persisted per browser; Shift+M never fires while typing.
     control=page.locator('#sound-control')
-    page.locator('.sound-toggle').click();expect(page.locator('#sound-panel')).to_be_visible()
+    menu(page);page.locator('.sound-toggle').click();expect(page.locator('#sound-panel')).to_be_visible()
     page.locator('#sound-music').fill('60');page.locator('#sound-effects').fill('40')
     page.locator('#sound-mute').check()
     expect(control).to_have_attribute('data-muted','true');expect(control).to_have_attribute('data-audio','suspended')
@@ -698,7 +682,7 @@ def sound_settings_checks(page,context,url,report,bridge):
     if bridge:load_bridge(fresh,url,{})
     else:fresh.goto(url)
     expect(fresh.locator('#sound-control')).to_have_attribute('data-music','0.6')
-    fresh.locator('.sound-toggle').click()
+    menu(fresh);fresh.locator('.sound-toggle').click()
     assert fresh.locator('#sound-music').input_value()=='60' and fresh.locator('#sound-effects').input_value()=='40'
     assert not fresh.locator('#sound-mute').is_checked()
     fresh.close()
@@ -710,13 +694,13 @@ def mobile_checks(browser,url,identity,report,out):
     px=lambda page:page.evaluate('document.querySelector("#map").getScreenCTM().a')
     for w,h in [(390,844),(844,390)]:
         context=browser.new_context(viewport={'width':w,'height':h},is_mobile=True,has_touch=True,device_scale_factor=2)
-        context.add_init_script('localStorage.setItem("coi.identity",'+json.dumps(json.dumps(identity))+');')
+        context.add_init_script('localStorage.setItem("coi.identity",'+json.dumps(json.dumps(identity))+');'+COACH_DONE)
         page=context.new_page();page.goto(url);page.locator('[data-room="ui-war"][data-resume]').click()
         expect(page.locator('#commander-title')).to_have_text('British Empire');page.locator('#map').scroll_into_view_if_needed()
         # The viewBox takes the element's aspect: no letterboxing.
         box=page.locator('#map').bounding_box();vb=[float(v) for v in page.locator('#map').get_attribute('viewBox').split()]
         assert abs(vb[2]/vb[3]-box['width']/box['height'])<.01,(vb,box)
-        page.locator('#world-view').click();page.wait_for_timeout(150);start=vb_w=float(page.locator('#map').get_attribute('viewBox').split()[2])
+        camera(page,'world');page.wait_for_timeout(150);start=vb_w=float(page.locator('#map').get_attribute('viewBox').split()[2])
         # Pinch (two real touch points through CDP) zooms in.
         cdp=context.new_cdp_session(page);page.locator('#map').scroll_into_view_if_needed();box=page.locator('#map').bounding_box()
         top,bottom=max(box['y'],0),min(box['y']+box['height'],h);cx,cy=box['x']+box['width']/2,(top+bottom)/2
@@ -729,7 +713,7 @@ def mobile_checks(browser,url,identity,report,out):
         for _ in range(6):pinch(spread)
         assert px(page)>=MAX_PX-.05,('pinch max',w,px(page))
         # Double tap zooms 2× at the tap point.
-        page.locator('#world-view').click();page.locator('#map').scroll_into_view_if_needed();page.wait_for_timeout(100)
+        camera(page,'world');page.locator('#map').scroll_into_view_if_needed();page.wait_for_timeout(100)
         box=page.locator('#map').bounding_box()
         # Tap a spot with no counter under it (a tap on a merged counter would zoom to fit it instead).
         tx,ty=page.evaluate('''([x0,y0,x1,y1])=>{for(let y=y0+20;y<y1-20;y+=17)for(let x=x0+20;x<x1-20;x+=17){const e=document.elementFromPoint(x,y);
@@ -738,19 +722,19 @@ def mobile_checks(browser,url,identity,report,out):
         page.touchscreen.tap(tx,ty);page.wait_for_timeout(60);page.touchscreen.tap(tx,ty);page.wait_for_timeout(120)
         now=float(page.locator('#map').get_attribute('viewBox').split()[2]);assert abs(now-before/2)<1,('double tap',before,now)
         # Europe at maximum zoom via the + button: near LOD, desktop-or-better px/unit, tappable provinces.
-        page.locator('#europe-view').click()
-        for _ in range(12):page.locator('#zoom-in').click()
+        camera(page,'europe')
+        for _ in range(14):page.keyboard.press('e')  # touch: no +/− buttons (pinch, double tap, E)
         page.wait_for_timeout(200);level=page.locator('#map').get_attribute('data-lod')
         assert px(page)>=DESKTOP_OLD_MAX and px(page)>=MAX_PX-.05 and level=='near',(w,px(page),level)
         sizes=page.evaluate('''()=>['belgium','low-countries','ruhr','rhineland','saxony','serbia'].map(id=>{const r=document.querySelector('#province-'+id).getBoundingClientRect();return [id,Math.min(r.width,r.height)];})''')
         assert all(s>=32 for _,s in sizes),sizes
-        page.locator('#europe-view').click();page.locator('#zoom-in').click();page.locator('#zoom-in').click();page.wait_for_timeout(200)
+        camera(page,'europe');page.keyboard.press('e');page.keyboard.press('e');page.keyboard.press('e');page.wait_for_timeout(200)
         result=page.evaluate(MAP_AUDIT,'ui-war');assert not result['overlaps'] and not result['missing'] and not result['badSums'],result
         if w==390:page.screenshot(path=str(out/'19-mobile-max-zoom.png'))
         if w==390:
             # A column that has just left Scotland sits on the Scotland counter: a tap must still select Scotland.
-            page.locator('#world-view').click();page.locator('#home-view').click()
-            for _ in range(4):page.locator('#zoom-in').click()
+            camera(page,'world');page.locator('#home-view').click()
+            for _ in range(5):page.keyboard.press('e')
             page.locator('#map').scroll_into_view_if_needed();page.wait_for_timeout(250)
             departing=page.evaluate('''()=>{const c=document.querySelector('#marker-scotland .counter-body').getBoundingClientRect();
               return [...document.querySelectorAll('#map .moving-army:not(.engaged)')].map(g=>{const r=g.querySelector('.army-arrow').getBoundingClientRect();
@@ -758,11 +742,46 @@ def mobile_checks(browser,url,identity,report,out):
             assert departing and all(a['blocked'] for a in departing) and all(a['hit']<=18 for a in departing),departing
             body=page.locator('#marker-scotland .counter-body').bounding_box()
             page.touchscreen.tap(body['x']+body['width']/2,body['y']+body['height']/2)
-            expect(page.locator('#source')).to_have_value('scotland')
+            expect(page.locator('#card-title')).to_have_text('Scotland')
         context.close()
     report['assertions'].append(f'Phones (390×844 and 844×390, touch emulation) reach {MAX_PX} px per map unit (desktop previously {DESKTOP_OLD_MAX:.1f}) by + button and by a real two-finger pinch; double tap zooms 2×; near LOD with names is reachable; small Europe provinces are ≥32 CSS px; a tap on a counter under a just-departed army selects the province; the viewBox fills the element (no letterboxing); counters stay non-overlapping.')
 
 MAX_PX=14
+
+def coach_and_drag_checks(browser,url,identity,report,out):
+    """First-match tips (three, dismissible, stored per browser) and a real touch drag from a province counter."""
+    context=browser.new_context(viewport={'width':390,'height':844},is_mobile=True,has_touch=True,device_scale_factor=2)
+    context.add_init_script('localStorage.setItem("coi.identity",'+json.dumps(json.dumps(identity))+');')
+    page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+    page.goto(url+'/?match=ui-fixture');expect(page.locator('#commander-title')).to_have_text('British Empire')
+    coach=page.locator('#coach');expect(coach).to_be_visible(timeout=5000);expect(coach).to_contain_text('Tip 1 of 3');expect(coach).to_contain_text('Drag from your province')
+    check_layout(page,'390 coach tip 1');page.screenshot(path=str(out/'21-coach-1.png'))
+    page.locator('#coach-next').click();expect(coach).to_contain_text('Tap a country');check_layout(page,'390 coach tip 2')
+    page.locator('#coach-next').click();expect(coach).to_contain_text('Your standard');expect(page.locator('#coach-next')).to_have_text('Got it')
+    page.screenshot(path=str(out/'21-coach-3.png'));page.locator('#coach-next').click();expect(coach).to_be_hidden()
+    assert page.evaluate("localStorage.getItem('coi.coach')")=='done'
+    page.reload();expect(page.locator('#commander-title')).to_have_text('British Empire');page.wait_for_timeout(1200);expect(coach).to_be_hidden()
+    menu(page);page.locator('#coach-replay').click();expect(coach).to_be_visible();page.keyboard.press('Escape');expect(coach).to_be_hidden()
+    # Drag with a real touch point from Southern England's counter to the Low Countries.
+    page.locator('#home-view').click();page.wait_for_timeout(250)
+    def centre(sel):
+        b=page.locator(sel).bounding_box();return b['x']+b['width']/2,b['y']+b['height']/2
+    (x0,y0),(x1,y1)=centre('#marker-england .counter-body'),centre('#marker-low-countries .counter-body')
+    cdp=context.new_cdp_session(page)
+    cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':x0,'y':y0,'id':1}]})
+    for i in range(1,13):cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':x0+(x1-x0)*i/12,'y':y0+(y1-y0)*i/12,'id':1}]})
+    page.wait_for_timeout(80)
+    expect(page.locator('#map')).to_have_class(re.compile('command-drag'));expect(page.locator('#map .draft-arrow.snapped')).to_have_count(1)
+    assert re.fullmatch(r'\d+ · \d+s',page.locator('#map .draft-label text').text_content()),page.locator('#map .draft-label text').text_content()  # troops · ETA
+    page.screenshot(path=str(out/'22-touch-drag.png'))
+    cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
+    expect(page.locator('#card')).to_have_attribute('data-kind','province');expect(page.locator('#card-title')).to_have_text('Low Countries')
+    expect(page.locator('#card-sub')).to_contain_text('from Southern England');check_commit(page,'390 after drag')
+    assert page.locator('#map .draft-arrow').count()==1  # the order arrow stays while the card is open
+    page.screenshot(path=str(out/'23-after-drag.png'))
+    assert not errors,errors
+    context.close()
+    report['assertions'].append('First match: three dismissible tips (drag to attack, tap a country, your standard shows what needs you), stored per browser, replayable from the menu, closed by Escape, never overlapping other overlays. A real touch drag from a province counter draws a snapped order arrow with an ETA label, then opens the order card for that target with one primary action; drags elsewhere still pan.')
 
 def main():
     parser=argparse.ArgumentParser()
@@ -781,11 +800,11 @@ def main():
             if args.executable:launch['executable_path']=args.executable
             browser=p.chromium.launch(**launch)
             context=browser.new_context(viewport={'width':1600,'height':1000})
-            context.add_init_script(SOUND_SPY)
+            context.add_init_script(SOUND_SPY);context.add_init_script(COACH_DONE)
             page=context.new_page();page.on('pageerror',lambda e:report['pageErrors'].append(str(e)))
             if args.bridge:load_bridge(page,url,{'coi.identity':json.dumps(identity)})
             else:
-                context.add_init_script('localStorage.setItem("coi.identity",'+json.dumps(json.dumps(identity))+');')
+                context.add_init_script('localStorage.setItem("coi.identity",'+json.dumps(json.dumps(identity))+');'+COACH_DONE)
                 page.goto(url)
             expect(page.locator('#faction-parade .insignia')).to_have_count(8)
             page.wait_for_timeout(600)
@@ -796,7 +815,7 @@ def main():
             expect(page.locator('#sound-control')).to_have_attribute('data-loaded','ogg',timeout=10000)
             assert spy(page,'contexts')==1 and spy(page,'starts')==2,(spy(page,'contexts'),spy(page,'starts'))  # theme + tension loops
             expect(page.locator('#commander-title')).to_have_text('British Empire')
-            expect(page.locator('.country-card')).to_have_count(8)
+            expect(page.locator('#lb-rows .lb-row').first).to_be_visible()
             # Catch-up: the World feed shows history but nothing flashes or announces itself.
             expect(page.locator('#world-feed')).to_be_visible()
             expect(page.locator('#feed-list [data-kind="major_battle"]').first).to_be_visible()
@@ -816,12 +835,11 @@ def main():
                     frames.append((page.screenshot(),hold));page.locator('#capture-label').evaluate('(e)=>e.remove()')
             def no_overflow():
                 assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1')
-            ensure_orders(page,'half')
-            page.locator('#source').select_option('england');page.locator('#destination').select_option('low-countries')
-            page.locator('#europe-view').click();page.locator('#orders-tab').evaluate('(e)=>e.scrollTop=0')
-            capture('01-command-europe.png');no_overflow()
-            page.keyboard.press('Escape');expect(page.locator('#command-panel')).to_be_hidden()
-            # v0.7 full screen: every listed viewport, player and spectator, idle / selected / drawer states.
+            select(page,'england','low-countries')
+            camera(page,'europe');capture('01-order-card-europe.png');no_overflow()
+            page.keyboard.press('Escape');expect(page.locator('#card')).to_be_hidden()
+            # v0.8 one map: every listed viewport, player and spectator; idle, order card (peek/full), country and
+            # alliance cards, and the history sheet. Nothing overlaps; the one primary action is always reachable.
             spectator=context.new_page();spectator.on('pageerror',lambda e:report['pageErrors'].append(str(e)))
             if args.bridge:load_bridge(spectator,url);spectator.locator('[data-room="ui-fixture"][data-spectate="true"]').click()
             else:spectator.goto(url+'/?match=ui-fixture&spectate=1')
@@ -829,27 +847,36 @@ def main():
             shots=out/'layout';shots.mkdir(exist_ok=True)
             def feed_open(view,open):
                 if (view.locator('#feed-toggle').get_attribute('aria-expanded')=='true')!=open:view.locator('#feed-toggle').click()
+            def open_country(view,cid,compact):
+                if compact:
+                    if view.locator('#lb-toggle').get_attribute('aria-expanded')=='true':view.locator('#lb-toggle').click()
+                    view.locator(f'#lb-powers [data-power="{cid}"]').click()
+                else:view.locator(f'#lb-rows .lb-row[data-id="{cid}"]').click()
+                expect(view.locator('#card')).to_have_attribute('data-kind','country')
+            surfaces={}
             for w,h in [(1920,1080),(1366,768),(1280,720),(390,844),(844,390),(768,1024)]:
-                tag=f'{w}x{h}'
+                tag=f'{w}x{h}';compact=w<1024 or h<500
                 for view in (page,spectator):view.set_viewport_size({'width':w,'height':h})
-                feed_open(page,w>=760);page.wait_for_timeout(200)
-                check_layout(page,f'{tag} player idle');page.screenshot(path=str(shots/f'{tag}-player.png'))
+                feed_open(page,not compact);page.wait_for_timeout(200)
+                idle=check_layout(page,f'{tag} player idle');page.screenshot(path=str(shots/f'{tag}-player.png'))
+                surfaces[tag]=idle['visible']
                 coverage={'idle':round(page.evaluate(UNCOVERED),3)}
-                ensure_orders(page,'half');page.locator('#source').select_option('england');page.locator('#destination').select_option('low-countries')
-                expect(page.locator('#send-army')).to_contain_text('Commit')
-                for size in ['half','full','peek']:
-                    ensure_orders(page,size);page.wait_for_timeout(60)
-                    check_layout(page,f'{tag} selected {size}');check_commit(page,f'{tag} {size}')
-                    page.screenshot(path=str(shots/f'{tag}-selected-{size}.png'))
-                    if size=='peek':coverage['selectedPeek']=round(page.evaluate(UNCOVERED),3)
+                select(page,'england','low-countries')
+                for size in ['full','peek']:
+                    if page.locator('#card').get_attribute('data-size')!=size:page.locator('#card-size').click()
+                    page.wait_for_timeout(60)
+                    check_layout(page,f'{tag} order {size}');check_commit(page,f'{tag} {size}')
+                    page.screenshot(path=str(shots/f'{tag}-order-{size}.png'))
+                    if size=='peek':coverage['orderPeek']=round(page.evaluate(UNCOVERED),3)
                 report.setdefault('uncoveredMap',{})[tag]=coverage
-                if tag=='1366x768':assert coverage['idle']>=.65 and coverage['selectedPeek']>=.62,coverage  # overlays stay compact; the map dominates
-                page.keyboard.press('Escape');expect(page.locator('#command-panel')).to_be_hidden()
-                for drawer in ['council']:  # v0.7 single view: messages live in the rail, not a drawer
-                    page.locator(f'#{drawer}-label').click();expect(page.locator(f'#{drawer}-tab')).to_be_visible()
-                    check_layout(page,f'{tag} {drawer}');page.screenshot(path=str(shots/f'{tag}-{drawer}.png'))
-                page.keyboard.press('Escape');expect(page.locator('#command-panel')).to_be_hidden()
-                if w<760:
+                if tag=='1366x768':assert coverage['idle']>=.65 and coverage['orderPeek']>=.62,coverage  # overlays stay compact; the map dominates
+                page.keyboard.press('Escape');expect(page.locator('#card')).to_be_hidden()
+                open_country(page,'germany',compact);check_layout(page,f'{tag} country card');check_commit(page,f'{tag} country')
+                page.screenshot(path=str(shots/f'{tag}-country.png'));page.keyboard.press('Escape')
+                page.locator('#hud-standard').click();expect(page.locator('#card')).to_have_attribute('data-kind','alliance')
+                check_layout(page,f'{tag} alliance card');page.screenshot(path=str(shots/f'{tag}-alliance.png'));page.keyboard.press('Escape')
+                expect(page.locator('#card')).to_be_hidden()
+                if compact:
                     expect(page.locator('#feed-ticker')).to_be_visible()
                     feed_open(page,True);expect(page.locator('#feed-list')).to_be_visible()
                     check_layout(page,f'{tag} history sheet');page.screenshot(path=str(shots/f'{tag}-history.png'))
@@ -857,27 +884,34 @@ def main():
                 else:
                     expect(page.locator('#feed-list')).to_be_visible()
                     feed_open(page,False);check_layout(page,f'{tag} history edge tab');feed_open(page,True)
-                feed_open(spectator,w>=760);spectator.wait_for_timeout(150)
+                feed_open(spectator,not compact);spectator.wait_for_timeout(150)
                 check_layout(spectator,f'{tag} spectator');spectator.screenshot(path=str(shots/f'{tag}-spectator.png'))
-                expect(spectator.locator('#spectator-note')).to_be_visible();expect(spectator.locator('#command-footer')).to_be_hidden()
-                if w>=760:expect(spectator.locator('#feed-list')).to_be_visible()
+                expect(spectator.locator('#feed-form')).to_be_hidden();expect(spectator.locator('#attention')).to_be_hidden()
+                if not compact:expect(spectator.locator('#feed-list')).to_be_visible()
+            # Spectators: the same cards, information only.
+            spectator.set_viewport_size({'width':1366,'height':768});spectator.locator('#lb-rows .lb-row[data-id="germany"]').click()
+            expect(spectator.locator('#card')).to_have_attribute('data-kind','country');expect(spectator.locator('#card-actions button')).to_have_count(0)
+            expect(spectator.locator('#composer')).to_be_hidden();spectator.keyboard.press('Escape')
+            click_at(spectator,spectator.locator('#marker-england .counter-body')) if spectator.locator('#marker-england .counter-body').is_visible() else None
+            expect(spectator.locator('#amount-control')).to_be_hidden();expect(spectator.locator('#primary')).to_have_count(0)
             spectator.close()
-            report['layout']=layout_log
-            report['assertions'].append('Full-screen contract at 1920×1080, 1366×768, 1280×720, 390×844, 844×390 and 768×1024 for player and spectator: the map is exactly the viewport, no document scroll, and no overlapping or off-screen overlays when idle, with a selection (peek, half, full), with Council or Dispatches open, or with the history collapsed; the form-associated March commit stays visible, unobstructed and outside any scrolling region; the World history stays beside the map on wide screens and opens as a sheet on phones. At 1366×768 at least 65% of the map is uncovered with nothing selected and at least 62% with a province card peeking (actual shares in uncoveredMap).')
+            report['layout']=layout_log;report['persistentSurfaces']=surfaces
+            assert all(len(v)<=4 for v in surfaces.values()),surfaces  # idle: HUD, leaderboard, history, camera (+ the map itself)
+            report['assertions'].append('One-map contract at 1920×1080, 1366×768, 1280×720, 390×844, 844×390 and 768×1024 for player and spectator: the map is exactly the viewport, no document scroll, and no overlapping or off-screen overlays when idle, with an order card (peek and expanded), a country card, the alliance card, or the history collapsed/opened; the card has exactly one primary button, visible, unobstructed and outside any scrolling region. Idle, at most four floating surfaces (HUD, leaderboard, history, camera) sit over the map. At 1366×768 at least 65% of the map is uncovered idle and at least 62% with an order card peeking (actual shares in uncoveredMap). Spectators get the same cards without actions or message boxes.')
             page.set_viewport_size({'width':1600,'height':1000});page.wait_for_timeout(150)
-            # Keyboard: a HUD button opens its drawer and moves focus in; Escape closes it and returns focus.
-            page.locator('#council-label').focus();page.keyboard.press('Enter')
-            expect(page.locator('#command-panel')).to_have_attribute('data-tab','council');expect(page.locator('#panel-title')).to_be_focused()
-            expect(page.locator('#council-label')).to_have_attribute('aria-expanded','true')
-            page.keyboard.press('Escape');expect(page.locator('#command-panel')).to_be_hidden();expect(page.locator('#council-label')).to_be_focused()
-            expect(page.locator('#council-label')).to_have_attribute('aria-expanded','false')
-            page.locator('#orders-label').focus();page.keyboard.press('Enter');expect(page.locator('#command-panel')).to_have_attribute('data-sheet','half')
-            page.locator('#sheet-handle').focus();page.keyboard.press('ArrowUp');expect(page.locator('#command-panel')).to_have_attribute('data-sheet','full')
-            page.keyboard.press('ArrowDown');page.keyboard.press('ArrowDown');expect(page.locator('#command-panel')).to_have_attribute('data-sheet','peek')
-            page.keyboard.press('Escape');expect(page.locator('#command-panel')).to_be_hidden();expect(page.locator('#orders-label')).to_be_focused()
-            page.locator('#menu-button').focus();page.keyboard.press('Enter');expect(page.locator('#hud-menu')).to_be_visible();expect(page.locator('#share')).to_be_focused()
+            # Keyboard: your standard opens the alliance card with focus moved in; Escape closes it and returns focus.
+            page.locator('#hud-standard').focus();page.keyboard.press('Enter')
+            expect(page.locator('#card')).to_have_attribute('data-kind','alliance');expect(page.locator('#card-title')).to_be_focused()
+            page.keyboard.press('Escape');expect(page.locator('#card')).to_be_hidden();expect(page.locator('#hud-standard')).to_be_focused()
+            page.locator('#card-size').evaluate('(b)=>b')  # present
+            page.locator('#menu-button').focus();page.keyboard.press('Enter');expect(page.locator('#hud-menu')).to_be_visible();expect(page.locator('#world-view')).to_be_focused()
             page.keyboard.press('Escape');expect(page.locator('#hud-menu')).to_be_hidden();expect(page.locator('#menu-button')).to_be_focused()
-            report['assertions'].append('Keyboard: Council opens from its HUD button with focus moved into the panel and closes with Escape, returning focus; the order sheet resizes with arrow keys on its handle; the menu opens and closes the same way.')
+            # Keyboard orders: focus your province counter, Enter, then a neighbour, Enter → focus on the one primary; Escape cancels.
+            page.locator('#home-view').click();page.locator('#marker-england').focus();page.keyboard.press('Enter')
+            expect(page.locator('#card-title')).to_have_text('Southern England')
+            page.locator('#marker-low-countries').focus();page.keyboard.press('Enter');expect(page.locator('#primary')).to_be_focused()
+            page.keyboard.press('Escape');expect(page.locator('#card')).to_be_hidden()
+            report['assertions'].append('Keyboard: the standard opens the alliance card with focus moved in and Escape returns it; the menu opens and closes the same way; a province then a neighbour selected with Enter puts focus on the one primary action (Enter sends), and Escape cancels.')
             observed=page.evaluate("fetch('/api/games/ui-fixture').then(r=>r.json())")
             def expected_troops(country):
                 return sum(p['troops'] for p in observed['provinces'] if p['owner']==country)+sum(a['amount'] for a in observed['armies'] if a['country']==country)
@@ -911,48 +945,48 @@ def main():
             page.screenshot(path=str(out/'15-leaderboard-players-1920.png'))
             page.locator('[data-lb-mode="teams"]').click()
             report['assertions'].append('Leaderboard heads the right rail at 1366×768 and 1920×1080 without overlapping any overlay. Teams view (default): each alliance row equals the sum of its nested members, which are sorted by troops with shares summing to 100%; every row matches garrisons + armies from the public observation; groups collapse and expand by keyboard; the flat Players toggle works.')
-            page.locator('#council-label').click()
-            page.locator('[data-country-focus="germany"]').focus();page.wait_for_timeout(850)
-            expect(page.locator('[data-country-focus="germany"]')).to_be_focused()
-            page.keyboard.press('Enter');assert page.locator('#map').get_attribute('viewBox')!='0 0 1280 680'
-            expect(page.locator('#command-panel')).to_have_attribute('data-tab','orders')
-            page.locator('#journal-toggle').click();expect(page.locator('#war-journal')).to_be_visible()
+            # A leaderboard row is a country: focus survives polling, Enter opens its card.
+            page.locator('#lb-rows .lb-row[data-id="germany"]').focus();page.wait_for_timeout(850)
+            expect(page.locator('#lb-rows .lb-row[data-id="germany"]')).to_be_focused()
+            page.keyboard.press('Enter');expect(page.locator('#card')).to_have_attribute('data-kind','country');expect(page.locator('#card-title')).to_have_text('German Empire')
+            page.keyboard.press('Escape')
+            menu(page);page.locator('#journal-toggle').click();expect(page.locator('#war-journal')).to_be_visible()
             expect(page.locator('#journal-toggle')).to_have_attribute('aria-expanded','true')
             capture('02-war-log.png')
-            page.keyboard.press('Escape');expect(page.locator('#war-journal')).to_be_hidden();expect(page.locator('#journal-toggle')).to_be_focused()
+            page.keyboard.press('Escape');expect(page.locator('#war-journal')).to_be_hidden();expect(page.locator('#menu-button')).to_be_focused()
             page.keyboard.press('j');expect(page.locator('#war-journal')).to_be_visible()
             page.locator('#journal-close').click();expect(page.locator('#war-journal')).to_be_hidden()
-            report['assertions'].append('Council roster preserves keyboard focus across polling and inspects the map; War log opens by click/J and closes with Escape or Close.')
-            ensure_orders(page,'full');page.locator('#source').select_option('england');page.locator('#destination').select_option('low-countries')
-            page.locator('[data-order-mode="coordinate"]').click();capture('03-coordinate.png')
-            page.locator('[data-order-mode="develop"]').click();page.locator('#source').select_option('scotland');capture('04-industry.png')
-            page.locator('#council-label').click();capture('05-council.png')
-            page.locator('#orders-label').click();page.locator('[data-order-mode="march"]').click();page.locator('#world-view').click()
-            page.locator('#orders-tab').evaluate('(e)=>e.scrollTop=0');capture('06-command-world.png')
+            report['assertions'].append('Leaderboard rows keep keyboard focus across polling and open the country card; the War log opens from the menu or J and closes with Escape or Close.')
+            select(page,'england','low-countries','full');capture('03-order-expanded.png')
+            select(page,'scotland',None,'full');capture('04-own-province.png')
+            open_country(page,'germany',False);capture('05-country.png');page.keyboard.press('Escape')
+            select(page,'england','low-countries','peek');camera(page,'world');capture('06-order-world.png')
             # Templates with authored static symbols cannot execute arbitrary player inputs.
             ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
-            page.locator('.standing-order summary').click();expect(page.locator('#set-route')).to_be_visible()
-            page.wait_for_timeout(850);assert page.locator('.standing-order').get_attribute('open') is not None
-            report['assertions'].append('March/Coordinate/Develop and Council render in the same panel; recruitment disclosure remains open through refresh; SVG IDs are unique.')
+            select(page,'england','midlands','full');page.locator('#card-body details[data-part="route"] summary').click();expect(page.locator('#set-route')).to_be_visible()
+            page.wait_for_timeout(850);assert page.locator('#card-body details[data-part="route"]').get_attribute('open') is not None
+            page.keyboard.press('Escape')
+            report['assertions'].append('Order, own-province and country cards render in the same card; the recruitment disclosure in "More" stays open through refresh; SVG IDs are unique.')
             narrow=context.new_page();narrow.set_viewport_size({'width':390,'height':844})
             if args.bridge:load_bridge(narrow,url,{'coi.identity':json.dumps(identity)})
             else:narrow.goto(url)
             narrow.locator('[data-room="ui-fixture"][data-resume]').click()
             expect(narrow.locator('#leaderboard')).to_have_class(re.compile('collapsed'))
             expect(narrow.locator('#lb-summary')).to_contain_text('You #')
-            assert narrow.locator('#leaderboard').bounding_box()['height']<=44
+            assert narrow.locator('#leaderboard').bounding_box()['height']<=48
+            assert narrow.locator('#lb-powers [data-power]').count()==7  # every other power, one tap into diplomacy
             assert narrow.evaluate('document.documentElement.scrollWidth<=innerWidth+1')
             narrow.screenshot(path=str(out/'16-leaderboard-390-collapsed.png'),full_page=True)
             narrow.locator('#lb-toggle').click();expect(narrow.locator('#lb-rows')).to_be_visible()
             assert narrow.evaluate('document.documentElement.scrollWidth<=innerWidth+1')
             check_layout(narrow,'390 leaderboard expanded')
             narrow.close()
-            report['assertions'].append('At 390px the leaderboard starts as a one-line tappable strip under the HUD and expands without horizontal overflow or covering other overlays.')
+            report['assertions'].append('At 390px the leaderboard starts as a one-line strip under the HUD (your rank plus every other power’s standard as a one-tap way into diplomacy) and expands without horizontal overflow or covering other overlays.')
             page.keyboard.press('Escape')
             for w,h in [(1024,768),(390,844),(844,390)]:
                 page.set_viewport_size({'width':w,'height':h});page.wait_for_timeout(120);no_overflow();check_layout(page,f'{w}x{h} responsive')
-                if w==390:capture('07-mobile-command.png')
-            page.set_viewport_size({'width':1600,'height':1000});page.locator('#world-view').click()
+                if w==390:capture('07-mobile.png')
+            page.set_viewport_size({'width':1600,'height':1000});camera(page,'world')
             before=len(spy(page,'cues'))
             server.stdin.write('535\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==535
             expect(page.locator('#declaration')).to_contain_text('Major battle at Northern India',timeout=5000)
@@ -964,21 +998,18 @@ def main():
             expect(page.locator('#feed-list .fresh[data-kind="major_battle"]').last).to_contain_text('Northern India')
             page.screenshot(path=str(out/'13-major-battle-banner.png'))
             report['assertions'].append('A live recorded major battle (casualties above max(20, 3% of all troops)) raised one banner and a fresh feed row.')
-            expect(page.locator('#battle-signal')).to_have_attribute('data-tone','lost')
-            expect(page.locator('#battle-signal')).to_contain_text('Northern India')
-            expect(page.locator('#countdown-break')).to_be_visible()
+            expect(page.locator('#notice')).to_contain_text('Province lost · Northern India',timeout=5000)
+            expect(page.locator('#feed-list [data-kind="dominance_broken"]').last).to_contain_text('Countdown stopped')
             capture('11-battle-loss.png')
-            page.locator('[data-dismiss-signal]').click();expect(page.locator('#battle-signal')).to_be_hidden()
             server.stdin.write('539\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==539
-            expect(page.locator('#battle-signal')).to_contain_text('Line held')
-            expect(page.locator('#battle-signal')).to_contain_text('16 troops')
-            page.locator('#europe-view').click();capture('12-line-held.png')
+            expect(page.locator('#notice')).to_contain_text('Line held',timeout=8000)
+            expect(page.locator('#notice')).to_contain_text('16 troops')
+            camera(page,'europe');capture('12-line-held.png')
             feed_checks(page,report)
             page.wait_for_timeout(900);before=len(spy(page,'cues'))
             go_back(page);page.locator('[data-room="ui-fixture"][data-resume]').click()
             expect(page.locator('#commander-title')).to_have_text('British Empire')
-            expect(page.locator('#battle-signal')).to_be_hidden()
-            page.wait_for_timeout(900)
+            page.wait_for_timeout(900);expect(page.locator('#notice')).to_be_hidden()  # old battle notices are never replayed
             assert spy(page,'cues')[before:]==[],spy(page,'cues')[before:]
             sound_settings_checks(page,context,url,report,args.bridge)
             for banner in ['#declaration','#alliance-seal','#fallen-seal']:expect(page.locator(banner)).to_be_hidden()
@@ -1014,13 +1045,19 @@ def main():
             battle_checks(page,server,report,capture)
             if not args.bridge:relation_checks(page,server,report,capture)  # v0.7 HUD/rail/card relations; runs after the tick-58 battle step
             if not args.bridge:inbox_checks(page,server,context,url,report,capture)
-            page.emulate_media(reduced_motion='reduce');assert page.evaluate('getComputedStyle(document.querySelector("#battle-signal")).animationName')=='none'
+            page.emulate_media(reduced_motion='reduce')
             if not args.bridge:effect_checks(page,report);hostile_name_check(page,report)  # dynamic module import needs native HTTP
             for selector in ['#declaration','#alliance-seal','.alliance-ribbon','#fallen-seal','.fallen-strike']:
                 assert page.evaluate(f'getComputedStyle(document.querySelector("{selector}")).animationName')=='none',selector
             if not args.bridge:expand_checks(browser,url,identity,report,out)  # real navigation and an init script
             assert spy(page,'csp')==[],spy(page,'csp')
             if not args.bridge:mobile_checks(browser,url,identity,report,out)
+            if not args.bridge:
+                coach_and_drag_checks(browser,url,identity,report,out)
+                # v0.8 core tasks, scripted like a player, with measured interaction counts (bounds in ui_tasks.BOUNDS).
+                report['tapCounts']={'390x844 touch':walkthrough(browser,url,identity,server,report,out,'ui-tasks-m',390,844,True),
+                    '1366x768 mouse':walkthrough(browser,url,identity,server,report,out,'ui-tasks-d',1366,768,False)}
+                report['assertions'].append('Core tasks at 390×844 (touch) and 1366×768 (mouse), counted interactions within bounds: declare war on a neutral country and march ≤4, attack a neighbouring enemy with 50% ≤3 (drag on desktop, tap on phone), recall an army ≤2, propose an alliance ≤3, answer an alliance offer from the badge ≤2, reply to a DM ≤3 plus typing, develop a province ≤3 (actual counts in tapCounts; screenshots in tasks/).')
             assert not report['pageErrors'],report['pageErrors'];report['status']='passed'
             browser.close()
         if args.gif:

@@ -134,7 +134,7 @@ footer{display:flex;justify-content:space-between;gap:14px;margin:0 3vw;padding:
 /* The context card: province (orders), army, country (diplomacy) or your alliance. Peek or expanded. */
 .card{position:absolute;z-index:30;left:calc(var(--gap) + var(--safe-l));bottom:calc(var(--gap) + var(--safe-b));width:var(--card-w);max-width:calc(100% - 2 * var(--gap));max-height:calc(100dvh - var(--top) - 2 * var(--gap) - var(--safe-b));display:flex;flex-direction:column;background:var(--glass);border:1px solid var(--glass-edge);border-top:3px solid var(--card-accent,#a88e5c);box-shadow:0 14px 40px #000a;outline:none}
 .card[data-size=full]{max-height:min(640px,calc(100dvh - var(--top) - 2 * var(--gap) - var(--safe-b)))}
-.card[data-relation=war],.card[data-relation=enemy],.card[data-relation=open]{--card-accent:var(--war)}.card[data-relation=ally]{--card-accent:var(--ally)}.card[data-relation=offer]{--card-accent:var(--offer)}.card[data-relation=neutral]{--card-accent:#e6cf97}
+.card[data-relation=war],.card[data-relation=enemy],.card[data-relation=open]{--card-accent:var(--war)}.card[data-relation=ally],.card[data-relation=forming]{--card-accent:var(--ally)}.card[data-relation=offer]{--card-accent:var(--offer)}.card[data-relation=neutral]{--card-accent:#e6cf97}
 .card-head{flex:none;display:flex;align-items:center;gap:8px;padding:8px 6px 6px 12px}
 .card-flag:empty{display:none}.card-flag .insignia{width:28px;height:33px}
 .card-heading{flex:1;min-width:0}
@@ -149,7 +149,7 @@ footer{display:flex;justify-content:space-between;gap:14px;margin:0 3vw;padding:
 .card-relation{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;font-size:12px;color:#d8d2c0}
 .rel{font-size:11px;letter-spacing:1.3px;font-weight:800;color:#e6cf97}
 .card-relation.big .rel{flex-basis:100%;font:400 24px/1.15 var(--serif);letter-spacing:.5px}
-.rel-war,.rel-enemy,.rel-open{color:#ff9c85}.rel-ally,.rel-own,.rel-you{color:#9fd0ff}.rel-offer{color:#ffcf8a}.rel-neutral{color:#e6cf97}.rel-fallen,.rel-unclaimed,.rel-watch{color:#b9c1b4}
+.rel-war,.rel-enemy,.rel-open{color:#ff9c85}.rel-ally,.rel-own,.rel-you,.rel-forming{color:#9fd0ff}.rel-offer{color:#ffcf8a}.rel-neutral{color:#e6cf97}.rel-fallen,.rel-unclaimed,.rel-watch{color:#b9c1b4}
 .card-strength{font-variant-numeric:tabular-nums}.card-bloc{flex-basis:100%;display:flex;align-items:center;gap:4px;overflow-wrap:anywhere}.card-wars{flex-basis:100%;color:#ffb39e}.card-note{flex-basis:100%;color:#e6d7b4;font-size:11px;line-height:1.45}
 .card-hint{color:#e9d8b7}
 .card-wars .link,.card-members button{min-height:30px;padding:2px 8px;font-size:11px;margin:2px 4px 0 0}
@@ -234,7 +234,9 @@ body[data-status=lobby] :is(.hud-standard,.hud-stats){visibility:hidden}
 @media(max-height:499px) and (min-width:560px){
  :root{--hud-h:44px;--card-w:330px}
  .hud-standard,.hud-menu-button{height:38px}.attention{height:34px}
- .card{left:calc(var(--gap) + var(--safe-l));right:auto;top:calc(var(--top) + var(--strip-h) + 2 * var(--gap));bottom:calc(var(--gap) + var(--safe-b));width:var(--card-w);max-height:none;border-radius:0;border-bottom:1px solid var(--glass-edge);transform:none}
+ .card{left:calc(var(--gap) + var(--safe-l));right:auto;top:calc(var(--top) + var(--gap));bottom:calc(var(--gap) + var(--safe-b));width:var(--card-w);max-height:none;border-radius:0;border-bottom:1px solid var(--glass-edge);transform:none}
+ .war-room:has(#card:not([hidden])) .leaderboard{left:calc(var(--card-w) + 2 * var(--gap) + var(--safe-l))}
+ .card-status{flex:0 1 auto;min-height:0;overflow:auto}.amount-presets button,.source-chip{min-height:38px}.card-actions button,.card-actions .primary{min-height:42px}#amount-slider{min-height:24px;margin:2px 0 4px}.card-head{padding-top:4px}
  .card[data-size=full]{height:auto}
  .card[data-size=peek]{top:auto}
  .card-head::before{display:none}
@@ -272,4 +274,4 @@ html.map-expanded-lock,html.map-expanded-lock body{overflow:hidden;overscroll-be
  .fallen-standard .insignia{width:24px;height:28px}.fallen-standard figcaption,.fallen-strike{display:none}
 }
 @keyframes toast-in{0%{opacity:0;transform:translateY(-12px)}8%,85%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-6px)}}
-@media(max-height:499px) and (min-width:560px){body:has(#card:not([hidden])) :is(.notice,.declaration,.alliance-seal,.fallen-seal){left:calc(var(--card-w) + 2 * var(--gap) + var(--safe-l))}}
+@media(max-height:499px) and (min-width:560px){body:has(#card:not([hidden])) :is(.notice,.declaration,.alliance-seal,.fallen-seal,#toast){left:calc(var(--card-w) + 2 * var(--gap) + var(--safe-l))}}

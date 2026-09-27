@@ -406,9 +406,11 @@ function relationOf(id){
   const p=playerOf(id);if(!p)return 'unclaimed';if(p.eliminatedAt!=null)return 'fallen';
   if(sameSide(state.you,id))return 'ally';
   if(relationsOf(state,state.you).enemies.includes(id))return state.rules.warRequired?'war':'open';
-  return (state.proposals || []).some(q=>q.status==='open' && q.roster.includes(state.you) && q.roster.includes(id))?'offer':'neutral';
+  const both=q=>q.roster.includes(state.you) && q.roster.includes(id);
+  if((state.proposals || []).some(q=>q.status==='pending' && both(q)))return 'forming';
+  return (state.proposals || []).some(q=>q.status==='open' && both(q))?'offer':'neutral';
 }
-const RELATION_WORDS={you:'YOU',ally:'ALLIED',war:'AT WAR',open:'HOSTILE',neutral:'NEUTRAL',offer:'ALLIANCE OFFER PENDING',fallen:'FALLEN',watch:'',unclaimed:'UNCLAIMED'};
+const RELATION_WORDS={you:'YOU',forming:'ALLIANCE FORMING',ally:'ALLIED',war:'AT WAR',open:'HOSTILE',neutral:'NEUTRAL',offer:'ALLIANCE OFFER PENDING',fallen:'FALLEN',watch:'',unclaimed:'UNCLAIMED'};
 function ownerButton(id){
   if(!id)return el('span','card-owner','No owner');
   const b=button('',{openCountry:id},'card-owner');b.append(flag(id),el('span','',country(id).name));
@@ -488,7 +490,7 @@ function provinceCard(){
   if(mine && active()){
     // Troops that left (or are about to leave) this province: recall them from here too.
     const outgoing=[...(state.commandBudget?.reserved || []).filter(o=>o.type==='move' && o.from===id).map(o=>({id:o.id,amount:o.amount,to:o.to,queued:true})),
-      ...state.armies.filter(a=>a.country===state.you && a.from===id && !a.returning).map(a=>({id:a.id,amount:a.amount,to:a.to}))];
+      ...state.armies.filter(a=>a.country===state.you && a.from===id && !a.returning && !(state.commandBudget?.reserved || []).some(o=>o.type==='recall' && [a.id,a.groupId].includes(o.target))).map(a=>({id:a.id,amount:a.amount,to:a.to}))];
     for(const o of outgoing.slice(0,2))actions.push({label:`${o.queued?'Cancel':'Recall'} ${o.amount} → ${place(o.to).name}`,act:'recall',arg:o.id,disabled:pendingCommand || !state.commandBudget?.remaining});
   }
   return {...base,sub:[owner && !mine?ownerButton(owner):el('span','card-meta',mine?'Your province':'Unclaimed'),el('span','card-meta',`${p.troops} troops${owner?` · industry ${'ⅠⅡⅢⅣⅤ'[p.development-1] || p.development}`:''}`)],subKey:[owner,relationOf(owner),p.troops,p.development,mine],
@@ -540,7 +542,7 @@ function armyCard(){
   const status=el('div','card-relation');status.append(el('b',`rel ${a.returning?'rel-ally':'rel-war'}`,a.returning?'RETURNING':a.engaged?'IN BATTLE':'MARCHING'),el('span','',`${place(a.from).name} → ${place(a.to).name} · arrives in ${Math.max(0,a.arrivesAt-state.tick)}s (${time(a.arrivesAt)})`));
   const group=a.groupId && state.armies.filter(x=>x.groupId===a.groupId && !x.returning).length>1;
   return {flag:a.country,title:`${a.amount} ${faction(a.country).short} troops`,sub:[ownerButton(a.country)],subKey:[a.country,relationOf(a.country)],status,statusKey:[a.returning,a.engaged,a.arrivesAt,state.tick],relation:'',
-    actions:mine && !a.returning?[{label:'Recall',act:'recall',arg:a.id,primary:true,disabled:pendingCommand || !state.commandBudget?.remaining,id:'primary'},...(group?[{label:'Recall whole attack',act:'recall',arg:a.groupId}]:[])]:[]};
+    actions:mine && !a.returning && !(state.commandBudget?.reserved || []).some(o=>o.type==='recall' && [a.id,a.groupId].includes(o.target))?[{label:'Recall',act:'recall',arg:a.id,primary:true,disabled:pendingCommand || !state.commandBudget?.remaining,id:'primary'},...(group?[{label:'Recall whole attack',act:'recall',arg:a.groupId}]:[])]:[]};
 }
 function countryCard(){
   const id=card.id,p=playerOf(id),c=country(id),rel=relationOf(id),me=myPlayer();
@@ -565,6 +567,7 @@ function countryCard(){
       else actions.push({label:'Accept alliance',act:'accept',arg:offer.id,primary:true,disabled:pendingCommand,id:'primary'},{label:'Decline',act:'decline',arg:offer.id,disabled:pendingCommand});
     }else if(peaceOffer)actions.push({label:'Accept peace',act:'vote-peace',arg:peaceOffer.id,primary:true,disabled:pendingCommand,id:'primary'});
     else if(rel==='war')actions.push({label:(state.players.filter(x=>x.side===me.side).length>1?'Call peace vote':'Offer peace'),act:'peace',arg:id,primary:true,disabled:pendingCommand,id:'primary'});
+    else if(rel==='forming'){const q=state.proposals.find(q=>q.status==='pending' && q.roster.includes(id) && q.roster.includes(state.you));note=`${q.name} starts at ${time(q.activateAt)}.`;actions.push({label:'Message',act:'compose',primary:true,id:'primary'});}
     else if(rel==='ally'){actions.push({label:'Message',act:'compose',primary:true,id:'primary'},{label:'Leave alliance',act:'leave',danger:true,disabled:pendingCommand || state.departures?.some(d=>d.country===state.you)});}
     else if(rel==='neutral' || rel==='open'){
       const canPropose=p.side.startsWith('solo:') && !(state.proposals || []).some(q=>q.status==='pending' && (q.roster.includes(id) || q.roster.includes(state.you)));
@@ -634,7 +637,7 @@ function renderThread(items,empty,extra=null){
   }
   // Seen in an open, expanded card = read (per item).
   const fresh=worldFeed.markRead(items.filter(i=>i.from!==state.you).map(i=>i.seq));
-  if(fresh.length)renderAttention();
+  if(fresh.length){renderAttention();if(fresh.some(seq=>notifier.current?.key===`e${seq}`))notifier.dismiss();}
 }
 
 /* ── HUD ── */
@@ -912,6 +915,7 @@ standings=new LeaderboardPanel({root:$('leaderboard'),rows:$('lb-rows'),toggle:$
   standings.setOpen(saved?saved==='open':!compact.matches);}
 herald=new Herald({declaration:$('declaration'),alliance:$('alliance-seal'),fallen:$('fallen-seal')});
 notifier=new Notifier($('notice'));
+{const push=notifier.push.bind(notifier);notifier.push=n=>{$('toast').hidden=true;push(n);};} // a notice about something new replaces an older toast
 const sounds=new SoundBoard($('sound-control'));
 {let saved=null;try{saved=localStorage.getItem('coi.feed');}catch{}
   worldFeed.setOpen(saved?saved==='open':!compact.matches);}
