@@ -306,7 +306,8 @@ def map_checks(page,server,report,capture):
     page.set_viewport_size({'width':1366,'height':768});page.locator('#world-view').click();page.wait_for_timeout(100)
     before=float(page.locator('#map').get_attribute('viewBox').split()[2])
     cluster=page.locator('#map .map-cluster').first
-    members=cluster.get_attribute('data-cluster').split(',');cluster.click();page.wait_for_timeout(150)
+    members=cluster.get_attribute('data-cluster').split(',');cluster.focus();page.keyboard.press('Enter');  # a departing army may sit on top of the counter
+    page.wait_for_timeout(150)
     assert float(page.locator('#map').get_attribute('viewBox').split()[2])<before
     report['assertions'].append('Map LOD: country, merged and per-province counters at 1366×768, 1920×1080 and 390px; every province is counted exactly once, merged totals equal the summed public garrisons, owners never mix, visible counters never overlap, and a merged counter zooms in when clicked.')
     page.locator('#back').click();page.locator('[data-room="ui-war"][data-resume]').click()
@@ -360,6 +361,52 @@ def effect_checks(page,report):
     assert result['still'] and result['animations']==0,result
     assert result['pacificTrail']<640 and result['pacificMarkerFromOrigin']<=result['shortWay']/2+2,result
     report['assertions'].append('atlas.effect exposes the supported kinds, draws aria-hidden effects inside its own map instance only, returns false for unknown kinds/ids/malformed data without throwing, and is a static highlight under reduced motion.')
+
+def mobile_checks(browser,url,identity,report,out):
+    # Real mobile emulation: the zoom limit is in screen px per map unit, so phones reach the same
+    # maximum as desktop (the old fixed minimum view width gave a 390px phone ~2.9 px/unit).
+    DESKTOP_OLD_MAX=1552/135  # what a 1920×1080 desktop map reached before this change
+    px=lambda page:page.evaluate('document.querySelector("#map").getScreenCTM().a')
+    for w,h in [(390,844),(844,390)]:
+        context=browser.new_context(viewport={'width':w,'height':h},is_mobile=True,has_touch=True,device_scale_factor=2)
+        context.add_init_script('localStorage.setItem("coi.identity",'+json.dumps(json.dumps(identity))+');')
+        page=context.new_page();page.goto(url);page.locator('[data-room="ui-war"][data-resume]').click()
+        expect(page.locator('#commander-title')).to_have_text('British Empire');page.locator('#map').scroll_into_view_if_needed()
+        # The viewBox takes the element's aspect: no letterboxing.
+        box=page.locator('#map').bounding_box();vb=[float(v) for v in page.locator('#map').get_attribute('viewBox').split()]
+        assert abs(vb[2]/vb[3]-box['width']/box['height'])<.01,(vb,box)
+        page.locator('#world-view').click();page.wait_for_timeout(150);start=vb_w=float(page.locator('#map').get_attribute('viewBox').split()[2])
+        # Pinch (two real touch points through CDP) zooms in.
+        cdp=context.new_cdp_session(page);page.locator('#map').scroll_into_view_if_needed();box=page.locator('#map').bounding_box()
+        top,bottom=max(box['y'],0),min(box['y']+box['height'],h);cx,cy=box['x']+box['width']/2,(top+bottom)/2
+        def pinch(spread):
+            cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':cx-10,'y':cy,'id':1},{'x':cx+10,'y':cy,'id':2}]})
+            for i in range(1,9):cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':cx-10-spread*i/8,'y':cy,'id':1},{'x':cx+10+spread*i/8,'y':cy,'id':2}]})
+            cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]});page.wait_for_timeout(80)
+        spread=min(box['width'],bottom-top)*.4;pinch(spread)
+        after=float(page.locator('#map').get_attribute('viewBox').split()[2]);assert after<start*.5,(start,after)
+        for _ in range(6):pinch(spread)
+        assert px(page)>=MAX_PX-.05,('pinch max',w,px(page))
+        # Double tap zooms 2× at the tap point.
+        page.locator('#world-view').click();page.locator('#map').scroll_into_view_if_needed();page.wait_for_timeout(100)
+        box=page.locator('#map').bounding_box();tx,ty=box['x']+box['width']/2,(max(box['y'],0)+min(box['y']+box['height'],h))/2
+        before=float(page.locator('#map').get_attribute('viewBox').split()[2])
+        page.touchscreen.tap(tx,ty);page.wait_for_timeout(60);page.touchscreen.tap(tx,ty);page.wait_for_timeout(120)
+        now=float(page.locator('#map').get_attribute('viewBox').split()[2]);assert abs(now-before/2)<1,('double tap',before,now)
+        # Europe at maximum zoom via the + button: near LOD, desktop-or-better px/unit, tappable provinces.
+        page.locator('#europe-view').click()
+        for _ in range(12):page.locator('#zoom-in').click()
+        page.wait_for_timeout(200);level=page.locator('#map').get_attribute('data-lod')
+        assert px(page)>=DESKTOP_OLD_MAX and px(page)>=MAX_PX-.05 and level=='near',(w,px(page),level)
+        sizes=page.evaluate('''()=>['belgium','low-countries','ruhr','rhineland','saxony','serbia'].map(id=>{const r=document.querySelector('#province-'+id).getBoundingClientRect();return [id,Math.min(r.width,r.height)];})''')
+        assert all(s>=32 for _,s in sizes),sizes
+        page.locator('#europe-view').click();page.locator('#zoom-in').click();page.locator('#zoom-in').click();page.wait_for_timeout(200)
+        result=page.evaluate(MAP_AUDIT,'ui-war');assert not result['overlaps'] and not result['missing'] and not result['badSums'],result
+        if w==390:page.screenshot(path=str(out/'19-mobile-max-zoom.png'))
+        context.close()
+    report['assertions'].append(f'Phones (390×844 and 844×390, touch emulation) reach {MAX_PX} px per map unit (desktop previously {DESKTOP_OLD_MAX:.1f}) by + button and by a real two-finger pinch; double tap zooms 2×; near LOD with names is reachable; small Europe provinces are ≥32 CSS px; the viewBox fills the element (no letterboxing); counters stay non-overlapping.')
+
+MAX_PX=14
 
 def main():
     parser=argparse.ArgumentParser()
@@ -526,6 +573,7 @@ def main():
             if not args.bridge:effect_checks(page,report);hostile_name_check(page,report)  # dynamic module import needs native HTTP
             for selector in ['#declaration','#alliance-seal','.alliance-ribbon','#fallen-seal','.fallen-strike']:
                 assert page.evaluate(f'getComputedStyle(document.querySelector("{selector}")).animationName')=='none',selector
+            if not args.bridge:mobile_checks(browser,url,identity,report,out)
             assert not report['pageErrors'],report['pageErrors'];report['status']='passed'
             browser.close()
         if args.gif:

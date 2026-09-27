@@ -19,6 +19,8 @@ export const MAP_MODES = Object.freeze(['political', 'diplomacy']);
 const RELATION = Object.freeze({ focus: '#d9b45a', ally: '#4f9e94', enemy: '#b8483c', neutral: '#8f8d80', none: '#6d716a' });
 /** Where the map key sits inside the map (the host may also mount it elsewhere). */
 export const LEGEND_PLACEMENTS = Object.freeze(['bottom-left', 'bottom-right', 'top-left', 'top-right']);
+/** Zoom limit in screen pixels per map unit, identical on every device (phones included). */
+export const MAX_PX_PER_UNIT = 14;
 /** Level of detail by on-screen pixels per map unit: country totals, merged counters, every province. */
 export const LOD = Object.freeze({ far: 1.2, near: 2.6 });
 const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
@@ -213,6 +215,14 @@ export class Atlas {
   up(event) {
     const gesture = this.gesture; this.pointers.delete(event.pointerId);
     if (this.svg.hasPointerCapture(event.pointerId)) this.svg.releasePointerCapture(event.pointerId);
+    // Double tap zooms 2× at the tap; the first tap already selected, the second does not.
+    if (event.pointerType === 'touch' && !this.dragged && gesture) {
+      const now = performance.now(), last = this.lastTap;
+      if (last && now - last.t < 350 && Math.hypot(event.clientX - last.x, event.clientY - last.y) < 30) {
+        this.lastTap = null; this.zoom(.5, event.clientX, event.clientY); if (!this.pointers.size) this.gesture = null; return;
+      }
+      this.lastTap = { t: now, x: event.clientX, y: event.clientY };
+    }
     if (!this.dragged && gesture?.army) this.showArmy(gesture.army, { left: event.clientX - 14, top: event.clientY + 65, width: 0 });
     else if (!this.dragged && gesture?.cluster) this.fit(gesture.cluster.split(','));
     else if (!this.dragged && gesture?.id) this.onSelect(gesture.id, { shiftKey: gesture.shiftKey, target: gesture.target });
@@ -267,18 +277,28 @@ export class Atlas {
     this.tip(`${this.countries.get(a.country)?.name || 'Army'} · ${a.amount} troops`,
       `${this.places.get(a.from)?.name} → ${this.places.get(a.to)?.name}${a.returning ? ' · returning' : ''} · arrives in ${eta}s`, at.left + at.width / 2, at.top);
   }
+  /** [min, max] view width in map units: max zoom is MAX_PX_PER_UNIT on this element's width;
+   * zoom-out stops at one world width, so each province and counter is seen once. */
+  widthLimits(rect = this.svg.getBoundingClientRect()) {
+    return [rect.width > 0 ? Math.min(WORLD, rect.width / MAX_PX_PER_UNIT) : 135, WORLD];
+  }
   applyView() {
-    // Never more than one world width on screen, so each province and counter is seen once.
     const rect = this.svg.getBoundingClientRect(), aspect = rect.width > 0 && rect.height > 0 ? rect.width / rect.height : 0;
-    const visible = Math.max(this.view.w, this.view.h * aspect);
-    if (visible > WORLD) {
-      const k = WORLD / visible, cx = this.view.x + this.view.w / 2, cy = this.view.y + this.view.h / 2;
-      this.view = { x: cx - this.view.w * k / 2, y: cy - this.view.h * k / 2, w: this.view.w * k, h: this.view.h * k };
+    const cx = this.view.x + this.view.w / 2, cy = this.view.y + this.view.h / 2;
+    if (aspect) {
+      // The viewBox takes the element's own aspect (no letterboxing), so portrait phones fill
+      // the screen and px/unit is simply element width ÷ view width.
+      const [minW, maxW] = this.widthLimits(rect), w = clamp(this.view.w, minW, maxW);
+      this.view = { x: cx - w / 2, y: cy - w / aspect / 2, w, h: w / aspect };
+    } else if (this.view.w > WORLD) {
+      const k = WORLD / this.view.w;
+      this.view = { x: cx - WORLD / 2, y: cy - this.view.h * k / 2, w: WORLD, h: this.view.h * k };
     }
     // Wrap: keep the view centre inside [0, WORLD); an active drag follows the same shift.
     const shift = WORLD * Math.floor((this.view.x + this.view.w / 2) / WORLD);
     if (shift) { this.view.x -= shift; if (this.gesture) this.gesture.vx -= shift; }
-    this.view.y = clamp(this.view.y, -this.view.h * .35, 680 - this.view.h * .65);
+    const low = -this.view.h * .35, high = 680 - this.view.h * .65;
+    this.view.y = low > high ? 340 - this.view.h / 2 : clamp(this.view.y, low, high);
     this.svg.setAttribute('viewBox', `${this.view.x} ${this.view.y} ${this.view.w} ${this.view.h}`);
     this.requestLayout();
   }
@@ -288,7 +308,7 @@ export class Atlas {
   zoom(factor, clientX, clientY) {
     const rect = this.svg.getBoundingClientRect();
     const anchor = this.coordinates(clientX ?? rect.left + rect.width / 2, clientY ?? rect.top + rect.height / 2);
-    const w = clamp(this.view.w * factor, 135, WORLD), ratio = w / this.view.w;
+    const [minW, maxW] = this.widthLimits(rect), w = clamp(this.view.w * factor, minW, maxW), ratio = w / this.view.w;
     this.view = { x: anchor.x - (anchor.x - this.view.x) * ratio, y: anchor.y - (anchor.y - this.view.y) * ratio, w, h: this.view.h * ratio };
     this.applyView();
   }
@@ -301,7 +321,7 @@ export class Atlas {
     const points = ids.map(id => this.places.get(id)).filter(Boolean);
     if (!points.length) return;
     const xs = points.map(p => points[0].x + wrapDelta(p.x - points[0].x)), ys = points.map(p => p.y), pad = Math.max(40, (Math.max(...xs) - Math.min(...xs)) * .2, (Math.max(...ys) - Math.min(...ys)) * .3);
-    const w = clamp(Math.max(Math.max(...xs) - Math.min(...xs) + pad * 2, (Math.max(...ys) - Math.min(...ys) + pad * 2) * 1280 / 680), 135, 1450);
+    const w = Math.max(Math.max(...xs) - Math.min(...xs) + pad * 2, (Math.max(...ys) - Math.min(...ys) + pad * 2) * 1280 / 680);
     // Always zoom in at least one step, so a click on a merged counter is never a dead end.
     const width = Math.min(w, this.view.w * .7), h = width * 680 / 1280;
     this.view = { x: (Math.min(...xs) + Math.max(...xs)) / 2 - width / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 - h / 2, w: width, h };
