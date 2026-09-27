@@ -151,7 +151,7 @@ test('stdio MCP negotiates, validates schemas, joins an agent, calls real HTTP, 
   ].map(x=>JSON.stringify(x)).join('\n')+'\n';
   const result=await subprocess('agents/mcp.js',[],env,input);assert.equal(result.code,0,result.stderr);
   const output=result.stdout.trim().split('\n').map(x=>JSON.parse(x));assert.equal(output.length,7);
-  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,29);
+  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,30);
   assert.equal(JSON.parse(output[2].result.content[0].text).country,'britain');
   assert.equal(JSON.parse(output[3].result.content[0].text).you,'britain');
   assert.equal(output[4].error.code,-32602);assert.equal(output[5].error.code,-32602);assert.deepEqual(output[6].result,{});
@@ -265,4 +265,13 @@ test('World feed is one public, cursor-based stream for HTTP, CLI and MCP with e
     JSON.stringify({jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'leaderboard',arguments:{mode:'alliances'}}})].join('\n')+'\n');
   const alliances=JSON.parse(JSON.parse(lb.stdout.trim().split('\n')[1]).result.content[0].text);
   assert.equal(alliances.mode,'alliances');assert.equal(alliances.rows.length,2);
+  // Wars: the same shared helpers over the public observation, for CLI and MCP.
+  const {warsOf,relationsOf}=await import('../public/leaderboard.js');
+  const view=(await f.call(`/api/games/${id}`)).data;
+  const cliWars=await subprocess('agents/cli.js',['wars'],env);assert.equal(cliWars.code,0,cliWars.stderr);
+  const wars=JSON.parse(cliWars.stdout);
+  assert.deepEqual(wars.wars,warsOf(view));assert.deepEqual(wars.relations,relationsOf(view,'britain'));assert.equal(wars.you,'britain');
+  const mcpWars=await subprocess('agents/mcp.js',[],env,[input.split('\n')[0],input.split('\n')[1],
+    JSON.stringify({jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'wars',arguments:{}}})].join('\n')+'\n');
+  assert.deepEqual(JSON.parse(JSON.parse(mcpWars.stdout.trim().split('\n')[1]).result.content[0].text).wars,warsOf(view));
 });

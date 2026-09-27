@@ -4,7 +4,7 @@
 .after-action button:hover{background:#f6ecd4}
 .after-action select{color:#24343c;background:#f7f1e3;border-color:#bab296}
 .after-action .primary{background:#c8a773;color:#162830;border-color:#e5c184}
-.reviewing #game > .campaign-bar,.reviewing #operations,.reviewing #game > .war-room,.reviewing #scoreboard,.reviewing #game > .chronicle{display:none}
+.reviewing #game > .war-room,.reviewing #game > .chronicle{display:none}
 #result.after-action{padding:0;border:1px solid #746e58;overflow:hidden;border-top:3px solid var(--gold);background:#eee7d5}
 .aar-header{background:#172b34;color:#f0ebdd;padding:30px 32px;display:flex;justify-content:space-between;gap:25px;align-items:center}
 .aar-header .eyebrow{color:var(--gold)}.aar-header h2{font-size:32px;margin-bottom:10px;max-width:900px}.aar-header p{margin-bottom:7px;color:#d3d9ca}.aar-header small{color:#b9c6b9;font-size:11px}

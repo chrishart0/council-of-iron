@@ -5,7 +5,10 @@
 import { feedItems, headlineCopy } from './feed-model.js';
 import { icon, insignia } from './presentation.js';
 
-const MAX_ROWS = 150, MAX_QUEUE = 5;
+// The history column keeps the whole match (a full 30-minute match stays well below this).
+const MAX_ROWS = 2000, MAX_QUEUE = 5;
+/** How long a new row stays expanded (≤4 lines) before shrinking to the compact clamp. */
+export const FRESH_MS = 7000;
 const node = (tag, className, text) => {
   const element = document.createElement(tag);
   if (className) element.className = className;
@@ -13,53 +16,103 @@ const node = (tag, className, text) => {
   return element;
 };
 const itemKey = item => item.id === null ? `b${item.seq}:${item.side}` : `e${item.id}`;
+const reducedMotion = () => globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-/** Chronological public feed. Rows are appended, never re-rendered, so focus and
- * screen-reader position survive polling. */
+/** Chronological public history. Rows are appended, never re-rendered, so scroll position,
+ * focus and screen-reader position survive polling. New live rows arrive expanded (clamped to
+ * four lines), then shrink to two; any clamped text expands on click, Enter or Space. */
 export class WorldFeed {
-  constructor({ list, unread, toggle, body }, names) {
-    Object.assign(this, { list, unread, toggle, body, names });
-    this.keys = new Set(); this.count = 0; this.lastSeq = 0; this.caughtUp = false;
+  constructor({ list, unread, toggle, body, jump }, names) {
+    Object.assign(this, { list, unread, toggle, body, jump, names });
+    this.keys = new Set(); this.count = 0; this.lastSeq = 0; this.caughtUp = false; this.below = 0; this.timers = new Set();
+    list.addEventListener('click', event => { const clamp = event.target.closest('.feed-clamp[aria-expanded]'); if (clamp) this.expand(clamp); });
+    list.addEventListener('keydown', event => {
+      const clamp = event.target.closest('.feed-clamp[aria-expanded]');
+      if (clamp && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); this.expand(clamp); }
+    });
+    list.addEventListener('scroll', () => { if (this.atBottom()) this.showJump(0); }, { passive: true });
+    jump?.addEventListener('click', () => { this.list.scrollTop = this.list.scrollHeight; this.showJump(0); });
   }
-  reset() { this.list.replaceChildren(); this.keys.clear(); this.count = 0; this.lastSeq = 0; this.caughtUp = false; this.showUnread(); }
+  reset() {
+    for (const timer of this.timers) clearTimeout(timer); this.timers.clear();
+    this.list.replaceChildren(); this.keys.clear(); this.count = 0; this.lastSeq = 0; this.caughtUp = false; this.showUnread(); this.showJump(0);
+  }
   get open() { return this.toggle.getAttribute('aria-expanded') === 'true'; }
   setOpen(open) {
     this.toggle.setAttribute('aria-expanded', String(open)); this.body.hidden = !open;
     this.toggle.closest('.world-feed')?.classList.toggle('collapsed', !open);
-    if (open) { this.count = 0; this.showUnread(); this.list.scrollTop = this.list.scrollHeight; }
+    if (open) { this.count = 0; this.showUnread(); this.list.scrollTop = this.list.scrollHeight; this.showJump(0); this.measureAll(); }
   }
+  atBottom() { return this.list.scrollHeight - this.list.scrollTop - this.list.clientHeight < 40; }
   showUnread() {
     this.unread.textContent = this.count ? String(this.count) : '';
     this.unread.setAttribute('aria-label', this.count ? `${this.count} unread` : '');
   }
-  /** `live` marks items that arrived after catch-up: only those count as unread or flash. */
+  /** "N new ↓": newer rows arrived while the reader was scrolled up; never yank them down. */
+  showJump(n) {
+    this.below = n; if (!this.jump) return;
+    this.jump.hidden = !n; this.jump.textContent = n ? `${n} new ↓` : '';
+  }
+  /** `live` marks items that arrived after catch-up: only those count as unread, flash or start expanded. */
   update(events, breaks, { live, you }) {
-    const atBottom = this.list.scrollHeight - this.list.scrollTop - this.list.clientHeight < 40;
-    let added = 0;
+    const atBottom = this.atBottom(), added = [];
     for (const item of feedItems(events, breaks)) {
       const key = itemKey(item); if (this.keys.has(key)) continue;
-      this.keys.add(key); this.list.append(this.row(item, live)); added++;
+      const li = this.row(item, live); this.keys.add(key); this.list.append(li); added.push(li);
       if (live && !this.open && !(item.type === 'message' && item.from === you)) this.count++;
     }
     while (this.list.children.length > MAX_ROWS) { this.list.firstElementChild.remove(); }
     if (!this.list.children.length) this.list.append(node('li', 'feed-empty', 'No headlines or public messages yet.'));
     else this.list.querySelector('.feed-empty')?.remove();
-    if (added && (atBottom || !live)) this.list.scrollTop = this.list.scrollHeight;
+    if (added.length) {
+      if (atBottom || !live) this.list.scrollTop = this.list.scrollHeight;
+      else this.showJump(this.below + added.length);
+      for (const li of added) this.measure(li.querySelector('.feed-clamp'));
+    }
     this.showUnread();
+  }
+  /** Expand or collapse one clamped text. */
+  expand(clamp) {
+    const open = clamp.getAttribute('aria-expanded') !== 'true';
+    clamp.setAttribute('aria-expanded', String(open)); clamp.closest('.feed-row')?.classList.toggle('expanded', open);
+    if (!open) this.measure(clamp);
+  }
+  /** Make a text a toggle only while its clamp actually hides something (or it is expanded). */
+  measure(clamp) {
+    if (!clamp || !clamp.isConnected || clamp.getAttribute('aria-expanded') === 'true') return;
+    const clipped = clamp.scrollHeight > clamp.clientHeight + 1;
+    if (clipped) { clamp.setAttribute('role', 'button'); clamp.tabIndex = 0; clamp.setAttribute('aria-expanded', 'false'); clamp.title = 'Show the full text'; }
+    else { clamp.removeAttribute('role'); clamp.removeAttribute('tabindex'); clamp.removeAttribute('aria-expanded'); clamp.removeAttribute('title'); }
+  }
+  measureAll() { for (const clamp of this.list.querySelectorAll('.feed-clamp')) this.measure(clamp); }
+  /** New rows: four lines for a moment, then the compact clamp. Reduced motion: compact at once. */
+  settle(li) {
+    if (reducedMotion()) return;
+    li.classList.add('feed-new');
+    const timer = setTimeout(() => {
+      this.timers.delete(timer); const pinned = this.atBottom();
+      li.classList.remove('feed-new'); this.measure(li.querySelector('.feed-clamp'));
+      if (pinned) this.list.scrollTop = this.list.scrollHeight;
+    }, FRESH_MS);
+    this.timers.add(timer);
   }
   row(item, live) {
     const n = this.names, li = node('li', `feed-row${live ? ' fresh' : ''}`);
     li.dataset.feedKey = itemKey(item);
+    if (live) this.settle(li);
     if (!item.headline) {
       li.classList.add('feed-chat');
       const header = node('header'), who = node('b', '', n.country(item.from));
       const flag = node('span', 'feed-flag'); flag.innerHTML = insignia(item.from); // authored constant SVG
       header.append(flag, who, node('time', '', n.time(item.tick)));
-      li.append(header, node('p', 'feed-text', item.text));
+      li.append(header, node('p', 'feed-text feed-clamp', item.text)); // player text: textContent only
       return li;
     }
     const copy = headlineCopy(item, n);
     li.classList.add('feed-headline'); li.dataset.tone = copy.tone; li.dataset.kind = item.headline.kind;
+    // Alliance formed/changed/dissolved rows take that alliance's map colour (palette constant, never player text).
+    const allianceTone = ['alliance', 'dissolved', 'departure'].includes(item.headline.kind) && n.sideColor?.(item.headline.side);
+    if (allianceTone) { li.style.setProperty('--tone', allianceTone); li.dataset.side = item.headline.side; }
     const target = copy.focus ? node('button') : node('div');
     if (copy.focus) {
       target.type = 'button';
@@ -69,9 +122,9 @@ export class WorldFeed {
     }
     const mark = node('span', 'feed-icon'); mark.innerHTML = icon(copy.icon);
     const words = node('span', 'feed-words');
-    const title = node('b', '', copy.title);
-    words.append(title, node('time', '', n.time(item.tick)), node('span', 'feed-detail', copy.detail));
-    target.append(mark, words); li.append(target);
+    words.append(node('b', '', copy.title), node('time', '', n.time(item.tick)));
+    target.append(mark, words);
+    li.append(target, node('p', 'feed-detail feed-clamp', copy.detail));
     return li;
   }
 }

@@ -40,7 +40,30 @@ test('a live engine observation gives spectators and players the same totals', (
   const spectator = observe(g, null), player = observe(g, 'usa');
   assert.ok(spectator.armies.some(a => a.country === 'usa'), 'moving armies are public');
   const a = leaderboard(spectator), b = leaderboard(player, { you: 'usa' });
-  assert.deepEqual(a.rows.map(({ you, ...r }) => r), b.rows.map(({ you, ...r }) => r));
+  // Only the viewer-relative fields differ; totals, ranks and wars are identical.
+  assert.deepEqual(a.rows.map(({ you, relation, ...r }) => r), b.rows.map(({ you, relation, ...r }) => r));
   const usa = a.rows.find(r => r.id === 'usa');
   assert.equal(usa.troops, g.provinces.filter(p => p.owner === 'usa').reduce((n, p) => n + p.troops, 0) + 5);
+});
+test('relations, wars and alliance colours come only from public wars and sides', async () => {
+  const { relationsOf, warsOf, allianceColor, allianceColors, ALLIANCE_PALETTE } = await import('../public/leaderboard.js');
+  const sided = { ...view, wars: ['britain:germany', 'france:germany', 'germany:usa'],
+    players: view.players.map(p => ({ ...p, side: view.sides.find(s => s.members.includes(p.id)).id })) };
+  assert.deepEqual(relationsOf(sided, 'britain'), { allies: ['usa'], enemies: ['germany'], neutral: ['france', 'japan'] });
+  assert.deepEqual(relationsOf(sided, 'germany').enemies, ['britain', 'france', 'usa']);
+  // Fronts group country pairs by side: the coalition fights Germany once, France fights it separately.
+  const fronts = warsOf(sided);
+  assert.deepEqual(fronts.map(f => [f.sides.map(s => [s.side, s.name, s.countries]), f.pairs]), [
+    [[['coalition-1', '<b>Accord</b>', ['britain', 'usa']], ['solo:germany:0', null, ['germany']]], [['britain', 'germany'], ['germany', 'usa']]],
+    [[['solo:france:0', null, ['france']], ['solo:germany:0', null, ['germany']]], [['france', 'germany']]]]);
+  assert.deepEqual(fronts.flatMap(f => f.pairs.map(p => p.join(':'))).sort(), [...sided.wars].sort());
+  const rows = leaderboard(sided, { you: 'britain' }).rows;
+  assert.deepEqual(Object.fromEntries(rows.map(r => [r.id, [r.relation, r.atWarWith]])), {
+    germany: ['enemy', ['britain', 'france', 'usa']], usa: ['ally', ['germany']], france: ['neutral', ['germany']],
+    britain: ['you', ['germany']], japan: ['neutral', []] });
+  assert.deepEqual(leaderboard(sided, { mode: 'alliances', you: 'france' }).rows.find(r => r.id === 'coalition-1').atWarWith, ['germany']);
+  assert.equal(leaderboard(sided).rows[0].relation, undefined, 'no viewer, no relation');
+  // Colour follows the coalition counter, so it survives list order changes and dissolution.
+  assert.equal(allianceColor('coalition-1'), ALLIANCE_PALETTE[0]); assert.equal(allianceColor('coalition-8'), ALLIANCE_PALETTE[1]);
+  assert.equal(allianceColor('solo:france:0'), null); assert.deepEqual(allianceColors(sided), { 'coalition-1': ALLIANCE_PALETTE[0] });
 });

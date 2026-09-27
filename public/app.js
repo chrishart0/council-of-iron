@@ -6,6 +6,8 @@ import { Atlas } from './atlas.js';
 import { escapeHTML as esc, syncOptions, setHTML, operationId, confirmAction } from './ui.js';
 import { WorldFeed, Herald, presentHeadline } from './feed.js';
 import { LeaderboardPanel } from './leaderboard-panel.js';
+// Relations/colours: DOM-free shared helpers (swap for public/relations.js when the map branch lands).
+import { relationsOf, warsOf, allianceColor } from './leaderboard.js';
 const time = n => `${Math.floor(Math.max(0,n)/60).toString().padStart(2,'0')}:${Math.floor(Math.max(0,n)%60).toString().padStart(2,'0')}`;
 const signed = n => `${n>=0?'+':''}${n.toFixed(1)}`;
 let identity;try{identity=JSON.parse(localStorage.getItem('coi.identity'));}catch{identity=null;}
@@ -16,8 +18,11 @@ let pollController=null, inspected=null;
 const attackSelections = new Map();
 let plannedDestination=null, mapReadyFor=null, orderMode='march';
 let spectating=false;
+// One command panel: `tab` picks its content; nothing is open until a province or HUD button asks.
+let panelOpen=false, panelOpener=null;
+const narrow=matchMedia('(max-width:759px)');
 let messageCatchupComplete=false;
-let worldFeed, herald, standings;
+let worldFeed, herald, standings, mapMode='political';
 const country = id => map.countries.find(c=>c.id===id);
 const place = id => map.provinces.find(p=>p.id===id);
 const sideName = id => state?.sides.find(s=>s.id===id)?.name || id;
@@ -32,6 +37,7 @@ const feedNames={
   province:id=>place(id)?.name || id,
   // Alliance names are player text; callers render them with textContent only.
   side:id=>history.find(e=>e.type==='alliance_activated' && e.side===id)?.name || namedSide(id),
+  sideColor:id=>allianceColor(id),
   time:n=>time(n),
 };
 /** Live headlines only (never catch-up): queue banners and ask the atlas for a brief effect. */
@@ -56,6 +62,9 @@ function renderFeed(live){
   const delay=Math.max(0,(state.commandBudget?.chatReadyAt || 0)-state.tick);
   $('feed-send').disabled=!canSend || delay>0 || pendingCommand;
   $('feed-cooldown').textContent=canSend && delay?`Chat ready in ${delay} game s (shared across channels)`:'';
+  // Collapsed feed = a one-line ticker of the latest item (text only; chat is player text).
+  const last=$('feed-list').lastElementChild,words=last?.querySelector('.feed-words b,.feed-chat b');
+  $('feed-ticker').textContent=words?`${words.textContent}: ${last.querySelector('.feed-detail,.feed-text')?.textContent || ''}`:'Headlines · public chat';
 }
 async function request(path,method='GET',data,token=identity?.token){
   const response=await fetch(path,{method,headers:{...(token?{Authorization:`Bearer ${token}`} : {}),...(data?{'Content-Type':'application/json'}:{})},body:data?JSON.stringify(data):undefined});
@@ -72,7 +81,8 @@ function startingSummary(c){
   const production=c.start.reduce((n,id)=>n+(c.development?.[id] ?? 1),0)*3;
   return `${c.start.length} holdings · ${troops} troops · ${production} recruits/min · ${c.colonies?.length || 0} colonial footholds. ${c.start.map(id=>place(id).name).join(' · ')}`;
 }
-function showIdentity(){ $('identity').textContent=identity?.name || 'Observer';$('display-name').value=identity?.name || '';$('join-name').value=identity?.name || ''; }
+function setConnection(text){$('connection').textContent=text;$('hud-connection').textContent=text;}
+function showIdentity(){ $('identity').textContent=identity?.name || 'Observer';$('hud-identity').textContent=identity?.name || 'Observer';$('display-name').value=identity?.name || '';$('join-name').value=identity?.name || ''; }
 function options(id,values,current){syncOptions($(id),values,current);}
 async function rooms(){
   const data=await request('/api/games');
@@ -86,7 +96,7 @@ async function rooms(){
 }
 async function openRoom(id,watch=false){
   generation++;pollController?.abort();review?.destroy();review=null;document.body.classList.remove('reviewing');
-  setMapFullscreen(false);spectating=watch;messageCatchupComplete=false;herald.reset();worldFeed.reset();
+  closePanel();closeMenu();spectating=watch;messageCatchupComplete=false;herald.reset();worldFeed.reset();
   resetPresentation();orderMode='march';matchId=id;mapReadyFor=null;state=null;cursor=0;history=[];source=null;destination=null;inspected=null;previewKey='';readMessageId=0;
   document.body.classList.add('in-game');atlas.world();
   $('home').hidden=true;$('game').hidden=false;$('result').hidden=true;
@@ -114,8 +124,8 @@ async function poll(){
     }
     if(!state.hasMore)messageCatchupComplete=true;
     announce(liveDeclarations);
-    $('connection').textContent=state.status==='finished'?'Review':'Live';render();renderFeed(live);
-  }catch(e){if(e.name!=='AbortError' && epoch===generation){$('connection').textContent='Reconnecting';toast(e.message,true);}}
+    setConnection(state.status==='finished'?'Review':'Live');render();renderFeed(live);
+  }catch(e){if(e.name!=='AbortError' && epoch===generation){setConnection('Reconnecting');toast(e.message,true);}}
   finally{if(polling===epoch)polling=false;}
 }
 async function command(action){
@@ -141,9 +151,20 @@ function initMap(){
   atlas?.destroy();
   const previous=$('map'),replacement=previous.cloneNode(false);previous.replaceWith(replacement);
   atlas=new Atlas(replacement,map,selectProvince);
+  // Diplomacy map mode is an optional atlas capability; the control appears only where it exists.
+  $('map-mode').hidden=typeof atlas.setMapMode!=='function';if(!$('map-mode').hidden)atlas.setMapMode(mapMode);
   $('landing-map').innerHTML=map.provinces.map(p=>`<path d="${p.path}"/>`).join('');
 }
-function focusCountry(){if(state?.you)atlas.home(state.you);}
+/** Screen insets (px) covered by the HUD, rail and open panel, so a camera move can centre the target in the
+ * map area that is actually visible. Passed as an optional trailing argument; the atlas may ignore it. */
+function view(){
+  const stage=$('stage').getBoundingClientRect(),box=sel=>{const e=document.querySelector(sel);return e?.checkVisibility()?e.getBoundingClientRect():null;};
+  const hud=box('.hud-bar'),rail=box('.right-rail') || box('#world-feed:not(.collapsed)'),panel=box('#command-panel'),nav=box('#hud-rail');
+  const bottom=Math.max(nav && nav.top>stage.height/2?stage.bottom-nav.top:0,panel && panel.width>stage.width*.8?stage.bottom-panel.top:0);
+  return {insets:{top:hud?hud.bottom-stage.top:0,right:rail && rail.left>stage.width/2?stage.right-rail.left:0,
+    left:panel && panel.width<=stage.width*.8?panel.right-stage.left:0,bottom}};
+}
+function focusCountry(){if(state?.you)atlas.home(state.you,view());}
 function selectProvince(id,modifiers={}){
   if(!state)return;
   const p=state.provinces.find(p=>p.id===id);inspected=id;
@@ -153,7 +174,8 @@ function selectProvince(id,modifiers={}){
     if(source)$('amount').value=Math.max(1,Math.floor(availableTroops()/2));
   }else if(source && place(source).neighbors.includes(id))destination=id;
   else if(own){source=id;destination=null;$('amount').value=Math.max(1,Math.floor(availableTroops()/2));}
-  if(source || own)showTab('orders');
+  // The map is the selector: a province click opens its context panel (never in the lobby).
+  if(state.status==='running')openPanel('orders');
   renderOrders();paintMap();$('orders-tab').scrollTop=0;
 }
 function availableTroops(){
@@ -163,17 +185,55 @@ function availableTroops(){
 }
 function paintMap(){
   if(!state)return;atlas.update(state,source,destination);
-  $('selection-label').textContent=!state.you?`${state.name} · ${time(state.tick)} · LIVE`:source?`${place(source).name}${destination?' → '+place(destination).name:' · Choose a connected destination'}`:'Select a province to begin';
 }
-function setMapFullscreen(on){
-  document.body.classList.toggle('spectator-map-fullscreen',on);
-  const button=$('spectator-fullscreen');button.setAttribute('aria-pressed',String(on));button.textContent=on?'Exit full screen':'Full screen';
-  if(atlas)requestAnimationFrame(()=>atlas.layout());
+/** Browser full screen (the page is already full-viewport). Hidden where the API is absent. */
+function syncFullscreen(){
+  const on=Boolean(document.fullscreenElement),button=$('fullscreen-toggle');
+  button.hidden=!document.fullscreenEnabled;button.setAttribute('aria-pressed',String(on));button.textContent=on?'Exit full screen':'Full screen';
+}
+function closeMenu(focus=false){
+  if($('hud-menu').hidden)return;
+  $('hud-menu').hidden=true;$('menu-button').setAttribute('aria-expanded','false');if(focus)$('menu-button').focus();
+}
+function openMenu(){$('hud-menu').hidden=false;$('menu-button').setAttribute('aria-expanded','true');$('hud-menu').querySelector('button').focus();}
+const SHEETS=['peek','half','full'];
+function setSheet(size){
+  const panel=$('command-panel');panel.dataset.sheet=size;panel.style.height='';
+  const next=SHEETS[(SHEETS.indexOf(size)+1)%SHEETS.length];
+  $('sheet-handle').setAttribute('aria-label',`Panel size: ${size}. Press to ${next==='peek'?'collapse':'expand'}; arrow keys resize.`);
+}
+function syncPanelButtons(){
+  for(const button of document.querySelectorAll('#hud-rail [data-tab]'))button.setAttribute('aria-expanded',String(panelOpen && tab===button.dataset.tab));
+}
+/** Open the command panel on `name`. `focus` moves focus into it (HUD buttons); map clicks never steal focus. */
+function openPanel(name,{focus=false,size}={}){
+  const panel=$('command-panel'),wasOpen=panelOpen;
+  if(focus && !panel.contains(document.activeElement))panelOpener=document.activeElement;
+  if(tab!==name)$(`${name}-tab`).scrollTop=0;
+  tab=name;panelOpen=true;panel.hidden=false;panel.dataset.tab=name;
+  for(const current of ['orders','council','dispatches'])$(`${current}-tab`).hidden=current!==name;
+  // Diplomacy reads best tall; a map selection starts as a peek so the map stays visible.
+  setSheet(size || (name==='orders'?(wasOpen?panel.dataset.sheet:state?.you?'peek':'half'):'full'));
+  syncPanelButtons();
+  if(state){renderPanelTitle();renderChat();renderCommandFooter();}
+  if(focus)$('panel-title').focus();
+}
+function closePanel({restoreFocus=false}={}){
+  const panel=$('command-panel'),inside=panel.contains(document.activeElement);
+  if(!panelOpen)return;
+  panelOpen=false;panel.hidden=true;syncPanelButtons();
+  if(tab==='orders'){source=null;destination=null;inspected=null;if(state){renderOrders();paintMap();}}
+  if((restoreFocus || inside) && panelOpener?.isConnected && panelOpener.checkVisibility())panelOpener.focus();
+  panelOpener=null;
+}
+function togglePanel(name){if(panelOpen && tab===name)closePanel({restoreFocus:true});else openPanel(name,{focus:true,size:name==='orders'?'half':undefined});}
+function renderPanelTitle(){
+  $('panel-title').textContent=tab==='council'?'Council':tab==='dispatches'?'Dispatches':place(source || inspected)?.name || 'Orders';
 }
 function renderOrders(){
   const scroll=$('orders-tab').scrollTop;
   const mode=orderMode;
-  $('orders-tab').dataset.orderMode=mode;
+  $('command-panel').dataset.orderMode=mode;
   $('order-modes').hidden=false;
   for(const button of document.querySelectorAll('[data-order-mode]'))button.setAttribute('aria-pressed',String(button.dataset.orderMode===mode));
   const owned=state.provinces.filter(p=>p.owner===state.you && state.you);
@@ -184,7 +244,7 @@ function renderOrders(){
   options('destination',[{value:'',label:'Choose a connected destination…'},...neighbors.map(id=>{const p=state.provinces.find(p=>p.id===id);return{value:id,label:`${place(id).name} · ${p.troops} · ${country(p.owner)?.name || 'Neutral'}`};})],destination || '');
   $('commander-title').textContent=country(state.you)?.name || 'Observer';
   setHTML($('commander-insignia'),insignia(state.you));
-  $('province-title').textContent=place(source || inspected)?.name || 'Select a province';
+  renderPanelTitle();
   const active=state.status==='running' && myPlayer()?.eliminatedAt===null;
   const available=availableTroops(),amount=Number($('amount').value),valid=Number.isSafeInteger(amount) && amount>0 && amount<=available;
   const recovery=state.commandBudget?.nextRecoveryAt;
@@ -210,6 +270,7 @@ function renderOrders(){
     setHTML($('incoming-waves'),`<h3>${esc(place(inspectedId).name)} · incoming waves</h3>${battle?`<p><b>Battle in progress</b> · ${state.armies.filter(a=>a.engaged && a.to===inspectedId).reduce((n,a)=>n+a.amount,0)} attackers against ${state.provinces.find(p=>p.id===inspectedId)?.troops || 0} defenders. Reinforcements and recalls can still change the fight.</p>`:''}${waves.length?waves.slice(0,4).map(a=>`<p>${a.amount} ${esc(country(a.country).name)} · ${a.returning?'returning':'marching'} · arrives ${time(a.arrivesAt)} (${a.arrivesAt-state.tick}s)</p>`).join(''):'<p>No armies committed to this destination.</p>'}${waves.length>4?`<p>Plus ${waves.length-4} later armies.</p>`:''}${previousBattle?`<p>Last battle ${time(previousBattle.tick)}: ${previousBattle.troops} survivors; ${esc(country(previousBattle.owner)?.name || 'neutral')} held afterward.</p>`:''}`);}
   const inspectedProvince=state.provinces.find(p=>p.id===(inspected || source));
   setHTML($('province-readout'),p?`<div><span>AVAILABLE</span><strong>${available}</strong></div><div><span>GARRISON</span><strong>${p.troops}</strong></div><div><span>RECRUIT IN</span><strong>${p.nextRecruit===null?'—':Math.max(0,p.nextRecruit-state.tick)+'s'}</strong></div>`:inspectedProvince?`<p><b>${esc(place(inspectedProvince.id).name)}</b><br>${esc(country(inspectedProvince.owner)?.name || 'Uncontrolled')} · ${inspectedProvince.troops} troops</p>`:'<p><b>Your next decision starts on the map.</b><br>Select a province you own, then a neighboring target. Nothing moves until you commit.</p>');
+  renderRelationBanner();
   renderDevelopment(p,canCommand);
   renderCoordination(owned,active);
   renderTransit(active);
@@ -322,7 +383,11 @@ function renderCouncil(){
   $('leave-alliance').hidden=!me || me.side.startsWith('solo:') || me.eliminatedAt!==null;
   const awaiting=(state.diplomacy || []).filter(m=>m.status==='voting' && m.fromRoster.includes(state.you) && !m.fromYes.includes(state.you) ||
     m.status==='offered' && m.toRoster.includes(state.you) && !m.toYes.includes(state.you)).length;
-  $('offer-count').textContent=state.proposals.filter(q=>q.status==='open' && q.roster.includes(state.you) && !q.accepted.includes(state.you)).length+awaiting || '';
+  const matters=state.proposals.filter(q=>q.status==='open' && q.roster.includes(state.you) && !q.accepted.includes(state.you)).length+awaiting;
+  $('offer-count').textContent=matters || '';
+  // CK3-style alert: pending proposals and war/peace motions wait for this player's vote.
+  const alert=$('council-alert');alert.hidden=!matters || state.status!=='running' || panelOpen && tab==='council';
+  if(!alert.hidden)setHTML(alert,`${icon('council')}<span>${matters} council ${matters===1?'matter awaits':'matters await'} your vote</span>`);
   const offerHTML=state.proposals.filter(q=>q.roster.includes(state.you) || q.status==='pending').map(q=>{
     const voters=q.roster.filter(id=>state.players.find(p=>p.id===id).eliminatedAt===null);
     const slice=100*state.players.length/q.roster.length;
@@ -345,10 +410,88 @@ function renderCouncil(){
   }).join('');
   setHTML($('diplomacy-motions'),motions);
 }
+/** DOM helper for new relation UI: player text (alliance names) only ever reaches textContent. */
+function el(tag,className,text){const e=document.createElement(tag);if(className)e.className=className;if(text!==undefined)e.textContent=text;return e;}
+function standards(ids){const span=el('span','chip-flags');span.innerHTML=ids.slice(0,3).map(insignia).join('');if(ids.length>3)span.append(el('small','',`+${ids.length-3}`));return span;} // authored SVG only
+const allianceOf=id=>{const side=state.players.find(p=>p.id===id)?.side;return side && !side.startsWith('solo:')?state.sides.find(s=>s.id===side):null;};
+const formingOf=id=>(state.proposals || []).find(q=>q.status==='pending' && q.roster.includes(id));
+/** HUD: who is with you (alliance colour) and who you are at war with, visible without opening anything. */
+function renderRelations(){
+  const me=myPlayer(),ally=$('ally-chip'),war=$('war-chip'),running=state.status==='running';
+  ally.hidden=!me || !running;war.hidden=!running;
+  const key=JSON.stringify([state.you,state.sides,state.wars,(state.proposals || []).filter(q=>q.status==='pending').map(q=>[q.id,q.roster,q.name,q.activateAt]),state.rules.warRequired]);
+  if(war.dataset.key===key)return;war.dataset.key=key;
+  if(me){
+    const alliance=allianceOf(me.id),forming=!alliance && formingOf(me.id);
+    const members=(alliance?alliance.members:forming?forming.roster:[]).filter(id=>id!==me.id);
+    const color=alliance?allianceColor(alliance.id):forming?allianceColor(forming.coalition) || '#c8a773':null;
+    ally.dataset.state=alliance?'active':forming?'forming':'independent';ally.dataset.allies=members.join(',');
+    if(color)ally.style.setProperty('--band',color);else ally.style.removeProperty('--band');
+    ally.replaceChildren(el('span','chip-label',alliance?'Allied':forming?'Forming':'Independent'),...(members.length?[standards(members)]:[]),...(alliance || forming?[el('small','chip-name',(alliance || forming).name)]:[]));
+    ally.setAttribute('aria-label',alliance?`Allied in ${alliance.name} with ${members.map(id=>country(id).name).join(', ')}. Open the Council.`:forming?`Forming ${forming.name} with ${members.map(id=>country(id).name).join(', ')}; active in ${Math.max(0,forming.activateAt-state.tick)} game seconds. Open the Council.`:'Independent: no allies. Open the Council.');
+  }
+  const enemies=me?relationsOf(state,me.id).enemies:[],fronts=warsOf(state);
+  war.dataset.state=me?(enemies.length?'war':'peace'):(fronts.length?'war':'peace');war.dataset.enemies=enemies.join(',');
+  const openRoom=!state.rules.warRequired;
+  const label=me?(enemies.length?'At war':openRoom?'No declarations':'At peace'):fronts.length?`${fronts.length} ${fronts.length===1?'war':'wars'}`:openRoom?'No declarations':'No wars';
+  war.replaceChildren(el('span','chip-swords',enemies.length || !me && fronts.length?'⚔':'☮'),el('span','chip-label',label),...(enemies.length?[standards(enemies)]:[]));
+  war.setAttribute('aria-label',`${me && enemies.length?`At war with ${enemies.map(id=>country(id).name).join(', ')}`:label}${openRoom?' (this room needs no declaration to attack)':''}. Open the list of wars.`);
+}
+/** Council → Wars: every active war as side ⚔ side, with its start and your involvement. */
+function renderWars(){
+  const fronts=warsOf(state),list=$('war-list');
+  const key=JSON.stringify([fronts,state.you,history.length && history.filter(e=>e.type==='war_declared').length]);
+  if(list.dataset.key===key)return;list.dataset.key=key;
+  const declared=history.filter(e=>e.type==='war_declared');
+  const sideText=s=>s.name || s.countries.map(id=>country(id)?.name || id).join(' + ');
+  list.replaceChildren(...fronts.map(f=>{
+    const [a,b]=f.sides,li=el('li','war-front'),button=el('button','war-front-button');button.type='button';
+    button.dataset.frontA=a.countries.join(',');button.dataset.frontB=b.countries.join(',');button.dataset.pairs=f.pairs.map(pair=>pair.join(':')).join(' ');
+    const since=f.pairs.map(([x,y])=>declared.filter(e=>e.fromRoster.includes(x) && e.toRoster.includes(y) || e.fromRoster.includes(y) && e.toRoster.includes(x)).at(-1)?.tick).filter(t=>t!==undefined);
+    const involved=state.you && [...a.countries,...b.countries].includes(state.you);
+    const side=s=>{const span=el('span','war-side');span.append(standards(s.countries),el('span','war-names',sideText(s)));return span;};
+    button.append(side(a),el('b','war-swords','⚔'),side(b));
+    const meta=el('small','war-meta',since.length?`since ${time(Math.min(...since))}`:'at war');
+    if(involved)meta.append(el('strong','war-you',' · you are involved'));
+    button.append(meta);button.title='Show this front on the map';li.append(button);
+    if(involved)li.classList.add('involved');return li;
+  }));
+  if(!fronts.length)list.append(el('li','war-empty',state.rules.warRequired?'No wars: every country is at peace.':'This room needs no declaration: any non-ally may attack.'));
+}
+/** The selected province's owner relation, in the context card (visible even when peeking). */
+function renderRelationBanner(){
+  const banner=$('relation-banner'),id=destination || (inspected && inspected!==source?inspected:null) || (!state.you?inspected:null);
+  const p=state.provinces.find(v=>v.id===id),owner=p?.owner || null;
+  if(!p || owner && owner===state.you){banner.hidden=true;banner.dataset.key='';return;}
+  const me=myPlayer(),alliance=owner?allianceOf(owner):null,enemies=me?relationsOf(state,me.id).enemies:[];
+  const kind=!me?'watch':!owner?'unclaimed':state.players.find(x=>x.id===owner)?.side===me.side?'ally':enemies.includes(owner)?'enemy':state.rules.warRequired?'neutral':'open';
+  const [title,detail]={watch:[owner?'OWNER':'UNCLAIMED',''],unclaimed:['UNCLAIMED','No declaration needed to march in.'],ally:['ALLIED','Reinforce or pass through; troops you send become theirs.'],
+    enemy:['AT WAR','You can attack.'],neutral:['NEUTRAL','Declare war in the Council before attacking.'],open:['NOT ALLIED','This room needs no declaration: you can attack.']}[kind];
+  const key=JSON.stringify([id,owner,kind,alliance?.id,alliance?.name]);banner.hidden=false;
+  if(banner.dataset.key===key)return;banner.dataset.key=key;banner.dataset.relation=kind;
+  const dot=el('i','alliance-dot');if(alliance)dot.style.setProperty('--band',allianceColor(alliance.id));
+  const who=el('span','relation-owner',`${place(id).name} · ${owner?country(owner).name:'no owner'}`);
+  if(alliance)who.append(' · ',dot,el('span','',alliance.name));
+  banner.replaceChildren(el('b','relation-kind',title),...(detail?[el('span','relation-detail',detail)]:[]),who);
+  if(kind==='neutral'){const b=el('button','relation-action','War council →');b.type='button';b.dataset.warCouncil=owner;banner.append(b);}
+}
+function frontProvinces(a,b){
+  const left=new Set(a),right=new Set(b),ids=[];
+  for(const p of state.provinces){
+    if(!left.has(p.owner) && !right.has(p.owner))continue;
+    const other=left.has(p.owner)?right:left;
+    if(place(p.id).neighbors.some(n=>other.has(state.provinces.find(q=>q.id===n)?.owner)))ids.push(p.id);
+  }
+  return ids.length?ids:[...a,...b].map(id=>state.provinces.find(p=>p.owner===id)?.id || country(id)?.start[0]).filter(Boolean);
+}
+function setMapMode(mode){
+  mapMode=mode;atlas?.setMapMode?.(mode);
+  $('map-mode').setAttribute('aria-pressed',String(mode==='diplomacy'));
+}
 function renderChat(){
   const box=$('messages'),atBottom=box.scrollHeight-box.scrollTop-box.clientHeight<40;
   const messages=history.filter(e=>e.type==='message');
-  if(tab==='dispatches' && messages.length)readMessageId=Math.max(readMessageId,messages.at(-1).id);
+  if(panelOpen && tab==='dispatches' && messages.length)readMessageId=Math.max(readMessageId,messages.at(-1).id);
   const signature=`${matchId}:${state.you}:`+messages.map(e=>e.id).join(',');
   if(box.dataset.signature!==signature){box.dataset.signature=signature;box.innerHTML=messages.length?messages.map(m=>`<article class="message"><header><b>${esc(country(m.from)?.name)}</b> · ${time(m.tick)} · ${m.channel==='dm'?`PRIVATE → ${esc(country(m.to)?.name)}`:esc(m.channel.toUpperCase())}</header><p>${esc(m.text)}</p></article>`).join(''):'<p class="muted small">The diplomatic wire is open. Make the first approach.</p>';if(atBottom)box.scrollTop=box.scrollHeight;}
   options('recipient',state.players.filter(p=>p.id!==state.you).map(p=>({value:p.id,label:country(p.id).name})),$('recipient').value);
@@ -364,6 +507,7 @@ function renderScoreboard(){
     const troops=land.reduce((n,v)=>n+v.troops,0)+state.armies.filter(a=>a.country===c.id).reduce((n,a)=>n+a.amount,0);
     const button=$('scoreboard').querySelector(`[data-country-focus="${c.id}"]`);
     button.classList.toggle('mine',c.id===state.you);
+    const alliance=p?allianceOf(c.id):null;button.dataset.band=alliance?'active':'';if(alliance)button.style.setProperty('--band',allianceColor(alliance.id));else button.style.removeProperty('--band');
     button.title=`${c.name} · ${p?.name || 'Unclaimed'} · ${p?namedSide(p.side):'Neutral'} · ${land.length} provinces · ${troops} troops${projection?` · ${signed(projection.projectedPrestige)} Prestige if victorious`:''}`;
     button.setAttribute('aria-label',`Inspect ${button.title}`);
     setHTML(button,`${insignia(c.id)}<span class="country-summary"><b>${esc(faction(c.id).short)}</b><span class="country-metrics">${icon('land')}${land.length} ${icon('troops')}${troops}</span><small>${p?esc(p.eliminatedAt!==null?'Eliminated':p.side.startsWith('solo:')?'Independent':namedSide(p.side)):'Unclaimed'}</small></span>`);
@@ -408,7 +552,15 @@ function renderOperations(){
   const me=myPlayer(),team=state.sides.find(s=>s.id===me?.side),projection=state.projections.find(p=>p.country===state.you);
   const land=state.provinces.filter(p=>p.owner===state.you && state.you),leader=[...state.sides].sort((a,b)=>b.economy-a.economy)[0];
   const troops=land.reduce((n,p)=>n+p.troops,0)+state.armies.filter(a=>a.country===state.you).reduce((n,a)=>n+a.amount,0);
-  setHTML($('operations'),`<div class="operation operation-faction">${insignia(state.you)}<div><span>${state.you?'YOUR COMMAND':'SPECTATOR'}</span><strong>${esc(faction(state.you).short)}</strong></div></div><div class="operation">${icon('land')}<div><span>HOLDINGS</span><strong>${state.you?land.length:state.provinces.filter(p=>p.owner).length}<small> / ${state.provinces.length}</small></strong></div></div><div class="operation">${icon('troops')}<div><span>FORCES</span><strong>${state.you?troops:state.provinces.reduce((n,p)=>n+p.troops,0)}</strong></div></div><div class="operation operation-wide"><div><span>${team?'YOUR ALLEGIANCE':'ECONOMIC LEAD'}</span><strong>${esc(namedSide(team?.id || leader?.id) || 'No allegiance')}<small> · ${team?.economy || leader?.economy || 0}/${state.economyThreshold} industry</small></strong><div class="land-progress"><i style="width:${Math.min(100,100*(team?.economy || leader?.economy || 0)/Math.max(1,state.economyThreshold))}%"></i></div></div></div><div class="operation">${icon('prestige')}<div><span>PRESTIGE ON WIN</span><strong>${projection?signed(projection.projectedPrestige):'—'}<small>${projection?` · ${Math.round(projection.maturity*100)}% earned`:''}</small></strong></div></div>`);
+  // CK3-style resource bar: icon + value; the label is for assistive technology and the tooltip.
+  const stat=(name,label,value,title,extra='',kind='')=>`<span class="stat ${kind}" title="${esc(title)}">${icon(name)}<span class="sr-only">${esc(label)} </span><b>${value}</b>${extra}</span>`;
+  const economy=team?.economy || leader?.economy || 0,sideLabel=namedSide(team?.id || leader?.id) || 'No allegiance';
+  const holdings=state.you?land.length:state.provinces.filter(p=>p.owner).length,forces=state.you?troops:state.provinces.reduce((n,p)=>n+p.troops,0);
+  setHTML($('operations'),stat('land',state.you?'Holdings':'Provinces held',`${holdings}<small>/${state.provinces.length}</small>`,`${state.you?'Your holdings':'Provinces held by all powers'}: ${holdings} of ${state.provinces.length}`)+
+    stat('troops',state.you?'Forces':'Troops on the map',forces,state.you?'Your troops: garrisons and armies':'All garrisoned troops')+
+    stat('economy',`Industry, ${sideLabel}`,`${economy}<small>/${state.economyThreshold}</small>`,`${team?'Your allegiance':'Economic lead'} ${sideLabel}: ${economy} of ${state.economyThreshold} industry needed to start the victory hold`,`<i class="stat-bar"><i style="width:${Math.min(100,100*economy/Math.max(1,state.economyThreshold))}%"></i></i>`)+
+    (projection?stat('prestige','Prestige on win',signed(projection.projectedPrestige),`Prestige if your side wins · ${Math.round(projection.maturity*100)}% earned`,'','prestige'):''));
+  $('commander-side').textContent=me?(me.eliminatedAt!==null?'Eliminated':namedSide(me.side)):state.status==='running'?'Watching live':'';
   const stopped=state.dominanceBreaks?.at(-1);
   $('countdown-break').hidden=!stopped || state.tick-stopped.tick>60 || state.status!=='running';
   if(stopped)$('countdown-break').textContent=`${time(stopped.tick)} · ${namedSide(stopped.side)}’s victory countdown stopped. ${stopped.reason} ${stopped.economy}/${stopped.threshold} industry afterward.`;
@@ -418,13 +570,12 @@ function renderOperations(){
 }
 function resetPresentation(){
   signalCursor=null;clearTimeout(signalTimer);clearTimeout(toastTimer);$('toast').hidden=true;$('battle-signal').hidden=true;
-  toggleJournal(false);document.body.classList.remove('playing');
+  toggleJournal(false);
 }
 function toggleJournal(open){
   $('war-journal').hidden=!open;$('journal-toggle').setAttribute('aria-expanded',String(open));
 }
 function renderPresentation(){
-  document.body.classList.toggle('playing',state.status==='running');
   const dominant=Object.entries(state.dominance)[0];
   document.querySelector('.campaign-bar').classList.toggle('victory-warning',Boolean(dominant) && state.status==='running');
   $('victory-status').setAttribute('role','timer');$('victory-status').setAttribute('aria-live','off');
@@ -443,31 +594,22 @@ function renderPresentation(){
 }
 function renderCommandFooter(){
   const mode=orderMode;
-  $('command-footer').hidden=tab!=='orders' || state.status!=='running' || !state.you;
+  $('command-footer').hidden=!panelOpen || tab!=='orders' || state.status!=='running' || !state.you;
   $('send-army').hidden=mode!=='march';$('coordinate-commit').hidden=mode!=='coordinate';
   const p=state.provinces.find(p=>p.id===source);
   $('develop-province').hidden=mode!=='develop' || !p || p.development===state.rules.maxDevelopment;
   $('commit-context').textContent=source?`${place(source).name}${destination && mode!=='develop'?' → '+place(destination).name:''}`:'Select a province on the map';
 }
-function showTab(name){
-  if(tab!==name)$(`${name}-tab`).scrollTop=0;
-  tab=name;
-  for(const current of ['orders','council','dispatches']){
-    $(`${current}-tab`).hidden=current!==name;
-    const button=document.querySelector(`[data-tab="${current}"]`);button.classList.toggle('active',current===name);
-    button.setAttribute('aria-selected',String(current===name));button.tabIndex=current===name?0:-1;
-  }
-  if(state){renderChat();renderCommandFooter();}
-}
 function render(){
   if(!state)return;
   document.body.classList.toggle('spectating',state.status==='running' && !state.you);
   $('spectator-note').hidden=state.status!=='running' || Boolean(state.you);
-  $('spectator-fullscreen').hidden=state.status!=='running' || Boolean(state.you);
-  if(state.status!=='running')setMapFullscreen(false);
+  document.body.dataset.status=state.status;
+  $('orders-label').hidden=state.status!=='running' || !state.you;
+  if(state.status!=='running')closePanel();
   renderPresentation();
   document.querySelector('.scenario-note').textContent=map.notice;
-  $('game-name').textContent=state.name;$('room-label').textContent=`COUNCIL ${state.id.toUpperCase()} · ${state.eligible?'LEAGUE':'EXPERIMENTAL'} · ${state.players.length}/8 SEATS`;
+  $('game-name').textContent=state.name;$('lobby-room').textContent=state.name;$('room-label').textContent=`COUNCIL ${state.id.toUpperCase()} · ${state.eligible?'LEAGUE':'EXPERIMENTAL'} · ${state.players.length}/8 SEATS`;
   $('lobby').hidden=state.status!=='lobby';$('join-form').hidden=Boolean(state.you);
   options('country-choice',map.countries.filter(c=>!state.players.some(p=>p.id===c.id)).map(c=>({value:c.id,label:c.name})),$('country-choice').value);
   $('host-controls').hidden=!state.isHost;$('fill-bots').disabled=state.players.length===8;$('start-match').disabled=state.players.length<2 || !state.you;
@@ -479,10 +621,10 @@ function render(){
   $('clock').textContent=`${time(state.tick)} / 30:00`;$('pace-badge').textContent=state.speed===1?'STANDARD · 1×':`QUICK · ${state.speed}×`;
   const dominant=Object.entries(state.dominance)[0];
   $('victory-status').textContent=dominant && state.status==='running'?`${namedSide(dominant[0])} wins in ${state.rules.hold-(state.tick-dominant[1])}s unless stopped`:`60% of active industry (${state.economyThreshold}) · hold ${state.rules.hold} game seconds`;
-  renderOrders();paintMap();renderCouncil();renderChat();renderScoreboard();renderResult();renderOperations();renderLeaderboard();
+  renderOrders();paintMap();renderCouncil();renderWars();renderRelations();renderChat();renderScoreboard();renderResult();renderOperations();renderLeaderboard();
   $('events').innerHTML=history.map(e=>({e,description:describe(e)})).filter(x=>x.description).slice(-30).reverse().map(({e,description})=>`<div class="event"><time>${time(e.tick)}</time>${esc(description)}</div>`).join('');
 }
-async function home(){resetPresentation();review?.destroy();review=null;setMapFullscreen(false);document.body.classList.remove('reviewing','spectating');generation++;pollController?.abort();document.body.classList.remove('in-game');matchId=null;state=null;spectating=false;herald.reset();worldFeed.reset();messageCatchupComplete=false;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');await rooms();}
+async function home(){resetPresentation();review?.destroy();review=null;closePanel();closeMenu();document.body.classList.remove('reviewing','spectating');generation++;pollController?.abort();document.body.classList.remove('in-game');matchId=null;state=null;spectating=false;herald.reset();worldFeed.reset();messageCatchupComplete=false;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');await rooms();}
 $('create-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('display-name').value);const g=await request('/api/games','POST',{name:$('room-name').value,preset:$('preset').value});await openRoom(g.id);}));
 $('join-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('join-name').value);await request(`/api/games/${matchId}/join`,'POST',{country:$('country-choice').value,kind:'human'});await poll();toast('Your seat is reserved.');}));
 $('fill-bots').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/bots`,'POST',{});await poll();}));
@@ -548,26 +690,64 @@ $('lb-toggle').addEventListener('click',()=>{
 });
 for(const button of document.querySelectorAll('[data-lb-mode]'))button.addEventListener('click',()=>{standings.setMode(button.dataset.lbMode);if(state)renderLeaderboard();});
 $('back').addEventListener('click',safely(home));$('refresh-rooms').addEventListener('click',safely(rooms));
-$('share').addEventListener('click',safely(async()=>{try{await navigator.clipboard.writeText(location.href);toast('Room link copied. It contains no credentials.');}catch{prompt('Copy this room link. It contains no credentials:',location.href);}}));
-$('account-button').addEventListener('click',safely(async()=>{const name=prompt('Create a separate local player identity. Existing results stay with the old identity. Enter a new display name:');if(name?.trim()){await ensureIdentity(name,true);if(matchId)await poll();}}));
+for(const button of document.querySelectorAll('[data-share]'))button.addEventListener('click',safely(async()=>{closeMenu();try{await navigator.clipboard.writeText(location.href);toast('Room link copied. It contains no credentials.');}catch{prompt('Copy this room link. It contains no credentials:',location.href);}}));
+const changeIdentity=safely(async()=>{closeMenu();const name=prompt('Create a separate local player identity. Existing results stay with the old identity. Enter a new display name:');if(name?.trim()){await ensureIdentity(name,true);if(matchId)await poll();}});
+$('account-button').addEventListener('click',changeIdentity);$('menu-identity').addEventListener('click',changeIdentity);
 $('zoom-in').onclick=()=>atlas.zoom(.7);$('zoom-out').onclick=()=>atlas.zoom(1.4);
 $('world-view').onclick=()=>atlas.world();$('europe-view').onclick=()=>atlas.europe();$('home-view').onclick=focusCountry;
-$('spectator-fullscreen').onclick=()=>setMapFullscreen(!document.body.classList.contains('spectator-map-fullscreen'));
-document.querySelector('.tabs').addEventListener('keydown',event=>{
-  if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
-  event.preventDefault();const names=['orders','council','dispatches'],index=names.indexOf(tab);
-  const next=event.key==='Home'?0:event.key==='End'?2:(index+(event.key==='ArrowRight'?1:2))%3;
-  showTab(names[next]);document.querySelector(`[data-tab="${names[next]}"]`).focus();
+$('fullscreen-toggle').addEventListener('click',safely(async()=>{
+  if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();
+}));
+document.addEventListener('fullscreenchange',syncFullscreen);
+$('menu-button').addEventListener('click',()=>{if($('hud-menu').hidden)openMenu();else closeMenu(true);});
+$('panel-close').addEventListener('click',()=>closePanel({restoreFocus:true}));
+// Bottom sheet (narrow screens): the handle cycles peek → half → full; arrows resize; drag snaps.
+$('sheet-handle').addEventListener('click',()=>{if(sheetDrag?.moved)return;const i=SHEETS.indexOf($('command-panel').dataset.sheet);setSheet(SHEETS[(i+1)%SHEETS.length]);});
+$('sheet-handle').addEventListener('keydown',event=>{
+  const i=SHEETS.indexOf($('command-panel').dataset.sheet);
+  if(event.key==='ArrowUp'){event.preventDefault();setSheet(SHEETS[Math.min(2,i+1)]);}
+  if(event.key==='ArrowDown'){event.preventDefault();setSheet(SHEETS[Math.max(0,i-1)]);}
 });
+let sheetDrag=null;
+$('command-panel').querySelector('.sheet-head').addEventListener('pointerdown',event=>{
+  if(!narrow.matches || event.target.closest('#panel-close,#order-modes'))return;
+  const panel=$('command-panel');sheetDrag={y:event.clientY,height:panel.getBoundingClientRect().height,moved:false};
+});
+$('command-panel').querySelector('.sheet-head').addEventListener('pointermove',event=>{
+  if(!sheetDrag)return;const dy=event.clientY-sheetDrag.y;
+  // Capture only once it is a drag, so a plain tap still clicks the handle or close button.
+  if(!sheetDrag.moved && Math.abs(dy)>6){sheetDrag.moved=true;event.currentTarget.setPointerCapture(event.pointerId);}
+  if(sheetDrag.moved)$('command-panel').style.height=`${Math.max(60,sheetDrag.height-dy)}px`;
+});
+$('command-panel').querySelector('.sheet-head').addEventListener('pointerup',()=>{
+  if(!sheetDrag)return;const drag=sheetDrag,panel=$('command-panel');
+  if(drag.moved){
+    const height=panel.getBoundingClientRect().height,max=parseFloat(getComputedStyle(panel).maxHeight)||innerHeight;
+    const peek=panel.querySelector('.sheet-head').offsetHeight+($('command-footer').hidden?0:$('command-footer').offsetHeight);
+    if(height<peek*.6)closePanel();
+    else setSheet([['peek',peek],['half',max*.5],['full',max]].sort((a,b)=>Math.abs(a[1]-height)-Math.abs(b[1]-height))[0][0]);
+  }
+  setTimeout(()=>{sheetDrag=null;});
+});
+$('command-panel').querySelector('.sheet-head').addEventListener('pointercancel',()=>{sheetDrag=null;$('command-panel').style.height='';});
 document.addEventListener('keydown',event=>{
   if(!state || document.body.classList.contains('reviewing') || event.ctrlKey || event.metaKey || event.altKey || event.target.closest('input,select,textarea,dialog') || $('confirm-dialog').open)return;
-  if(event.key==='Escape' && document.body.classList.contains('spectator-map-fullscreen')){setMapFullscreen(false);return;}
-  if(event.key==='Escape' && !$('war-journal').hidden){toggleJournal(false);$('journal-toggle').focus();return;}
+  // Escape closes the top-most overlay: menu, then war log, then the command panel (and its selection).
+  if(event.key==='Escape'){
+    if(!$('hud-menu').hidden)closeMenu(true);
+    else if(!$('war-journal').hidden){toggleJournal(false);$('journal-toggle').focus();}
+    else if(panelOpen)closePanel({restoreFocus:true});
+    else{source=null;destination=null;inspected=null;renderOrders();paintMap();}
+    return;
+  }
   if(event.key.toLowerCase()==='j'){toggleJournal($('war-journal').hidden);return;}
-  if(event.key==='Escape'){source=null;destination=null;inspected=null;renderOrders();paintMap();}
   if(event.key.toLowerCase()==='c')focusCountry();
+  if(event.key.toLowerCase()==='m' && atlas?.setMapMode)setMapMode(mapMode==='diplomacy'?'political':'diplomacy');
   if(event.key.toLowerCase()==='q')atlas.zoom(1.25);
   if(event.key.toLowerCase()==='e')atlas.zoom(.8);
+});
+document.addEventListener('pointerdown',event=>{
+  if(!$('hud-menu').hidden && !event.target.closest('#hud-menu,#menu-button'))closeMenu();
 });
 document.addEventListener('click',safely(async event=>{
   const button=event.target.closest('button');if(!button)return;
@@ -575,15 +755,15 @@ document.addEventListener('click',safely(async event=>{
   if(button.id==='journal-close'){toggleJournal(false);$('journal-toggle').focus();}
   if(button.hasAttribute('data-dismiss-signal')){$('battle-signal').hidden=true;$('orders-label').focus();}
   if(button.dataset.countrySeat){$('country-choice').value=button.dataset.countrySeat;$('country-choice').dispatchEvent(new Event('change'));atlas.home(button.dataset.countrySeat);}
-  if(button.dataset.countryFocus){const id=button.dataset.countryFocus;const focus=state.provinces.filter(p=>p.owner===id).sort((a,b)=>b.troops-a.troops)[0]?.id || country(id).start[0];atlas.focus(focus);inspected=focus;source=null;destination=null;orderMode='march';showTab('orders');renderOrders();paintMap();$('orders-tab').scrollTop=0;}
-  if(button.dataset.reserveFrom){source=button.dataset.reserveFrom;destination=button.dataset.reserveTo;inspected=source;orderMode='march';$('amount').value=freeTroops(source);showTab('orders');renderOrders();paintMap();toast('Transfer drafted; review the garrison before committing.');}
-  if(button.dataset.orderMode){orderMode=button.dataset.orderMode;renderOrders();$('orders-tab').scrollTop=0;}
+  if(button.dataset.countryFocus){const id=button.dataset.countryFocus;const focus=state.provinces.filter(p=>p.owner===id).sort((a,b)=>b.troops-a.troops)[0]?.id || country(id).start[0];atlas.focus(focus,view());inspected=focus;source=null;destination=null;orderMode='march';openPanel('orders');renderOrders();paintMap();$('orders-tab').scrollTop=0;}
+  if(button.dataset.reserveFrom){source=button.dataset.reserveFrom;destination=button.dataset.reserveTo;inspected=source;orderMode='march';$('amount').value=freeTroops(source);openPanel('orders');renderOrders();paintMap();toast('Transfer drafted; review the garrison before committing.');}
+  if(button.dataset.orderMode){orderMode=button.dataset.orderMode;if(orderMode!=='march' && $('command-panel').dataset.sheet==='peek')setSheet('half');renderOrders();$('orders-tab').scrollTop=0;}
   if(button.dataset.room)await openRoom(button.dataset.room,button.dataset.spectate==='true');
   if(button.dataset.home)await home();
   if(button.dataset.fraction){$('amount').value=Math.max(1,Math.floor(availableTroops()*Number(button.dataset.fraction)));renderOrders();}
-  if(button.dataset.focus){atlas.focus(button.dataset.focus);inspected=button.dataset.focus;renderOrders();}
-  if(button.dataset.feedProvince){atlas.focus(button.dataset.feedProvince);inspected=button.dataset.feedProvince;renderOrders();paintMap();}
-  if(button.dataset.feedCountry)atlas.home(button.dataset.feedCountry);
+  if(button.dataset.focus){atlas.focus(button.dataset.focus,view());inspected=button.dataset.focus;if(state.status==='running')openPanel('orders');renderOrders();}
+  if(button.dataset.feedProvince){atlas.focus(button.dataset.feedProvince,view());inspected=button.dataset.feedProvince;renderOrders();paintMap();}
+  if(button.dataset.feedCountry)atlas.home(button.dataset.feedCountry,view());
   if(button.dataset.decline){await command({type:'decline',proposalId:button.dataset.decline});toast('Offer declined.');}
   if(button.dataset.voteWar){const result=await command({type:'vote_war',motionId:button.dataset.voteWar});if(result)toast(result.status==='enacted'?'War declared.':'War vote recorded.');}
   if(button.dataset.votePeace){const result=await command({type:'vote_peace',motionId:button.dataset.votePeace});if(result)toast(result.status==='enacted'?'Peace agreed; attacking troops are returning.':'Peace vote recorded.');}
@@ -594,15 +774,39 @@ document.addEventListener('click',safely(async event=>{
     if(!await confirmAction({title:`Join ${offer.name}?`,message:`${f.economy}/${f.totalEconomy} industry combined; ${f.threshold} needed. ${f.wouldDraw?'This would end in a negotiated draw.':f.wouldStartHold?'This would start a fresh victory hold after activation.':`${f.remaining} more industry needed for a victory hold.`} Your maximum slice becomes ${mine.maximumShare.toFixed(1)} points (${signed(mine.fullMaturityPrestige)} Prestige at full maturity). ${mine.keepsMaturity?'Your existing tenure remains.':'Your maturity restarts at zero.'} Industry and ownership may change before approval and the 30-second notice complete.`,accept:'Accept these terms'}))return;
     await command({type:'accept',proposalId:offer.id});toast('Terms accepted.');
   }
-  if(button.dataset.tab)showTab(button.dataset.tab);
+  if(button.dataset.tab && button.closest('#hud-rail'))togglePanel(button.dataset.tab);
+  if(button.dataset.openPanel)openPanel(button.dataset.openPanel,{focus:true});
+  if(button.hasAttribute('data-open-wars')){openPanel('council',{focus:true});$('council-tab').scrollTop=0;}
+  if(button.dataset.frontA){atlas.fit(frontProvinces(button.dataset.frontA.split(','),button.dataset.frontB.split(',')),view());}
+  if(button.dataset.warCouncil){
+    const target=button.dataset.warCouncil;openPanel('council',{focus:true});
+    if([...$('diplomacy-target').options].some(o=>o.value===target)){$('diplomacy-target').value=target;renderCouncil();}
+    $('council-tab').scrollTop=document.querySelector('.war-council').offsetTop-$('council-tab').offsetTop; // never scrollIntoView: it would scroll the clipped stage too
+    if(!$('declare-war').disabled)$('declare-war').focus();
+  }
+  if(button.id==='map-mode')setMapMode(mapMode==='diplomacy'?'political':'diplomacy');
 }));
 for(const element of document.querySelectorAll('[data-icon]'))element.innerHTML=icon(element.dataset.icon);
-worldFeed=new WorldFeed({list:$('feed-list'),unread:$('feed-unread'),toggle:$('feed-toggle'),body:$('feed-body')},feedNames);
-standings=new LeaderboardPanel({root:$('leaderboard'),rows:$('lb-rows'),toggle:$('lb-toggle'),summary:$('lb-summary'),modes:[...document.querySelectorAll('[data-lb-mode]')]},feedNames);
+worldFeed=new WorldFeed({list:$('feed-list'),unread:$('feed-unread'),toggle:$('feed-toggle'),body:$('feed-body'),jump:$('feed-jump')},feedNames);
+standings=new LeaderboardPanel({root:$('leaderboard'),rows:$('lb-rows'),toggle:$('lb-toggle'),summary:$('lb-summary'),modes:[...document.querySelectorAll('[data-lb-mode]')],fronts:$('lb-fronts'),
+  onFocus:id=>atlas?.setRelationFocus?.(id)},feedNames);
 {let saved=null;try{saved=localStorage.getItem('coi.leaderboard');}catch{}
-  standings.setOpen(saved?saved==='open':!matchMedia('(max-width:760px)').matches);}
+  standings.setOpen(saved?saved==='open':!matchMedia('(max-width:759px), (max-height:499px)').matches);}
 herald=new Herald({declaration:$('declaration'),alliance:$('alliance-seal'),fallen:$('fallen-seal')});
 {let saved=null;try{saved=localStorage.getItem('coi.feed');}catch{}
-  worldFeed.setOpen(saved?saved==='open':!matchMedia('(max-width:760px)').matches);}
-try{map=await request('/map.json','GET',undefined,null);initMap();showIdentity();const params=new URL(location).searchParams,initial=params.get('match');if(initial)await openRoom(initial,params.get('spectate')==='1');else await rooms();$('connection').textContent=state?.status==='finished'?'Review':'Live';}catch(e){toast(e.message,true);}
+  worldFeed.setOpen(saved?saved==='open':!narrow.matches);}
+try{map=await request('/map.json','GET',undefined,null);initMap();showIdentity();const params=new URL(location).searchParams,initial=params.get('match');if(initial)await openRoom(initial,params.get('spectate')==='1');else await rooms();setConnection(state?.status==='finished'?'Review':'Live');}catch(e){toast(e.message,true);}
+syncFullscreen();
+// Overlays size themselves around the leaderboard and the top alert stack (e.g. the order card's max height).
+// Overlays size themselves around the alert stack and leaderboard (e.g. the order card's max height).
+function measureStack(){
+  const stage=$('stage');
+  stage.style.setProperty('--lb-h',`${Math.round($('leaderboard').getBoundingClientRect().height)}px`);
+  const alerts=$('alerts').getBoundingClientRect(),board=$('leaderboard').getBoundingClientRect(); // read after --lb-h moved the alerts
+  stage.style.setProperty('--alerts-bottom',`${Math.round(alerts.bottom)}px`);
+  stage.style.setProperty('--stack-bottom',`${Math.round(Math.max(alerts.bottom,board.bottom))}px`);
+}
+const stackObserver=new ResizeObserver(measureStack);
+for(const element of [$('alerts'),$('leaderboard')])stackObserver.observe(element);
+addEventListener('resize',measureStack);
 setInterval(()=>{if(matchId)poll();},750);

@@ -6,6 +6,8 @@ Command an industrial homeland and colonial footholds. Invest in recruitment, co
 
 ![Actual browser gameplay, with an accelerated test clock and heuristic agents](docs/media/gameplay.gif)
 
+**v0.7: The map is the screen.** The live match is full screen: a slim HUD with your allies and wars at a glance, alerts top-left, the leaderboard and a persistent, scrollable World history on the right, and a province card (with a percentage slider and one Commit button) that opens only when you select something. Council → Wars lists every war; phones get a bottom navigation bar and sheets. See `docs/UI-DESIGN.md`.
+
 **v0.5: The command table.** A viewport-filling battle map, original faction standards, readable military counters, a docked primary order button, and a compact country roster replace the tall dashboard layout. Click a country to inspect its position. **War log / J** opens the event drawer; Escape closes it. Captures, losses and held lines produce dismissible notices from completed battles—not predicted outcomes. No map, economy, scoring or agent-command rules changed.
 
 ![Actual command interface displaying a recorded test position](docs/media/command-table.png)
@@ -32,7 +34,7 @@ npm start
 
 Open **http://192.168.1.216:3107** from this machine or another device on the same network. The default `npm start` binds all interfaces and accepts this LAN origin; `HOST`, `PORT`, and `PUBLIC_ORIGIN` can override it. Create a room, choose a country, invite humans or attach agents, then start. Add external players **before** filling empty seats with practice bots. Two to eight occupied countries can start; balance tests use eight. Unclaimed countries' territories remain neutral.
 
-The lobby lists running games first. **Spectate** opens the public view with world-chat bubbles and a full-screen map; a separate **Resume** button restores your own playing seat. Private messages never enter spectator bubbles.
+The lobby lists running games first. **Spectate** opens the same full-screen map with the public World history beside it; a separate **Resume** button restores your own playing seat. Private messages never enter the public history.
 
 Standard lasts at most **30 real minutes**. Quick runs all game timers at 6× and finishes within five real minutes. The displayed clock always shows game time. Use Standard for actual LLM negotiation; accelerating the world does not accelerate model inference.
 
@@ -46,7 +48,7 @@ Use that exact origin in browsers and agent configuration. Internet hosting requ
 
 ## Play
 
-The Orders panel separates **March**, **Coordinate**, and **Develop**. The current primary action stays docked below its scrolling controls. Local recruitment arrows are an expandable section; they remain explicitly **new local recruits only**, not a forwarding chain.
+The Orders panel separates **March**, **Coordinate**, and **Develop**. The current primary action stays in the commit dock below the card's scrolling details. Local recruitment arrows are an expandable section; they remain explicitly **new local recruits only**, not a forwarding chain.
 
 **March.** Choose a source and connected target. Commit an exact number or use the percentage presets. Leave one garrison troop. Travel is `15 + ceil(distance_km / 35)` game ticks, with one tick per game second. Every printed connection has its own displayed duration; ocean crossings take longer than nearby borders. These are game timings, not realistic historical troop speeds.
 

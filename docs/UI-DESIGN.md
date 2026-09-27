@@ -1,3 +1,78 @@
+# v0.7 — The map is the screen
+
+A first-principles pass on the live match screen. No rule, balance value, event or map changed; relations (wars, alliances) are presented from data every spectator already receives. Review and replay keep their v0.4–v0.6 page layout (only its heading moved into the shared room menu); redesigning them was out of scope.
+
+## Principles (interaction only; no assets, art, names or trade dress copied)
+
+1. **The map is the whole screen.** Territorial.io and CK3 give the viewport to the map and float status over it. Here `#map` is exactly the viewport; nothing scrolls the document. — territorial.io tutorial (balance at the top, attack percentage bar at the bottom): https://territorial.io/tutorial
+2. **Status on top, actions in reach.** A slim top strip reads like a resource bar (CK3 puts resources and alert icons along the top edge, the outliner on the right). Mobile guidance puts primary actions in the bottom thumb zone and status at the top. — CK3 interface guide: https://www.gamepressure.com/crusader-kings-3/interface-description/z2f0f6 · Mobile game UI (thumb zones, fewer/bigger elements): https://www.wandr.studio/blog/mobile-game-ui-design
+3. **Selection drives context.** Nothing opens until you choose: selecting a province opens its card, like Conflict of Nations' province bar or CK3's context windows. — Conflict of Nations UI: https://wiki.conflictnations.com/User_Interface
+4. **One commit, a percentage, always visible.** Territorial.io's bottom percentage bar informs the commit dock: slider + 25/50/Max + one large Commit, outside any scrolling region.
+5. **What needs attention, where the eye starts.** Threats, battle notices, pending votes and the victory countdown stack top-left as CK3-style alerts; nothing moves the camera by itself.
+6. **Large targets, sheets, no hover dependence.** Bottom sheets with a drag handle on phones, 44 px targets on coarse pointers, WCAG 2.2 minimum target size as a floor. — https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html
+7. **History stays.** (User feedback) The World feed is a persistent, scrollable column; new items arrive expanded and settle, never vanish.
+8. **Friends and enemies at a glance.** (User feedback) Alliance colour and war status sit in the HUD, the leaderboard and the order card without opening a drawer.
+
+Material Design's bottom-sheet and Apple's layout pages were consulted but render client-side and could not be fetched; they are not cited as sources.
+
+## Layout
+
+```
+┌─[≡][◆ Britain][Allied ◆◆][⚔ At war ◆][▣18 ✕544 ⚒88/84 ★+166]──[ IN SESSION 08:00/30:00 · victory ]──[Orders][Council 2][Dispatches 16][Log]┐
+│ ┌alerts────────────┐                                                                          ┌Leaderboard (bands, ⚔/⛓)─┐ │
+│ │ ↘ 2 incoming …    │                                                                          │ 1 Britain  22.8% · 544   │ │
+│ │ 2 council matters │                       M A P  (full viewport)                              ├World history─────────────┤ │
+│ └──────────────────┘                                                                          │ ⚔ War declared   10:15   │ │
+│                                                                                               │ … scrollable, "N new ↓"  │ │
+│ ┌Southern England ^×┐ [+]                                                                     │                          │ │
+│ │MARCH COORD DEVELOP│ [−]                                                                     │                          │ │
+│ │AT WAR — can attack│ [World]                                                                 │                          │ │
+│ │═══○══ 25% 50% Max │ [Europe]                                                                │ [Reply to the world…][⏎] │ │
+│ │[ Commit 7 troops ]│ [Home]                                                                  └──────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+Phones (portrait): two-row HUD (country · clock · stats / ally+war chips · victory), leaderboard strip, alerts,
+map, World ticker line; Orders/Council/Dispatches/War log as a bottom nav; card, drawers and history are bottom sheets
+(the order sheet takes priority). Tablets upright keep the desktop overlays with the bottom nav. Landscape phones:
+compact strip, narrower rail, order card up to full height on the left.
+```
+
+- **Order card** (bottom-left): peek (title, order type, relation line, commit dock) → half → full, via the chevron/grab handle (click, arrow keys, or drag on phones). A map click opens it peeking so the map stays usable; the Orders button opens it at half.
+- **Council / Dispatches**: a full-height left drawer (a bottom sheet on phones). Council now starts with **Wars** (side ⚔ side, since when, "you are involved"; click to frame the front) and **The Powers** roster (the old bottom scoreboard). At widths under 1100 px an open drawer takes the rail's place.
+- **Menu** (☰): room name/label, connection, identity, Copy room link, All rooms, Change identity, browser Full screen, map-control help, scenario note. In review it becomes the page heading.
+- **Map controls**: bottom-left, beside the card; +/− hidden on coarse pointers (pinch), World/Europe/Home stay. A Diplomacy map-mode toggle (M) appears only when the atlas provides `setMapMode`.
+- **Camera insets**: `focus`/`home`/`fit` calls pass `{insets:{top,right,bottom,left}}` as an optional trailing argument describing the covered edges; the current atlas ignores it.
+
+## Deviations from the first proposal, and why
+
+- World feed moved from bottom-left to a **persistent right rail** under the leaderboard (user feedback: history must stay visible and scrollable). The context card and camera buttons moved to the **bottom-left** so nothing overlaps the rail.
+- The desktop card uses the **same peek/half/full states** as the phone sheet: a full-height card on the left hid the Americas and blocked map targeting.
+- **Single command panel** (Orders, Council, Dispatches share one surface) instead of independent drawers: keeps Escape/focus rules simple and avoids stacked panels on small screens.
+- **Bottom navigation up to 1023 px wide** (tablets upright too), not only phones: the top strip cannot hold relation chips, stats and four buttons at 768 px.
+- **Spectators** can still tap a province to see an inspector card (owner, incoming waves); there is no order form, dock or order type.
+- Zoom +/− are hidden on coarse pointers; **World/Europe/Home stay** (presets, not replaceable by pinch).
+- Relation/alliance helpers live in `public/leaderboard.js` as interim shared helpers until `public/relations.js` from the map branch is merged.
+
+## Verified (automated, not a usability study)
+
+`npm test` (93 tests, including relations/wars/alliance-colour unit tests and CLI/MCP `wars` parity), `npm run check`, and `python tests/browser.py` (live 12× match, historical review, focused UI suite) pass. The focused suite, on recorded positions:
+
+- At 1920×1080, 1366×768, 1280×720, 390×844, 844×390 and 768×1024, for player and spectator: `#map` equals the viewport; no document scroll; no overlapping or off-screen overlays when idle, with a selection (peek/half/full), with Council or Dispatches open, with the history collapsed to its edge tab (wide) or opened as a sheet (phones). The form-associated March commit is visible, unobstructed (hit-tested) and outside any scrolling region in every sheet size.
+- Uncovered map share (4 px sampling of overlay rectangles), recorded in the report: 1366×768 72.9% idle / 65.1% with a card peeking (asserted ≥65% / ≥62%); 1920×1080 79.3% / 75.4%; 1280×720 71.2% / 62.4%. Phones and tablets are much lower with a sheet open (390×844 33.5%, 844×390 37.0%, 768×1024 44.8%): the sheet is the focus there.
+- Keyboard: Council opens from its HUD button with focus moved in; Escape closes and returns focus; the sheet handle resizes with arrow keys; the menu opens/closes the same way; J/Escape war log; roster focus survives polling.
+- World history: scrollback to the first item of the match; reply pinned to the column bottom; a new item while scrolled up shows "1 new ↓" and does not move the reader; a long message arrives at ≤4 lines, shrinks to ≤2, expands and collapses by click, Enter and Space with `aria-expanded`.
+- Relations (war room fixture, where Britain declares war on the USA at tick 0 with no armies on that front): war chip = exactly the viewer's enemies; each leaderboard row's ⚔ marker matches `wars`; Council → Wars lists exactly the observation's pairs and focuses the front; the card states AT WAR / NEUTRAL and links to the war council. Alliances: a test-only acceptance shows "forming" (dashed), then active; band and feed colours equal `allianceColor`; a hostile alliance name renders as text only. The live match checks that the HUD chips agree with the public war list.
+- All v0.6 checks (map LOD audit, battle markers, effects scoping, banners without replay, reduced motion) still pass.
+
+Not verified: real touch-drag of the sheet on a device (the drag code path runs only on narrow screens and was not exercised by Playwright); iOS safe-area insets; screen-reader output; whether the layout is more enjoyable. The README GIF was re-recorded with `python tests/browser.py --gif docs/media/gameplay.gif` (12× test clock, heuristic agents), and is about twice the previous size.
+
+## Known issues
+
+- The atlas fits the 1280×680 world into the viewport, so in portrait phones the world view is a thin band until you pinch or press Home; the rail covers the eastern edge on desktop until panned. Camera insets are passed but not yet used by the atlas.
+- Army tooltips do not yet show the owner's alliance (atlas-owned; left for the map branch).
+- Tablet-portrait idle coverage is ~55%: the 288 px rail is a large share of 768 px.
+
+---
+
 # v0.6 — Map layers
 
 A presentation-only pass on the atlas. No rule, map ID, province geometry or adjacency changed; the server still decides every movement, battle and ownership change.

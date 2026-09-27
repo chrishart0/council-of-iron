@@ -27,6 +27,8 @@ tool('world_feed','Read the public World feed, oldest first: engine-classified h
   {after:{type:'integer',minimum:0},limit:{type:'integer',minimum:1,maximum:500}},[],a=>client.feed(a.after || 0,a.limit || 100),true);
 tool('leaderboard','Ranked standings shown on every player\'s map: provinces held (share of all provinces), then total troops (garrisons plus all of that country\'s armies on the map), then ID. mode players or alliances (an alliance sums its members; independents rank as themselves). Your own row is always included with its real rank. Public data only; territory is not the victory condition (industry is).',
   {mode:{type:'string',enum:['players','alliances']},limit:{type:'integer',minimum:1,maximum:8}},[],a=>client.leaderboard(a.mode || 'players',a.limit || 8),true);
+tool('wars','Active wars from the public observation, grouped as fronts between sides (a coalition or an independent country) with their country pairs, plus your own allies, enemies and neutral countries. warRequired false means the room needs no declaration to attack. Read-only; reveals nothing beyond what spectators see.',
+  {},[],()=>client.wars(),true);
 tool('preview','Preview combat against the current garrison. Not a guarantee of future outcome.',
   {from:string,to:string,amount:integer},['from','to','amount'],a=>client.preview(a.from,a.to,a.amount),true);
 tool('move','Commit troops across one connection. Leave one behind. Counts as one military command; executes next tick by default. Industrial scenario allows recall and distance-based travel. Supply exactly one of amount or percent; optional arriveAt schedules arrival.',

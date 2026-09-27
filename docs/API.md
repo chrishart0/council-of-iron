@@ -63,6 +63,14 @@ Casualties are one shared total; no per-country kills are attributed. Private ev
 
 There is no separate endpoint: the ranking is the pure function `leaderboard(observation, { mode, you, limit })` in `public/leaderboard.js`, shared by the browser, CLI (`leaderboard [players|alliances]`) and MCP (`leaderboard`). It uses only public observation fields, and every army is already public. Rows: `rank`, `id`, `kind` (`country` or `alliance`), `name` (alliances only; player text), `countries`, `provinces`, `share` (of all provinces), `troops` (garrisons + all own armies on the map, including engaged and returning), `eliminated`, and `you` on the viewer's row. Rank by provinces, then troops, then ID. With `limit`, the viewer's row is appended with its real rank when it is outside the top rows. Territory is not the victory condition; industry is.
 
+v0.7 adds public relations to every row: `atWarWith` (sorted country IDs at war with any of the row's countries, from `observation.wars`) and, when a viewer is given, `relation` = `you`, `ally` (same coalition side), `enemy` (a war pair with the viewer) or `neutral`. The same module exports DOM-free helpers used by the browser, CLI and MCP:
+
+- `relationsOf(observation, country)` → `{ allies, enemies, neutral }` (sorted country IDs).
+- `warsOf(observation)` → active wars grouped into fronts between sides: `[{ id, sides: [{ side, name, countries }, { … }], pairs: [[a, b], …] }]`. `name` is the coalition name (player text) or `null` for an independent country. The union of `pairs` is exactly `observation.wars`.
+- `allianceColor(sideId)` / `allianceColors(observation)`: the display colour of a coalition, chosen by its `coalition-N` counter so it survives list changes and dissolution; independents have none.
+
+These are interim homes; the map branch's shared `public/relations.js` (`relationsOf`, `allianceColors`) supersedes them on merge with the same shapes. CLI `wars` and MCP `wars` return `{ tick, status, you, warRequired, wars: warsOf(view), relations: relationsOf(view, you) | null }`. Nothing here is beyond what spectators already receive; in rooms with `rules.warRequired: false` the war list is empty and any non-ally may be attacked.
+
 ## Plan without committing
 
 `POST /api/games/ROOM/plan` requires your seat token:

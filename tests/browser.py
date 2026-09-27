@@ -22,6 +22,12 @@ from browser_helpers import load_bridge
 
 ROOT = Path(__file__).resolve().parents[1]
 
+def ensure_orders(page):
+    """v0.7: the order card opens from the HUD Orders button (or a map click) and must show its details."""
+    if page.locator('#orders-label').get_attribute('aria-expanded')!='true':page.locator('#orders-label').click()
+    if page.locator('#command-panel').get_attribute('data-sheet')=='peek':page.locator('#sheet-handle').click()
+    expect(page.locator('#orders-tab')).to_be_visible()
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--bridge', action='store_true')
@@ -91,6 +97,8 @@ def main():
                 # Simulate the randomUUID restriction of plain-HTTP LAN browsers.
                 page.evaluate('crypto.randomUUID = undefined')
                 # Real DOM inputs -> shared action endpoint. No direct state mutation.
+                expect(page.locator('#command-panel')).to_be_hidden()  # nothing is open until the player asks
+                ensure_orders(page)
                 page.locator('#source').select_option('west-us')
                 page.locator('#destination').select_option('mexico')
                 page.locator('#amount').fill('7')
@@ -130,6 +138,13 @@ def main():
                 expect(page.locator('#feed-list [data-kind="alliance"]').first).to_contain_text('Atlantic Accord')
                 report['assertions'].append('Alliance activation showed the standards-and-ribbon seal with country names and a matching feed headline.')
                 expect(page.locator('#coalition-info')).to_contain_text('Atlantic Accord',timeout=15000)
+                # HUD relations (no drawer needed): allies in the alliance colour, enemies from the public war list.
+                expect(page.locator('#ally-chip')).to_have_attribute('data-state','active')
+                expect(page.locator('#ally-chip')).to_have_attribute('data-allies','britain')
+                wars=http(f'/api/games/{room}')['wars']
+                enemies=sorted({b if a=='usa' else a for a,b in (w.split(':') for w in wars) if 'usa' in (a,b)})
+                expect(page.locator('#war-chip')).to_have_attribute('data-enemies',','.join(enemies),timeout=5000)
+                report['assertions'].append(f'HUD relation chips: allied with Britain in Atlantic Accord; at war with {enemies or "nobody"}, matching the public war list.')
                 report['assertions'].append('Browser proposed coalition; CLI accepted; public notice elapsed; both shared the coalition and payout projection.')
                 capture(page,1000)
                 # Cancellation must not file an accidental irreversible departure.
@@ -182,9 +197,9 @@ def main():
                 assert 'This dispatch is private.' not in spectator.locator('#messages').inner_text()
                 expect(spectator.locator('#scoreboard .country-card')).to_have_count(8)
                 spectator.screenshot(path=str(artifacts/'spectator-desktop.png'),full_page=True)
-                spectator.locator('#spectator-fullscreen').click()
-                expect(spectator.locator('body')).to_have_class(re.compile('spectator-map-fullscreen'))
-                assert spectator.locator('.war-room').bounding_box()['height'] >= 1049
+                # v0.7: spectating is already full screen: the map is the viewport and the history stays beside it.
+                assert spectator.locator('#map').bounding_box()=={'x':0,'y':0,'width':1600,'height':1050}
+                expect(spectator.locator('#world-feed #feed-list')).to_be_visible()
                 page.locator('#channel').select_option('world')
                 expect(page.locator('#chat-form button')).to_be_enabled(timeout=10000)
                 # Reply from the World feed itself: the shared chat action on channel world.
@@ -200,14 +215,13 @@ def main():
                 spectator.screenshot(path=str(artifacts/'spectator-fullscreen.png'),full_page=True)
                 assert 'This dispatch is private.' not in spectator.locator('#world-feed').inner_text()
                 spectator.keyboard.press('Escape')
-                expect(spectator.locator('body')).not_to_have_class(re.compile('spectator-map-fullscreen'))
+                expect(spectator.locator('#command-panel')).to_be_hidden()
                 spectator.set_viewport_size({'width':390,'height':844})
-                spectator.locator('#spectator-fullscreen').click()
-                assert spectator.locator('.war-room').bounding_box()['height'] >= 843
+                assert spectator.locator('#map').bounding_box()=={'x':0,'y':0,'width':390,'height':844}
                 assert spectator.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1')
                 spectator.screenshot(path=str(artifacts/'spectator-mobile.png'),full_page=True)
                 spectator.close()
-                report['assertions'].append('Lobby spectator opened a full-viewport map on desktop and mobile; the feed reply posted world chat that the read-only spectator feed showed as escaped text, while private dispatches stayed hidden.')
+                report['assertions'].append('Lobby spectator watched on a full-viewport map with the World history beside it on desktop and mobile; the feed reply posted world chat that the read-only spectator feed showed as escaped text, while private dispatches stayed hidden.')
                 # External process now controls the existing agent seat over the real API.
                 bot=subprocess.Popen(['node','agents/bot.js'],cwd=ROOT,env={**os.environ,'COUNCIL_URL':url,'COUNCIL_SESSION':str(Path(tmp)/'agent.session.json'),'COUNCIL_TOKEN':'','COUNCIL_MATCH':room},stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
                 page.locator('[data-tab="orders"]').click()
@@ -298,10 +312,12 @@ def main():
                 page.locator('#fill-bots').click()
                 page.locator('#start-match').click()
                 expect(page.locator('#phase')).to_have_text('IN SESSION')
-                # World view aggregates each contiguous holding; clicking the merged counter zooms in.
-                page.locator('#map .map-cluster[data-cluster*="west-us"]').click()
+                expect(page.locator('#command-panel')).to_be_hidden()
+                # The full-viewport map may already be at per-province detail; a merged counter zooms in when present.
+                west=page.locator('#map .map-cluster[data-cluster*="west-us"]')
+                if west.count():west.click()
                 expect(page.locator('#marker-west-us')).to_be_visible()
-                page.locator('#zoom-out').click()  # keep neighbouring Mexico in view as well
+                if not page.locator('#marker-mexico').is_visible():page.locator('#zoom-out').click()  # keep neighbouring Mexico in view as well
                 page.locator('#marker-west-us').click()
                 expect(page.locator('#source')).to_have_value('west-us')
                 page.locator('[data-fraction="1"]').click()
@@ -312,12 +328,16 @@ def main():
                 page.locator('#marker-central-us').click(modifiers=['Shift'])
                 expect(page.locator('#source')).to_have_value('central-us')
                 expect(page.locator('#destination')).to_have_value('')
-                page.locator('#orders-label').focus()
-                page.keyboard.press('ArrowRight')
+                expect(page.locator('#command-panel')).to_have_attribute('data-sheet','peek')  # a map selection opens a peeking card
+                page.locator('#council-label').focus()
+                page.keyboard.press('Enter')
+                expect(page.locator('#council-tab')).to_be_visible()
+                expect(page.locator('#council-label')).to_have_attribute('aria-expanded','true')
+                page.keyboard.press('Escape')
+                expect(page.locator('#command-panel')).to_be_hidden()
                 expect(page.locator('#council-label')).to_be_focused()
-                expect(page.locator('#council-label')).to_have_attribute('aria-selected','true')
-                report['assertions'].append('A second room starts with the same browser identity; map targeting, Max, Shift-source selection and keyboard tabs work.')
-                page.locator('[data-tab="orders"]').click()
+                report['assertions'].append('A second room starts with the same browser identity; map targeting opens a peeking order card; Max, Shift-source selection and keyboard open/close of the Council drawer work.')
+                ensure_orders(page)
                 page.locator('#source').select_option('west-us')
                 page.locator('#destination').select_option('mexico')
                 page.locator('[data-order-mode=coordinate]').click()

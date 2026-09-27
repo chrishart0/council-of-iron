@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { leaderboard } from '../public/leaderboard.js';
+import { leaderboard, warsOf, relationsOf } from '../public/leaderboard.js';
 
 export class CouncilClient {
   constructor({ url = process.env.COUNCIL_URL || 'http://127.0.0.1:3107', token = process.env.COUNCIL_TOKEN || '',
@@ -53,6 +53,12 @@ export class CouncilClient {
   async leaderboard(mode='players',limit=Infinity) {
     const view=await this.observe(Number.MAX_SAFE_INTEGER);
     return {tick:view.tick,status:view.status,you:view.you,...leaderboard(view,{mode,you:view.you,limit})};
+  }
+  /** Active wars as side-vs-side fronts plus your own allies/enemies — the browser's Wars view, from public data. */
+  async wars() {
+    const view=await this.observe(Number.MAX_SAFE_INTEGER);
+    return {tick:view.tick,status:view.status,you:view.you,warRequired:view.rules?.warRequired ?? true,wars:warsOf(view),
+      relations:view.you?relationsOf(view,view.you):null,rule:'Public data only: the war list and coalition sides every spectator receives.'};
   }
   review() {return this.request(this.gamePath('/review'));}
   replay(tick) {return this.request(this.gamePath(`/replay?tick=${encodeURIComponent(tick)}`));}

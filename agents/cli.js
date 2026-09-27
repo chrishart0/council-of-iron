@@ -12,6 +12,7 @@ const help=`Council of Iron CLI (Node 22.13+)
   state [EVENT_CURSOR]              Observe board and your diplomatic inbox
   feed [FEED_CURSOR]                 World feed: headlines + world chat (untrusted)
   leaderboard [players|alliances]    Ranked territory share and total troops (public data)
+  wars                               Active wars (side vs side) and your allies/enemies (public)
   map                                Province IDs, connections, and countries
   move FROM TO AMOUNT                Commit an adjacent army; distance-based travel
   move-percent FROM TO PERCENT        Commit % of currently uncommitted troops
@@ -52,6 +53,7 @@ try {
     case 'state':result=await client.observe(Number(args[0] || 0));break;
     case 'feed':result=await client.feed(Number(args[0] || 0));break;
     case 'leaderboard':result=await client.leaderboard(args[0] || 'players');break;
+    case 'wars':result=await client.wars();break;
     case 'map':result=await client.map();break;
     case 'move':result=await client.action({type:'move',from:args[0],to:args[1],amount:Number(args[2])});break;
     case 'move-percent':result=await client.action({type:'move',from:args[0],to:args[1],percent:Number(args[2])});break;

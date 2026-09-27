@@ -18,7 +18,9 @@ const finished=replay().game;finished.id='ui-review';finished.name='The Atlantic
 const w=createGame({id:'ui-war',name:'The Rhine front',hostId:profiles.britain.id},MAP);
 for(const c of MAP.countries)join(w,MAP,{country:c.id,name:profiles[c.id].name,profileId:profiles[c.id].id,kind:'agent'});
 start(w);
-const warOrders={0:[['russia',{type:'declare_war',country:'ottoman'}],['russia',{type:'move',from:'ukraine',to:'east-anatolia',amount:10}],['germany',{type:'declare_war',country:'france'}]],
+// Britain (the browser seat) also declares war on the USA at tick 0: no armies move on that front, so the
+// recorded battles are unchanged, but the viewer has a real war for the v0.7 relation UI.
+const warOrders={0:[['britain',{type:'declare_war',country:'usa'}],['russia',{type:'declare_war',country:'ottoman'}],['russia',{type:'move',from:'ukraine',to:'east-anatolia',amount:10}],['germany',{type:'declare_war',country:'france'}]],
   25:[['germany',{type:'move',from:'rhineland',to:'alpine-france',amount:11}]]};
 const stepWar=to=>{while(w.tick<to){for(const [country,action] of warOrders[w.tick]||[])act(w,MAP,country,action,`ui-war-${w.tick}-${country}-${action.type}`);tick(w);}};
 stepWar(55);app.games.set(w.id,w);app.store.save(w);
@@ -27,7 +29,10 @@ for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>app.close().the
 
 // A private test-process channel, never a route on the game server.
 createInterface({input:process.stdin}).on('line',line=>{
-  if(line.startsWith('war ')){const to=Number(line.slice(4));if(!Number.isSafeInteger(to)||to<w.tick||to>60)throw new Error('Invalid war fixture tick');stepWar(to);app.store.save(w);console.log(JSON.stringify({tick:w.tick,battles:w.battles.length}));return;}
+  // Test-only: an agent seat in the war room accepts the open alliance offer it received.
+  if(line.startsWith('ally ')){const who=line.slice(5).trim(),offer=w.proposals.find(q=>q.status==='open'&&q.roster.includes(who));if(!offer)throw new Error('No open offer');
+    act(w,MAP,who,{type:'accept',proposalId:offer.id},`ui-war-accept-${offer.id}`);app.store.save(w);console.log(JSON.stringify({tick:w.tick,status:offer.status}));return;}
+  if(line.startsWith('war ')){const to=Number(line.slice(4));if(!Number.isSafeInteger(to)||to<w.tick||to>120)throw new Error('Invalid war fixture tick');stepWar(to);app.store.save(w);console.log(JSON.stringify({tick:w.tick,battles:w.battles.length}));return;}
   const to=Number(line);if(!Number.isSafeInteger(to)||to<g.tick||to>539)throw new Error('Invalid fixture tick');
   while(g.tick<to && g.status==='running'){while(fixture.actions[index]?.tick===g.tick){const a=fixture.actions[index++];act(g,MAP,a.country,a.action,a.opId);}tick(g);}
   app.store.save(g);console.log(JSON.stringify({tick:g.tick}));
