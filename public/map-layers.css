@@ -29,7 +29,16 @@
 .relation-ally{stroke:#5fc4ff;stroke-width:2.6}
 .relation-focus{stroke:#f3d27b;stroke-width:2.2;stroke-dasharray:6 3}
 /* Map mode chip + legend (HTML, inside the map container). */
-.atlas-modes{position:absolute;right:10px;bottom:10px;z-index:7;display:flex;flex-direction:column;align-items:flex-end;gap:6px;max-width:min(260px,calc(100% - 20px));pointer-events:none}
+.atlas-modes{position:absolute;z-index:7;display:flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:min(260px,calc(100% - 20px));pointer-events:none;--atlas-legend-inset:10px}
+/* Placement: class at-<corner>; the host can also override --atlas-legend-inset or mount the key elsewhere. */
+.atlas-modes.at-bottom-left{left:calc(var(--atlas-map-left,0px) + var(--atlas-legend-inset));bottom:calc(var(--atlas-map-bottom,0px) + var(--atlas-legend-inset))}
+.atlas-modes.at-bottom-right{right:calc(var(--atlas-map-right,0px) + var(--atlas-legend-inset));bottom:calc(var(--atlas-map-bottom,0px) + var(--atlas-legend-inset));align-items:flex-end}
+.atlas-modes.at-top-left{left:calc(var(--atlas-map-left,0px) + var(--atlas-legend-inset));top:calc(var(--atlas-map-top,0px) + var(--atlas-legend-inset));flex-direction:column-reverse}
+.atlas-modes.at-top-right{right:calc(var(--atlas-map-right,0px) + var(--atlas-legend-inset));top:calc(var(--atlas-map-top,0px) + var(--atlas-legend-inset));align-items:flex-end;flex-direction:column-reverse}
+.atlas-modes.at-bottom-left,.atlas-modes.at-top-left{align-items:flex-start}
+.atlas-key-toggle{font:600 10px var(--sans,system-ui,sans-serif);letter-spacing:.6px;min-height:24px;padding:3px 9px;background:#0e222aee;color:#c9b27f;border:1px solid #5f716290;border-radius:12px;cursor:pointer}
+.atlas-key-toggle[hidden]{display:none}
+.atlas-modes.collapsed .atlas-legend,.atlas-modes.collapsed:not(.empty) .atlas-mode-toggle{display:none}
 .atlas-modes>*{pointer-events:auto}
 .atlas-mode-toggle{font:600 11px var(--sans,system-ui,sans-serif);min-height:28px;padding:4px 10px;background:#0e222aee;color:#efe3c2;border:1px solid #b99d64a0;border-radius:2px;cursor:pointer}
 .atlas-mode-toggle[aria-pressed=true]{background:#e2c993;color:#132831}
@@ -39,8 +48,10 @@
 .legend-item{display:flex;align-items:center;gap:7px;min-width:0}.legend-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .legend-item i{flex:none;width:12px;height:9px;border:1px solid #0d1c22}
 .legend-bloc i{height:4px;width:16px;border-radius:2px}
+.legend-forming i{height:0;width:14px;border:0;border-top:2px dashed currentColor;background:none!important}
+.bloc-forming{fill:none;stroke-width:2.2;stroke-dasharray:7 5;stroke-opacity:.95;vector-effect:non-scaling-stroke}
 .legend-war i{height:4px;width:16px;background:repeating-linear-gradient(90deg,#e0372b 0 2px,transparent 2px 4px)!important;border:0}
-@media(max-width:520px){.atlas-legend{font-size:10px;padding:5px 7px}.atlas-mode-toggle{min-height:32px}.atlas-modes:not(.diplomacy) .atlas-legend{display:none}}
+@media(max-width:520px){.atlas-legend{font-size:10px;padding:5px 7px}.atlas-mode-toggle{min-height:32px}}
 /* Moving armies: the top map layer; prominent, constant screen size, small hit area. */
 .map-armies .moving-army{pointer-events:none;cursor:pointer}
 .map-armies .army-hit{fill:transparent;pointer-events:all}

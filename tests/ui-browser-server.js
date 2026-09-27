@@ -22,7 +22,9 @@ const warOrders={0:[['russia',{type:'declare_war',country:'ottoman'}],['russia',
   25:[['germany',{type:'move',from:'rhineland',to:'alpine-france',amount:11}]],
   // Columns still on the march at tick 55, for army-layer checks.
   40:[['britain',{type:'move',from:'england',to:'low-countries',amount:8}],['france',{type:'move',from:'occitania',to:'iberia',amount:8}],['germany',{type:'move',from:'saxony',to:'balkans',amount:8}]]};
-const stepWar=to=>{while(w.tick<to){for(const [country,action] of warOrders[w.tick]||[])act(w,MAP,country,action,`ui-war-${w.tick}-${country}-${action.type}`);tick(w);}};
+// Tick 50: an approved alliance still inside its activation delay (a "forming" bloc).
+const pact=()=>{const q=act(w,MAP,'usa',{type:'propose',country:'japan',name:'Pacific Pact'},'ui-war-pact');act(w,MAP,'japan',{type:'accept',proposalId:q.proposalId},'ui-war-pact-accept');};
+const stepWar=to=>{while(w.tick<to){for(const [country,action] of warOrders[w.tick]||[])act(w,MAP,country,action,`ui-war-${w.tick}-${country}-${action.type}`);if(w.tick===50)pact();tick(w);}};
 stepWar(55);app.games.set(w.id,w);app.store.save(w);
 app.server.listen(0,'127.0.0.1',()=>console.log(JSON.stringify({url:`http://127.0.0.1:${app.server.address().port}`,identity:profiles.britain})));
 for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>app.close().then(()=>process.exit(0)));

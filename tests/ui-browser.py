@@ -174,6 +174,21 @@ def relations_checks(page,report,capture):
     assert audit['fronts'] and audit['fronts']==audit['expectedFronts'] and audit['frontsInBase'],audit
     assert audit['sea']==audit['expectedSea'],audit
     assert 'At war' in audit['legend'] and 'France – Germany' in audit['legend'],audit['legend']
+    forming=page.evaluate('''async()=>{const {allianceColors,formingAlliances}=await import('/relations.js');const s=await (await fetch('/api/games/ui-war')).json();
+      const f=formingAlliances(s),g=document.querySelector('#map .alliance-bloc.forming');
+      return {count:f.length,id:f[0]?.id,members:f[0]?.members.join(','),color:allianceColors(s)[f[0]?.id],provinces:s.provinces.filter(p=>f[0]?.members.includes(p.owner)).map(p=>p.id).sort().join(','),
+        el:g&&{id:g.dataset.forming,members:g.dataset.members,provinces:g.dataset.provinces,stroke:g.querySelector('path').getAttribute('stroke'),dash:getComputedStyle(g.querySelector('path')).strokeDasharray,inBase:Boolean(g.closest('[id$="world-base"]'))}};}''')
+    assert forming['count']==1 and forming['members']=='japan,usa' and forming['el'],forming
+    el=forming['el'];assert el['id']==forming['id'] and el['members']==forming['members'] and el['provinces']==forming['provinces'] and el['stroke']==forming['color'] and el['dash']!='none' and el['inBase'],forming
+    assert 'Pacific Pact · forming' in audit['legend'],audit['legend']
+    # Key placement (default bottom-left inside the visible map) and collapse to a single chip.
+    chip=page.locator('.atlas-modes').first;expect(chip).to_have_class(re.compile('at-bottom-left'))
+    mb,cb=page.locator('#map').bounding_box(),chip.bounding_box()
+    assert cb['x']>=mb['x'] and cb['x']+cb['width']<=mb['x']+mb['width']+1 and cb['y']+cb['height']<=mb['y']+mb['height']+1,(mb,cb)
+    page.locator('.atlas-key-toggle').first.click();expect(chip).to_have_class(re.compile('collapsed'))
+    expect(page.locator('.atlas-legend').first).to_be_hidden();expect(page.locator('.atlas-mode-toggle').first).to_be_hidden()
+    assert chip.bounding_box()['height']<40
+    page.locator('.atlas-key-toggle').first.click();expect(page.locator('.atlas-legend').first).to_be_visible()
     toggle=page.locator('.board-panel .atlas-mode-toggle, #map ~ .atlas-modes .atlas-mode-toggle').first
     fills=lambda:page.evaluate('''async()=>{const s=await (await fetch('/api/games/ui-war')).json();return s.provinces.map(p=>[p.id,p.owner,document.querySelector('#province-'+p.id).getAttribute('fill')]);}''')
     toggle.click();expect(page.locator('#map')).to_have_attribute('data-mode','diplomacy')
@@ -213,7 +228,7 @@ HOSTILE_NAME='''async () => {
   const host=document.createElement('div');host.style.cssText='position:fixed;left:0;top:0;width:800px;height:425px';
   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.id='hostile-test-map';svg.style.cssText='width:800px;height:425px';
   host.append(svg);document.body.append(host);
-  const atlas=new Atlas(svg,map,()=>{});atlas.update(state,null,null);atlas.world();
+  const atlas=new Atlas(svg,map,()=>{},{legend:{placement:'top-right'}});atlas.update(state,null,null);atlas.world();
   await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));atlas.layout();
   const labels=[...svg.querySelectorAll('.alliance-label')].map(e=>e.textContent),legend=host.querySelector('.atlas-legend').textContent;
   const focus=atlas.setRelationFocus('germany');atlas.setMapMode('diplomacy');
@@ -222,7 +237,8 @@ HOSTILE_NAME='''async () => {
   const owners=Object.fromEntries(state.provinces.map(p=>[p.id,p.owner]));
   const wrong=state.provinces.filter(p=>{const o=p.owner,f=fill(p.id);return !o?f!=='#6d716a':o==='germany'?f!=='#d9b45a':rel.allies.includes(o)?f!=='#4f9e94':rel.enemies.includes(o)?f!=='#b8483c':f!=='#8f8d80';}).map(p=>p.id);
   const bad=atlas.setMapMode('nope')===false&&atlas.setRelationFocus('<x>')===null;
-  const result={labels,legendHasName:legend.includes(evil.slice(0,20)),injected:Boolean(host.querySelector('img'))||Boolean(window.__pwned),focus,wrong,bad,
+  const placement=host.querySelector('.atlas-modes').className;
+  const result={placement,labels,legendHasName:legend.includes(evil.slice(0,20)),injected:Boolean(host.querySelector('img'))||Boolean(window.__pwned),focus,wrong,bad,
     leaked:document.querySelectorAll('#map [data-bloc]').length>0&&[...document.querySelectorAll('#map .alliance-bloc')].some(g=>g.closest('#hostile-test-map'))};
   atlas.destroy();host.remove();return result;
 }'''
@@ -230,6 +246,7 @@ HOSTILE_NAME='''async () => {
 def hostile_name_check(page,report):
     result=page.evaluate(HOSTILE_NAME)
     assert not result['injected'] and result['legendHasName'],result
+    assert 'at-top-right' in result['placement'] and 'at-bottom-left' not in result['placement'],result
     assert all(len(l)<=28 for l in result['labels']),result
     assert result['focus']=='germany' and not result['wrong'] and result['bad'] and not result['leaked'],result
     report['assertions'].append('A hostile alliance name renders only as capped text (no element injection); setRelationFocus/setMapMode recolour focus, allies, enemies and neutrals and reject unknown values.')

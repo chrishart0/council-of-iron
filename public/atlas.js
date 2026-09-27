@@ -1,6 +1,6 @@
 import { journeyPoint } from './movement.js';
 import { borderNetwork, insideRings, provinceRings } from './map-geometry.js';
-import { allianceColors, atWar, coalitions, relationsOf, warKey } from './relations.js';
+import { allianceColors, atWar, coalitions, formingAlliances, relationsOf, warKey } from './relations.js';
 import { faction } from './presentation.js';
 /** Presentation only: the server decides every movement, battle and ownership change.
  * Every SVG fragment below is an authored constant; player text never enters map markup.
@@ -17,6 +17,8 @@ export const MAP_EFFECTS = Object.freeze(['industry_up', 'industry_down', 'captu
 /** Map colouring modes: country colours, or relations relative to a focus country. */
 export const MAP_MODES = Object.freeze(['political', 'diplomacy']);
 const RELATION = Object.freeze({ focus: '#d9b45a', ally: '#4f9e94', enemy: '#b8483c', neutral: '#8f8d80', none: '#6d716a' });
+/** Where the map key sits inside the map (the host may also mount it elsewhere). */
+export const LEGEND_PLACEMENTS = Object.freeze(['bottom-left', 'bottom-right', 'top-left', 'top-right']);
 /** Level of detail by on-screen pixels per map unit: country totals, merged counters, every province. */
 export const LOD = Object.freeze({ far: 1.2, near: 2.6 });
 const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
@@ -33,7 +35,9 @@ let instances = 0;
 /** Shortest horizontal offset from a to b across the wrap. */
 export const wrapDelta = dx => dx - WORLD * Math.round(dx / WORLD);
 export class Atlas {
-  constructor(svg, map, onSelect) {
+  /** options.legend: { placement: one of LEGEND_PLACEMENTS (default 'bottom-left'),
+   *  container: element to mount the key in instead of the map container, collapsed: boolean }. */
+  constructor(svg, map, onSelect, options = {}) {
     this.svg = svg; this.map = map; this.onSelect = onSelect;
     this.positionsById = Object.fromEntries(map.provinces.map(p => [p.id, { x: p.x, y: p.y }]));
     this.places = new Map(map.provinces.map(p => [p.id, p]));
@@ -128,11 +132,18 @@ export class Atlas {
       ...copies(this.fx), this.fx, this.marches);
     this.tooltip = document.createElement('div'); this.tooltip.className = 'atlas-tooltip'; this.tooltip.hidden = true; svg.parentElement.append(this.tooltip);
     // Map-mode toggle and legend: plain DOM, text only via textContent.
+    const legendOptions = options?.legend || {};
     this.chip = document.createElement('div'); this.chip.className = 'atlas-modes';
+    this.keyButton = document.createElement('button'); this.keyButton.type = 'button'; this.keyButton.className = 'atlas-key-toggle';
+    this.keyButton.addEventListener('click', () => this.setLegendCollapsed(!this.chip.classList.contains('collapsed')));
     this.modeButton = document.createElement('button'); this.modeButton.type = 'button'; this.modeButton.className = 'atlas-mode-toggle';
     this.modeButton.addEventListener('click', () => this.setMapMode(this.mode === 'political' ? 'diplomacy' : 'political'));
     this.legend = document.createElement('div'); this.legend.className = 'atlas-legend';
-    this.chip.append(this.legend, this.modeButton); svg.parentElement.append(this.chip);
+    this.chip.append(this.keyButton, this.legend, this.modeButton);
+    this.chipDetached = legendOptions.container instanceof Element;
+    (this.chipDetached ? legendOptions.container : svg.parentElement).append(this.chip);
+    this.setLegendPlacement(legendOptions.placement);
+    this.setLegendCollapsed(legendOptions.collapsed ?? matchMedia('(max-width: 520px)').matches);
     svg.addEventListener('focusin', event => {
       const army = event.target.closest?.('[data-army]')?.dataset.army;
       if (army) { this.showArmy(army, event.target.getBoundingClientRect()); return; }
@@ -312,6 +323,18 @@ export class Atlas {
     if (!country) { if (this.hoverFocus) { this.hoverFocus = null; this.paintOutlines(); } return; }
     this.hoverTimer = setTimeout(() => { this.hoverFocus = country; this.paintOutlines(); }, 300);
   }
+  setLegendPlacement(placement) {
+    this.legendPlacement = LEGEND_PLACEMENTS.includes(placement) ? placement : 'bottom-left';
+    for (const p of LEGEND_PLACEMENTS) this.chip.classList.toggle(`at-${p}`, p === this.legendPlacement);
+    return this.legendPlacement;
+  }
+  /** Collapse the key to a single chip (the mode toggle hides with it). */
+  setLegendCollapsed(collapsed) {
+    this.chip.classList.toggle('collapsed', Boolean(collapsed));
+    this.keyButton.setAttribute('aria-expanded', String(!collapsed));
+    this.keyButton.textContent = collapsed ? 'Map key' : 'Hide key';
+    return Boolean(collapsed);
+  }
   level(px) { return px < LOD.far ? 'far' : px < LOD.near ? 'mid' : 'near'; }
   /** Units to draw before screen placement: single provinces, or same-owner merges. */
   units(level, px) {
@@ -363,8 +386,10 @@ export class Atlas {
     this.grain.setAttribute('patternTransform', `scale(${scale})`);
     this.svg.dataset.lod = level; this.svg.classList.toggle('atlas-zoomed', level === 'near');
     // Keep the mode chip inside the visible map, whatever else shares the container.
+    // Expose the visible map's insets so CSS can place the key inside it, whatever shares the container.
     const box = this.svg.getBoundingClientRect(), host = this.chip.parentElement?.getBoundingClientRect();
-    if (host) { this.chip.style.bottom = `${Math.max(0, host.bottom - box.bottom) + 10}px`; this.chip.style.right = `${Math.max(0, host.right - box.right) + 10}px`; }
+    if (host && !this.chipDetached) for (const side of ['top', 'right', 'bottom', 'left'])
+      this.chip.style.setProperty(`--atlas-map-${side}`, `${Math.max(0, side === 'top' || side === 'left' ? box[side] - host[side] : host[side] - box[side])}px`);
     for (const fx of this.pointEffects) fx.g.setAttribute('transform', `translate(${fx.x} ${fx.y}) scale(${scale})`);
     if (!this.state) {
       for (const p of this.map.provinces) this.markers.get(p.id).group.setAttribute('transform', `translate(${p.x} ${p.y}) scale(${scale})`);
@@ -676,6 +701,19 @@ export class Atlas {
       e.g.dataset.bloc = c.id; e.g.dataset.members = c.members.join(','); e.g.dataset.provinces = key;
       e.band.setAttribute('stroke', colors[c.id]); e.line.setAttribute('stroke', colors[c.id]);
     }
+    // Forming alliances (approved, inside the activation delay): dashed outline in the future colour.
+    this.formingInfo = [];
+    for (const f of formingAlliances(state)) {
+      const members = new Set(f.members), ids = state.provinces.filter(p => members.has(p.owner)).map(p => p.id).sort();
+      if (!ids.length || !colors[f.id]) continue;
+      const key = `forming:${f.id}`; live.add(key); this.formingInfo.push({ ...f, color: colors[f.id] });
+      let e = this.blocEls.get(key);
+      if (!e) { const g = node('g', { class: 'alliance-bloc forming' }), line = node('path', { class: 'bloc-line bloc-forming' }); g.append(line); this.blocs.append(g); e = { g, line }; this.blocEls.set(key, e); }
+      const provinces = ids.join(',');
+      if (e.key !== provinces) { e.key = provinces; e.line.setAttribute('d', this.outline(new Set(ids))); }
+      e.g.dataset.forming = f.id; e.g.dataset.members = f.members.join(','); e.g.dataset.provinces = provinces;
+      e.line.setAttribute('stroke', colors[f.id]);
+    }
     for (const [id, e] of this.blocEls) if (!live.has(id)) { e.g.remove(); this.blocEls.delete(id); }
     this.paintOutlines(); this.paintLegend(colors, focus);
   }
@@ -701,21 +739,24 @@ export class Atlas {
     const heading = text => { const b = document.createElement('b'); b.textContent = text; this.legend.append(b); };
     const item = (color, text, kind) => {
       const row = document.createElement('span'), swatch = document.createElement('i'), label = document.createElement('span');
-      row.className = `legend-item legend-${kind}`; swatch.style.background = color; label.textContent = text; row.append(swatch, label); this.legend.append(row);
+      row.className = `legend-item legend-${kind}`; swatch.style.background = color; swatch.style.color = color; label.textContent = text; row.append(swatch, label); this.legend.append(row);
     };
     if (diplomacy) {
       heading(focus ? `Relations of ${this.countries.get(focus)?.name || focus}` : 'Hover a country');
       item(RELATION.focus, focus ? this.countries.get(focus)?.name || 'Focus' : 'Focus', 'focus'); item(RELATION.ally, 'Allies', 'ally');
       item(RELATION.enemy, 'At war', 'enemy'); item(RELATION.neutral, 'Neutral', 'neutral'); item(RELATION.none, 'Uncontrolled', 'none');
     } else {
-      if ((this.blocInfo || []).length) heading('Alliances');
-      for (const bloc of this.blocInfo || []) item(bloc.color, bloc.name.length > 28 ? `${bloc.name.slice(0, 27)}…` : bloc.name, 'bloc');
+      const cap = name => name.length > 28 ? `${name.slice(0, 27)}…` : name;
+      if ((this.blocInfo || []).length || (this.formingInfo || []).length) heading('Alliances');
+      for (const bloc of this.blocInfo || []) item(bloc.color, cap(bloc.name), 'bloc');
+      for (const f of this.formingInfo || []) item(f.color, `${cap(f.name)} · forming`, 'forming');
       const wars = this.state?.rules?.warRequired ? (this.state.wars || []) : [];
       if (wars.length) heading('At war');
       for (const pair of wars.slice(0, 4)) item('#d8342a', pair.split(':').map(id => faction(id).short).join(' – '), 'war');
       if (wars.length > 4) heading(`+${wars.length - 4} more wars`);
     }
     this.legend.hidden = !this.legend.childElementCount;
+    this.keyButton.hidden = this.legend.hidden; this.chip.classList.toggle('empty', this.legend.hidden);
   }
   /** Persistent clash markers for phased battles: attacker strength vs defending garrison. */
   paintBattles(state) {
