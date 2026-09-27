@@ -306,8 +306,7 @@ def map_checks(page,server,report,capture):
     page.set_viewport_size({'width':1366,'height':768});page.locator('#world-view').click();page.wait_for_timeout(100)
     before=float(page.locator('#map').get_attribute('viewBox').split()[2])
     cluster=page.locator('#map .map-cluster').first
-    members=cluster.get_attribute('data-cluster').split(',');cluster.focus();page.keyboard.press('Enter');  # a departing army may sit on top of the counter
-    page.wait_for_timeout(150)
+    members=cluster.get_attribute('data-cluster').split(',');cluster.click();page.wait_for_timeout(150)
     assert float(page.locator('#map').get_attribute('viewBox').split()[2])<before
     report['assertions'].append('Map LOD: country, merged and per-province counters at 1366×768, 1920×1080 and 390px; every province is counted exactly once, merged totals equal the summed public garrisons, owners never mix, visible counters never overlap, and a merged counter zooms in when clicked.')
     page.locator('#back').click();page.locator('[data-room="ui-war"][data-resume]').click()
@@ -389,7 +388,10 @@ def mobile_checks(browser,url,identity,report,out):
         assert px(page)>=MAX_PX-.05,('pinch max',w,px(page))
         # Double tap zooms 2× at the tap point.
         page.locator('#world-view').click();page.locator('#map').scroll_into_view_if_needed();page.wait_for_timeout(100)
-        box=page.locator('#map').bounding_box();tx,ty=box['x']+box['width']/2,(max(box['y'],0)+min(box['y']+box['height'],h))/2
+        box=page.locator('#map').bounding_box()
+        # Tap a spot with no counter under it (a tap on a merged counter would zoom to fit it instead).
+        tx,ty=page.evaluate('''([x0,y0,x1,y1])=>{for(let y=y0+20;y<y1-20;y+=17)for(let x=x0+20;x<x1-20;x+=17){const e=document.elementFromPoint(x,y);
+          if(e&&!e.closest('.map-counter,.battle-counter,.moving-army,.atlas-modes')&&e.closest('#map'))return [x,y];}return null;}''',[box['x'],max(box['y'],0),box['x']+box['width'],min(box['y']+box['height'],h)])
         before=float(page.locator('#map').get_attribute('viewBox').split()[2])
         page.touchscreen.tap(tx,ty);page.wait_for_timeout(60);page.touchscreen.tap(tx,ty);page.wait_for_timeout(120)
         now=float(page.locator('#map').get_attribute('viewBox').split()[2]);assert abs(now-before/2)<1,('double tap',before,now)
@@ -403,8 +405,20 @@ def mobile_checks(browser,url,identity,report,out):
         page.locator('#europe-view').click();page.locator('#zoom-in').click();page.locator('#zoom-in').click();page.wait_for_timeout(200)
         result=page.evaluate(MAP_AUDIT,'ui-war');assert not result['overlaps'] and not result['missing'] and not result['badSums'],result
         if w==390:page.screenshot(path=str(out/'19-mobile-max-zoom.png'))
+        if w==390:
+            # A column that has just left Scotland sits on the Scotland counter: a tap must still select Scotland.
+            page.locator('#world-view').click();page.locator('#home-view').click()
+            for _ in range(4):page.locator('#zoom-in').click()
+            page.locator('#map').scroll_into_view_if_needed();page.wait_for_timeout(250)
+            departing=page.evaluate('''()=>{const c=document.querySelector('#marker-scotland .counter-body').getBoundingClientRect();
+              return [...document.querySelectorAll('#map .moving-army:not(.engaged)')].map(g=>{const r=g.querySelector('.army-arrow').getBoundingClientRect();
+                return {blocked:g.classList.contains('tap-blocked'),hit:g.querySelector('.army-hit').getBoundingClientRect().width,over:r.left<c.right&&c.left<r.right&&r.top<c.bottom&&c.top<r.bottom};}).filter(a=>a.over);}''')
+            assert departing and all(a['blocked'] for a in departing) and all(a['hit']<=18 for a in departing),departing
+            body=page.locator('#marker-scotland .counter-body').bounding_box()
+            page.touchscreen.tap(body['x']+body['width']/2,body['y']+body['height']/2)
+            expect(page.locator('#source')).to_have_value('scotland')
         context.close()
-    report['assertions'].append(f'Phones (390×844 and 844×390, touch emulation) reach {MAX_PX} px per map unit (desktop previously {DESKTOP_OLD_MAX:.1f}) by + button and by a real two-finger pinch; double tap zooms 2×; near LOD with names is reachable; small Europe provinces are ≥32 CSS px; the viewBox fills the element (no letterboxing); counters stay non-overlapping.')
+    report['assertions'].append(f'Phones (390×844 and 844×390, touch emulation) reach {MAX_PX} px per map unit (desktop previously {DESKTOP_OLD_MAX:.1f}) by + button and by a real two-finger pinch; double tap zooms 2×; near LOD with names is reachable; small Europe provinces are ≥32 CSS px; a tap on a counter under a just-departed army selects the province; the viewBox fills the element (no letterboxing); counters stay non-overlapping.')
 
 MAX_PX=14
 

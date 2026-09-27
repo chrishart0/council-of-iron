@@ -55,6 +55,7 @@
 /* Moving armies: the top map layer; prominent, constant screen size, small hit area. */
 .map-armies .moving-army{pointer-events:none;cursor:pointer}
 .map-armies .army-hit{fill:transparent;pointer-events:all}
+.map-armies .moving-army.tap-blocked .army-hit{pointer-events:none}
 .map-armies .army-halo{fill:none;stroke:#0b1519;stroke-width:4;stroke-linejoin:round}
 .map-armies .army-arrow{stroke:#fff6dc;stroke-opacity:.8;stroke-width:.9;stroke-linejoin:round}
 .map-armies .hostile .army-halo{stroke:#7a1410}

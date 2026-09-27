@@ -475,6 +475,7 @@ export class Atlas {
     }
     for (const [id, marker] of this.markers) marker.group.classList.toggle('counter-merged', !shownMarkers.has(id));
     for (const [key, cluster] of this.clusters) if (!usedClusters.has(key)) { cluster.group.remove(); this.clusters.delete(key); }
+    this.counterRects = placed;
     const taken = [...placed, ...labels, ...this.armyRects];
     this.paintCountryNames(level, px, scale, taken);
     this.paintAllianceNames(level, px, scale, taken);
@@ -635,7 +636,7 @@ export class Atlas {
         const group = node('g', { class: 'moving-army', 'data-army': army.id, tabindex: 0, role: 'button' });
         const body = node('g'), halo = node('path', { class: 'army-halo', d: ARROW }), disc = node('path', { class: 'army-arrow', d: ARROW });
         const pill = node('rect', { class: 'army-pill', y: -22, height: 13, rx: 2 }), label = node('text', { class: 'army-count', y: -15.3 });
-        body.append(halo, disc); group.append(node('circle', { class: 'army-hit', r: 8 }), body, pill, label); this.marches.append(group);
+        body.append(halo, disc); group.append(body, pill, label, node('circle', { class: 'army-hit', r: 6.5 })); this.marches.append(group);
         this.armies.set(army.id, { group, body, disc, pill, label });
       }
       const entry = this.armies.get(army.id), hostile = me && sides.get(army.country) !== me.side && state.provinces.some(p => p.id === army.to && p.owner === state.you);
@@ -955,11 +956,18 @@ export class Atlas {
   positions() {
     if (!this.state) return;
     const elapsed = this.reducedMotion || this.state.status !== 'running' ? 0 : Math.min(2, (performance.now() - this.receivedAt) / 1000) * this.state.speed;
-    const scale = 1 / (this.svg.getScreenCTM()?.a || 1);
+    const px = this.svg.getScreenCTM()?.a || 1, scale = 1 / px, counters = this.counterRects || [];
     for (const army of this.state.armies) {
       const point = journeyPoint(army, this.positionsById, Math.min(this.state.tick + elapsed, army.arrivesAt - .01));
       const entry = this.armies.get(army.id);
-      entry?.group.setAttribute('transform', `translate(${this.near(point.x)} ${point.y}) scale(${scale * (entry.large ? 1.3 : 1)})`);
+      if (!entry) continue;
+      const size = entry.large ? 1.3 : 1, x = this.near(point.x);
+      entry.group.setAttribute('transform', `translate(${x} ${point.y}) scale(${scale * size})`);
+      // Taps on a province counter always win: an army's small hit target (≤17 px) switches off
+      // while it overlaps any counter or battle box. Keyboard focus (Tab) is unaffected.
+      const r = 6.5 * size, sx = x * px, sy = point.y * px;
+      const blocked = counters.some(q => sx + r > q.x && sx - r < q.x + q.w && sy + r > q.y && sy - r < q.y + q.h);
+      if (entry.blocked !== blocked) { entry.blocked = blocked; entry.group.classList.toggle('tap-blocked', blocked); }
     }
   }
   destroy() {
