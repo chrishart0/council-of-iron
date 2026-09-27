@@ -1,0 +1,22 @@
+name: All-seat playtest source
+on:
+  push:
+    branches: [playtest-all-seats-20260927]
+    paths: [.github/workflows/all-seats-source.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: e9d8d768d27e04b6555aeb5c772e80f12d9e4512
+          persist-credentials: false
+      - run: git archive --format=tar HEAD > /tmp/council-source.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: council-all-seats-source
+          path: /tmp/council-source.tar
+          retention-days: 3
