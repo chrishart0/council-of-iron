@@ -1,13 +1,14 @@
 const $ = id => document.getElementById(id);
 import { AfterAction } from './review.js';
 import { developmentForecast, coalitionForecast } from './insights.js';
+import { faction, insignia, icon, battleSignal } from './presentation.js';
 import { Atlas } from './atlas.js';
 import { escapeHTML as esc, syncOptions, setHTML, operationId, confirmAction } from './ui.js';
 const time = n => `${Math.floor(Math.max(0,n)/60).toString().padStart(2,'0')}:${Math.floor(Math.max(0,n)%60).toString().padStart(2,'0')}`;
 const signed = n => `${n>=0?'+':''}${n.toFixed(1)}`;
 let identity;try{identity=JSON.parse(localStorage.getItem('coi.identity'));}catch{identity=null;}
 let map, matchId=null, state=null, cursor=0, history=[], polling=false, tab='orders', source=null, destination=null, toastTimer;
-let review;
+let review, signalCursor=null, signalTimer;
 let atlas, previewKey='', generation=0, pendingCommand=false, readMessageId=0, previewVersion=0;
 let pollController=null, inspected=null;
 const attackSelections = new Map();
@@ -27,7 +28,7 @@ async function request(path,method='GET',data,token=identity?.token){
 async function ensureIdentity(name, force=false){
   name=name.trim();if(!force && identity?.name===name)return;
   const profile=await request('/api/players','POST',{name},null);
-  generation++;pollController?.abort();review?.destroy();review=null;identity=profile;cursor=0;history=[];readMessageId=0;localStorage.setItem('coi.identity',JSON.stringify(identity));showIdentity();
+  generation++;pollController?.abort();review?.destroy();review=null;resetPresentation();identity=profile;cursor=0;history=[];readMessageId=0;localStorage.setItem('coi.identity',JSON.stringify(identity));showIdentity();
 }
 function startingSummary(c){
   if(!c)return 'All countries are taken. You can still observe.';
@@ -42,7 +43,7 @@ async function rooms(){
   const sections=[['running','Games in progress','Spectate'],['lobby','Open rooms','Enter'],['finished','Completed games','Review']];
   $('rooms').innerHTML=data.games.length?sections.map(([status,title,label])=>{
     const found=data.games.filter(g=>g.status===status);
-    return found.length?`<section class="room-group"><h3>${title} <small>${found.length}</small></h3>${found.map(g=>`<div class="room-card"><div><p>${esc(g.name)}</p><small>${g.players.length}/8 SEATS · ${g.speed===1?'30 MIN':'5 MIN'} · ${status==='running'?`${time(g.tick)} elapsed · `:''}${esc(g.id)}</small></div><button data-room="${esc(g.id)}" data-spectate="${status==='running'}">${label} →</button></div>`).join('')}</section>`:'';
+    return found.length?`<section class="room-group"><h3>${title} <small>${found.length}</small></h3>${found.map(g=>`<div class="room-card"><div><p>${esc(g.name)}</p><small>${g.players.length}/8 SEATS · ${g.speed===1?'30 MIN':'5 MIN'} · ${status==='running'?`${time(g.tick)} elapsed · `:''}${esc(g.id)}</small></div><div class="room-entry-actions">${status==='running' && g.you?`<button data-room="${esc(g.id)}" data-resume="true">Resume</button>`:''}<button data-room="${esc(g.id)}" data-spectate="${status==='running'}">${label} →</button></div></div>`).join('')}</section>`:'';
   }).join(''):'<p class="muted">The chamber is empty. Open the first council.</p>';
   const standings=await request('/api/standings');
   $('standings').innerHTML=standings.standings.length?standings.standings.map(p=>`<div class="standing-row"><span>${esc(p.name)} <small class="muted">${p.provisional?'PROVISIONAL':''} · ${p.matches} matches</small></span><b>${signed(p.prestige)}</b></div>`).join(''):'<p class="muted small">No decisive matches recorded yet. Results persist on this server.</p>';
@@ -50,7 +51,7 @@ async function rooms(){
 async function openRoom(id,watch=false){
   generation++;pollController?.abort();review?.destroy();review=null;document.body.classList.remove('reviewing');
   setMapFullscreen(false);spectating=watch;messageCatchupComplete=false;messageBubbles=[];
-  orderMode='march';matchId=id;mapReadyFor=null;state=null;cursor=0;history=[];source=null;destination=null;inspected=null;previewKey='';readMessageId=0;
+  resetPresentation();orderMode='march';matchId=id;mapReadyFor=null;state=null;cursor=0;history=[];source=null;destination=null;inspected=null;previewKey='';readMessageId=0;
   document.body.classList.add('in-game');atlas.world();
   $('home').hidden=true;$('game').hidden=false;$('result').hidden=true;
   const url=new URL(location);url.searchParams.set('match',id);if(watch)url.searchParams.set('spectate','1');else url.searchParams.delete('spectate');url.hash='';window.history.replaceState({},'',url);
@@ -82,7 +83,7 @@ async function poll(){
   finally{if(polling===epoch)polling=false;}
 }
 async function command(action){
-  if(!matchId || pendingCommand)return null;
+  if(!matchId || pendingCommand || spectating || !state?.you)return null;
   pendingCommand=true;const epoch=generation,room=matchId;
   const payload={opId:operationId(),action};
   if(state)renderOrders();
@@ -98,6 +99,9 @@ async function command(action){
 }
 const safely=fn=>async event=>{if(event?.type==='submit')event.preventDefault();try{await fn(event);}catch(e){toast(e.message,true);}};
 function initMap(){
+  $('faction-parade').innerHTML=map.countries.map(c=>`<span>${insignia(c.id)}<b>${esc(faction(c.id).short)}</b></span>`).join('');
+  $('faction-choices').innerHTML=map.countries.map(c=>`<button type="button" data-country-seat="${c.id}" aria-pressed="false">${insignia(c.id)}<b>${esc(faction(c.id).short)}</b><small>${c.start.length} holdings</small></button>`).join('');
+  $('scoreboard').innerHTML=map.countries.map(c=>`<button type="button" class="country-card" data-country-focus="${c.id}" style="--country:${c.color}"></button>`).join('');
   atlas?.destroy();
   const previous=$('map'),replacement=previous.cloneNode(false);previous.replaceWith(replacement);
   atlas=new Atlas(replacement,map,selectProvince);
@@ -114,7 +118,7 @@ function selectProvince(id,modifiers={}){
   }else if(source && place(source).neighbors.includes(id))destination=id;
   else if(own){source=id;destination=null;$('amount').value=Math.max(1,Math.floor(availableTroops()/2));}
   if(source || own)showTab('orders');
-  renderOrders();paintMap();
+  renderOrders();paintMap();$('orders-tab').scrollTop=0;
 }
 function availableTroops(){
   const p=state?.provinces.find(p=>p.id===source);
@@ -156,13 +160,15 @@ function renderOrders(){
   if(destination && !neighbors.includes(destination))destination=null;
   options('destination',[{value:'',label:'Choose a connected destination…'},...neighbors.map(id=>{const p=state.provinces.find(p=>p.id===id);return{value:id,label:`${place(id).name} · ${p.troops} · ${country(p.owner)?.name || 'Neutral'}`};})],destination || '');
   $('commander-title').textContent=country(state.you)?.name || 'Observer';
+  setHTML($('commander-insignia'),insignia(state.you));
+  $('province-title').textContent=place(source || inspected)?.name || 'Select a province';
   const active=state.status==='running' && myPlayer()?.eliminatedAt===null;
   const available=availableTroops(),amount=Number($('amount').value),valid=Number.isSafeInteger(amount) && amount>0 && amount<=available;
   const recovery=state.commandBudget?.nextRecoveryAt;
   $('budget').textContent=state.commandBudget?`${state.commandBudget.remaining}/3 commands available${recovery!==null && recovery!==undefined?` · next in ${Math.max(0,recovery-state.tick)}s`:''}`:'Join a country in the lobby to play.';
   const canCommand=active && source && !pendingCommand && state.commandBudget?.remaining>0;
   $('send-army').disabled=!canCommand || !destination || !valid;
-  $('send-army').textContent=pendingCommand?'Sending order…':'Commit army →';
+  $('send-army').textContent=pendingCommand?'Sending order…':valid && destination?`Commit ${amount} troops →`:'Commit army →';
   $('amount').max=available;$('amount-slider').max=Math.max(1,available);$('amount-slider').value=Math.min(amount,Math.max(1,available));
   $('amount-slider').disabled=!source || available===0;
   for(const button of document.querySelectorAll('[data-fraction]'))button.disabled=!source || available===0;
@@ -182,6 +188,7 @@ function renderOrders(){
   renderDevelopment(p,canCommand);
   renderCoordination(owned,active);
   renderMarches(active);
+  renderCommandFooter();
   if(mode==='march')updatePreview();
   $('orders-tab').scrollTop=scroll;
 }
@@ -292,11 +299,15 @@ function renderChat(){
   $('unread').textContent=unread?String(unread):'';
 }
 function renderScoreboard(){
-  $('scoreboard').innerHTML=map.countries.map(c=>{
-    const p=state.players.find(p=>p.id===c.id),land=state.provinces.filter(v=>v.owner===c.id),s=state.projections.find(s=>s.country===c.id);
+  for(const c of map.countries){
+    const p=state.players.find(p=>p.id===c.id),land=state.provinces.filter(v=>v.owner===c.id),projection=state.projections.find(v=>v.country===c.id);
     const troops=land.reduce((n,v)=>n+v.troops,0)+state.armies.filter(a=>a.country===c.id).reduce((n,a)=>n+a.amount,0);
-    return `<div class="country-card ${c.id===state.you?'mine':''}" style="--country:${c.color}"><div class="country">${esc(c.name)}</div><div class="player">${p?`${esc(p.name)} · ${p.kind==='bot'?'PRACTICE BOT':esc(p.kind.toUpperCase())}`:'UNCLAIMED'}</div><div class="metrics">${land.length}<small> LAND</small> &nbsp;${troops}<small> TROOPS</small></div><div class="production">${land.reduce((n,v)=>n+(v.development || 1),0)*60/state.rules.recruit} recruits / min</div><div class="team">${p?esc(p.eliminatedAt!==null?'ELIMINATED':p.side.startsWith('solo:')?'Independent':namedSide(p.side)):'—'}</div><div class="share">${s?`${Math.round(s.maturity*100)}% earned · ${signed(s.projectedPrestige)} on win`:'—'}</div></div>`;
-  }).join('');
+    const button=$('scoreboard').querySelector(`[data-country-focus="${c.id}"]`);
+    button.classList.toggle('mine',c.id===state.you);
+    button.title=`${c.name} · ${p?.name || 'Unclaimed'} · ${p?namedSide(p.side):'Neutral'} · ${land.length} provinces · ${troops} troops${projection?` · ${signed(projection.projectedPrestige)} Prestige if victorious`:''}`;
+    button.setAttribute('aria-label',`Inspect ${button.title}`);
+    setHTML(button,`${insignia(c.id)}<span class="country-summary"><b>${esc(faction(c.id).short)}</b><span class="country-metrics">${icon('land')}${land.length} ${icon('troops')}${troops}</span><small>${p?esc(p.eliminatedAt!==null?'Eliminated':p.side.startsWith('solo:')?'Independent':namedSide(p.side)):'Unclaimed'}</small></span>`);
+  }
 }
 function describe(e){
   const c=id=>country(id)?.name || id;
@@ -329,13 +340,46 @@ function renderOperations(){
   const me=myPlayer(),team=state.sides.find(s=>s.id===me?.side),projection=state.projections.find(p=>p.country===state.you);
   const land=state.provinces.filter(p=>p.owner===state.you && state.you),leader=[...state.sides].sort((a,b)=>b.economy-a.economy)[0];
   const troops=land.reduce((n,p)=>n+p.troops,0)+state.armies.filter(a=>a.country===state.you).reduce((n,a)=>n+a.amount,0);
-  setHTML($('operations'),`<div class="operation"><span>${state.you?'YOUR HOLDINGS':'PROVINCES'}</span><strong>${state.you?land.length:state.provinces.filter(p=>p.owner).length}<small> / ${state.provinces.length}</small></strong></div><div class="operation"><span>${state.you?'YOUR FORCES':'LEADING SIDE'}</span><strong>${state.you?troops:leader?.economy || 0}<small> ${state.you?'troops':'industry'}</small></strong></div><div class="operation operation-wide"><span>${team?'YOUR ALLEGIANCE':'ECONOMIC LEAD'}</span><strong>${esc(namedSide(team?.id || leader?.id) || 'No allegiance')}<small>${team?` · ${team.economy}/${state.economyThreshold} industry`:''}</small></strong><div class="land-progress"><i style="width:${Math.min(100,100*(team?.economy || leader?.economy || 0)/Math.max(1,state.economyThreshold))}%"></i></div></div><div class="operation"><span>${projection?'PRESTIGE IF VICTORIOUS':'MATCH FORMAT'}</span><strong>${projection?signed(projection.projectedPrestige):'Open diplomacy'}</strong><small>${projection?`${Math.round(projection.maturity*100)}% of your share earned`:'Humans & agents · same rules'}</small></div>`);
+  setHTML($('operations'),`<div class="operation operation-faction">${insignia(state.you)}<div><span>${state.you?'YOUR COMMAND':'SPECTATOR'}</span><strong>${esc(faction(state.you).short)}</strong></div></div><div class="operation">${icon('land')}<div><span>HOLDINGS</span><strong>${state.you?land.length:state.provinces.filter(p=>p.owner).length}<small> / ${state.provinces.length}</small></strong></div></div><div class="operation">${icon('troops')}<div><span>FORCES</span><strong>${state.you?troops:state.provinces.reduce((n,p)=>n+p.troops,0)}</strong></div></div><div class="operation operation-wide"><div><span>${team?'YOUR ALLEGIANCE':'ECONOMIC LEAD'}</span><strong>${esc(namedSide(team?.id || leader?.id) || 'No allegiance')}<small> · ${team?.economy || leader?.economy || 0}/${state.economyThreshold} industry</small></strong><div class="land-progress"><i style="width:${Math.min(100,100*(team?.economy || leader?.economy || 0)/Math.max(1,state.economyThreshold))}%"></i></div></div></div><div class="operation">${icon('prestige')}<div><span>PRESTIGE ON WIN</span><strong>${projection?signed(projection.projectedPrestige):'—'}<small>${projection?` · ${Math.round(projection.maturity*100)}% earned`:''}</small></strong></div></div>`);
   const stopped=state.dominanceBreaks?.at(-1);
   $('countdown-break').hidden=!stopped || state.tick-stopped.tick>60 || state.status!=='running';
   if(stopped)$('countdown-break').textContent=`${time(stopped.tick)} · ${namedSide(stopped.side)}’s victory countdown stopped. ${stopped.reason} ${stopped.economy}/${stopped.threshold} industry afterward.`;
   const hostile=state.armies.filter(a=>me && state.players.find(p=>p.id===a.country)?.side!==me.side && land.some(p=>p.id===a.to)).sort((a,b)=>a.arrivesAt-b.arrivesAt);
   $('threats').hidden=!hostile.length || state.status!=='running';
   if(hostile.length)setHTML($('threats'),`<span>↘ ${hostile.length} incoming ${hostile.length===1?'army':'armies'}</span>${hostile.slice(0,2).map(a=>`<button data-focus="${a.to}">${a.amount} → ${esc(place(a.to).name)} <b>${a.arrivesAt-state.tick}s</b></button>`).join('')}`);
+}
+function resetPresentation(){
+  signalCursor=null;clearTimeout(signalTimer);clearTimeout(toastTimer);$('toast').hidden=true;$('battle-signal').hidden=true;
+  toggleJournal(false);document.body.classList.remove('playing');
+}
+function toggleJournal(open){
+  $('war-journal').hidden=!open;$('journal-toggle').setAttribute('aria-expanded',String(open));
+}
+function renderPresentation(){
+  document.body.classList.toggle('playing',state.status==='running');
+  const dominant=Object.entries(state.dominance)[0];
+  document.querySelector('.campaign-bar').classList.toggle('victory-warning',Boolean(dominant) && state.status==='running');
+  $('victory-status').setAttribute('role','timer');$('victory-status').setAttribute('aria-live','off');
+  for(const button of $('faction-choices').querySelectorAll('button')){
+    const id=button.dataset.countrySeat,occupied=state.players.some(p=>p.id===id);
+    button.disabled=occupied;button.setAttribute('aria-pressed',String($('country-choice').value===id));
+    button.title=occupied?'Seat occupied':startingSummary(country(id));
+  }
+  const signal=signalCursor===null?null:battleSignal(state,history.filter(e=>e.id>signalCursor));
+  signalCursor=cursor;
+  if(signal){
+    const banner=$('battle-signal');banner.dataset.tone=signal.tone;
+    setHTML(banner,`${icon('military')}<div><span>${esc(signal.title)} · ${time(signal.tick)}</span><strong>${esc(place(signal.province).name)}</strong><small>${signal.troops} troops remain after the battle</small></div><button data-focus="${signal.province}">View</button><button data-dismiss-signal aria-label="Dismiss battle notice">×</button>`);
+    banner.hidden=false;clearTimeout(signalTimer);signalTimer=setTimeout(()=>{banner.hidden=true;},6000);
+  }
+}
+function renderCommandFooter(){
+  const mode=state.rules.distanceMovement?orderMode:'march';
+  $('command-footer').hidden=tab!=='orders' || state.status!=='running' || !state.you;
+  $('send-army').hidden=mode!=='march';$('coordinate-commit').hidden=mode!=='coordinate';
+  const p=state.provinces.find(p=>p.id===source);
+  $('develop-province').hidden=mode!=='develop' || !p || p.development===state.rules.maxDevelopment;
+  $('commit-context').textContent=source?`${place(source).name}${destination && mode!=='develop'?' → '+place(destination).name:''}`:'Select a province on the map';
 }
 function showTab(name){
   if(tab!==name)$(`${name}-tab`).scrollTop=0;
@@ -345,7 +389,7 @@ function showTab(name){
     const button=document.querySelector(`[data-tab="${current}"]`);button.classList.toggle('active',current===name);
     button.setAttribute('aria-selected',String(current===name));button.tabIndex=current===name?0:-1;
   }
-  if(state)renderChat();
+  if(state){renderChat();renderCommandFooter();}
 }
 function render(){
   if(!state)return;
@@ -353,6 +397,7 @@ function render(){
   $('spectator-note').hidden=state.status!=='running' || Boolean(state.you);
   $('spectator-fullscreen').hidden=state.status!=='running' || Boolean(state.you);
   if(state.status!=='running')setMapFullscreen(false);
+  renderPresentation();
   document.querySelector('.scenario-note').textContent=map.notice;
   $('game-name').textContent=state.name;$('room-label').textContent=`COUNCIL ${state.id.toUpperCase()} · ${state.eligible?'LEAGUE':'EXPERIMENTAL'} · ${state.players.length}/8 SEATS`;
   $('lobby').hidden=state.status!=='lobby';$('join-form').hidden=Boolean(state.you);
@@ -370,7 +415,7 @@ function render(){
   renderMessageBubbles();
   $('events').innerHTML=history.map(e=>({e,description:describe(e)})).filter(x=>x.description).slice(-30).reverse().map(({e,description})=>`<div class="event"><time>${time(e.tick)}</time>${esc(description)}</div>`).join('');
 }
-async function home(){review?.destroy();review=null;setMapFullscreen(false);document.body.classList.remove('reviewing','spectating');generation++;pollController?.abort();document.body.classList.remove('in-game');matchId=null;state=null;spectating=false;messageBubbles=[];messageCatchupComplete=false;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');await rooms();}
+async function home(){resetPresentation();review?.destroy();review=null;setMapFullscreen(false);document.body.classList.remove('reviewing','spectating');generation++;pollController?.abort();document.body.classList.remove('in-game');matchId=null;state=null;spectating=false;messageBubbles=[];messageCatchupComplete=false;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');await rooms();}
 $('create-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('display-name').value);const g=await request('/api/games','POST',{name:$('room-name').value,preset:$('preset').value});await openRoom(g.id);}));
 $('join-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('join-name').value);await request(`/api/games/${matchId}/join`,'POST',{country:$('country-choice').value,kind:'human'});await poll();toast('Your seat is reserved.');}));
 $('fill-bots').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/bots`,'POST',{});await poll();}));
@@ -380,7 +425,7 @@ $('source').addEventListener('change',()=>{source=$('source').value || null;dest
 $('destination').addEventListener('change',()=>{destination=$('destination').value || null;renderOrders();paintMap();});
 $('amount').addEventListener('input',()=>{if(state)renderOrders();});
 $('amount-slider').addEventListener('input',()=>{$('amount').value=$('amount-slider').value;if(state)renderOrders();});
-$('country-choice').addEventListener('change',()=>{const c=country($('country-choice').value);$('starting-holdings').textContent=startingSummary(c);});
+$('country-choice').addEventListener('change',()=>{const c=country($('country-choice').value);$('starting-holdings').textContent=startingSummary(c);if(state)renderPresentation();});
 $('set-route').addEventListener('click',safely(async()=>{await command({type:'route',from:source,to:destination});toast('Recruitment arrow queued.');}));
 $('clear-route').addEventListener('click',safely(async()=>{await command({type:'route',from:source,to:null});toast('Arrow removal queued.');}));
 $('ally-choice').addEventListener('change',()=>{if(state)renderCouncil();});
@@ -420,16 +465,21 @@ document.querySelector('.tabs').addEventListener('keydown',event=>{
 });
 document.addEventListener('keydown',event=>{
   if(!state || document.body.classList.contains('reviewing') || event.ctrlKey || event.metaKey || event.altKey || event.target.closest('input,select,textarea,dialog') || $('confirm-dialog').open)return;
-  if(event.key==='Escape'){
-    if(document.body.classList.contains('spectator-map-fullscreen')){setMapFullscreen(false);return;}
-    source=null;destination=null;inspected=null;renderOrders();paintMap();
-  }
+  if(event.key==='Escape' && document.body.classList.contains('spectator-map-fullscreen')){setMapFullscreen(false);return;}
+  if(event.key==='Escape' && !$('war-journal').hidden){toggleJournal(false);$('journal-toggle').focus();return;}
+  if(event.key.toLowerCase()==='j'){toggleJournal($('war-journal').hidden);return;}
+  if(event.key==='Escape'){source=null;destination=null;inspected=null;renderOrders();paintMap();}
   if(event.key.toLowerCase()==='c')focusCountry();
   if(event.key.toLowerCase()==='q')atlas.zoom(1.25);
   if(event.key.toLowerCase()==='e')atlas.zoom(.8);
 });
 document.addEventListener('click',safely(async event=>{
   const button=event.target.closest('button');if(!button)return;
+  if(button.id==='journal-toggle')toggleJournal($('war-journal').hidden);
+  if(button.id==='journal-close'){toggleJournal(false);$('journal-toggle').focus();}
+  if(button.hasAttribute('data-dismiss-signal')){$('battle-signal').hidden=true;$('orders-label').focus();}
+  if(button.dataset.countrySeat){$('country-choice').value=button.dataset.countrySeat;$('country-choice').dispatchEvent(new Event('change'));atlas.home(button.dataset.countrySeat);}
+  if(button.dataset.countryFocus){const id=button.dataset.countryFocus;const focus=state.provinces.filter(p=>p.owner===id).sort((a,b)=>b.troops-a.troops)[0]?.id || country(id).start[0];atlas.focus(focus);inspected=focus;source=null;destination=null;orderMode='march';showTab('orders');renderOrders();paintMap();$('orders-tab').scrollTop=0;}
   if(button.dataset.reserveFrom){source=button.dataset.reserveFrom;destination=button.dataset.reserveTo;inspected=source;orderMode='march';$('amount').value=freeTroops(source);showTab('orders');renderOrders();paintMap();toast('Transfer drafted; review the garrison before committing.');}
   if(button.dataset.orderMode){orderMode=button.dataset.orderMode;renderOrders();$('orders-tab').scrollTop=0;}
   if(button.dataset.room)await openRoom(button.dataset.room,button.dataset.spectate==='true');
@@ -446,5 +496,6 @@ document.addEventListener('click',safely(async event=>{
   }
   if(button.dataset.tab)showTab(button.dataset.tab);
 }));
+for(const element of document.querySelectorAll('[data-icon]'))element.innerHTML=icon(element.dataset.icon);
 try{map=await request('/map.json','GET',undefined,null);initMap();showIdentity();const params=new URL(location).searchParams,initial=params.get('match');if(initial)await openRoom(initial,params.get('spectate')==='1');else await rooms();$('connection').textContent=state?.status==='finished'?'Review':'Live';}catch(e){toast(e.message,true);}
 setInterval(()=>{if(matchId)poll();},750);

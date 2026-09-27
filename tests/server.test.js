@@ -206,3 +206,15 @@ test('the active scenario contributes to standings and player history',async t=>
   assert.equal((await f.call('/api/standings?scenario=classic-64')).status,400);
   assert.equal((await f.call('/api/me','GET',undefined,a.token)).data.history[0].scenario,'imperial-1910-v3');
 });
+
+
+test('room resume hints identify only the authenticated seat and respect match-scoped credentials',async t=>{
+  const f=await fixture(t),{a,b,id,sa}=await f.boot();
+  const other=await f.room(a,'Second room');await f.seat(other,a,'usa');
+  const hints=token=>f.call('/api/games','GET',undefined,token);
+  assert.ok((await hints()).data.games.every(g=>g.you===null));
+  assert.equal((await hints(a.token)).data.games.find(g=>g.id===id).you,'usa');
+  assert.equal((await hints(b.token)).data.games.find(g=>g.id===id).you,'britain');
+  assert.equal((await hints(sa.token)).data.games.find(g=>g.id===id).you,'usa');
+  assert.equal((await hints(sa.token)).data.games.find(g=>g.id===other).you,null);
+});

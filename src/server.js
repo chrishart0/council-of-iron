@@ -18,6 +18,7 @@ const staticFiles = new Map([
   ['/', ['public/index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['public/app.js', 'text/javascript; charset=utf-8']],
   ['/atlas.js', ['public/atlas.js', 'text/javascript; charset=utf-8']],
+  ['/presentation.js', ['public/presentation.js', 'text/javascript; charset=utf-8']],
   ['/ui.js', ['public/ui.js', 'text/javascript; charset=utf-8']],
   ['/style.css', ['public/style.css', 'text/css; charset=utf-8']],
   ['/review.js', ['public/review.js', 'text/javascript; charset=utf-8']],
@@ -101,7 +102,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         let bucket=ipBudgets.get(ip); if(!bucket || now-bucket.at>60000) {bucket={at:now,count:0};ipBudgets.set(ip,bucket);}
         requireRule(++bucket.count<=1200,'Transport request limit exceeded.',429);
       }
-      if(path==='/api/health' && req.method==='GET') return json(res,200,{ok:true,version:'0.4.0'});
+      if(path==='/api/health' && req.method==='GET') return json(res,200,{ok:true,version:'0.5.0'});
       if(path==='/api/players' && req.method==='POST') {
         const data=await body(req); return json(res,201,store.register(text(data.name,'Player name',40)));
       }
@@ -117,6 +118,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         const listed=[...active,...all.filter(g=>g.status==='finished').reverse().slice(0,50-active.length)];
         return json(res,200,{games:listed.map(g=>({
           id:g.id,name:g.name,status:g.status,tick:g.tick,speed:g.speed,
+          you:identity && (!identity.gameId || identity.gameId===g.id) ? g.players.find(p=>p.profileId===identity.id)?.id || null : null,
           players:g.players.map(p=>({id:p.id,name:p.name,kind:p.kind})),eligible:g.eligible}))});
       }
       if(path==='/api/games' && req.method==='POST') {

@@ -26,6 +26,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--bridge', action='store_true')
     parser.add_argument('--gif', help='Write an actual browser-capture GIF to this path.')
+    parser.add_argument('--ui-gif', help='Record a labeled tour of the command interface.')
     parser.add_argument('--review-gif', help='Also record the focused after-action review as a GIF.')
     parser.add_argument('--executable', default=os.environ.get('BROWSER_EXECUTABLE'))
     parser.add_argument('--artifacts', default=str(ROOT / 'artifacts'))
@@ -64,7 +65,7 @@ def main():
                     else:
                         load_bridge(page,url,saved)
                         expect(page.locator('#connection')).to_have_text('Live')
-                        if match: page.locator(f'[data-room="{match}"]').click()
+                        if match: page.locator(f'[data-room="{match}"][data-resume]').click()
                     expect(page.locator('#connection')).to_have_text('Live')
                 page=context.new_page();load_page(page)
                 page.screenshot(path=str(artifacts/'01-lobby.png'),full_page=True)
@@ -99,6 +100,7 @@ def main():
                 cli('move','england','north-france','6')
                 page.locator('#source').select_option('central-us')
                 page.locator('#destination').select_option('west-us')
+                page.locator('.standing-order summary').click()
                 page.locator('#set-route').click()
                 expect(page.locator('#route-status')).to_contain_text('New recruits',timeout=10000)
                 report['assertions'].append('Browser and CLI committed armies; browser set a standing reinforcement route.')
@@ -144,13 +146,16 @@ def main():
                 report['assertions'].append('Private diplomacy delivered both ways; spectator API excluded DMs; HTML in agent speech rendered as text, not executable markup.')
                 spectator=context.new_page();load_page(spectator)
                 expect(spectator.locator('.room-group').first).to_contain_text('Games in progress')
-                spectator.locator(f'[data-room="{room}"]').click()
+                spectator.locator(f'[data-room="{room}"][data-spectate="true"]').click()
                 expect(spectator.locator('#phase')).to_have_text('SPECTATING')
                 expect(spectator.locator('#spectator-note')).to_be_visible()
                 expect(spectator.locator('#move-form')).to_be_hidden()
+                expect(spectator.locator('#command-footer')).to_be_hidden()
+                assert spectator.evaluate('document.documentElement.scrollHeight<=innerHeight+1')
                 spectator.locator('[data-tab="dispatches"]').click()
                 assert 'This dispatch is private.' not in spectator.locator('#messages').inner_text()
                 expect(spectator.locator('#scoreboard .country-card')).to_have_count(8)
+                spectator.screenshot(path=str(artifacts/'spectator-desktop.png'),full_page=True)
                 spectator.locator('#spectator-fullscreen').click()
                 expect(spectator.locator('body')).to_have_class(re.compile('spectator-map-fullscreen'))
                 assert spectator.locator('.war-room').bounding_box()['height'] >= 1049
@@ -160,6 +165,7 @@ def main():
                 page.locator('#chat-form button').click()
                 expect(spectator.locator('#spectator-bubbles')).to_contain_text('Public call to the council.',timeout=10000)
                 assert spectator.locator('#spectator-bubbles img').count()==0
+                spectator.screenshot(path=str(artifacts/'spectator-fullscreen.png'),full_page=True)
                 assert 'This dispatch is private.' not in spectator.locator('#spectator-bubbles').inner_text()
                 spectator.keyboard.press('Escape')
                 expect(spectator.locator('body')).not_to_have_class(re.compile('spectator-map-fullscreen'))
@@ -167,6 +173,7 @@ def main():
                 spectator.locator('#spectator-fullscreen').click()
                 assert spectator.locator('.war-room').bounding_box()['height'] >= 843
                 assert spectator.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1')
+                spectator.screenshot(path=str(artifacts/'spectator-mobile.png'),full_page=True)
                 spectator.close()
                 report['assertions'].append('Lobby spectator opened a full-viewport map on desktop and mobile; new world chat appeared as escaped bubbles, while private dispatches stayed hidden.')
                 # External process now controls the existing agent seat over the real API.
@@ -338,5 +345,10 @@ def main():
     if args.executable:review_command.extend(['--executable',args.executable])
     if args.review_gif:review_command.extend(['--gif',args.review_gif])
     subprocess.run(review_command,cwd=ROOT,check=True)
+    ui_command=[sys.executable,str(ROOT/'tests/ui-browser.py'),'--artifacts',str(artifacts/'ui')]
+    if args.bridge:ui_command.append('--bridge')
+    if args.executable:ui_command.extend(['--executable',args.executable])
+    if args.ui_gif:ui_command.extend(['--gif',args.ui_gif])
+    subprocess.run(ui_command,cwd=ROOT,check=True)
 
 if __name__=='__main__':main()

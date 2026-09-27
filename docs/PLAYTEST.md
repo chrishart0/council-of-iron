@@ -4,6 +4,28 @@ After changing victory to 60% of active industry, `npm test` passed 62/62 Node t
 
 The native `python tests/browser.py --gif docs/media/gameplay.gif` run passed its live browser, CLI/external agent, and recorded-match review suites with no captured page errors. The final rerun recorded 84 frames of actual gameplay. Its live match ended with an Ottoman solo victory by economic output; a prior successful run recorded 85 frames and ended with a German solo victory. The earlier recorded handplay input now ends at tick 530 under the new rule; all 295 accepted actions before that finish replayed exactly, the public review reconstructed every tick, and private messages remained excluded from the review.
 
+# v0.5 command-table verification — 27 September 2026
+
+**86 Node tests and JavaScript syntax checks passed locally.** Four new unit tests cover eight distinct decorative insignia, safe fallback for malicious/unknown SVG lookup names, factual battle notifications, and suppression of old/future/unrelated/spectator events. The original 343-action golden game, every public historical tick, privacy and scoring tests remain passing.
+
+The complete local browser/CLI/API-agent playthrough passed, including docked troop submission, coordinated arrivals, recalls, construction, chat, reconnect and a final result. The recorded-match review suite passed. The new focused UI suite passed six groups of assertions: desktop viewport fit, retained roster focus and the event drawer, command modes/disclosures, actual battle-loss/defense notifications, responsive layouts/faction selection, and result/replay identity separation. No captured JavaScript page errors occurred in any of the three suites.
+
+The local environment restricts Chromium navigation. Those runs used the existing **explicit bridge** (unchanged browser policy, real modules, real HTTP server); they do not establish native origin/storage/CSP behavior. Native verification is recorded separately when completed. The focused test resumes a recorded match using a private test-process channel, not a public clock API and not another independent game.
+
+**64 seeded smoke games completed with zero invariant failures**, 32 solo from seed 950000 and 32 diplomacy from 960000. This was a regression check, not a new balance-selection campaign. Engine, maps, movement, forecast and replay-rule files are byte-unchanged. No claim of improved country balance or human enjoyment is made.
+
+During visual review, fixed the primary attack action falling below a 1366×768 viewport by placing it in a proper non-scrolling command dock. Replaced zoom-amplified diagonal shading (which looked like an occupation indicator) with fixed-screen fine stipple. Removed a stale room-change toast, hid the inapplicable War log button during review, kept roster focus stable through polling, and separated province-label decluttering from counter visibility. Recruitment controls now require expanding their named section; the full browser test follows that user interaction.
+
+[Design rationale and references](UI-DESIGN.md) · [Local machine-readable verification](testing/v05-local.json)
+
+The first native UI run passed all browser suites but refused publication because master advanced to `125cf3c` with spectator features. Those changes were merged rather than overwritten. The integrated build preserves full-screen public spectating and escaped message bubbles, adds an explicit authenticated Resume action, and checks its credential scoping. Final integrated verification is recorded separately below.
+
+## Native v0.5 integrated verification
+
+The [native publication run](https://github.com/chrishart0/council-of-iron/actions/runs/36341145508) passed 86 Node tests and reproduced all 64 seeded smoke games. All three actual-browser suites passed: complete gameplay with an external agent and public spectating, exact after-action review, and focused command-table interactions including battle signals, docked controls, roster focus and responsive layouts. No captured page errors occurred. Concurrent spectator features and their tests are preserved; authenticated Resume remains distinct from public Spectate. README screenshots and GIFs were recorded by that native run. [Machine-readable receipt](testing/v05-native-ci.json).
+
+## Earlier verification records
+
 # Full-screen spectator verification — 27 September 2026
 
 The native `python tests/browser.py` run passed with no page errors. Its spectator check expanded the live map to the desktop and 390-pixel mobile viewports, exited with Escape, displayed a newly sent world dispatch as an escaped bubble, and found no private dispatch in the spectator view. The full live match, agent interaction and recorded-match review suites also passed. All 81 Node tests, `npm run check`, and the 32-round diplomacy balance run passed; the balance run reported zero invariant failures. These are automated checks, not a human playtest.

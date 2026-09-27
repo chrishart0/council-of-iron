@@ -27,3 +27,10 @@ The original no-development/no-recall prototype is now a **legacy scenario**. Do
 The public replay/report is not the private action log. Keep public fields allowlisted, refuse live-match history requests, verify reconstruction against the saved final military state and score, and fail closed with saved scores intact if legacy history cannot be proved. Preserve materialized public archives across restart. Playback has no command capability. Per-country combat kills are not defined for shared battles; do not fabricate an attribution. Alliance score is the sum of final-member Prestige, not a new reward.
 
 Run all Node tests plus `python tests/browser.py` (now includes the focused recorded-match review browser suite). The 630-tick handplay golden replay must still match without changing production balance. Read-only reserve/admission/development forecasts must be available to both browser and agent clients and clearly state assumptions. Map instances must have distinct SVG IDs and scoped selectors; hidden live and review maps must never paint each other.
+
+
+## v0.5 presentation contract
+
+`public/presentation.js` is an allowlisted set of original decorative SVG fragments and a pure completed-battle signal selector. Never interpolate player text into SVG. Preserve country labels alongside insignia. The command dock contains a form-associated March submit button outside the scrolling form; do not move it below a long details pane again. Roster focus must survive polling, keyboard shortcuts must not hijack text entry, and reconnecting must not replay old battle banners. Keep the live desktop within its viewport, with a flowing layout for narrow/short screens.
+
+The full browser entry point also runs `tests/ui-browser.py`. Its paused fixture and private stdin stepping are test-only. No production advance endpoint or new game rule is implied. Screenshots/GIFs of that fixture must be labeled recorded-position UI, never passed off as a new live match.
