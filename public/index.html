@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0d1b22"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Council"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><title>Council of Iron</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/review.css"><link rel="stylesheet" href="/map-layers.css"><link rel="stylesheet" href="/feed.css"></head>
+<meta name="theme-color" content="#0d1b22"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Council"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><title>Council of Iron</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/review.css"><link rel="stylesheet" href="/map-layers.css"><link rel="stylesheet" href="/feed.css"><link rel="stylesheet" href="/sound.css"></head>
 <body>
 <header class="masthead"><a href="/" class="wordmark"><span class="sigil" data-icon="compass"></span><span>COUNCIL <i>of</i> IRON<small>A REAL-TIME GAME OF EMPIRES &amp; ALLEGIANCES</small></span></a>
-<div class="header-right"><span id="connection" class="connection">Connecting</span><span id="identity">Observer</span><button id="account-button" class="quiet">Change identity</button></div></header>
+<div class="header-right"><span id="masthead-sound-slot"><div id="sound-control" class="sound-control"></div></span><span id="connection" class="connection">Connecting</span><span id="identity">Observer</span><button id="account-button" class="quiet">Change identity</button></div></header>
 <div id="toast" role="status" aria-live="polite" hidden></div>
 <div id="declaration" class="declaration" role="status" aria-live="assertive" hidden><span id="declaration-kind"></span><strong id="declaration-title"></strong><p id="declaration-detail"></p></div>
 <div id="alliance-seal" class="alliance-seal" role="status" aria-live="assertive" hidden><div id="alliance-standards" class="alliance-standards"></div><div class="alliance-ribbon"><span class="alliance-stamp">ALLIANCE FORMED</span><strong id="alliance-name"></strong><p id="alliance-members"></p></div></div>
@@ -23,7 +23,7 @@
 <section id="game" hidden>
 <div class="war-room" id="stage">
 <div class="hud-bar">
-<button id="menu-button" class="hud-menu-button" type="button" aria-expanded="false" aria-controls="hud-menu" aria-label="Menu: room, identity and full screen"><span class="burger" aria-hidden="true"></span></button>
+<button id="menu-button" class="hud-menu-button" type="button" aria-expanded="false" aria-controls="hud-menu" aria-label="Menu: room, identity and full screen"><span class="burger" aria-hidden="true"></span></button><span id="hud-sound-slot" class="hud-sound"></span>
 <header id="hud" class="hud" aria-label="Campaign status"><div class="hud-country"><span id="commander-insignia"></span><span class="hud-country-name"><b id="commander-title">Observer</b><small id="commander-side"></small></span></div>
 <div class="hud-relations" role="group" aria-label="Allies and wars"><button id="ally-chip" class="relation-chip" type="button" data-open-panel="council" hidden></button><button id="war-chip" class="relation-chip war-chip" type="button" data-open-wars hidden></button></div>
 <div id="operations" class="hud-stats" role="group" aria-label="Campaign overview"></div>

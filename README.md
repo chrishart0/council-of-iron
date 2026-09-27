@@ -36,6 +36,8 @@ Open **http://192.168.1.216:3107** from this machine or another device on the sa
 
 The lobby lists running games first. **Spectate** opens the same full-screen map with the public World history beside it; a separate **Resume** button restores your own playing seat. Private messages never enter the public history.
 
+**Sound** starts after your first click or key press: a quiet looping theme plus short cues for live headlines (war, alliances, peace, battles, falls, countdowns), incoming armies and your own orders. Every cue repeats a visible banner or row. The header **♪ Sound** button has mute, music and effects volume and a reduced mode; **Shift+M** mutes. [Sound design and regeneration](docs/UI-DESIGN.md)
+
 Standard lasts at most **30 real minutes**. Quick runs all game timers at 6× and finishes within five real minutes. The displayed clock always shows game time. Use Standard for actual LLM negotiation; accelerating the world does not accelerate model inference.
 
 For another trusted LAN address or port:

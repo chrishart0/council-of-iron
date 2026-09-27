@@ -589,6 +589,46 @@ def effect_checks(page,report):
     assert result['pacificTrail']<640 and result['pacificMarkerFromOrigin']<=result['shortWay']/2+2,result
     report['assertions'].append('atlas.effect exposes the supported kinds, draws aria-hidden effects inside its own map instance only, returns false for unknown kinds/ids/malformed data without throwing, and is a static highlight under reduced motion.')
 
+# Test-only spy (not production code): counts AudioContexts and buffer starts, records the
+# sound module's `coi:sound` decisions and any CSP violation. No real audio output is inspected.
+SOUND_SPY='''(() => {
+  const spy = window.__sound = { contexts: 0, starts: 0, cues: [], csp: [] };
+  const Base = window.AudioContext;
+  if (Base) window.AudioContext = class extends Base { constructor(...a) { super(...a); spy.contexts++; } };
+  const start = AudioBufferSourceNode.prototype.start;
+  AudioBufferSourceNode.prototype.start = function (...a) { spy.starts++; return start.apply(this, a); };
+  document.addEventListener('coi:sound', e => spy.cues.push(e.detail));
+  document.addEventListener('securitypolicyviolation', e => spy.csp.push(e.violatedDirective + ' ' + e.blockedURI));
+})();'''
+spy=lambda page,expr:page.evaluate(f'window.__sound.{expr}')
+audio_fetches=lambda page:page.evaluate("performance.getEntriesByType('resource').filter(e=>e.name.includes('/audio/')).length")
+
+def sound_settings_checks(page,context,url,report,bridge):
+    # Controls: mute, volume sliders, reduced sound; persisted per browser; Shift+M never fires while typing.
+    control=page.locator('#sound-control')
+    page.locator('.sound-toggle').click();expect(page.locator('#sound-panel')).to_be_visible()
+    page.locator('#sound-music').fill('60');page.locator('#sound-effects').fill('40')
+    page.locator('#sound-mute').check()
+    expect(control).to_have_attribute('data-muted','true');expect(control).to_have_attribute('data-audio','suspended')
+    expect(page.locator('.sound-toggle')).to_have_text('♪ Sound off')
+    saved=json.loads(page.evaluate("localStorage.getItem('coi.sound')"))
+    assert saved=={'muted':True,'music':.6,'effects':.4,'reduced':False},saved
+    page.keyboard.press('Escape');expect(page.locator('#sound-panel')).to_be_hidden()
+    expect(page.locator('#feed-text')).to_be_visible()
+    page.locator('#feed-text').focus();page.keyboard.press('Shift+M');expect(control).to_have_attribute('data-muted','true')
+    assert page.locator('#feed-text').input_value().endswith('M');page.locator('#feed-text').fill('')
+    page.locator('#feed-text').evaluate('(e)=>e.blur()');page.keyboard.press('Shift+M')  # not typing any more
+    expect(control).to_have_attribute('data-muted','false');expect(control).to_have_attribute('data-audio','running')
+    fresh=context.new_page()
+    if bridge:load_bridge(fresh,url,{})
+    else:fresh.goto(url)
+    expect(fresh.locator('#sound-control')).to_have_attribute('data-music','0.6')
+    fresh.locator('.sound-toggle').click()
+    assert fresh.locator('#sound-music').input_value()=='60' and fresh.locator('#sound-effects').input_value()=='40'
+    assert not fresh.locator('#sound-mute').is_checked()
+    fresh.close()
+    report['assertions'].append('Sound control: mute suspends audio, music/effects sliders and mute persist in localStorage across pages; Shift+M toggles mute but not while typing in the feed reply.')
+
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--bridge',action='store_true')
@@ -606,13 +646,20 @@ def main():
             if args.executable:launch['executable_path']=args.executable
             browser=p.chromium.launch(**launch)
             context=browser.new_context(viewport={'width':1600,'height':1000})
+            context.add_init_script(SOUND_SPY)
             page=context.new_page();page.on('pageerror',lambda e:report['pageErrors'].append(str(e)))
             if args.bridge:load_bridge(page,url,{'coi.identity':json.dumps(identity)})
             else:
                 context.add_init_script('localStorage.setItem("coi.identity",'+json.dumps(json.dumps(identity))+');')
                 page.goto(url)
             expect(page.locator('#faction-parade .insignia')).to_have_count(8)
+            page.wait_for_timeout(600)
+            assert spy(page,'contexts')==0 and spy(page,'starts')==0 and audio_fetches(page)==0,'audio before a gesture'
+            expect(page.locator('#sound-control')).to_have_attribute('data-audio','idle')
+            report['assertions'].append('No AudioContext, audio fetch or playback before the first user gesture.')
             page.locator('[data-room="ui-fixture"][data-resume]').click()
+            expect(page.locator('#sound-control')).to_have_attribute('data-loaded','ogg',timeout=10000)
+            assert spy(page,'contexts')==1 and spy(page,'starts')==2,(spy(page,'contexts'),spy(page,'starts'))  # theme + tension loops
             expect(page.locator('#commander-title')).to_have_text('British Empire')
             expect(page.locator('.country-card')).to_have_count(8)
             # Catch-up: the World feed shows history but nothing flashes or announces itself.
@@ -621,6 +668,11 @@ def main():
             assert page.locator('#feed-list .feed-headline').count()>=10
             assert page.locator('#feed-list .fresh').count()==0
             for banner in ['#declaration','#alliance-seal','#fallen-seal']:expect(page.locator(banner)).to_be_hidden()
+            page.wait_for_timeout(1600)  # two more polls
+            assert spy(page,'cues')==[],spy(page,'cues')
+            types=page.evaluate('''Promise.all(['effects.ogg','theme.ogg','tension.mp3','manifest.json'].map(f=>fetch('/audio/'+f).then(r=>r.headers.get('content-type'))))''')
+            assert types==['audio/ogg','audio/ogg','audio/mpeg','application/json'],types
+            report['assertions'].append('Audio decodes (Ogg Opus) under the page CSP with correct Content-Types; catch-up history plays no cue.')
             def capture(name,hold=900):
                 # Clean real DOM capture: not a mockup, no credentials or local player storage.
                 page.screenshot(path=str(out/name),full_page=True)
@@ -766,8 +818,13 @@ def main():
                 page.set_viewport_size({'width':w,'height':h});page.wait_for_timeout(120);no_overflow();check_layout(page,f'{w}x{h} responsive')
                 if w==390:capture('07-mobile-command.png')
             page.set_viewport_size({'width':1600,'height':1000});page.locator('#world-view').click()
+            before=len(spy(page,'cues'))
             server.stdin.write('535\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==535
             expect(page.locator('#declaration')).to_contain_text('Major battle at Northern India',timeout=5000)
+            page.wait_for_timeout(1600);fresh_cues=spy(page,'cues')[before:]
+            assert len(fresh_cues)==1 and fresh_cues[0]['audible'],fresh_cues
+            report['sound']={'tick535':fresh_cues}
+            report['assertions'].append(f'The live tick-535 headlines chose exactly one audible cue ({fresh_cues[0]["cue"]}, priority {fresh_cues[0]["priority"]}).')
             expect(page.locator('#declaration')).to_contain_text('troops lost')
             expect(page.locator('#feed-list .fresh[data-kind="major_battle"]').last).to_contain_text('Northern India')
             page.screenshot(path=str(out/'13-major-battle-banner.png'))
@@ -782,10 +839,13 @@ def main():
             expect(page.locator('#battle-signal')).to_contain_text('16 troops')
             page.locator('#europe-view').click();capture('12-line-held.png')
             feed_checks(page,report)
+            page.wait_for_timeout(900);before=len(spy(page,'cues'))
             go_back(page);page.locator('[data-room="ui-fixture"][data-resume]').click()
             expect(page.locator('#commander-title')).to_have_text('British Empire')
             expect(page.locator('#battle-signal')).to_be_hidden()
             page.wait_for_timeout(900)
+            assert spy(page,'cues')[before:]==[],spy(page,'cues')[before:]
+            sound_settings_checks(page,context,url,report,args.bridge)
             for banner in ['#declaration','#alliance-seal','#fallen-seal']:expect(page.locator(banner)).to_be_hidden()
             assert page.locator('#feed-list .fresh').count()==0
             expect(page.locator('#feed-list [data-kind="major_battle"]').last).to_contain_text('Netherlands')
@@ -823,6 +883,7 @@ def main():
             for selector in ['#declaration','#alliance-seal','.alliance-ribbon','#fallen-seal','.fallen-strike']:
                 assert page.evaluate(f'getComputedStyle(document.querySelector("{selector}")).animationName')=='none',selector
             if not args.bridge:expand_checks(browser,url,identity,report,out)  # real navigation and an init script
+            assert spy(page,'csp')==[],spy(page,'csp')
             assert not report['pageErrors'],report['pageErrors'];report['status']='passed'
             browser.close()
         if args.gif:

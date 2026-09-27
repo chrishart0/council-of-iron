@@ -64,6 +64,7 @@ def main():
                 if args.executable: launch['executable_path']=args.executable
                 browser=playwright.chromium.launch(**launch)
                 context=browser.new_context(viewport={'width':1600,'height':1050},device_scale_factor=1)
+                context.add_init_script("window.__cues=[];document.addEventListener('coi:sound',e=>window.__cues.push(e.detail))")  # test-only listener
                 def load_page(page, match=None, saved=None):
                     page.on('pageerror',lambda error: report['pageErrors'].append(str(error)))
                     if not args.bridge:
@@ -103,8 +104,11 @@ def main():
                 page.locator('#destination').select_option('mexico')
                 page.locator('#amount').fill('7')
                 expect(page.locator('#preview')).to_contain_text('Risk-style rounds')
+                expect(page.locator('#sound-control')).to_have_attribute('data-loaded','ogg')  # decoded after the first click
                 page.locator('#send-army').click()
                 expect(page.locator('#toast')).to_contain_text('Army committed')
+                assert {'cue':'march','priority':1,'audible':True} in page.evaluate('window.__cues'),page.evaluate('window.__cues')
+                report['assertions'].append('Committing the march through the UI played the audible march cue (toast is the visible counterpart).')
                 cli('war','france')
                 # Engine headline -> the same World feed row for every viewer, with a live banner.
                 expect(page.locator('#feed-list [data-kind="war"]').first).to_contain_text('French Republic',timeout=10000)

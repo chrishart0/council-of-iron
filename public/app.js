@@ -10,6 +10,7 @@ import { ExpandableMap } from './expand.js';
 // Relations and alliance colours: the same DOM-free helpers the atlas and agent tools use.
 import { relationsOf, allianceColors } from './relations.js';
 import { warsOf } from './leaderboard.js';
+import { SoundBoard } from './sound.js';
 const time = n => `${Math.floor(Math.max(0,n)/60).toString().padStart(2,'0')}:${Math.floor(Math.max(0,n)%60).toString().padStart(2,'0')}`;
 const signed = n => `${n>=0?'+':''}${n.toFixed(1)}`;
 let identity;try{identity=JSON.parse(localStorage.getItem('coi.identity'));}catch{identity=null;}
@@ -128,7 +129,7 @@ async function poll(){
       if(!next.hasMore)break;
     }
     if(!state.hasMore)messageCatchupComplete=true;
-    announce(liveDeclarations);
+    announce(liveDeclarations);sounds.update(state,liveDeclarations,live);
     setConnection(state.status==='finished'?'Review':'Live');render();renderFeed(live);
   }catch(e){if(e.name!=='AbortError' && epoch===generation){setConnection('Reconnecting');toast(e.message,true);}}
   finally{if(polling===epoch)polling=false;}
@@ -145,7 +146,7 @@ async function command(action){
     try{result=await request(`/api/games/${room}/actions`,'POST',payload);}
     catch(error){if(error.status || epoch!==generation)throw error;result=await request(`/api/games/${room}/actions`,'POST',payload);}
     if(epoch!==generation)return null;
-    await poll();return result;
+    sounds.order(action);await poll();return result;
   }finally{pendingCommand=false;if(epoch===generation && state)renderOrders();}
 }
 const safely=fn=>async event=>{if(event?.type==='submit')event.preventDefault();try{await fn(event);}catch(e){toast(e.message,true);}};
@@ -541,7 +542,7 @@ function describe(e){
 }
 function renderResult(){
   if(!state.outcome){$('result').hidden=true;return;}
-  $('result').hidden=false;document.body.classList.add('reviewing');
+  $('result').hidden=false;document.body.classList.add('reviewing');placeSound();
   if(!review || review.id!==state.id){review?.destroy();review=new AfterAction($('result'),state,map);}
 }
 function renderOperations(){
@@ -596,6 +597,11 @@ function renderCommandFooter(){
   $('develop-province').hidden=mode!=='develop' || !p || p.development===state.rules.maxDevelopment;
   $('commit-context').textContent=source?`${place(source).name}${destination && mode!=='develop'?' → '+place(destination).name:''}`:'Select a province on the map';
 }
+/** One sound control: in the HUD during a live room, in the masthead on the home page and in review. */
+function placeSound(){
+  const slot=matchId && !document.body.classList.contains('reviewing')?$('hud-sound-slot'):$('masthead-sound-slot');
+  if($('sound-control').parentElement!==slot)slot.append($('sound-control'));
+}
 function render(){
   if(!state)return;
   document.body.classList.toggle('spectating',state.status==='running' && !state.you);
@@ -617,10 +623,11 @@ function render(){
   $('clock').textContent=`${time(state.tick)} / 30:00`;$('pace-badge').textContent=state.speed===1?'STANDARD · 1×':`QUICK · ${state.speed}×`;
   const dominant=Object.entries(state.dominance)[0];
   $('victory-status').textContent=dominant && state.status==='running'?`${namedSide(dominant[0])} wins in ${state.rules.hold-(state.tick-dominant[1])}s unless stopped`:`60% of active industry (${state.economyThreshold}) · hold ${state.rules.hold} game seconds`;
+  placeSound();
   renderOrders();paintMap();renderCouncil();renderWars();renderRelations();renderChat();renderScoreboard();renderResult();renderOperations();renderLeaderboard();
   $('events').innerHTML=history.map(e=>({e,description:describe(e)})).filter(x=>x.description).slice(-30).reverse().map(({e,description})=>`<div class="event"><time>${time(e.tick)}</time>${esc(description)}</div>`).join('');
 }
-async function home(){resetPresentation();review?.destroy();review=null;closePanel();closeMenu();expander.set(false,{fromBrowser:true});document.body.classList.remove('reviewing','spectating');generation++;pollController?.abort();document.body.classList.remove('in-game');matchId=null;state=null;spectating=false;herald.reset();worldFeed.reset();messageCatchupComplete=false;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');await rooms();}
+async function home(){resetPresentation();sounds.leave();review?.destroy();review=null;closePanel();closeMenu();expander.set(false,{fromBrowser:true});document.body.classList.remove('reviewing','spectating');generation++;pollController?.abort();document.body.classList.remove('in-game');matchId=null;state=null;spectating=false;herald.reset();worldFeed.reset();messageCatchupComplete=false;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');placeSound();await rooms();}
 $('create-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('display-name').value);const g=await request('/api/games','POST',{name:$('room-name').value,preset:$('preset').value});await openRoom(g.id);}));
 $('join-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('join-name').value);await request(`/api/games/${matchId}/join`,'POST',{country:$('country-choice').value,kind:'human'});await poll();toast('Your seat is reserved.');}));
 $('fill-bots').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/bots`,'POST',{});await poll();}));
@@ -742,7 +749,7 @@ document.addEventListener('keydown',event=>{
   }
   if(event.key.toLowerCase()==='j'){toggleJournal($('war-journal').hidden);return;}
   if(event.key.toLowerCase()==='c')focusCountry();
-  if(event.key.toLowerCase()==='m')atlas.setMapMode(atlas.mode==='diplomacy'?'political':'diplomacy');
+  if(event.key==='m')atlas.setMapMode(atlas.mode==='diplomacy'?'political':'diplomacy');  // Shift+M is the sound mute
   if(event.key.toLowerCase()==='q')atlas.zoom(1.25);
   if(event.key.toLowerCase()==='e')atlas.zoom(.8);
 });
@@ -793,6 +800,7 @@ standings=new LeaderboardPanel({root:$('leaderboard'),rows:$('lb-rows'),toggle:$
 {let saved=null;try{saved=localStorage.getItem('coi.leaderboard');}catch{}
   standings.setOpen(saved?saved==='open':!matchMedia('(max-width:759px), (max-height:499px)').matches);}
 herald=new Herald({declaration:$('declaration'),alliance:$('alliance-seal'),fallen:$('fallen-seal')});
+const sounds=new SoundBoard($('sound-control'));
 {let saved=null;try{saved=localStorage.getItem('coi.feed');}catch{}
   worldFeed.setOpen(saved?saved==='open':!narrow.matches);}
 try{map=await request('/map.json','GET',undefined,null);initMap();showIdentity();const params=new URL(location).searchParams,initial=params.get('match');if(initial)await openRoom(initial,params.get('spectate')==='1');else await rooms();setConnection(state?.status==='finished'?'Review':'Live');}catch(e){toast(e.message,true);}

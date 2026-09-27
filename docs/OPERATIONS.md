@@ -29,6 +29,7 @@ The server stores private messages and action history in its snapshots. A server
 - At most 32 unfinished rooms per process. Finished snapshots and logs are retained, not automatically pruned. There is no abandoned-lobby deletion UI yet; use a fresh test database or administrative maintenance between long test sessions.
 - JSON bodies are limited to 16 KiB; a coarse write-request limit supplements per-seat gameplay limits. This is not comprehensive DDoS protection.
 - Full game snapshots are persisted frequently and loaded at startup. Appropriate for a prototype and small playtests, not large public concurrency.
+- Sound assets (`public/audio/`, ≈0.6 MB per browser as Ogg Opus, MP3 fallback) are fetched only after a player's first click or key press and cached for a day; `manifest.json` is not cached and its content hash versions the audio URLs, so regenerated audio is picked up on the next page load. Running the server needs no sound tooling; see `docs/UI-DESIGN.md` → Sound to regenerate.
 - The browser uses polling. Reconnects reconcile state and event cursors; it does not support offline orders or undo.
 - No integrated content moderation, mute UI, report handling, verified operator identities, match scheduling, account recovery, or public matchmaking.
 - Map and country balance have not been established. Names/colors are thematic, not faction-specific mechanics.

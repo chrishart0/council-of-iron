@@ -81,6 +81,71 @@ Not verified: real touch-drag of the sheet on a device (the drag code path runs 
 - The atlas fits the 1280×680 world into the viewport, so in portrait phones the world view is a thin band until you pinch or press Home; the rail covers the eastern edge on desktop until panned. Camera insets are passed but not yet used by the atlas.
 - Tablet-portrait idle coverage is ~55%: the 288 px rail is a large share of 768 px.
 
+# v0.7 — Sound
+
+A presentation-only layer. It changes no rule, event, headline classification or API field. Every sound repeats something already visible (a banner, a World-feed row, the threat strip or an order toast), so muting loses no information.
+
+## Sound → event
+
+| Cue | Plays when (live only) | Visible counterpart | Priority (+2 if it names your country) |
+|---|---|---|---|
+| `war` — snare roll, timpani, low brass stab, horn call | headline `war` | War seal banner, red feed row | 3 |
+| `alliance` — brass fanfare, F-major chord, bells | headline `alliance` | Alliance seal, brass row | 3 |
+| `peace` — Gsus4 → G major strings, bells | headline `peace` | Treaty banner, white row | 3 |
+| `battle` — two distant low booms and a rumble | headline `major_battle` | Major-battle banner, orange row | 2 |
+| `fallen` — descending muted horn | headline `eliminated` (another country) | Fallen-standard banner | 3 |
+| `defeat` — lower, longer horn, timpani roll, D-minor chord | `eliminated` of your country, or `finished` when your side lost | DEFEAT banner / result panel | 5 |
+| `industry_up` — two clanks, rising steam hiss | headline `industry_up` (level III) | gear row, map effect | 2 |
+| `industry_down` — metal crunch, falling hiss | headline `industry_down` | gear row, map effect | 2 |
+| `countdown` — accelerating ticks, timpani, low D/E♭ swell | headline `dominance` | VICTORY COUNTDOWN banner | 3 |
+| `countdown_stop` — tension chord falling open | new entry in `dominanceBreaks` | “Countdown stopped” row + strip | 3 |
+| `victory` / `draw` | headline `finished` (spectators hear `victory` for any winner) | result panel, gold row | 3 |
+| `dispatch` — two neutral muted notes | `departure` / `dissolved` | Council dispatch banner | 2 |
+| `warning` — soft two-tone bugle | a hostile army newly targets one of your provinces | threat strip | 3 (always yours) |
+| `chat` — double blip | another player's world message | feed row | 1 |
+| `march` / `click` | your own committed move/transit/attack / any other accepted command | toast | 1 |
+
+**Music.** `theme` is a 64 s D-minor march (90 BPM, 24 bars: strings pad, horn melody, bass, timpani, snare) that loops seamlessly. `tension` is a 16 s timpani/snare/pulse layer started in sync with it (16 divides 64) and faded in while you are at war or any victory countdown runs; it is silent otherwise and in Reduced mode.
+
+**Arbitration** (`public/sound-model.js`, pure and unit-tested). Requests are ranked by priority. Per poll at most one stinger (priority ≥ 2) plays, plus a UI cue only when no stinger was chosen. Each cue has its own cooldown (battle 6 s, chat 6 s, warning 8 s, …); an equal-or-lower stinger must wait 2.5 s after the previous one; at most four stingers per 20 s (own defeat always passes). Dropped cues still have their banner and feed row. Music is ducked to 30% under each stinger.
+
+**Live only.** `app.js` calls `sounds.update(state, liveDeclarations, live)` right after `announce()`: the same post-catch-up event list that drives banners (`messageCatchupComplete`). Threat IDs and stopped-hold `seq` baselines advance on every poll, including catch-up, and reset when the room changes, so reconnects and room switches replay nothing. Spectators hear headlines and chat, never warnings.
+
+**Autoplay and settings.** Nothing is fetched, decoded or started until the first trusted `pointerdown`/`keydown`; then one `AudioContext` is created, `/audio/manifest.json` is read and Ogg Opus is decoded (MP3 if the browser reports no Ogg Opus or its decode fails — Safari's `decodeAudioData` support for Ogg Opus varies by version). The header **♪ Sound** button opens mute, Music and Effects sliders and **Reduced sound**; they persist in `localStorage["coi.sound"]` (all access in try/catch). Defaults: effects 70%, music 30%. **Shift+M** toggles mute; it is ignored while typing in inputs, selects, text areas and dialogs, and stops propagation so it cannot also trigger a plain `M` shortcut. Muted or hidden tabs suspend the `AudioContext` (music pauses). *Reduced sound* is a separate opt-in, not tied to `prefers-reduced-motion` (motion sensitivity and sound sensitivity are different needs): only priority ≥ 3 stingers (including your own battles), effects −6 dB, music −3 dB, no tension layer, no UI clicks or chat blips.
+
+## How the audio is made
+
+Original, pure synthesis — no samples, soundfonts, loops or third-party recordings. `scripts/sound/compose.js` describes every cue with [Tone.js](https://github.com/Tonejs/Tone.js) 15.1 (MIT, a **devDependency** only: loaded into headless Chromium at build time, never served or bundled). `scripts/sound/generate.py` seeds `Math.random`, renders each cue with `Tone.Offline` at 48 kHz, takes the steady-state second cycle of each loop (so reverb tails wrap), prepends the loop's last second and appends its first 0.5 s, levels everything with an ITU-R BS.1770 K-weighted meter, and encodes with ffmpeg: Ogg Opus (theme 40 kb/s stereo, tension 32 kb/s mono, cue sprite 32 kb/s mono) and MP3 fallbacks (64/48/48 kb/s). All cues share one sprite, `effects.*`, indexed by `manifest.json` (start/duration per cue, loop points, content hash used as `?v=` cache buster). Audio routes are an allowlist in `src/server.js` served as `audio/ogg` / `audio/mpeg` with `Cache-Control: public, max-age=86400`; the CSP is unchanged (`fetch` is covered by `connect-src 'self'`; no media elements are used).
+
+Regenerate: `npm install` (dev), `python -m pip install numpy scipy matplotlib` plus the Playwright Chromium from `tests/requirements.txt`, ffmpeg with libopus/libmp3lame, then `python scripts/sound/generate.py --report /tmp/sound-report` (spectrogram PNGs + `levels.json`). Renders repeat within ≈4×10⁻⁷ (−128 dBFS); encoded bytes can differ between runs.
+
+## Measured levels (committed assets)
+
+Targets: stingers −16 LUFS maximum momentary (400 ms), UI −24, click −27, theme −23 LUFS integrated, tension −25; sample-peak ceiling −1 dBFS (the ceiling wins, so three percussive cues end below target). True peak from 4× oversampling.
+
+| Asset | Seconds | Loudness | True peak dBFS |
+|---|---|---|---|
+| theme (loop 64 s) | 65.5 | −23.0 LUFS-I | −9.8 |
+| tension (loop 16 s) | 17.5 | −25.0 LUFS-I | −5.7 |
+| war / alliance / peace | 5.0 / 3.7 / 3.9 | −16.0 M | −2.9 / −3.7 / −4.8 |
+| battle / fallen / defeat | 3.3 / 4.4 / 6.3 | −16.0 M | −2.0 / −7.3 / −6.0 |
+| industry_up / industry_down | 2.1 / 2.3 | −18.9 / −16.0 M | −0.9 / −2.1 |
+| countdown / countdown_stop | 3.1 / 2.9 | −17.8 / −16.0 M | −1.0 / −2.8 |
+| victory / draw / dispatch | 5.3 / 4.0 / 2.0 | −16.0 M | −3.4 / −5.0 / −8.7 |
+| click / march / warning / chat | 0.2 / 1.1 / 1.2 / 0.4 | −27 / −24 / −24 / −24 M | −3.1 / −2.9 / −16.2 / −9.8 |
+
+Sizes: theme 320 KB (ogg) / 525 KB (mp3), tension 67 / 105 KB, effects 211 / 332 KB, manifest 1.4 KB. A browser downloads one format: 599 KB (Ogg) or 963 KB (MP3); 1.56 MB in the repository.
+
+**Loop seams** (decoded files, 40 ms before `loopEnd` vs before `loopStart`, max difference over 20 log bands within 30 dB of the loudest): theme 0.9 dB (Ogg) / 0.0 dB (MP3), tension 2.9 / 0.5 dB; sample step at the join ≤ 0.003. Source (pre-encode) seam difference is exactly 0. Spectrograms and waveforms of every asset were inspected for clipping, silence and discontinuities: none at the seams; leading silence 12–32 ms per cue. An abrupt end of the theme's final-bar cymbal swell was found this way and resolved by a soft crash on the loop's downbeat.
+
+## Verified
+
+- `tests/sound.test.js`: every headline kind → cue, own-country variants and priorities; spectator finish/elimination; only other players' public world chat; stopped holds by `seq`; one stinger per batch, gap, per-cue cooldowns and a 30-event burst limited to ≤ 4 plays; Reduced mode filtering; threat IDs and tension from a real engine observation (war + a German army marching on France; none for spectators); every cue exists in the sprite; server Content-Types, `nosniff`, cache header, byte-exact files, Ogg magic, 404 for unlisted paths, unchanged CSP, total size.
+- `tests/ui-browser.py` (recorded position, with a test-only spy on `AudioContext`, `AudioBufferSourceNode.start` and `coi:sound`): no context, audio fetch or start before the first click; after it, one context and exactly two loop starts, Ogg decoded under the page CSP with no CSP violation; catch-up history plays no cue; the live tick-535 headlines (a lost major battle and Britain's stopped countdown) choose exactly one audible cue — `countdown_stop` at priority 5 outranks the battle (4); reopening the room plays nothing; mute suspends audio; sliders and mute persist across pages; Shift+M types into the feed reply instead of muting, and mutes/unmutes elsewhere.
+- `tests/browser.py` (live match): committing a march through the UI plays the audible `march` cue.
+
+Not verified: how anything sounds — no listening test or human feedback; Safari/iOS decoding (only Chromium is automated); the tension layer's audibility balance; real output devices.
+
 ---
 
 # v0.6 — Map layers
