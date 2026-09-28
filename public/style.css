@@ -152,8 +152,8 @@ body[data-screen=match] .toast{position:absolute}
 .empty-note{margin:12px 2px;color:var(--text-2)}
 .create{grid-area:create;align-self:start}
 .create-body{padding:12px 16px 4px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.create-body>.field:nth-child(-n+2){grid-column:1/-1}
-.create-body .seg{flex-direction:column}
+.create-body>.field{grid-column:1/-1}
+.create-body .seg>button{flex:1}
 .sound-control{display:inline-flex}
 
 /* ── The match: one grid of anchored regions over the full-bleed map ─────────── */
