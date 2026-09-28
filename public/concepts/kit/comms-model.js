@@ -3,6 +3,11 @@
  * Input is the viewer's own observation (already recipient-filtered by the server); it never widens visibility.
  */
 import { commsItems, affectsViewer, viewerOf, decisionsFor } from '/feed-model.js';
+import { atWar } from '/relations.js';
+/** Same rule as `threatening()` in public/relations.js on ui-v0.8-simple (fdec5c8), which replaces this copy
+ * after the Phase 2 merge: a marching (not returning) army on my province whose country is at war with me
+ * (legacy rooms: any non-ally). */
+const threatening = (state, army, you) => Boolean(army && !army.returning && you && state.provinces.find(p => p.id === army.to)?.owner === you && atWar(state, army.country, you));
 
 export const TIERS = ['action', 'personal', 'world'];
 /** An incoming hostile army is an ACTION when it lands on one of my provinces within this many game seconds. */
@@ -28,8 +33,8 @@ export function inbox(state, { read = new Set(), dismissed = new Set() } = {}) {
     return { key, seq: i.seq, tick: i.tick, tier, status, mine, item: i, thread: threadKey(i, mySide) };
   });
   // Incoming attacks arriving soon (public armies aimed at my provinces): synthetic ACTION rows in World.
-  const owned = new Set(state.provinces.filter(p => p.owner === you).map(p => p.id));
-  for (const a of state.armies || []) if (a.country !== you && owned.has(a.to) && a.arrivesAt - state.tick <= THREAT_WINDOW && a.arrivesAt >= state.tick && (state.wars || []).some(w => w.split(':').includes(you) && w.split(':').includes(a.country)))
+  // Withdrawn automatically: a row exists only while the army still qualifies (turned back, died or arrived = gone).
+  for (const a of state.armies || []) if (threatening(state, a, you) && a.arrivesAt - state.tick <= THREAT_WINDOW && a.arrivesAt >= state.tick)
     rows.push({ key: `threat:${a.id}`, seq: Infinity, tick: state.tick, tier: 'action', status: 'open', mine: false, thread: 'world', item: { type: 'threat', army: a } });
   for (const r of rows) { r.unread = !r.mine && r.tier !== 'world' && !read.has(r.key) && r.status !== 'expired'; r.pending = r.tier === 'action' && r.status === 'open'; r.dismissed = dismissed.has(r.key); }
   return { rows, conversations: conversations(state, rows, mySide), counts: { action: rows.filter(r => r.pending).length, unread: rows.filter(r => r.unread && r.tier === 'personal').length } };

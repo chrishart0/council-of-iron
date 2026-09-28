@@ -36,7 +36,7 @@ User priority: *"see things coming in without clutter, know how to access what i
 
 | Tier | What | Arrives as | Sound |
 |---|---|---|---|
-| ACTION | a decision that is mine: an alliance offer to me, a war/peace vote of my coalition, a peace offer to my side (`decisionsFor`); an enemy army landing on my province within 30 s | one compact toast that stays until handled or dismissed; one visible, "+N" for the rest | stinger (`cx-sfx: stinger`) |
+| ACTION | a decision that is mine: an alliance offer to me, a war/peace vote of my coalition, a peace offer to my side (`decisionsFor`); an army at war with me marching (not returning) on my province and landing within 30 s — the `threatening()` rule from ui-v0.8-simple fdec5c8; the row is withdrawn when the army turns back, dies or arrives | one compact toast that stays until handled or dismissed; one visible, "+N" for the rest | stinger (`cx-sfx: stinger`) |
 | PERSONAL | to me, no decision: DMs, alliance chat, diplomatic rows in my threads, headlines that `affectsViewer` (war on me, my battles, my alliance) | a one-line toast (standard + first line), hides after ~4 s; a burst from one sender coalesces ("Japan · 3 messages") | soft blip |
 | WORLD | everything else: headlines and world chat | no toast; the World conversation pulses | none |
 
