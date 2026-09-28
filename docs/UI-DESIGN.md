@@ -1,3 +1,53 @@
+# v0.9 — The War Room
+
+User verdict on v0.8: *"This feels like a website with a map in it, not like an integrated game UI."* and *"The map is good, it's everything else: the after-action report, the menus, etc., the chat. It doesn't feel integrated and cohesive."* Three directions were prototyped over the real atlas (`docs/UI-CONCEPTS.md`); the user chose **A · War Room**. This pass implements it across the whole shell with C's interaction habits (one loud primary per panel, press feedback, round camera buttons). No rule, balance value, event or API field changed for the UI.
+
+## The system
+
+- **Material:** blued-iron plates (brushed gradient, brass rim, dark inner line, four brass studs), engraved brass title strips (plaques), oxblood enamel for war and danger, verdigris for alliances, ivory text. One set of primitives in `public/style.css`: `.plate`, `.plaque`, `.btn` (`-primary` brass, `-danger` oxblood, `-ghost`), round `.bezel-btn`, `.tabs`, `.seg`, `.chip`, the brass range slider, iron switches, input slots, event letters (`dialog.letter`, open decisions in Messages). Comms skin in `public/comms.css`; replay and report in `public/review.css`; the map keeps its own type in `public/map-layers.css`.
+- **Type:** Alegreya SC for titles and plaques, Barlow Condensed for UI and tabular numbers. SIL OFL 1.1 files and licences in `public/fonts/` (four Latin subsets, 91 KB, cached for a day).
+- **Icons:** one original engraved line set in `presentation.js` (24-unit grid); old names are aliases.
+- **Motion:** one moment per state — a card slides in, a letter unfolds, a toast drops, a herald plate scales in; press feedback on every control; `prefers-reduced-motion` removes all of it.
+- **Copy:** game voice, sentence case, no development jargon. "Bots" not "practice bots", "Prestige" without disclaimers, banners in sentence case.
+
+## Layout: anchored regions, no overlap
+
+Every panel is a named grid region of the stage, marked `data-region`; nothing is positioned relative to another panel.
+
+```
+┌ hud: [standard][troops][provinces][industry gauge] ─── [clock · victory line] ─── [Messages ●][⚙] ┐
+│ card (left, bottom-anchored,        map area: toasts (top) · banner (under it)      │ powers  (≤ 62%) │
+│ primary in a fixed footer)          camera (bottom-right, round bezel buttons)     │ comms   (rest)  │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────┘
+Menu and war log take the right column while open. Phones (<1024 px): hud · strip of standards · map · dock
+(Map / Powers / Menu); the card, Powers, Messages and the menu are sheets that replace the dock. Short landscape
+(<500 px tall): one side sheet on the left, the dock as a column on the right.
+```
+
+The camera gets the regions as insets (`atlas.setInsets({left,right,top})` and `{insets}` on focus/fit), so World view and focus frame the uncovered map, never under the frame.
+
+## Screens
+
+- **Title:** the iron gate (emblem, name, commander, sound), *The Assembly* (rooms by state with Resume/Watch/Enter/Review; a Prestige tab), *Open a council* (name, room, Pace and Rules as segmented controls, one primary).
+- **Lobby:** a rack of the eight standards along the bottom, the dossier of the chosen country (holdings, commander name, *Take this seat*), host controls (bots, *Start match*), invite link.
+- **Match:** the HUD, the card (orders with the brass slider and 25/50/75/100 chips; country with the relation in large type, strength and *Propose alliance* / *Declare war* / *Message*; army with *Recall* or *Turn around*; your alliance), Powers with nested alliance totals and the war fronts always listed under the rows, Messages, heralds for what affects you (compact on phones), the menu (map views, sound and voice, map key, controls, war log, room, identity, tips), rally points (card action, keep-N field, dashed arrow, pause notices).
+- **Replay:** top bar, the map, the right column = one team leaderboard at the scrubbed tick above the History thread up to the tick (rows seek; alliance chat only where the room revealed it), a timeline band (big play, ±10 s, first/last, speed chips, event marks, next-event line).
+- **After-action report:** victory/defeat/armistice band with the winners' standards and a Prestige medal, final standings grouped by alliance (alliance = sum of member Prestige), land-share chart, turning points that open the replay at that moment, Military/Economy/Diplomacy tabs, one primary *Watch the replay*.
+
+## Comms: one model for notifications and messages
+
+The Phase 1 model (`docs/UI-CONCEPTS.md`, "Comms") is now production code: `public/comms-model.js` (pure triage) and `public/comms.js` (controller).
+
+| Tier | What | Arrives as | Sound |
+|---|---|---|---|
+| ACTION | an offer to you, your coalition's war/peace vote, a peace offer to your side (`decisionsFor`); an enemy army `threatening()` your province within 30 s | the one toast slot, persistent, inline Accept / Read / ×, "+N" | `dispatch` stinger |
+| PERSONAL | DMs, alliance chat, diplomatic rows, headlines that affect you, your battle results, turned-back armies (sticky, Turn around / Show army), paused rallies | a brief one-line toast (bursts coalesce) | `chat` blip (messages) |
+| WORLD | everything else | no toast; the World conversation pulses | silent |
+
+One comms button (red count = decisions, brass = unread; **C**); Messages = conversations sorted by what needs you + threads with inline Accept/Decline, an Unread divider, "↓ N new", quick replies, the composer with the mic, Mark all read; docked in the right column on desktop, a sheet on phones; the World thread is the history. Read state is per item (`coi.comms.<match>.<seat>`). Spectators get the World thread only, read-only. Order confirmations and errors use the same slot and never cover a decision.
+
+<!-- V09-VERIFIED -->
+
 # v0.8 — One map, two nouns
 
 User verdict after playing on a phone: *"The UX is too complex and not intuitive enough. I get lost."* They got lost declaring war, forming an alliance and responding to offers and messages; troop movement "isn't smooth yet"; "the map feels good". This pass keeps the map (rendering, zoom, counters, borders) and replaces everything around it with fewer concepts. No rule, balance value, event, API field, CLI or MCP command changed.
