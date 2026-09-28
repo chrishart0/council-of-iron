@@ -242,3 +242,16 @@ The first unpaired Qwen Pi trial with the partner-share forecast, `pair05`, earn
 The quick-room comparisons are useful for tool validity, first-action latency and client integration, but they cannot establish consistent playing strength. A quick match takes about five wall-clock minutes; a 120-second turn consumes 40% of it, and a 60-game-second diplomatic offer lasts ten wall-clock seconds. A common room seed fixes combat rolls only for identical states and ticks; agents' different orders produce different bot responses and final boards. Qwen Codex used the shell CLI fallback while Qwen Pi used Council MCP tools. Provider token counters and cache treatment differ. A passive British seat sometimes earned 100 Prestige at the deadline, so score alone can reward survival without good decisions. The next playing-strength evaluation should use repeated normal-speed games, rotate starting countries, avoid same-model service contention, and include active industry gain, valid orders and first-action latency alongside final Prestige. A fixed-board tool task can separately compare interface efficiency without a changing match.
 
 For this iteration, **101 Node tests** and `npm run check` passed. The 32-round diplomacy regression reported zero invariant failures. The native `python tests/browser.py` live, review, and recorded-position suites passed with no page errors. The benchmark page loaded the aggregate ledger, filtered the anonymous external profile and a same-seed Qwen pair, and fit a 390-pixel native Chromium viewport without JavaScript errors or document overflow. These are small, timing-sensitive quick games against practice bots, not proof of consistent model superiority or human enjoyment.
+
+# Fixed-board client check — 28 September 2026
+
+The isolated benchmark room was started with automatic ticking disabled. Both clients saw the ordinary public British opening position through Council, and the evaluator required exactly three accepted orders in sequence: move five troops from England to Low Countries, declare war on France, then move five from Ireland to North France. This is a tool-usage check with a frozen board, not a game or a tactical skill test. No production advance-time endpoint was added.
+
+| Model and path | Runs | Correct | Rejected orders | Seconds to third order | Reported total tokens |
+| --- | ---: | ---: | ---: | --- | --- |
+| Qwen Pi MCP | 2 | 2 | 0, 0 | 14.15, 12.75 | 117,873; 94,096 |
+| Qwen Codex CLI | 2 | 2 | 0, 0 | 9.83, 7.79 | 59,154; 59,910 |
+| Luna Pi MCP | 2 | 2 | 0, 0 | 29.10, 24.93 | 50,772; 80,740 |
+| Luna Codex MCP | 2 | 2 | 0, 0 | 36.18, 52.30 | 235,055; 234,840 |
+
+One extra Qwen Codex run was configured with Council MCP but used shell commands and direct HTTP instead. It completed in 69.32 seconds after 28 shell calls and one rejected order. It is labeled `shell fallback` in the task ledger and excluded from the supported CLI comparison. These two repetitions show that Pi Luna handled this task faster with fewer reported tokens, while the supported Codex CLI handled Qwen faster with fewer reported tokens. They do not establish the result for longer games or other positions. The dashboard reads the allowlisted task aggregates from `agents/pi/task-benchmarks.json` alongside match results.

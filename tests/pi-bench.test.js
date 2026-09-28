@@ -18,6 +18,7 @@ test('benchmark export keeps aggregate Pi metrics and excludes private run conte
   assert.equal(run.totalTokens, 1300);
   assert.equal(run.meanTurnSeconds, 25);
   assert.equal(run.firstActionSeconds, 12);
+  assert.equal(run.country, 'britain');
   assert.doesNotMatch(JSON.stringify(run), /private|secret|endpoint/);
   assert.equal(summarizeRun(raw, 'external').modelGroup, 'external');
 });

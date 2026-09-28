@@ -4,6 +4,8 @@ This optional package gives one Pi agent a Council seat through the public HTTP 
 
 The harness starts a private loopback server with a separate SQLite file, registers the chosen Pi player, fills seven seats with built-in non-LLM practice bots, locks its opening, and plays until the saved result exists or the run limit is reached. It does not join or modify the LAN round. Run artifacts and game credentials live in ignored `data/pi/` with owner-only permissions. The Qwen service must be running before a Qwen test.
 
+For a short interface check, `--task fixed` starts that isolated room with its clock paused and asks the model to issue the same three legal orders. It uses the ordinary Council HTTP validation and does not add a public time-control endpoint. The task measures order accuracy, failed calls, reported tokens, and time to the third accepted order. It does not measure strategic playing strength.
+
 ```bash
 npm ci --prefix agents/pi
 npm --prefix agents/pi run play -- --model qwen --country britain --preset quick --max-minutes 12
@@ -12,6 +14,9 @@ npm --prefix agents/pi run play -- --model sample --country britain --preset qui
 node agents/pi/codex-play.js --preset quick --max-minutes 12
 node agents/pi/codex-play.js --access cli --preset quick --max-minutes 12
 node agents/pi/codex-play.js --model luna --preset standard --max-minutes 35
+node agents/pi/play.js --model qwen --task fixed --preset standard --max-minutes 6 --max-turn-seconds 300
+node agents/pi/codex-play.js --model qwen --access cli --task fixed --preset standard --max-minutes 6
+node agents/pi/codex-play.js --model luna --access mcp --task fixed --preset standard --max-minutes 6
 ```
 
 The model alias is resolved from the ignored root `.env` (or process environment). `PI_DEFAULT_MODEL` selects the default alias. For each alias, set `PI_MODEL_<ALIAS>_PROVIDER` (`openai-completions` or `openai-codex`), `ID`, `PLAYER_NAME` (at most 40 characters), and `CONTEXT_WINDOW`. Local OpenAI-compatible profiles also need `BASE_URL` and `TRANSPORT=chat_completions`. Optional fields are `NAME`, `LEADER_NAME`, `MAX_TOKENS`, `THINKING_LEVEL`, `REASONING`, `THINKING_FORMAT`, `CHAT_TEMPLATE_KWARGS` (JSON when `THINKING_FORMAT=chat-template`), and `API_KEY`. See [the example config](.env.example); copy its values into the root `.env` and use any lowercase alias. No model names, endpoints, or API keys need to be added to the client source. The root `.env` is ignored by git and must not be committed. OAuth profiles read the existing Codex login in memory; no token is copied into this repo.
@@ -34,10 +39,14 @@ After a completed run, publish only its aggregate metrics to the tracked JSON le
 node agents/pi/bench.js qwen data/pi/<completed-run>.json
 node agents/pi/bench.js luna data/pi/<completed-run>.json
 node agents/pi/bench.js external data/pi/<completed-run>.json
+node agents/pi/task-bench.js qwen data/pi/<completed-task>.json
+node agents/pi/task-bench.js luna data/pi/<completed-task>.json
 cd agents/pi && python -m http.server 8000
 ```
 
 Open `http://127.0.0.1:8000/bench.html` to filter [the benchmark page](bench.html) by model, clock and measure. The page reads [benchmarks.json](benchmarks.json); regenerate it after new completed matches. Compare the same model and clock. The current Codex Qwen games used the CLI fallback because the direct MCP path did not expose Council tools; that different interface is labeled in the ledger. Rooms have independent game IDs and combat seeds, so repeated runs are needed before drawing performance conclusions.
+
+The page also reads [task-benchmarks.json](task-benchmarks.json) for the paused task. Qwen launched through Codex with Council MCP configured used shell commands instead; that observed path is labeled `shell fallback`. The supported Qwen Codex comparison uses the CLI explicitly. Luna uses Council MCP in both clients.
 
 Quick rooms are integration and latency trials: at 6× speed, a 120-second model turn uses twelve game minutes and a 60-game-second diplomatic offer lasts ten wall-clock seconds. A common `--combat-seed` controls combat rolls only when game state and tick match; the models' different decisions immediately create different positions. Final Prestige is the authoritative game outcome but a passive seat can earn a deadline prize. For a playing-strength claim, use repeated normal-speed rooms, rotate the country, and report first-action latency, accepted/rejected orders, final industry and Prestige separately. Provider token totals and Codex's CLI fallback are not identical instruments; treat token comparisons as directional until both clients use the same tool transport and accounting basis.
 

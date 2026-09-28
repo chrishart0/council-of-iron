@@ -10,7 +10,7 @@ const round = value => number(value) === null ? null : Math.round(value * 100) /
 const finiteSum = (items, key) => items.every(item => number(item[key]) !== null)
   ? items.reduce((sum, item) => sum + item[key], 0) : null;
 
-function codexToolFailure(event) {
+export function codexToolFailure(event) {
   if (event.exitCode !== undefined && event.exitCode !== null) return event.exitCode !== 0;
   if (event.result?.isError) return true;
   const content = event.result?.content;
@@ -50,7 +50,7 @@ export function summarizeRun(raw, modelGroup) {
   const durationSeconds = raw.finishedAt ? (Date.parse(raw.finishedAt) - Date.parse(raw.startedAt)) / 1000 : null;
   return {
     id: raw.runId, match: raw.match, combatSeed: raw.combatSeed || null,
-    startedAt: raw.startedAt, modelGroup, client, access,
+    startedAt: raw.startedAt, modelGroup, client, access, country: raw.country || 'britain',
     strategy: usedSituation ? 'concise situation' : raw.maxTurnSeconds ? 'full observation, capped' : 'full observation',
     maxTurnSeconds: number(raw.maxTurnSeconds),
     sessionMode: raw.sessionMode || (client === 'Pi' ? 'persistent' : null),
