@@ -48,7 +48,24 @@ The Phase 1 model (`docs/UI-CONCEPTS.md`, "Comms") is now production code: `publ
 
 One comms button (red count = decisions, brass = unread; **C**); Messages = conversations sorted by what needs you + threads with inline Accept/Decline, an Unread divider, "↓ N new", quick replies, the composer with the mic, Mark all read; docked in the right column on desktop, a sheet on phones; the World thread is the history. Read state is per item (`coi.comms.<match>.<seat>`). Spectators get the World thread only, read-only. Order confirmations and errors use the same slot and never cover a decision.
 
-<!-- V09-VERIFIED -->
+## Verified (automated, not a usability study)
+
+`npm test` (156), `npm run check`, `npm run test:balance -- --rounds 32 --mode diplomacy`, and the full `python tests/browser.py` (live 12× match, review, the focused UI suite with the tap walkthroughs, voice) pass with no page errors. The README GIF was re-recorded from that run (`python tests/browser.py --gif docs/media/gameplay.gif`, heuristic agents, accelerated test clock; recorded-position frames are labelled as such).
+
+- **Region audit** (`tests/ui-browser.py`): every visible `[data-region]`; no overlap over 4 px, nothing off-screen, no document scroll, `#map` is the viewport — at 1920×1080, 1536×864, 1440×900, 1366×768, 1280×800, 390×844 and 844×390, for the player (idle, order card peek and full, country card, alliance card, Messages list and thread, menu, the phone Powers sheet), the spectator, the lobby, the replay and the report.
+- **Contrast** (WCAG, computed colour against the effective background, gradient stops included): minimum 4.96:1 over every sampled screen and viewport.
+- **Uncovered map** (idle / order card peeking): 1920×1080 76.7% / 69.1%, 1536×864 71.0% / 59.2%, 1440×900 70.8% / 59.2%, 1366×768 68.6% / 54.2%, 1280×800 68.1% / 54.2%, 390×844 76.7% / 41.1%, 844×390 78.6% / 40.7%. The War Room frame is heavier than v0.8's floating cards by design; asserted bounds: ≥65% idle and ≥50% peeking at 1366×768, ≥64% idle everywhere.
+- **Interaction counts** (`tests/ui_tasks.py`, 390×844 touch / 1366×768 mouse): declare war and march 3/3 (bound 4), attack with 50% 3/3, recall 2/2, turn around 2/2, propose an alliance 3/3, respond to an offer 2/2, reply to a DM 2/2 (bound 3), develop 3/3 (+1 camera move), rally 3/3 (+1), and the new conversation walkthrough (DM Japan, receive a reply, reply again, switch to the alliance chat, send, switch back) 7 / 6 (bound 7; opening the DM ≤2, each switch 1) with no toast for the open thread and drafts kept across polling.
+- Comms: an offer arrives as one ACTION toast with Accept/Read/dismiss, a DM as a PERSONAL toast, no toast replay on reconnect, per-item read state across reloads, aria-live assertive/polite per tier, the World thread keeps scrollback with "N new", long messages clamp and expand; war fronts all listed and hit-testable at 1366×768 and 1920×1080.
+
+Not verified: real devices and iOS Safari, screen-reader output beyond the ARIA attributes asserted, and whether players find it more integrated or enjoyable — only that it is laid out, readable and reachable as described.
+
+## Known issues
+
+- With a card open on a phone the map shows about 41% of the screen (the card is the focus there).
+- In the legacy recorded room, an incoming attack warning (ACTION) holds the one toast slot, so a "Province lost" notice waits until it is dismissed — this follows the tier rule, but it is a visible change from v0.8.
+- The replay's phone map is short while the standings sheet is open.
+
 
 # v0.8 — One map, two nouns
 
