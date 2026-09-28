@@ -8,8 +8,8 @@
 
 1. **Goal.** Hold **60% of the world's industry** with your alliance for **90 seconds**. If nobody does by **30:00**, the side with the most industry wins. A tie is a draw. Everyone on the winning side wins; your own industry at the end is your score.
 2. **Troops.** Each province makes troops every 20 s: 1, 2 or 3 by its industry level.
-3. **March.** Drag from your province to any target (or tap one, then the other). Add more of your provinces to attack together — they arrive at the same moment. Troops travel through your and your allies' land, twice as fast inside it. Always leave one troop at home.
-4. **Battle.** Arriving attackers fight dice rounds until one side is gone. Defenders win ties, and a factory (industry II or III) gives them +1. Send help, or **recall** to pull back.
+3. **March.** Drag from your province to any province you can reach (or tap one, then the other): a neighbour, or anywhere across your own and your allies' land, plus one step beyond it. Troops take the quickest way, twice as fast inside friendly land, and find another way if part of it is lost. Add more of your provinces to attack together — they arrive at the same moment. Always leave one troop at home.
+4. **Battle.** Arriving attackers fight dice rounds until one side is gone. Defenders win ties, and a factory (industry II or III) gives them +1. Send help, **recall** an army to bring it home, or send a returning army back to its target (**march again**, twice per army).
 5. **Rally.** Pick provinces and a rally point: their new troops march there automatically.
 6. **Build.** Spend troops to raise a province's industry: I→II costs 24 (2 min), II→III costs 48 (3 min). A capture takes the factory; unfinished work is lost.
 7. **War and peace.** Declare war before attacking another country; both whole alliances go to war. Anyone can offer peace; anyone on the other side can accept.
@@ -47,6 +47,8 @@ node agents/cli.js join ROOM_ID germany "My envoy"
 node agents/cli.js board                          # your provinces, neighbours, sides, wars
 node agents/cli.js preview mexico 50% west-us central-us
 node agents/cli.js march mexico 50% west-us central-us --declare-war
+node agents/cli.js march alaska 20 mexico            # across your own land: via west-us, west-canada
+node agents/cli.js turn-around GROUP_OR_ARMY_ID     # bring a march home; a returning army marches again
 node agents/cli.js rally central-us,east-us west-us
 node agents/cli.js news                           # messages and diplomacy since last time
 ```

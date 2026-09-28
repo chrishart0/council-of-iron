@@ -55,7 +55,7 @@ Casualties are one shared total; nobody is credited with kills in a shared battl
 
 ## Forecast without committing
 
-`POST /api/games/ROOM/plan` (your seat, running match) takes a march body — `{ "to", "from", "amount" | "percent" }` or `{ "to", "sources": [{ "from", "amount" | "percent" }] }` — and returns `{ to, owner, warRequired, reinforcement, arrivesAt, total, sources: [{ from, amount, available, travel, path, executeAt }], combat, defenseAtArrival, combatAtArrival, summary, incoming, warning }`. `path` lists the provinces after the source. `combat` is the exact static capture chance against today's garrison (an estimate above 250 troops per side); `combatAtArrival` uses the defenders expected at arrival (scheduled recruits and visible friendly reinforcements). A target that still needs a declaration is forecast as if at war, with `warRequired: true`. With `{ "type": "rally", "from", "to" }` it returns the rally plan (`sources: [{ from, path, travel, arrivesAt }]`; 409 when no friendly path exists). Nothing is reserved.
+`POST /api/games/ROOM/plan` (your seat, running match) takes a march body — `{ "to", "from", "amount" | "percent" }` or `{ "to", "sources": [{ "from", "amount" | "percent" }] }` — and returns `{ to, owner, warRequired, reinforcement, arrivesAt, total, sources: [{ from, amount, available, travel, path, executeAt }], combat, defenseAtArrival, combatAtArrival, summary, incoming, warning }`. `path` lists the provinces after the source. `combat` is the exact static capture chance against today's garrison (an estimate above 250 troops per side); `combatAtArrival` uses the defenders expected at arrival (scheduled recruits and visible friendly reinforcements). A target that still needs a declaration is forecast as if at war, with `warRequired: true`. With `{ "type": "turn_around", "armyId" }` it returns `{ mode: "recall" | "resume", to, via, arrivesAt, turnArounds, limit, battleInProgress? }` (a resume into another side's battle may be turned back again). With `{ "type": "rally", "from", "to" }` it returns the rally plan (`sources: [{ from, path, travel, arrivesAt }]`; 409 when no friendly path exists). Nothing is reserved.
 
 ## Commit actions
 
@@ -65,6 +65,7 @@ Casualties are one shared total; nobody is credited with kills in a shared battl
 |---|---|---|
 | `march` | `to`, and either `from` + exactly one of `amount`/`percent`, or `sources` (1–16 unique own provinces, each `from` + `amount`/`percent`); optional `declareWar` | Reserves troops now; each column leaves so that all arrive on the same tick (`arrivesAt`), along the quickest path through your own and allied land (`path`). `percent` takes that share of the source's uncommitted troops, rounded down, always leaving one. Receipt: `groupId`, `orderId`, `executeAt`, `arrivesAt`, `orders` |
 | `recall` | `id` (army, order or `groupId`) | Next tick: waiting sources are cancelled; marching troops turn home from their current position and take as long as they have been out |
+| `turn_around` | `armyId` (your moving, non-engaged army) | Advancing: exactly a `recall` (receipt `mode: "recall"`). Returning (recalled or turned back automatically): next tick it marches again toward the target it had been heading for, from its actual position, arriving after the ticks it spent coming back plus what it still had to go, then on along friendly land if the target was further (receipt `mode: "resume"`, `to`, `arrivesAt`). Re-checked at execution like a march; at most `rules.maxTurnArounds` (2) per army (`army.turnArounds`); counts toward the order limit. Public event `army_turned_around` |
 | `rally` | `from` (one own province or 1–16), `to` (own province, or `null` to clear) | At each recruitment, the new troops of each source march to `to` along friendly land. Rally columns never attack |
 | `develop` | `from` | Reserves 24 (I→II) or 48 (II→III) local troops; builds for 120 or 180 s |
 | `declare_war` | `country` | Both whole alliances are at war at once. Receipt: `from`, `to`, `fromRoster`, `toRoster` |
@@ -79,7 +80,9 @@ Casualties are one shared total; nobody is credited with kills in a shared battl
 
 **Limits.** An invisible anti-spam limit refuses more than 10 orders per 10 game seconds (429 "Too many orders at once") and more than one message per 2 s. Rally marches are automatic and free. Invalid actions change nothing.
 
-**Order checks at departure.** A waiting source that is no longer yours, no longer has the troops, or whose route is no longer friendly fails privately (`order_failed` with a `reason`); the other sources of the march still go.
+**Long marches.** The target may be any province reachable through your own and allied provinces (not through battles), plus one step beyond them; each source's `path` is the quickest such route by current travel times (internal links ×2). With no such route the march is refused ("No route from A to B: a march passes only through your own or allied provinces …"). A column re-checks its way at each province: if a later province is no longer friendly it takes the quickest friendly way from where it is (private `army_rerouted {armyId, province, to, path}`), otherwise it turns back (`transit_blocked`, `noRoute: true`). A waiting source re-routes at departure the same way.
+
+**Order checks at departure.** A waiting source that is no longer yours, no longer has the troops, or has no friendly route any more fails privately (`order_failed` with a `reason`); the other sources of the march still go.
 
 **Rules.** `observe.rules` is the one ruleset:
 
@@ -92,7 +95,7 @@ Casualties are one shared total; nobody is credited with kills in a shared battl
 | `battleSlowdownPercent` | 125 | Four dice rounds per five seconds |
 | `developmentCosts` / `developmentTicks` | `[0,24,48]` / `[0,120,180]` | Industry II and III |
 | `notice` / `proposalLife` / `peaceLife` | 30 / 120 / 60 | Alliance start and leave notice; offer lifetimes |
-| `maxSources` / `maxDevelopment` | 16 / 3 | |
+| `maxSources` / `maxTurnArounds` / `maxDevelopment` | 16 / 2 / 3 | |
 | `orderLimit` / `orderWindow` / `chatWindow` | 10 / 10 / 2 | Anti-spam limits |
 
 **Battles.** Hostile arrivals start a battle; each round, up to three attacker dice meet two defender dice, sorted and compared in pairs; defenders win ties, and industry II–III adds +1 to the best defender die (max 6). Allied attackers fight together, later allied arrivals join, and arrivals to a defending ally join its garrison as its troops. A captured province keeps its finished industry; unfinished construction is lost. Dice are seeded from the room, battle and tick, so a replay reproduces them. If two sides arrive on the same tick, the larger claims the battle; a returning army that finds its home hostile is lost (`army_interned`).
@@ -104,7 +107,7 @@ Casualties are one shared total; nobody is credited with kills in a shared battl
 | `no_war` | Not at war with the owner (`owner`, `allied: true` if it became an ally) |
 | `battle_in_progress` | Another side's battle there was already under way (`battleAttackerSide`) |
 | `rival_arrival` | Another side arrived on the same tick with a larger force (`rivalSide`) |
-| `transit_blocked` | The next province on the route was no longer friendly, or a battlefield |
+| `transit_blocked` | The province reached was no longer friendly or was a battlefield, or no friendly way remained (`noRoute`) |
 | `rally_blocked` | A rally column's destination is no longer yours |
 | `peace` | A peace treaty with the target's owner |
 
