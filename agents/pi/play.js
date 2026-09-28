@@ -82,7 +82,7 @@ mkdirSync(outputDir, { recursive: true, mode: 0o700 });
 const file = resolve(outputDir, `${runId}.json`);
 const record = { runId, country, preset, playerModel, modelId, provider: config.provider,
   embeddedBoard: taskMode === 'match',
-  interfaceVersion: taskMode === 'match' ? 'board-turn-v3' : 'fixed-v1',
+  interfaceVersion: taskMode === 'match' ? 'board-turn-v4' : 'fixed-v1',
   ...(config.provider !== 'openai-codex' ? { endpoint, contextWindow } : {}),
   startedAt: new Date().toISOString(), maxTurnSeconds, decisionIntervalTicks, sessionMode, combatSeed: combatSeed || null,
   taskId: taskMode === 'fixed' ? FIXED_TASK_ID : null,
