@@ -1,8 +1,8 @@
 // Deterministic real-match fixtures for browser review tests. No public test endpoints.
-import { makeServer, MAP } from '../src/server.js';
-import { replay } from '../scripts/replay-handplay.js';
+import { makeServer } from '../src/server.js';
+import { replay, map as MAP } from '../scripts/replay-handplay.js';
 import { createGame, join, start, act, tick } from '../src/engine.js';
-const app = makeServer({dbPath: ':memory:', automatic: false});
+const app = makeServer({dbPath: ':memory:', automatic: false, board: MAP});
 const game = replay().game; game.id = 'review-fixture'; game.name = 'The Atlantic campaign';
 app.games.set(game.id, game); app.store.save(game);
 const draw = createGame({id:'draw-fixture',name:'A negotiated peace',hostId:'usa'},MAP);
