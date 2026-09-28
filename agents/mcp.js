@@ -90,7 +90,7 @@ tool('transit','March through 1–7 allied intermediate provinces to a final con
   ['from','amount','path'],a=>client.action({type:'transit',from:a.from,amount:a.amount,path:a.path},a.opId));
 tool('route','Forward new LOCAL recruits one hop to a friendly province; null clears. Arriving reinforcements and existing garrisons stay put, even along a chain of arrows.',
   {from:string,to:{type:['string','null']},...op},['from','to'],a=>client.action({type:'route',from:a.from,to:a.to},a.opId));
-tool('propose_alliance','Invite an independent country. Admission is unanimous. New founders reset maturity; incumbents retain theirs. A larger coalition reduces each maximum share.',
+tool('propose_alliance','Invite an independent country. Supply an original alliance name when founding one; later admission uses the existing name. Admission is unanimous. New founders reset maturity; incumbents retain theirs. A larger coalition reduces each maximum share.',
   {country:string,name:string,...op},['country'],a=>client.action({type:'propose',country:a.country,name:a.name || 'The Accord'},a.opId));
 tool('accept_alliance','Consent to this exact roster. Fully approved changes activate after 30 game seconds.',
   {proposalId:string,...op},['proposalId'],a=>client.action({type:'accept',proposalId:a.proposalId},a.opId));

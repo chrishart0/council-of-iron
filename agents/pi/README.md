@@ -12,6 +12,8 @@ The harness starts a private loopback server with a separate SQLite file, regist
 
 `decision-turn-v6` separates a country's own industry from its alliance's industry in the view and calculates additional-partner score shares using every current member's strength. The short instruction asks the player to reconsider independent partners when its side remains far below the victory threshold. These are read-only guidance and prompt changes; winning strength still needs completed normal-speed playtests.
 
+`decision-turn-v7` asks the model for a leader name and public opening declaration during the ordinary pregame window, then carries that chosen identity as labeled game data in later turns. A failed or late model response uses a plain default declaration. The turn reminder encourages brief in-character diplomacy, playful founding alliance names, and alliance chat while keeping strategic orders first. Speech uses the standard chat cooldown and recipient rules. This is a client prompt change; measure its effect in completed matches before claiming it improves diplomacy or winning strength.
+
 For a short interface check, `--task fixed` starts that isolated room with its clock paused and asks the model to issue the same three legal orders. It uses the ordinary Council HTTP validation and does not add a public time-control endpoint. The task measures order accuracy, failed calls, reported tokens, and time to the third accepted order. It does not measure strategic playing strength.
 
 ```bash
