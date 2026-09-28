@@ -1,7 +1,9 @@
 /** Concise, recipient-filtered view derived solely from the ordinary observation. */
+import { troopAvailability } from './board.js';
 export function situation(observation) {
   const o = observation;
   const mine = new Set(o.provinces.filter(p => p.owner === o.you).map(p => p.id));
+  const available = troopAvailability(o);
   const mySide = o.players.find(p => p.id === o.you)?.side;
   const significant = new Set(['message', 'war_declared', 'peace_accepted', 'peace_offered',
     'alliance_activated', 'departed', 'proposal_created', 'proposal_accepted', 'proposal_declined',
@@ -15,7 +17,7 @@ export function situation(observation) {
       economy: a.economy, rank: a.rank, dominanceStartedAt: a.dominanceStartedAt })) || [],
     provinces: o.provinces.map(p => ({ id: p.id, owner: p.owner, troops: p.troops,
       development: p.development, ...(p.developing ? { developing: p.developing } : {}),
-      ...(p.owner === o.you && p.route ? { route: p.route } : {}) })),
+      ...(p.owner === o.you ? { available: available.get(p.id), ...(p.route ? { route: p.route } : {}) } : {}) })),
     armies: o.armies.filter(a => a.country === o.you || mine.has(a.to)).map(a => ({
       id: a.id, country: a.country, from: a.from, to: a.to, amount: a.amount,
       arrivesAt: a.arrivesAt, returning: a.returning, engaged: a.engaged })),

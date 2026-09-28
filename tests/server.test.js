@@ -253,10 +253,12 @@ test('stdio MCP negotiates, validates schemas, joins an agent, calls real HTTP, 
     {jsonrpc:'2.0',id:11,method:'tools/call',params:{name:'situation',arguments:{}}},
     {jsonrpc:'2.0',id:12,method:'tools/call',params:{name:'board',arguments:{}}},
     {jsonrpc:'2.0',id:13,method:'tools/call',params:{name:'view_map',arguments:{}}},
+    {jsonrpc:'2.0',id:14,method:'tools/call',params:{name:'news',arguments:{}}},
+    {jsonrpc:'2.0',id:15,method:'tools/call',params:{name:'move',arguments:{from:'england',to:'low-countries',amount:5}}},
   ].map(x=>JSON.stringify(x)).join('\n')+'\n';
   const result=await subprocess('agents/mcp.js',[],env,input);assert.equal(result.code,0,result.stderr);
-  const output=result.stdout.trim().split('\n').map(x=>JSON.parse(x));assert.equal(output.length,13);
-  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,34);
+  const output=result.stdout.trim().split('\n').map(x=>JSON.parse(x));assert.equal(output.length,15);
+  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,35);
   assert.equal(JSON.parse(output[2].result.content[0].text).country,'britain');
   assert.equal(JSON.parse(output[3].result.content[0].text).you,'britain');
   assert.equal(output[4].error.code,-32602);assert.equal(output[5].error.code,-32602);assert.deepEqual(output[6].result,{});
@@ -281,6 +283,15 @@ test('stdio MCP negotiates, validates schemas, joins an agent, calls real HTTP, 
   assert.equal(JSON.parse(view[0].text).you,'britain');
   assert.equal(view[1].mimeType,'image/png');
   assert.equal(Buffer.from(view[1].data,'base64').subarray(0,8).toString('hex'),'89504e470d0a1a0a');
+  const news=JSON.parse(output[13].result.content[0].text);
+  assert.equal(news.you,'britain');
+  assert.equal(Object.hasOwn(news,'provinces'),false);
+  assert.equal(Object.hasOwn(news,'armies'),false);
+  const failedMove=JSON.parse(output[14].result.content[0].text);
+  assert.equal(output[14].result.isError,true);
+  assert.match(failedMove.error,/match is not running/i);
+  assert.equal(failedMove.hint.sources[0].id,'england');
+  assert.ok(failedMove.hint.sources[0].available>0);
 
   const other=await f.register('Other envoy');
   const conflictInput=[

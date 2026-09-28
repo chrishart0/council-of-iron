@@ -20,6 +20,9 @@ test('compact board shows only observed state and legal direct connections', () 
   assert.equal(england.available, source.troops - 3);
   assert.ok(england.neighbors.some(p => p.id === 'low-countries' && p.owner === null));
   assert.ok(england.neighbors.some(p => p.owner === 'france' && p.attackReady === false));
+  assert.ok(board.sides.every(side => !Object.hasOwn(side,'winsAt')));
+  game.dominance[game.players.find(p=>p.id==='france').side]=game.tick;
+  assert.equal(boardView(observe(game,'britain'),MAP).sides.find(side=>side.members.includes('france')).winsAt,game.rules.hold);
   assert.ok(JSON.stringify(board).length < 10000);
   assert.equal('events' in board, false);
   assert.equal('travelTimes' in board, false);

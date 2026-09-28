@@ -4,7 +4,7 @@ import { situation } from '../agents/situation.js';
 
 test('concise situation retains delivered messages while dropping unrelated combat history', () => {
   const full = { id: 'room', status: 'running', tick: 100, you: 'britain', rules: { duration: 1800 },
-    economyThreshold: 60, commandBudget: { remaining: 2 }, dominance: {},
+    economyThreshold: 60, commandBudget: { remaining: 2, reserved: [{ type: 'move', from: 'england', amount: 4 }] }, dominance: {},
     players: [{ id: 'britain', side: 'blue', eliminatedAt: null }, { id: 'france', side: 'red', eliminatedAt: null }],
     leaderboard: { alliances: [{ id: 'blue', members: ['britain'], economy: 12, rank: 2 }] },
     provinces: [{ id: 'england', owner: 'britain', troops: 20, development: 2, route: 'scotland' },
@@ -19,6 +19,8 @@ test('concise situation retains delivered messages while dropping unrelated comb
   assert.deepEqual(brief.events, [{ type: 'message', text: 'untrusted speech' }]);
   assert.deepEqual(brief.armies.map(a => a.id), ['own']);
   assert.equal(brief.provinces.length, 2);
+  assert.equal(brief.provinces[0].available, 15);
+  assert.equal(Object.hasOwn(brief.provinces[1], 'available'), false);
   assert.equal(brief.cursor, 2);
   assert.equal(Object.hasOwn(brief, 'travelTimes'), false);
   assert.equal(Object.hasOwn(brief, 'insights'), false);
