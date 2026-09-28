@@ -390,7 +390,9 @@ dialog.letter footer .btn{flex:1}
 /* ── Lobby: choose your country (a dossier and a rack of standards over the live atlas) ── */
 .lobby{position:absolute;inset:0;z-index:8;display:grid;grid-template-columns:400px minmax(0,1fr);grid-template-rows:var(--top) minmax(0,1fr) auto;grid-template-areas:"top top" "dossier ." "rack rack";pointer-events:none}
 .lobby>*{pointer-events:auto}
-body[data-status=lobby] .war-room>:is(.topbar#hud,.strip,.left,.maparea,.powers,.comms,.dock){display:none}
+body:is([data-status=lobby],[data-status=opening]) .war-room>:is(.topbar#hud,.strip,.left,.maparea,.powers,.comms,.dock){display:none}
+.opening-countdown{margin:0;font:700 24px/1.1 var(--title);color:var(--brass-hi)}
+.opening-form{display:flex;flex-direction:column;gap:8px}.slot textarea{flex:1;min-width:0;min-height:64px;padding:8px 12px;resize:vertical;border:0;background:transparent;color:var(--ivory);font:500 17px var(--ui);outline:none}.slot textarea::placeholder{color:#8f8c7a}
 .lobby-bar{grid-area:top}
 .lobby-title{display:flex;flex-direction:column;margin-right:auto;min-width:0}
 .lobby-title b{font:700 22px/1.05 var(--title);color:var(--brass-hi);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

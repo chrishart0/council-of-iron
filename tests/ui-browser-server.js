@@ -2,17 +2,14 @@
 import { createInterface } from 'node:readline';
 import { makeServer, MAP } from '../src/server.js';
 import { createGame, join, start, act, tick } from '../src/engine.js';
-import { fixture, replay, map as V3 } from '../scripts/replay-handplay.js';
+import { replay, seatRecorded, stepper } from '../scripts/replay-handplay.js';
 const app=makeServer({dbPath:':memory:',automatic:false});
 const profiles=Object.fromEntries(MAP.countries.map(c=>[c.id,app.store.register(c.name)]));
-// The recorded ui-fixture position was played on imperial-1910-v3: it stays a v3 room (old-room rendering).
-const g=createGame({id:'ui-fixture',name:'The Atlantic campaign',hostId:profiles.britain.id},V3);
-for(const c of V3.countries)join(g,V3,{country:c.id,name:profiles[c.id].name,profileId:profiles[c.id].id,kind:'agent'});
-g.rules.warRequired=false;
-// Keep the recorded interaction fixture running through its tick-539 UI assertions.
+// The recorded decisions (scripts/replay-handplay.js adapter) under the current rules, paused at tick 480.
+const g=createGame({id:'ui-fixture',name:'The Atlantic campaign',hostId:profiles.britain.id},MAP);
+// Keep the recorded interaction fixture running through its later UI assertions.
 g.rules.hold=1800;
-start(g);let index=0;
-while(g.tick<480){while(fixture.actions[index]?.tick===g.tick){const a=fixture.actions[index++];act(g,V3,a.country,a.action,a.opId);}tick(g);}
+seatRecorded(g,profiles);const recorded=stepper(g);recorded.to(480);
 app.games.set(g.id,g);app.store.save(g);
 // A short finished match whose room announced public alliance chat after the match (replay parity checks).
 const talks=createGame({id:'ui-chat',name:'Pacific talks',hostId:profiles.britain.id},MAP);
@@ -68,7 +65,7 @@ createInterface({input:process.stdin}).on('line',input=>{
   if(line.startsWith('ally ')){const who=line.slice(5).trim(),offer=w.proposals.find(q=>q.status==='open'&&q.roster.includes(who));if(!offer)throw new Error('No open offer');
     act(w,MAP,who,{type:'accept',proposalId:offer.id},`ui-war-accept-${offer.id}`);app.store.save(w);console.log(JSON.stringify({tick:w.tick,status:offer.status}));return;}
   if(line.startsWith('war ')){const to=Number(line.slice(4));if(!Number.isSafeInteger(to)||to<w.tick||to>120)throw new Error('Invalid war fixture tick');stepWar(to);app.store.save(w);console.log(JSON.stringify({tick:w.tick,battles:w.battles.length}));return;}
-  const to=Number(line);if(!Number.isSafeInteger(to)||to<g.tick||to>539)throw new Error('Invalid fixture tick');
-  while(g.tick<to && g.status==='running'){while(fixture.actions[index]?.tick===g.tick){const a=fixture.actions[index++];act(g,V3,a.country,a.action,a.opId);}tick(g);}
+  const to=Number(line);if(!Number.isSafeInteger(to)||to<g.tick||to>700)throw new Error('Invalid fixture tick');
+  recorded.to(to);
   app.store.save(g);console.log(JSON.stringify({tick:g.tick}));
 });

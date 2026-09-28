@@ -1,4 +1,4 @@
-import { journeyPoint } from './movement.js';
+import { journeyPoint, ownedPath } from './movement.js';
 import { borderNetwork, insideRings, provinceRings } from './map-geometry.js';
 import { allianceColors, atWar, battleColors, coalitions, formingAlliances, relationsOf, teamColor, threatening, warKey } from './relations.js';
 import { faction } from './presentation.js';
@@ -677,6 +677,12 @@ export class Atlas {
     for (const edge of this.seas.children) edge.classList.toggle('selected-connection', edge.dataset.edge.split('|').includes(source));
     this.connections.replaceChildren();
     for (const id of neighbors) this.connections.append(node('path', { d: this.path(source, id), class: id === destination ? 'target-connection' : 'adjacent-connection', ...(id === destination ? { 'marker-end': `url(#${this.prefix}march-head)` } : {}) }));
+    // A long march: the controlled route through your own provinces, leg by leg.
+    if (source && destination && !neighbors.includes(destination) && state.rules?.distanceMovement && state.you) {
+      const route = ownedPath(this.map, state.provinces, state.travelTimes, state.you, source, destination, true) || [];
+      route.forEach((id, i) => this.connections.append(node('path', { d: this.path(i ? route[i - 1] : source, id), class: 'target-connection route-leg',
+        ...(i === route.length - 1 ? { 'marker-end': `url(#${this.prefix}march-head)` } : {}) })));
+    }
     this.routes.replaceChildren();
     for (const p of state.provinces) if (p.route && (p.owner === state.you || p.id === source)) this.routes.append(node('path', { d: this.path(p.id, p.route), class: 'recruit-connection', 'marker-end': `url(#${this.prefix}march-head)` }));
     // Your rally points (private to you): a dashed arrow in your colour from source to rally province.
@@ -1062,7 +1068,8 @@ export class Atlas {
   dragTo(clientX, clientY) {
     const from = this.gesture?.command; if (!from) return;
     if (!this.dragging) this.dragHooks?.begin?.(from);
-    const neighbors = this.places.get(from)?.neighbors || [], point = this.coordinates(clientX, clientY), px = this.svg.getScreenCTM()?.a || 1;
+    // Legal targets: the optional drag hook (neighbours plus provinces reached through your own land), else neighbours.
+    const neighbors = this.dragHooks?.targets?.(from) || this.places.get(from)?.neighbors || [], point = this.coordinates(clientX, clientY), px = this.svg.getScreenCTM()?.a || 1;
     const el = document.elementFromPoint(clientX, clientY);
     let to = el?.closest?.('[data-province]')?.dataset.province || null;
     const cluster = el?.closest?.('[data-cluster]')?.dataset.cluster;

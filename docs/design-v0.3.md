@@ -44,6 +44,6 @@ Winning roster members divide the fixed pool `100 × starting seats`, then earn 
 
 ## Compatibility and tests
 
-Matches freeze these rules, movement times and coordinates into their snapshots. The only playable scenario is `imperial-1910-v3`.
+Matches freeze these rules, movement times and coordinates into their snapshots. The only playable scenario is now `imperial-1910-v4`.
 
 59 automated tests include full modern deterministic replay, mixed waiting/marching group recall, recall at arrival, return-to-captured-home combat, percentage rounding, atomic validation, queued reservations, interrupted construction, partial dispatch failure, restart, private planning and real CLI/MCP subprocesses. See [playtest record](PLAYTEST.md) and [balance evidence](BALANCE.md). Testing functionality does not establish human enjoyment or live-model competence.

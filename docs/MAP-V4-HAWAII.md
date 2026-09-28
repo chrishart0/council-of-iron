@@ -23,7 +23,8 @@ Going via Hawaii is slower end to end (136 + 219 = 355 s versus 281 s direct), b
 
 For the proposed logistics ruleset (not yet merged or pushed, so its doc wasn't available to check): if movement becomes 1.2× faster, every figure scales to about 1/1.2 (for example 136 → ~113 and 219 → ~183). If the ×2 speed-up applies only to links owned at both ends, it would apply to the Hawaii links only when the same side holds both Hawaii and the far port; the times above are the unowned or contested case.
 
-## Versioning
+## Versioning (superseded)
+Since the 2026-09-27 merge the game keeps no backward compatibility: v4 is the only map, `public/maps/imperial-1910-v3.json`, `scripts/build_imperial_v4.js`, `tests/map-versions.test.js` and the per-room map registry are removed, and v3 rooms are skipped at startup. The notes below describe the earlier two-map arrangement.
 - **Registry:** `src/maps.js` exposes `CURRENT` (v4), `MAPS` (v4 and the byte-frozen `public/maps/imperial-1910-v3.json`), and `mapFor(g)`, which returns the map a room was created with (`g.scenario`).
 - **Server:**
   - It loads rooms of any known scenario.

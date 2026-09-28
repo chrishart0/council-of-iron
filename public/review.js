@@ -31,7 +31,9 @@ export class AfterAction {
     this.root.addEventListener('click', event => this.click(event), options);
     this.root.addEventListener('input', event => {
       if (event.target.id === 'replay-slider') { this.pause(); this.seek(Number(event.target.value)); }
+      if (event.target.id === 'wire-search') { this.wireQuery = event.target.value; this.renderWire(); }
     }, options);
+    this.wireThread = 'all'; this.wireQuery = '';
     this.root.addEventListener('keydown', event => this.keydown(event), options);
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.pause(); }, options);
     this.load(state);
@@ -74,9 +76,11 @@ export class AfterAction {
       : winner ? `Victory for the ${this.side(winner.id)}` : `${this.side(r.outcome.winningSide)} prevails`;
     const reason = r.outcome.reason === 'domination' ? (economic ? `Held 60% of active industry for ${r.rules.hold} seconds` : `Held ${r.rules.threshold} provinces for ${r.rules.hold} seconds`)
       : r.outcome.reason === 'negotiated_draw' ? 'Every remaining country joined one alliance'
-      : r.outcome.draw ? `Equal ${economic ? 'industry' : 'territory'} at the deadline` : `Most ${economic ? 'industry' : 'territory'} at the deadline`;
+      : r.outcome.draw ? `Equal ${economic ? 'industry' : 'territory'} at the deadline` : `Most ${economic ? 'industry' : 'territory'} at the deadline; first place takes half the prize, second and third a quarter each`;
     const winners = winner?.members || (solo ? [solo.country] : []);
-    const verdict = r.outcome.draw ? 'Armistice' : this.viewer ? (winners.includes(this.viewer) ? 'Victory' : 'Defeat') : 'After-action report';
+    const mineSide = this.viewer ? r.alliances.find(s => s.members.includes(this.viewer)) : null;
+    const viewerRank = mineSide ? 1 + r.alliances.filter(s => s.economy > mineSide.economy).length : Infinity;
+    const verdict = r.outcome.draw ? 'Armistice' : this.viewer ? (winners.includes(this.viewer) ? 'Victory' : r.outcome.reason === 'deadline' && viewerRank <= 3 ? 'Placed' : 'Defeat') : 'After-action report';
     this.root.dataset.verdict = verdict.toLowerCase();
     const mine = this.viewer ? r.alliances.find(a => a.members.includes(this.viewer)) : null;
     const medal = mine ? { value: mine.prestige, label: 'your alliance' } : winner ? { value: winner.prestige, label: 'alliance Prestige' } : this.viewer && this.player(this.viewer) ? { value: this.player(this.viewer).prestige, label: 'your Prestige' } : null;
@@ -104,17 +108,19 @@ ${medal ? `<div class="v-medal">${icon('laurel')}<b>${signed(medal.value)}</b><s
     const alliances = [...r.alliances].sort((a, b) => Number(b.won) - Number(a.won) || b.prestige - a.prestige);
     const grouped = new Set(alliances.flatMap(a => a.members));
     const independents = [...r.players].filter(p => !grouped.has(p.country)).sort((a, b) => b.prestige - a.prestige);
-    const memberRow = p => `<tr class="mem" data-result-country="${p.country}"><th scope="row">${insignia(p.country)}<span><b>${esc(this.country(p.country).name)}</b><small>${esc(this.seat(p.country))}${p.eliminatedAt !== null ? ' · fallen' : ''}</small></span></th><td>${p.land}</td>${economic ? `<td>${p.economy}</td>` : ''}<td class="c-forces">${p.troops}</td><td class="c-earned">${number(p.maturity * 100)}%</td><td class="pr${p.prestige < 0 ? ' neg' : ''}">${signed(p.prestige)}</td></tr>`;
-    const body = alliances.map(a => `<tbody style="--c:${colors[a.id] || NEUTRAL}"><tr class="grp${a.won ? ' won' : ''}" data-result-alliance="${esc(a.id)}"><th scope="rowgroup"><i class="sw"></i><span class="grp-name">${esc(this.side(a.id))}</span>${a.won ? `<span class="tag">${icon('laurel')}Victor</span>` : r.outcome.draw ? '<span class="tag draw">Draw</span>' : ''}</th><td>${a.provinces}</td>${economic ? `<td>${a.economy}</td>` : ''}<td class="c-forces">${a.members.reduce((n, id) => n + (this.player(id)?.troops || 0), 0)}</td><td class="c-earned"></td><td class="pr${a.prestige < 0 ? ' neg' : ''}">${signed(a.prestige)}</td></tr>${a.members.map(id => this.player(id)).filter(Boolean).sort((x, y) => y.prestige - x.prestige).map(memberRow).join('')}</tbody>`).join('')
-      + (independents.length ? `<tbody class="solo"><tr class="grp solo-head"><th scope="rowgroup" colspan="${economic ? 6 : 5}">Independent</th></tr>${independents.map(memberRow).join('')}</tbody>` : '');
+    const memberRow = p => `<tr class="mem" data-result-country="${p.country}"><th scope="row">${insignia(p.country)}<span><b>${esc(this.country(p.country).name)}</b><small>${esc(this.seat(p.country))}${p.eliminatedAt !== null ? ' · fallen' : ''}</small></span></th><td>${p.land}</td>${economic ? `<td>${p.economy}</td>` : ''}<td class="c-forces">${p.troops}</td><td class="c-share">${p.victoryShare === undefined ? '—' : `${number(100 * p.victoryShare)}%`}</td><td class="c-earned">${number(p.maturity * 100)}%</td><td class="pr${p.prestige < 0 ? ' neg' : ''}">${signed(p.prestige)}</td></tr>`;
+    const rank = a => 1 + r.alliances.filter(s => s.economy > a.economy).length;
+    const placeTag = a => r.outcome.reason !== 'deadline' || r.outcome.draw || a.won || rank(a) > 3 ? '' : `<span class="tag">${rank(a) === 2 ? 'Second' : 'Third'}</span>`;
+    const body = alliances.map(a => `<tbody style="--c:${colors[a.id] || NEUTRAL}"><tr class="grp${a.won ? ' won' : ''}" data-result-alliance="${esc(a.id)}"><th scope="rowgroup"><i class="sw"></i><span class="grp-name">${esc(this.side(a.id))}</span>${a.won ? `<span class="tag">${icon('laurel')}Victor</span>` : r.outcome.draw ? '<span class="tag draw">Draw</span>' : placeTag(a)}</th><td>${a.provinces}</td>${economic ? `<td>${a.economy}</td>` : ''}<td class="c-forces">${a.members.reduce((n, id) => n + (this.player(id)?.troops || 0), 0)}</td><td class="c-share"></td><td class="c-earned"></td><td class="pr${a.prestige < 0 ? ' neg' : ''}">${signed(a.prestige)}</td></tr>${a.members.map(id => this.player(id)).filter(Boolean).sort((x, y) => y.prestige - x.prestige).map(memberRow).join('')}</tbody>`).join('')
+      + (independents.length ? `<tbody class="solo"><tr class="grp solo-head"><th scope="rowgroup" colspan="${economic ? 7 : 6}">Independent</th></tr>${independents.map(memberRow).join('')}</tbody>` : '');
     const W = 520, H = 150, total = this.map.provinces.length || 1, scale = .7;
     const series = r.series || [];
     const lines = alliances.map(a => `<polyline points="${series.map(s => { const n = s.countries.filter(c => a.members.includes(c.country)).reduce((x, c) => x + c.land, 0); return `${(s.tick / Math.max(1, r.duration) * W).toFixed(1)},${(H - Math.min(1, n / total / scale) * H).toFixed(1)}`; }).join(' ')}" style="--c:${colors[a.id] || NEUTRAL}"><title>${esc(this.side(a.id))}</title></polyline>`).join('');
     const turning = (r.events || []).filter(e => KEY_EVENTS.includes(e.type));
     const totals = r.totals || {};
     this.el('aar-overview').innerHTML = `<div class="report-body">
-<section class="r-table"><h2 class="r-head">Final standings</h2><div class="r-scroll"><table id="aar-standings"><caption class="sr-only">Final standings by alliance: provinces, ${economic ? 'industry, ' : ''}forces, share earned and Prestige</caption><thead><tr><th scope="col">Alliance / country</th><th scope="col">Land</th>${economic ? '<th scope="col">Industry</th>' : ''}<th scope="col" class="c-forces">Forces</th><th scope="col" class="c-earned">Earned</th><th scope="col">Prestige</th></tr></thead>${body}</table></div>
-<p class="fine">Alliance Prestige is the total of its members' Prestige. Prestige = payout − 100; a draw awards none. Forces include troops still marching at the finish.</p>
+<section class="r-table"><h2 class="r-head">Final standings</h2><div class="r-scroll"><table id="aar-standings"><caption class="sr-only">Final standings by alliance: provinces, ${economic ? 'industry, ' : ''}forces, prize share, share earned and Prestige</caption><thead><tr><th scope="col">Alliance / country</th><th scope="col">Land</th>${economic ? '<th scope="col">Industry</th>' : ''}<th scope="col" class="c-forces">Forces</th><th scope="col" class="c-share">Share</th><th scope="col" class="c-earned">Earned</th><th scope="col">Prestige</th></tr></thead>${body}</table></div>
+<p class="fine">Alliance Prestige is the total of its members' Prestige. Prestige = payout − 100; a draw awards none. Share: each member's part of the alliance prize, by final industry. Earned: time held in the final allegiance. Forces include troops still marching at the finish.</p>
 <dl class="aar-facts"><div><dt>Length</dt><dd>${clock(r.duration)}</dd></div><div><dt>Battles</dt><dd>${totals.battles ?? '—'}</dd></div><div><dt>Prize awarded</dt><dd>${number(r.maximumPrize - r.unawardedPrize)}<small> / ${r.maximumPrize}</small></dd></div><div><dt>Unearned</dt><dd>${number(r.unawardedPrize)}</dd></div></dl></section>
 <section class="r-side"><h2 class="r-head">Share of the map</h2><figure class="chart land-chart"><svg viewBox="-4 -6 ${W + 8} ${H + 12}" preserveAspectRatio="none" role="img" aria-label="Provinces held by each alliance over the match"><line x1="0" x2="${W}" y1="0" y2="0" class="grid"/><line x1="0" x2="${W}" y1="${H / 2}" y2="${H / 2}" class="grid"/><line x1="0" x2="${W}" y1="${H}" y2="${H}" class="grid"/>${lines}</svg>
 <figcaption><span class="axis">Top line ${Math.round(scale * 100)}% of the map · 00:00 → ${clock(r.duration)}</span>${alliances.map(a => `<span style="--c:${colors[a.id] || NEUTRAL}"><i></i>${esc(this.side(a.id))}</span>`).join('')}</figcaption></figure>
@@ -157,7 +163,42 @@ ${medal ? `<div class="v-medal">${icon('laurel')}<b>${signed(medal.value)}</b><s
   }
   diplomacy() {
     const history = this.report.events.filter(e => KEY_EVENTS.includes(e.type));
-    this.el('aar-diplomacy').innerHTML = `<h2 class="r-head">Alliances through the match</h2><p class="fine">Only active membership counts. Private offers and messages stay private.</p><div class="aar-tenures">${this.report.players.map(p => `<div class="aar-tenure-row"><b>${insignia(p.country)}${esc(faction(p.country).short)}</b><div class="aar-tenure-track">${this.report.tenures.filter(t => t.country === p.country && t.end > t.start).map(t => `<button type="button" style="left:${100 * t.start / this.report.duration}%;width:${100 * (t.end - t.start) / this.report.duration}%" class="${t.side.startsWith('solo:') ? 'independent' : ''}" data-aar-seek="${t.start}" title="${esc(this.side(t.side))} · ${clock(t.start)}–${clock(t.end)}" aria-label="${esc(this.side(t.side))}, ${esc(this.country(p.country).name)}, ${clock(t.start)} to ${clock(t.end)}">${esc(this.side(t.side))}</button>`).join('')}</div></div>`).join('')}</div><h2 class="r-head">Turning points</h2><p class="fine">Open a moment to see the map at that exact time.</p><div class="aar-timeline">${history.map(e => this.eventButton(e)).join('')}</div>`;
+    const wire = (this.report.messages || []).length ? `<h2 class="r-head">What they said</h2><p class="fine">Public AI seats disclose their world messages, their messages to other public AI seats, and chat in alliances where every member was a public AI seat. Everyone else stays private.</p><div class="wire-shell"><nav id="wire-thread-list" class="wire-thread-list" aria-label="Disclosed conversations"></nav><section class="wire-reader" aria-label="Conversation"><div class="wire-reader-head"><h3 id="wire-heading"></h3><label class="field">Find<span class="slot"><input id="wire-search" type="search" placeholder="Words or countries" autocomplete="off"></span></label></div><ol id="wire-messages" class="wire-messages" aria-live="polite"></ol></section></div>` : '';
+    this.el('aar-diplomacy').innerHTML = `${wire}<h2 class="r-head">Alliances through the match</h2><p class="fine">Only active membership counts. Private offers stay private.</p><div class="aar-tenures">${this.report.players.map(p => `<div class="aar-tenure-row"><b>${insignia(p.country)}${esc(faction(p.country).short)}</b><div class="aar-tenure-track">${this.report.tenures.filter(t => t.country === p.country && t.end > t.start).map(t => `<button type="button" style="left:${100 * t.start / this.report.duration}%;width:${100 * (t.end - t.start) / this.report.duration}%" class="${t.side.startsWith('solo:') ? 'independent' : ''}" data-aar-seek="${t.start}" title="${esc(this.side(t.side))} · ${clock(t.start)}–${clock(t.end)}" aria-label="${esc(this.side(t.side))}, ${esc(this.country(p.country).name)}, ${clock(t.start)} to ${clock(t.end)}">${esc(this.side(t.side))}</button>`).join('')}</div></div>`).join('')}</div><h2 class="r-head">Turning points</h2><p class="fine">Open a moment to see the map at that exact time.</p><div class="aar-timeline">${history.map(e => this.eventButton(e)).join('')}</div>`;
+    if (wire) { if (this.el('wire-search')) this.el('wire-search').value = this.wireQuery; this.renderWire(); }
+  }
+  wireKey(m) { return m.channel === 'world' ? 'world' : m.channel === 'alliance' ? `alliance:${m.side}` : `dm:${[m.from, m.to].sort().join(':')}`; }
+  wireThreads() {
+    const messages = this.report.messages || [], groups = new Map();
+    for (const m of messages) { const key = this.wireKey(m), g = groups.get(key) || { key, messages: [], last: 0 }; g.messages.push(m); g.last = m.tick; groups.set(key, g); }
+    const label = key => key === 'world' ? 'World' : key.startsWith('alliance:') ? this.side(key.slice(9)) : key.slice(3).split(':').map(id => this.country(id)?.name || id).join(' ↔ ');
+    return [{ key: 'all', label: 'Everything disclosed', messages, last: messages.at(-1)?.tick || 0 },
+      ...[...groups.values()].sort((a, b) => b.last - a.last).map(g => ({ ...g, label: label(g.key) }))];
+  }
+  /** Disclosed messages: player text only through textContent. */
+  renderWire() {
+    const list = this.el('wire-thread-list'), body = this.el('wire-messages'); if (!list || !body) return;
+    const threads = this.wireThreads(), selected = threads.find(t => t.key === this.wireThread) || threads[0];
+    list.replaceChildren(...threads.map(t => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'wire-thread'; b.dataset.wireThread = t.key; b.setAttribute('aria-pressed', String(t.key === selected.key));
+      const name = document.createElement('b'); name.textContent = t.label;
+      const meta = document.createElement('small'); meta.textContent = `${t.messages.length} ${t.messages.length === 1 ? 'message' : 'messages'} · last ${clock(t.last)}`;
+      b.append(name, meta); return b;
+    }));
+    const query = this.wireQuery.trim().toLocaleLowerCase();
+    const shown = selected.messages.filter(m => !query || [m.text, m.leaderName, this.country(m.from)?.name, this.country(m.to)?.name, m.side && this.side(m.side)].some(v => String(v || '').toLocaleLowerCase().includes(query)));
+    this.el('wire-heading').textContent = `${selected.label} · ${shown.length} ${shown.length === 1 ? 'message' : 'messages'}`;
+    if (!shown.length) { const empty = document.createElement('li'); empty.className = 'wire-empty'; empty.textContent = 'No disclosed messages match this view.'; body.replaceChildren(empty); return; }
+    body.replaceChildren(...shown.map(m => {
+      const li = document.createElement('li'); li.className = 'wire-letter'; li.dataset.channel = m.channel;
+      const head = document.createElement('header'), who = document.createElement('b'), to = document.createElement('small');
+      who.textContent = `${this.country(m.from)?.name || m.from}${m.leaderName ? ` · ${m.leaderName}` : ''}`;
+      to.textContent = `${m.channel === 'dm' ? `To ${this.country(m.to)?.name || m.to}` : m.channel === 'alliance' ? this.side(m.side) : 'To the world'} · ${clock(m.tick)}`;
+      head.append(who, to);
+      const text = document.createElement('p'); text.textContent = m.text;
+      const seek = document.createElement('button'); seek.type = 'button'; seek.className = 'chip'; seek.dataset.aarSeek = String(m.tick); seek.textContent = 'Watch this moment';
+      li.append(head, text, seek); return li;
+    }));
   }
   describe(e) {
     const c = id => this.country(id)?.name || 'Neutral';
@@ -177,6 +218,7 @@ ${medal ? `<div class="v-medal">${icon('laurel')}<b>${signed(medal.value)}</b><s
       case 'army_turned_around': return `${c(e.country)} turns ${e.amount} troops back toward ${this.place(e.to)}.`;
       case 'eliminated': return `${c(e.country)} is eliminated.`;
       case 'finished': return 'The match ends. Final scores are fixed.';
+      case 'dispatch': return `${c(e.from)} sends a disclosed message.`;
       default: return e.type.replaceAll('_', ' ');
     }
   }
@@ -188,7 +230,7 @@ ${medal ? `<div class="v-medal">${icon('laurel')}<b>${signed(medal.value)}</b><s
     const r = this.report, winner = r.alliances.find(a => a.won);
     const marks = r.events.filter(e => ['alliance_activated', 'war_declared', 'peace_accepted', 'dominance', 'dominance_broken', 'finished', 'capture', 'eliminated'].includes(e.type))
       .map(e => `<i class="mark m-${e.type}" style="--x:${e.tick / Math.max(1, r.duration)}"></i>`).join('');
-    const chat = r.allianceChatRevealed && r.allianceChat?.length;
+    const allianceChat = r.allianceChatRevealed && r.allianceChat?.length, chat = allianceChat || r.messages?.length;
     this.el('aar-replay').innerHTML = `<header class="topbar replay-bar" data-region="replay-top"><button type="button" class="bezel-btn" id="replay-exit" data-aar-tab="overview" aria-label="Back to the after-action report" title="After-action report" data-sfx="press">${icon('back')}</button>
 <div class="lobby-title"><b>Replay · ${esc(r.name || '')}</b><small>${esc(r.outcome.draw ? 'Ended in a draw' : winner ? `${this.side(winner.id)} won` : `${this.side(r.outcome.winningSide)} won`)}</small></div>
 <div class="clock-plaque"><div class="clock-face">${icon('clock')}<b id="replay-clock-now">00:00</b><small>/ ${clock(r.duration)}</small></div><output id="replay-clock" class="sr-only" aria-live="off">00:00 / ${clock(r.duration)}</output><span class="victory">Drag the timeline or press play</span></div>
@@ -200,8 +242,8 @@ ${medal ? `<div class="v-medal">${icon('laurel')}<b>${signed(medal.value)}</b><s
 <aside class="replay-side" aria-label="Standings and history at this moment">
 <section class="replay-leaderboard" data-region="replay-standings" aria-label="Standings at this moment"><header class="plaque"><h2><button class="lb-toggle" type="button" aria-expanded="true"><span id="replay-standings-title">Standings at 00:00</span></button></h2><span class="lb-summary plaque-note"></span><div class="tabs lb-modes" role="group" aria-label="Rank"><button type="button" data-lb-mode="teams" aria-pressed="true">Teams</button><button type="button" data-lb-mode="players" aria-pressed="false">Players</button></div></header>
 <div class="lb-body"><div class="lb-columns" aria-hidden="true"><span>#</span><span>Power</span><span>Land</span><span>Troops</span></div><ol class="lb-rows"></ol><h3 class="lb-fronts-title">${icon('war')}War fronts <small class="lb-front-count"></small></h3><ul class="lb-fronts" aria-label="Wars between blocs"></ul></div></section>
-<section class="replay-history" data-region="replay-history" aria-label="History up to this moment"><header class="plaque"><h2 id="replay-history-title">History to 00:00</h2><div class="tabs replay-filters" role="group" aria-label="Show"><button type="button" data-replay-filter="all" aria-pressed="true">All</button><button type="button" data-replay-filter="events" aria-pressed="false">Headlines</button>${chat ? '<button type="button" data-replay-filter="chat" aria-pressed="false">Alliance chat</button>' : ''}</div></header>
-<ol id="replay-feed" class="replay-feed cx-rows"></ol><p class="replay-feed-note">${chat ? 'Alliance chat was announced as public after the match. ' : ''}Select a row to jump there.</p></section>
+<section class="replay-history" data-region="replay-history" aria-label="History up to this moment"><header class="plaque"><h2 id="replay-history-title">History to 00:00</h2><div class="tabs replay-filters" role="group" aria-label="Show"><button type="button" data-replay-filter="all" aria-pressed="true">All</button><button type="button" data-replay-filter="events" aria-pressed="false">Headlines</button>${chat ? `<button type="button" data-replay-filter="chat" aria-pressed="false">${allianceChat && !r.messages?.length ? 'Alliance chat' : 'Messages'}</button>` : ''}</div></header>
+<ol id="replay-feed" class="replay-feed cx-rows"></ol><p class="replay-feed-note">${allianceChat ? 'Alliance chat was announced as public after the match. ' : ''}${r.messages?.length ? 'Public AI seats disclose their messages. ' : ''}Select a row to jump there.</p></section>
 <div class="replay-side-tabs tabs dark" role="tablist" aria-label="Standings or history"><button type="button" role="tab" aria-selected="true" data-replay-pane="standings">Standings</button><button type="button" role="tab" aria-selected="false" data-replay-pane="history">History</button></div>
 </aside>
 <section class="plate timeline" data-region="replay-timeline" aria-label="Replay controls">
@@ -217,8 +259,11 @@ ${medal ? `<div class="v-medal">${icon('laurel')}<b>${signed(medal.value)}</b><s
    * shown up to the scrubbed tick; a row seeks there. Chat is player text: textContent only. */
   buildHistory() {
     const list = this.el('replay-feed'); if (!list) return;
-    const rows = [...this.report.events.map(e => ({ tick: e.tick, kind: 'event', e })),
-      ...(this.report.allianceChatRevealed ? this.report.allianceChat || [] : []).map(m => ({ tick: m.tick, kind: 'chat', m }))]
+    const revealed = this.report.allianceChatRevealed ? this.report.allianceChat || [] : [];
+    const disclosed = (this.report.messages || []).filter(m => !(revealed.length && m.channel === 'alliance'))
+      .map(m => ({ tick: m.tick, from: m.from, sideName: m.channel === 'alliance' ? this.side(m.side) : m.channel === 'dm' ? `to ${this.country(m.to)?.name || m.to}` : 'World', text: m.text }));
+    const rows = [...this.report.events.filter(e => e.type !== 'dispatch').map(e => ({ tick: e.tick, kind: 'event', e })),
+      ...[...revealed, ...disclosed].map(m => ({ tick: m.tick, kind: 'chat', m }))]
       .sort((a, b) => a.tick - b.tick || (a.kind === 'chat') - (b.kind === 'chat'));
     this.historyRows = rows.map(row => {
       const tone = row.kind === 'chat' ? 'chat' : TONE[row.e.type] || 'neutral', marker = row.kind === 'event' && KEY_EVENTS.includes(row.e.type);
@@ -384,6 +429,7 @@ ${medal ? `<div class="v-medal">${icon('laurel')}<b>${signed(medal.value)}</b><s
     }
     if (button.dataset.aarTab) await this.showTab(button.dataset.aarTab);
     if (button.dataset.replayFilter) this.filterHistory(button.dataset.replayFilter);
+    if (button.dataset.wireThread) { this.wireThread = button.dataset.wireThread; this.renderWire(); return; }
     if (button.dataset.chart) {
       const s = this.chartState[button.dataset.chart];
       if (button.dataset.metric) s.metric = button.dataset.metric; else s.compare = button.dataset.compare;
@@ -404,7 +450,7 @@ ${medal ? `<div class="v-medal">${icon('laurel')}<b>${signed(medal.value)}</b><s
       else { this.pause(); this.seek(action === 'start' ? 0 : action === 'end' ? this.report.duration : this.position + (action === 'back' ? -10 : 10)); }
     }
     if (button.dataset.aarEvent && this.reader) {
-      this.pause(); const ticks = [...new Set(this.report.events.map(e => e.tick))];
+      this.pause(); const ticks = [...new Set(this.report.events.filter(e => e.type !== 'dispatch').map(e => e.tick))];
       const at = button.dataset.aarEvent === 'next' ? ticks.find(t => t > this.position) ?? this.report.duration
         : ticks.filter(t => t < this.position).at(-1) ?? 0;
       this.seek(at);

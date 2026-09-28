@@ -79,18 +79,30 @@ function play(g,a,offers,submit,skipped) {
   }
 }
 /** `onTick(g)` (optional) sees the board at the start of every tick, before that tick's orders. */
+/** Seat the eight recorded countries and run the opening council with fixed introductions. */
+export function seatRecorded(g, profiles = null) {
+  for(const c of map.countries)join(g,map,{profileId:profiles?.[c.id]?.id ?? c.id,name:profiles?.[c.id]?.name ?? `Single-controller ${c.id}`,country:c.id,kind:'agent'});
+  beginOpening(g);for(const c of map.countries)lockOpening(g,c.id,introduction(c.id));start(g);
+}
+/** Step a started game through the recorded decisions: `to(tick)` plays every recorded order before `tick`. */
+export function stepper(g, { onTick } = {}) {
+  const offers={map:new Map(),next:0},skipped={};let index=0;
+  return { skipped, get index(){return index;}, to(until=Infinity) {
+    while(g.status==='running' && g.tick<until) {
+      onTick?.(g);
+      while(fixture.actions[index]?.tick===g.tick)play(g,fixture.actions[index++],offers,(country,action,opId)=>act(g,map,country,action,opId),skipped);
+      tick(g);
+    }
+  } };
+}
+/** `onTick(g)` (optional) sees the board at the start of every tick, before that tick's orders. */
 export function replay({ onTick } = {}) {
   const g=createGame({id:'handplay',name:'Handplay replay',hostId:'britain'},map);
-  for(const c of map.countries)join(g,map,{profileId:c.id,name:`Single-controller ${c.id}`,country:c.id,kind:'agent'});
-  beginOpening(g);for(const c of map.countries)lockOpening(g,c.id,introduction(c.id));start(g);
-  const validate=validator(g),offers={map:new Map(),next:0},skipped={};let ledger=validate(),index=0;
-  while(g.status==='running') {
-    onTick?.(g);
-    while(fixture.actions[index]?.tick===g.tick)play(g,fixture.actions[index++],offers,(country,action,opId)=>act(g,map,country,action,opId),skipped);
-    tick(g);ledger=validate();
-  }
-  assert.equal(index,fixture.actions.filter(a=>a.tick<g.tick).length,'Every command before the finish must be offered to the engine.');
-  return {game:g,report:summary(g,ledger,'deterministic-engine-replay',skipped)};
+  seatRecorded(g);
+  const validate=validator(g),run=stepper(g,{onTick:g=>{onTick?.(g);if(g.tick)ledger=validate();}});let ledger=validate();
+  run.to();ledger=validate();
+  assert.equal(run.index,fixture.actions.filter(a=>a.tick<g.tick).length,'Every command before the finish must be offered to the engine.');
+  return {game:g,report:summary(g,ledger,'deterministic-engine-replay',run.skipped)};
 }
 export async function replayHttp() {
   const {makeServer}=await import('../src/server.js');

@@ -52,11 +52,11 @@ Why allies count: a coalition's shared logistics is how fronts get relieved in a
 
 **Determinism and ETAs.** The engine stores `travelTimes` (non-internal) and `internalTravelTimes` per room. Every preview (browser drag label and order plan, `/preview`, `/plan`, `plan_rally`, turn-around) charges the same table. An army on an internal leg carries `leg` so recall and turn-around ETAs stay exact.
 
-**Old rooms unchanged.** `createGame` defaults to `classic`, which adds no fields, so old rooms and the 630-tick golden handplay replay match byte for byte. The server creates new rooms with `ruleset: "logistics-1"` unless the host passes `"classic"`. The fixture is also in `tests/balance-cases.json` (`logistics-1`), and a test asserts that both copies are identical.
+**One ruleset (since the 2026-09-27 master merge).** These numbers are `RULES` in `src/engine.js`; the `classic` ruleset and the room `ruleset` option were removed (no backward compatibility). The same numbers are in `tests/balance-cases.json` (`logistics-1`), and a test asserts that they match `RULES`.
 
 ### 3. Deferred
 
-- **Defender (entrenchment) bonus:** proposed, not added. In self-play, battles under logistics-1 stay short (median 9 ticks) and there is no stalemate problem to fix. Slower rounds with unchanged recruitment already favour a defender slightly. Test it with humans first. A candidate would be "defender wins ties **and** rolls a third die after 60 ticks of battle".
+- **Defender (entrenchment) bonus:** not added here; master's industry defence (+1 to the highest defender die at industry II–III) arrived with the merge instead. In self-play, battles under logistics-1 stay short (median 9 ticks) and there is no stalemate problem to fix. Slower rounds with unchanged recruitment already favour a defender slightly. Test it with humans first. A candidate would be "defender wins ties **and** rolls a third die after 60 ticks of battle".
 - **Idle-surplus map overlay:** the tournament now measures idle share. The browser shows each province's free troops and rally status on its card, but no heat-map (left for the War Room UI).
 - **Bots:** `agents/industrial-policy.js` is unchanged. It reads costs and travel times from `observe`, so it adapts, and it has no attention limit that a rally point would relieve. Bots now rarely build level III, because the payback check in the policy (not a hard-coded cost) rejects late upgrades.
 

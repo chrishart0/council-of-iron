@@ -881,7 +881,7 @@ def main():
     parser.add_argument('--artifacts',default=str(ROOT/'artifacts/ui'))
     parser.add_argument('--gif')
     args=parser.parse_args();out=Path(args.artifacts);out.mkdir(parents=True,exist_ok=True)
-    report={'status':'not completed','transport':'python-http-bridge' if args.bridge else 'native-browser-http','assertions':[],'pageErrors':[],'fixture':'Recorded game at tick 480, not a new balance sample'}
+    report={'status':'not completed','transport':'python-http-bridge' if args.bridge else 'native-browser-http','assertions':[],'pageErrors':[],'fixture':'Recorded decisions replayed under the current rules, paused at tick 480; not a new balance sample'}
     server=subprocess.Popen(['node','tests/ui-browser-server.js'],cwd=ROOT,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
     frames=[]
     try:
@@ -1098,33 +1098,37 @@ def main():
                 if w==390:capture('07-mobile.png')
             page.set_viewport_size({'width':1600,'height':1000});camera(page,'world')
             before=len(spy(page,'cues'))
-            server.stdin.write('535\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==535
-            expect(page.locator('#declaration')).to_contain_text('Major battle at Northern India',timeout=5000)
-            page.wait_for_timeout(1600);fresh_cues=spy(page,'cues')[before:]
-            assert len(fresh_cues)==1 and fresh_cues[0]['audible'],fresh_cues
-            report['sound']={'tick535':fresh_cues}
-            report['assertions'].append(f'The live tick-535 headlines chose exactly one audible cue ({fresh_cues[0]["cue"]}, priority {fresh_cues[0]["priority"]}).')
-            expect(page.locator('#declaration')).to_contain_text('troops lost')
-            page.screenshot(path=str(out/'13-major-battle-banner.png'))
             personal=page.locator('#toasts .cx-toast[data-tier="personal"]')
-            # This legacy room makes every non-ally hostile: Russia's army reaching the Netherlands is an ACTION and owns
-            # the one lane; the battle result waits underneath until the decision is dismissed (it stays in Messages).
             threat=page.locator('#toasts .cx-toast[data-tier="action"]')
-            expect(threat).to_contain_text('attacks Netherlands',timeout=5000);expect(personal).to_have_count(0)
-            check_layout(page,'1600x1000 banner and action toast')
-            threat.locator('[data-do="dismiss"]').click()
-            expect(personal).to_contain_text('Province lost · Northern India',timeout=3000)
-            check_layout(page,'1600x1000 banner and toast')
-            capture('11-battle-loss.png')
+            # Russia's army (at war with Britain's alliance) lands on the Netherlands at 08:50: within 30 s it is an ACTION.
+            server.stdin.write('505\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==505
+            expect(threat).to_contain_text('attacks Netherlands',timeout=5000)
+            check_layout(page,'1600x1000 action toast')
+            threat.locator('[data-do="dismiss"]').click();expect(threat).to_have_count(0)
+            capture('11-incoming-attack.png')
+            # A recorded defence: Russia's 9 troops break on Northern India (a PERSONAL notice).
+            server.stdin.write('587\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==587
+            expect(personal).to_contain_text('Line held · Northern India',timeout=8000)
+            expect(personal).to_contain_text('85 troops')
+            camera(page,'world');capture('12-line-held.png')
+            # Tick 646: France takes the Rhineland in a major battle (a World row; not Britain's battle, so no banner) and
+            # Britain's alliance starts a victory countdown (a banner: it affects every seat); exactly one audible cue.
+            page.wait_for_timeout(3000)  # past the 2.5 s stinger gap after the Line held cue, as in real time
+            before=len(spy(page,'cues'))
+            server.stdin.write('647\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==647
+            expect(page.locator('#declaration')).to_contain_text('holds 60%',timeout=5000)
+            page.wait_for_timeout(1600);fresh_cues=spy(page,'cues')[before:]
+            assert len([c for c in fresh_cues if c['audible']])==1,fresh_cues
+            report['sound']={'tick646':fresh_cues}
+            report['assertions'].append(f'The live tick-646 headlines (a major battle elsewhere and your alliance’s victory countdown) chose exactly one audible cue ({[c["cue"] for c in fresh_cues if c["audible"]][0]}).')
+            page.screenshot(path=str(out/'13-countdown-banner.png'))
+            check_layout(page,'1600x1000 banner')
+            server.stdin.write('657\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==657
             rows=open_thread(page,'world')
-            expect(rows.locator('[data-kind="major_battle"]').last).to_contain_text('Northern India')
-            expect(rows.locator('[data-kind="dominance_broken"]').last).to_contain_text('Countdown stopped')
+            expect(rows.locator('[data-kind="major_battle"]').last).to_contain_text('Rhineland')
+            expect(rows.locator('[data-kind="dominance_broken"]').last).to_contain_text('Countdown stopped',timeout=5000)
             close_comms(page)
-            report['assertions'].append('A live recorded major battle (casualties above max(20, 3% of all troops)) raised one banner and a row in the World thread; an incoming attack arrived as the one ACTION toast (the battle result waited underneath and showed once the decision was dismissed).')
-            server.stdin.write('539\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==539
-            expect(personal).to_contain_text('Line held',timeout=8000)
-            expect(personal).to_contain_text('16 troops')
-            camera(page,'europe');capture('12-line-held.png')
+            report['assertions'].append('Recorded position stepped live: a hostile army due within 30 s is the one ACTION toast; a defence you won is a PERSONAL notice with the troops left; a major battle (casualties above max(20, 3% of all troops)) is a World row; your alliance’s victory countdown is a banner, and its end is a “Countdown stopped” row.')
             feed_checks(page,report)
             page.wait_for_timeout(900);before=len(spy(page,'cues'))
             go_back(page);page.locator('[data-room="ui-fixture"][data-resume]').click()
@@ -1133,7 +1137,7 @@ def main():
             assert spy(page,'cues')[before:]==[],spy(page,'cues')[before:]
             sound_settings_checks(page,context,url,report,args.bridge)
             for banner in ['#declaration','#alliance-seal','#fallen-seal']:expect(page.locator(banner)).to_be_hidden()
-            rows=open_thread(page,'world');expect(rows.locator('[data-kind="major_battle"]').last).to_contain_text('Netherlands');close_comms(page)
+            rows=open_thread(page,'world');expect(rows.locator('[data-kind="major_battle"]').last).to_contain_text('Rhineland');close_comms(page)
             report['assertions'].append('Reopening the room rebuilt the World thread without replaying banners or toasts.')
             report['assertions'].append('Actual recorded losses and defense trigger factual, dismissible notices; broken hold explains itself; reopening suppresses old battle popups.')
             page.set_viewport_size({'width':1500,'height':1150});go_back(page)

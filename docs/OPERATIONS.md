@@ -2,9 +2,9 @@
 
 ## Current scenario and saved records
 
-New rooms use `imperial-1910-v4` (v3 plus a neutral Hawaii; see `docs/MAP-V4-HAWAII.md`). Existing `imperial-1910-v3` rooms keep loading, playing and replaying on the frozen v3 map (`public/maps/imperial-1910-v3.json`); `src/maps.js` resolves each room's map from its `scenario`. New rooms freeze their rules, coordinates and travel times into snapshots. Earlier snapshots remain in SQLite. Pre-change rooms are not playable; finished industrial rooms with a materialized public review remain readable. Earlier result rows remain in personal history, while standings count matches played under the current economic victory rule. Back up SQLite normally before updating; no database reset is needed.
+There is one map, `imperial-1910-v4` (`public/imperial-map.json`; see `docs/MAP-V4-HAWAII.md`), and one ruleset (`RULES` in `src/engine.js`). The game keeps no backward compatibility: at startup the server loads a stored room only if it was created on this map and has every current rule field (`loadable()` in `src/server.js`); a finished room on this map with a materialized public review also loads. Anything else — rooms from the classic ruleset, the old v3 map, or a rule set missing current fields — is skipped with one log line (`Skipped N stored room(s) from an earlier version of the game: …`); unreadable snapshots are skipped too. Nothing is migrated or deleted: the rows stay in SQLite, and personal result history keeps them. Standings count results on the current map. Back up SQLite normally before updating.
 
-`public/imperial-map.json` is the current runtime map (v4, built from v3 by `node scripts/build_imperial_v4.js`; `--check` verifies it). Frozen earlier maps live in `public/maps/`. `public/map.json` remains as source geometry for the optional map-authoring script, not as a game mode. Runtime needs no Python or Shapely installation.
+`public/imperial-map.json` is the runtime map and the source of truth (it was derived once from the earlier v3 build; that builder and the v3 file are removed). `public/map.json` remains as source geometry for the optional map-authoring script, not as a game mode. Runtime needs no Python or Shapely installation.
 
 ## Supported deployment
 

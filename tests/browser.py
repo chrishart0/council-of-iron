@@ -110,7 +110,6 @@ def main():
                 page.locator('#create-form button[type=submit]').click()
                 expect(page.locator('#lobby')).to_be_visible()
                 room=http('/api/games')['games'][0]['id']
-                assert http('/api/games')['games'][0]['ruleset']=='logistics-1','new rooms default to logistics-1'
                 page.locator('[data-country-seat="usa"]').click()
                 page.locator('#join-form button').click()
                 expect(page.locator('#lobby-note')).to_contain_text('You command United States')
@@ -119,8 +118,18 @@ def main():
                 page.locator('#fill-bots').click()
                 expect(page.locator('#room-label')).to_contain_text('8/8')
                 page.locator('#start-match').click()
+                expect(page.locator('#phase')).to_have_text('Opening council')
+                expect(page.locator('#opening-countdown')).to_contain_text('until the campaign begins')
+                page.locator('#leader-name').fill('President Meridian')
+                page.locator('#opening-message').fill('The republic enters the council with open eyes and steady resolve.')
+                page.locator('#opening-form button[type=submit]').click()
+                expect(page.locator('#opening-form')).to_be_hidden()
+                expect(page.locator('[data-country-seat="usa"] small')).to_contain_text('Ready')
+                cli('opening','Envoy Ash','Britain comes to listen, bargain, and stand by its allies.')
                 expect(page.locator('#phase')).to_have_text('In session')
-                report['assertions'].append('Separate CLI process joined Britain; six practice bots filled seats; host started eight-seat match.')
+                opening=[e for e in http(f'/api/games/{room}?after=0')['events'] if e['type']=='message' and e.get('opening')]
+                assert {e['from'] for e in opening}==set(p['id'] for p in http(f'/api/games/{room}')['players']) and all(e['untrusted'] for e in opening)
+                report['assertions'].append('Separate CLI process joined Britain; six practice bots filled seats; host started the opening council; the browser and the CLI each locked a leader and a world introduction (bots got defaults), and the match began when all were ready.')
                 if args.gif:
                     page.evaluate('''() => { const note=document.createElement('div');note.textContent='ACTUAL BROWSER CAPTURE · 12× TEST CLOCK · HEURISTIC AGENTS';note.style.cssText='position:fixed;right:18px;bottom:10px;z-index:20;padding:6px 10px;background:#142c34ee;border:1px solid #c6a87280;color:#e4d6ae;font:9px system-ui;letter-spacing:.7px;border-radius:3px;pointer-events:none';document.body.append(note); }''')
                 capture(page,800)
@@ -355,13 +364,16 @@ def main():
                 report['assertions'].append('Persistent Prestige standings included the browser player after returning to the rooms.')
                 # Local UI interactions: distinct source selection, keyboard tabs and a real next room.
                 page.locator('#room-name').fill('Second Council')
-                page.locator('[data-ruleset="classic"]').click()  # this room checks the classic 12-troop development path
                 page.locator('#create-form button[type=submit]').click()
                 expect(page.locator('#lobby')).to_be_visible()
                 page.locator('[data-country-seat="usa"]').click()
                 page.locator('#join-form button').click()
                 page.locator('#fill-bots').click()
                 page.locator('#start-match').click()
+                expect(page.locator('#phase')).to_have_text('Opening council')
+                page.locator('#leader-name').fill('President Meridian')
+                page.locator('#opening-message').fill('A second council meets under the republic’s watch.')
+                page.locator('#opening-form button[type=submit]').click()
                 expect(page.locator('#phase')).to_have_text('In session')
                 expect(page.locator('#card')).to_be_hidden()
                 if page.locator('#coach').is_visible():page.locator('#coach-skip').click()
@@ -405,21 +417,57 @@ def main():
                 # Alaska starts undeveloped; let natural recruitment fund construction.
                 province(page,'alaska')
                 develop=page.locator('#develop-province')
-                expect(develop).to_be_enabled(timeout=15000)
+                expect(develop).to_be_enabled(timeout=40000)
                 page.locator('#card-size').click();expect(page.locator('#development-payback')).to_contain_text('payback')
                 develop.click()
-                expect(page.locator('#confirm-dialog')).to_contain_text('Spend 12 troops')
+                expect(page.locator('#confirm-dialog')).to_contain_text('Spend 24 troops')
                 page.locator('#confirm-dialog [value="confirm"]').click()
                 expect(lane(page)).to_contain_text('Investment committed')
                 expect(develop).to_contain_text(re.compile('Construction queued|Building level'),timeout=6000)
                 page.screenshot(path=str(artifacts/'08-development.png'),full_page=True)
                 capture(page,1300)
-                expect(page.locator('#card-sub')).to_contain_text('industry Ⅱ',timeout=15000)
-                report['assertions'].append('Browser funded, confirmed and completed province development using naturally recruited manpower.')
+                # Construction takes 120 game seconds; Alaska borders Canada, so the build either completes or the province
+                # falls first (and the unfinished work is lost). Both are the real rule; the card must show whichever happened.
+                deadline=time.monotonic()+25
+                while time.monotonic()<deadline:
+                    alaska=next(p for p in http(f'/api/games/{room2}')['provinces'] if p['id']=='alaska')
+                    if alaska['owner']!='usa' or alaska['development']>=2:break
+                    page.wait_for_timeout(300)
+                if alaska['owner']=='usa':
+                    assert alaska['development']==2,alaska
+                    province(page,'alaska');expect(page.locator('#card-sub')).to_contain_text('industry Ⅱ',timeout=5000)
+                    report['assertions'].append('Browser funded, confirmed and completed province development using naturally recruited manpower.')
+                else:
+                    assert alaska['developing'] is None and alaska['development']==1,alaska
+                    report['assertions'].append('Browser funded and confirmed province development with naturally recruited manpower; a bot captured Alaska before the 120-second build finished, and the unfinished work was lost (the capture rule).')
+                # A long march: through your own land to a province beyond the neighbours (one controlled route).
+                order(page,'west-us','east-us')
+                expect(page.locator('#primary')).to_contain_text('Reinforce')
+                expect(page.locator('#order-details')).to_contain_text('Via',timeout=5000)
+                page.locator('#primary').click();expect(lane(page)).to_contain_text('Sent')
+                deadline=time.monotonic()+8
+                while time.monotonic()<deadline and not any(a.get('controlledMarch') and a['path'][-1]=='east-us' for a in http(f'/api/games/{room2}')['armies']):page.wait_for_timeout(250)
+                assert any(a.get('controlledMarch') and a['path'][-1]=='east-us' for a in http(f'/api/games/{room2}')['armies'])
+                report['assertions'].append('Browser sent a long march from West US to East US through its own Central US: the card showed the controlled route and the server moved one transit column along it.')
                 page.set_viewport_size({'width':390,'height':844})
                 assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1')
                 page.screenshot(path=str(artifacts/'09-mobile-orders.png'),full_page=True)
                 page.set_viewport_size({'width':1600,'height':1050})
+                # A host who filled every seat with bots before choosing a country takes one of them over.
+                page.goto(url+'/');expect(page.locator('#room-name')).to_be_visible()
+                page.locator('#room-name').fill('Practice council')
+                page.locator('#create-form button[type=submit]').click()
+                expect(page.locator('#lobby')).to_be_visible()
+                page.locator('[data-country-seat="japan"]').click()
+                expect(page.locator('#fill-bots')).to_contain_text('Take this seat')
+                page.locator('#fill-bots').click()
+                expect(page.locator('#room-label')).to_contain_text('8/8')
+                expect(page.locator('#lobby-note')).to_contain_text('You command Japan')
+                practice=http('/api/games')['games'][0]['id']
+                players=http(f'/api/games/{practice}')['players']
+                assert next(p for p in players if p['id']=='japan')['kind']=='human' and sum(p['kind']=='bot' for p in players)==7
+                page.locator('#start-match').click();expect(page.locator('#phase')).to_have_text('Opening council')
+                report['assertions'].append('A host who had not chosen a country took Japan and filled the other seven seats with bots in one step, then began the opening council.')
 
                 assert not report['pageErrors'],report['pageErrors']
                 if args.gif:

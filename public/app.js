@@ -11,7 +11,8 @@ import { LeaderboardPanel } from './leaderboard-panel.js';
 import { ExpandableMap } from './expand.js';
 // Relations and alliance colours: the same DOM-free helpers the atlas and agent tools use.
 import { relationsOf, allianceColors, threatening } from './relations.js';
-import { turnAroundArrival, legTicks } from './movement.js';
+import { turnAroundArrival, legTicks, ownedPath } from './movement.js';
+import { combatForecast } from './combat.js';
 import { SoundBoard } from './sound.js';
 /* v0.9 — the War Room. One map, two nouns: a PROVINCE (troops) opens the order card; a COUNTRY (diplomacy)
  * opens the country card; your own standard opens your alliance card. Each card has one primary action.
@@ -52,6 +53,23 @@ const mayEnter = (a,b) => !b || sameSide(a,b) || atWar(a,b);
 const seated = () => Boolean(state?.you) && !spectating;
 const active = () => seated() && state.status==='running' && myPlayer()?.eliminatedAt===null;
 const neighbours = id => place(id)?.neighbors || [];
+/** How your troops reach `to` from `from`: a neighbour directly, or the quickest chain of your own provinces
+ * (the engine's controlled long march; the same route and leg times the server charges). Null: unreachable. */
+function routeOf(from,to){
+  if(!state || !from || !to || from===to)return null;
+  if(neighbours(from).includes(to))return {path:null,travel:travelOf(from,to)};
+  if(!state.rules?.distanceMovement || !state.you || prov(from)?.owner!==state.you)return null;
+  const path=ownedPath(map,state.provinces,state.travelTimes,state.you,from,to,true);
+  return path?{path,travel:path.reduce((n,id,i)=>n+(travelOf(i?path[i-1]:from,id) ?? 0),0)}:null;
+}
+const canReach=(from,to)=>Boolean(routeOf(from,to));
+/** Every province your troops in `from` can be sent to (neighbours first). */
+let reachCache={key:'',list:[]};
+const reachable=from=>{
+  const key=`${from}|${state?.tick}|${state?.provinces.map(p=>p.owner===state.you?1:0).join('')}`;
+  if(reachCache.key!==key)reachCache={key,list:[...neighbours(from),...map.provinces.map(p=>p.id).filter(id=>!neighbours(from).includes(id) && canReach(from,id))]};
+  return reachCache.list;
+};
 /** "Turn around" for one of your moving armies: advancing = recall home; returning = resume toward the
  * province it had been heading for, from where it is now. Mirrors the engine's turnAroundPlan (which
  * re-checks everything when the order executes next tick). Null when there is nothing to offer. */
@@ -112,7 +130,7 @@ function announce(events){
   }
 }
 function renderLeaderboard(){
-  const box=$('leaderboard');box.hidden=!state || state.status==='lobby';
+  const box=$('leaderboard');box.hidden=!state || ['lobby','opening'].includes(state.status);
   if(!box.hidden)standings.update(state,8); // v0.8: every power (≤8 seats) is one click from its country card
 }
 
@@ -122,7 +140,7 @@ function loadRead(){try{return new Set(JSON.parse(localStorage.getItem(readKey()
 function saveRead(keys){try{localStorage.setItem(readKey(),JSON.stringify([...keys].slice(-1200)));}catch{}}
 /** Messages: the inbox, threads and toasts for this seat (spectators: the World thread, read-only). */
 function renderComms(live){
-  if(!state || state.status==='lobby'){comms.panel.hidden=true;comms.button.hidden=true;return;}
+  if(!state || ['lobby','opening'].includes(state.status)){comms.panel.hidden=true;comms.button.hidden=true;return;}
   const room=`${matchId}:${state.you}`;
   if(comms.room!==room){comms.reset();comms.room=room;comms.read=loadRead();}
   const before=comms.box;
@@ -172,11 +190,11 @@ function showIdentity(){ $('identity').textContent=identity?.name || 'Observer';
 function options(id,values,current){syncOptions($(id),values,current);}
 async function rooms(){
   const data=await request('/api/games');
-  const sections=[['running','In progress','Watch'],['lobby','Open rooms','Enter'],['finished','Concluded','Review']];
+  const sections=[['running','In progress','Watch'],['opening','Opening councils','Watch'],['lobby','Open rooms','Enter'],['finished','Concluded','Review']];
   const seats=g=>`${g.players.length}/8 seats · ${g.speed===1?'30 min':'5 min'}`;
   $('rooms').innerHTML=data.games.length?sections.map(([status,title,label])=>{
     const found=data.games.filter(g=>g.status===status);
-    return found.length?`<section class="room-group"><h3>${title} <small>${found.length}</small></h3>${found.map(g=>`<div class="room-card${status==='running'?' live':''}"><div><p>${esc(g.name)}</p><small>${seats(g)}${status==='running'?` · ${time(g.tick)} played`:''}</small></div><div class="room-entry-actions">${status==='running' && g.you?`<button class="btn btn-primary" data-room="${esc(g.id)}" data-resume="true" data-sfx="confirm">Resume</button>`:''}<button class="btn${status==='lobby'?' btn-primary':''}" data-room="${esc(g.id)}" data-spectate="${status==='running'}" data-sfx="press">${label}</button></div></div>`).join('')}</section>`:'';
+    return found.length?`<section class="room-group"><h3>${title} <small>${found.length}</small></h3>${found.map(g=>`<div class="room-card${status==='running'?' live':''}"><div><p>${esc(g.name)}</p><small>${seats(g)}${status==='running'?` · ${time(g.tick)} played`:''}</small></div><div class="room-entry-actions">${['running','opening'].includes(status) && g.you?`<button class="btn btn-primary" data-room="${esc(g.id)}" data-resume="true" data-sfx="confirm">Resume</button>`:''}<button class="btn${status==='lobby'?' btn-primary':''}" data-room="${esc(g.id)}" data-spectate="${['running','opening'].includes(status)}" data-sfx="press">${label}</button></div></div>`).join('')}</section>`:'';
   }).join(''):'<p class="empty-note">No rooms yet. Open the first council.</p>';
   const standingsData=await request('/api/standings');
   $('standings').innerHTML=standingsData.standings.length?standingsData.standings.map(p=>`<div class="standing-row"><span>${esc(p.name)} <small class="muted">${p.matches} ${p.matches===1?'match':'matches'}</small></span><b>${signed(p.prestige)}</b></div>`).join(''):'<p class="empty-note">No results yet. Finish a match to earn Prestige.</p>';
@@ -246,7 +264,8 @@ function initMap(){
   atlas=new Atlas(replacement,map,selectProvince,{legend:{placement:'bottom-left',container:$('map-key'),collapsed:false},
     drag:{start:(id,{counter})=>active() && prov(id)?.owner===state.you && (counter || sources.includes(id)) && freeTroops(id)>0,
       begin:from=>{sources=[from];target=null;armyId=null;proposing=false;paintMap();},
-      label:(from,to)=>`${amountFor(from)} · ${travelOf(from,to) ?? '?'}s`,
+      label:(from,to)=>`${amountFor(from)} · ${routeOf(from,to)?.travel ?? '?'}s`,
+      targets:from=>reachable(from),
       end:(from,to)=>{sources=[from];target=to;armyId=null;openCard('province',to || from);paintMap();revealUnderCard(to || from);}},
     onArmy:id=>{const a=state?.armies.find(a=>a.id===id);if(!a)return false;armyId=id;sources=[];target=null;openCard('army',id);paintMap();return true;}});
   $('landing-map').innerHTML=map.provinces.map(p=>`<path d="${p.path}"/>`).join('');
@@ -305,15 +324,17 @@ function selectProvince(id,modifiers={}){
   armyId=null;proposing=false;
   if(modifiers.shiftKey && mine){sources=[id];target=null;}
   else if(target===id || (!target && sources.length===1 && sources[0]===id)){closeCard({restoreFocus:false});return;}
-  else if(target && mine && neighbours(id).includes(target)){
+  else if(target && mine && canReach(id,target)){
     sources=sources.includes(id)?sources.filter(s=>s!==id):[...sources,id];
     if(!sources.length)sources=[id];
   }
-  else if(sources.length===1 && !target && neighbours(sources[0]).includes(id))target=id;
+  else if(sources.length===1 && !target && canReach(sources[0],id))target=id;
   else if(mine){sources=[id];target=null;}
   else{
     // Target first: the best-placed of your neighbouring provinces is proposed as the source.
-    const donors=active()?state.provinces.filter(q=>q.owner===state.you && neighbours(q.id).includes(id) && freeTroops(q.id)>0).sort((a,b)=>freeTroops(b.id)-freeTroops(a.id)):[];
+    // Neighbours first; otherwise the best-placed province your land links to it.
+    const donors=active()?state.provinces.filter(q=>q.owner===state.you && freeTroops(q.id)>0 && canReach(q.id,id))
+      .sort((a,b)=>Number(neighbours(b.id).includes(id))-Number(neighbours(a.id).includes(id)) || freeTroops(b.id)-freeTroops(a.id)):[];
     sources=donors.length?[donors[0].id]:[];target=id;
   }
   openCard('province',target || sources[0] || id);paintMap();revealUnderCard(target || sources[0] || id);
@@ -332,7 +353,7 @@ function warPlan(owner){
 /** Everything the order card shows for the current sources → target, and its one primary action. */
 function orderPlan(){
   const tp=prov(target),owner=tp?.owner || null,name=place(target).name,who=owner?faction(owner).short:null;
-  const parts=sources.map(from=>({from,free:freeTroops(from),amount:amountFor(from),travel:travelOf(from,target) ?? 0}));
+  const parts=sources.map(from=>{const route=routeOf(from,target);return {from,free:freeTroops(from),amount:amountFor(from),travel:route?.travel ?? 0,path:route?.path || null};});
   const total=parts.reduce((n,s)=>n+s.amount,0),travel=Math.max(0,...parts.map(s=>s.travel)),war=warPlan(owner);
   const relation=!owner?'unclaimed':owner===state.you?'own':sameSide(state.you,owner)?'ally':war?'neutral':'enemy';
   const words={unclaimed:['UNCLAIMED','No declaration needed.'],own:['YOUR PROVINCE','Move troops within your land.'],ally:['ALLIED',`Troops you send become ${who}’s.`],
@@ -348,7 +369,7 @@ function orderPlan(){
   else label=`Send ${total} → ${name}`;
   let why='';
   if(kind!=='vote' && kind!=='voting'){
-    if(!sources.length){disabled=true;why=`None of your provinces borders ${name}.`;}
+    if(!sources.length){disabled=true;why=`None of your provinces can reach ${name}.`;}
     else if(!total){disabled=true;why='No free troops: one must stay home.';}
     else if(budget<=0){disabled=true;why=`Command limit reached${recovery!=null?`: next order in ${Math.max(0,recovery-state.tick)}s`:''}.`;}
   }
@@ -392,7 +413,10 @@ async function updatePreview(){
   try{
     const result=await request(`/api/games/${matchId}/preview?from=${sources[0]}&to=${target}&amount=${amount}`);
     if(key!==previewKey || version!==previewVersion || epoch!==generation)return;
-    $('order-details').innerHTML=`${esc(result.summary)}<small>${result.remaining} uncommitted troops stay home · ${result.travelTicks}s travel · arrives ${time(result.arrivesAt)}${result.reserved?` · ${result.reserved} already reserved`:''}. ${result.incoming.length} known incoming armies. Future orders and recruitment can change the result.</small>`;
+    const via=result.path?.length>1?`Via ${result.path.slice(0,-1).map(v=>esc(place(v).name)).join(' → ')} · `:'';
+    const hostile=prov(target)?.owner!==state.you && !sameSide(prov(target)?.owner,state.you);
+    const odds=hostile && result.combatAtArrival?`<b class="odds">${Math.round(100*result.combatAtArrival.attackerWinChance)}% to take it against ${result.defenseAtArrival.total} expected defenders</b>`:'';
+    $('order-details').innerHTML=`${esc(result.summary)}${odds}<small>${via}${result.remaining} troops stay home · ${result.travelTicks}s travel · arrives ${time(result.arrivesAt)}${result.reserved?` · ${result.reserved} already reserved`:''}${hostile && result.defenseAtArrival?` · ${result.defenseAtArrival.current} there now, +${result.defenseAtArrival.recruits} recruits, +${result.defenseAtArrival.incoming} arriving`:''}. New orders and battles can change this.</small>`;
   }catch(e){if(key===previewKey && version===previewVersion && epoch===generation)$('order-details').textContent=e.message;}
 }
 
@@ -445,7 +469,7 @@ function ownerButton(id){
 }
 function renderCard(){
   const box=$('card');
-  if(!card || !state || state.status==='lobby'){if(card && state?.status==='lobby')closeCard();return;}
+  if(!card || !state || ['lobby','opening'].includes(state.status)){if(card && ['lobby','opening'].includes(state?.status))closeCard();return;}
   if(card.kind==='army' && !state.armies.some(a=>a.id===card.id)){closeCard();return;}
   box.dataset.kind=card.kind;box.dataset.size=cardSize;box.dataset.relation='';
   $('card-size').setAttribute('aria-expanded',String(cardSize==='full'));$('card-size').setAttribute('aria-label',cardSize==='full'?'Show less':'Show more');
@@ -499,9 +523,12 @@ function provinceCard(){
   }
   const battle=state.battles?.find(b=>b.province===id);
   const status=el('div','card-relation');
-  if(battle)status.append(el('b','rel rel-war','BATTLE'),el('span','',`${state.armies.filter(a=>a.engaged && a.to===id).reduce((n,a)=>n+a.amount,0)} attackers against ${p.troops} defenders.`));
-  else if(mine && active())status.append(el('span','card-hint',freeTroops(id)>0?'Drag to a neighbour — or tap one — to send troops.':'Only one troop here: it must stay home.'));
-  else if(!mine && !spectating && state.you)status.append(el('span','card-hint',`None of your provinces borders ${place(id).name}.`));
+  if(battle){
+    const attackers=state.armies.filter(a=>a.engaged && a.to===id).reduce((n,a)=>n+a.amount,0),odds=combatForecast(attackers,p.troops,p.development);
+    status.append(el('b','rel rel-war','BATTLE'),el('span','',`${attackers} attackers against ${p.troops} defenders · attackers take it ${Math.round(100*odds.attackerWinChance)}% of the time${odds.defenseBonus?` · industry adds ${odds.defenseBonus} to the top defender die`:''}.`));
+  }
+  else if(mine && active())status.append(el('span','card-hint',freeTroops(id)>0?'Drag to a neighbour or through your land — or tap it — to send troops.':'Only one troop here: it must stay home.'));
+  else if(!mine && !spectating && state.you)status.append(el('span','card-hint',`None of your provinces can reach ${place(id).name}.`));
   const actions=[];
   if(mine && active() && p.development<state.rules.maxDevelopment){
     const cost=state.rules.developmentCosts[p.development],queued=state.commandBudget?.reserved.some(o=>o.type==='develop' && o.from===id);
@@ -522,7 +549,7 @@ function provinceCard(){
     }
   }
   return {...base,sub:[owner && !mine?ownerButton(owner):el('span','card-meta',mine?'Your province':'Unclaimed'),el('span','card-meta',`${p.troops} troops${owner?` · industry ${'ⅠⅡⅢⅣⅤ'[p.development-1] || p.development}`:''}`)],subKey:[owner,relationOf(owner),p.troops,p.development,mine],
-    status,statusKey:[battle && [battle.province,p.troops],mine,freeTroops(id)>0,state.armies.filter(a=>a.engaged && a.to===id).length],relation:mine?'own':'',actions,more:()=>moreProvince(id,false)};
+    status,statusKey:[battle && [battle.province,p.troops,state.armies.filter(a=>a.engaged && a.to===id).reduce((n,a)=>n+a.amount,0)],mine,freeTroops(id)>0,state.armies.filter(a=>a.engaged && a.to===id).length],relation:mine?'own':'',actions,more:()=>moreProvince(id,false)};
 }
 /** "More": the advanced details under the expanded card. */
 function moreProvince(id,order){
@@ -552,10 +579,12 @@ function moreProvince(id,order){
     const reserves=(state.insights?.routeReserves || []).filter(v=>v.province===id && v.available>=10);
     for(const v of reserves)html+=`<p class="small">${v.available} free troops wait here; recruits walk to ${esc(place(v.to).name)}. <button data-act="draft" data-arg="${esc(v.province)}" data-to="${esc(v.to)}">Draft transfer →</button></p>`;
   }
+  const fight=state.battles?.find(b=>b.province===id);
+  if(fight?.rounds?.length)html+=`<h3>${esc(place(id).name)} · battle rounds</h3><div class="battle-rolls">${fight.rounds.slice(-6).reverse().map(r=>`<p class="small"><time>${time(r.tick)}</time> attack ${r.attackDice.join(' ')} · defence ${r.defendDice.join(' ')} — attackers −${r.attackerLoss}, defenders −${r.defenderLoss}</p>`).join('')}</div>`;
   html+=`<h3>${esc(place(id).name)} · incoming</h3>${waves.length?waves.slice(0,4).map(a=>`<p class="small">${a.amount} ${esc(country(a.country).name)} · ${a.returning?'returning':'marching'} · arrives ${time(a.arrivesAt)} (${Math.max(0,a.arrivesAt-state.tick)}s)</p>`).join(''):'<p class="small muted">No armies on the way.</p>'}${waves.length>4?`<p class="small">Plus ${waves.length-4} later armies.</p>`:''}${lastBattle?`<p class="small muted">Last battle ${time(lastBattle.tick)}: ${lastBattle.troops} survivors; ${esc(country(lastBattle.owner)?.name || 'neutral')} held afterward.</p>`:''}`;
   if(active())html+=marchesHTML();
   html+=`<details class="rules-details" data-part="rules"><summary>Rules of engagement</summary><p>Leave one troop behind. Travel time follows distance. Recall turns an army around at its actual position. Attack an occupied enemy only after war is declared. Battles take several dice rounds; ties favour defenders. Troops sent to an ally become theirs. Three commands per ten game seconds; an attack from several provinces counts as one.</p></details>`;
-  if(active() && order===false && mine)html+=`<label class="keyboard-select">Keyboard: send to<select id="destination"><option value="">Choose a neighbour…</option>${neighbours(id).map(n=>`<option value="${esc(n)}">${esc(place(n).name)} · ${prov(n).troops} · ${esc(country(prov(n).owner)?.name || 'Unclaimed')}</option>`).join('')}</select></label>`;
+  if(active() && order===false && mine)html+=`<label class="keyboard-select">Keyboard: send to<select id="destination"><option value="">Choose a destination…</option>${reachable(id).map(n=>`<option value="${esc(n)}">${esc(place(n).name)} · ${prov(n).troops} · ${esc(country(prov(n).owner)?.name || 'Unclaimed')}</option>`).join('')}</select></label>`;
   // Rebuilt every tick: keep what the player typed or chose, and where focus was.
   const kept=Object.fromEntries([...body.querySelectorAll('input[id],select[id]')].map(e=>[e.id,e.value])),focused=body.contains(document.activeElement)?document.activeElement.id:null;
   body.innerHTML=html;body.scrollTop=scroll;
@@ -608,7 +637,7 @@ function countryCard(){
   if(can){
     if(offer){
       const forecast=coalitionForecast(state,offer.roster,offer.coalition),mine=forecast.members.find(m=>m.country===state.you);
-      note=`${offer.name}: ${offer.roster.map(r=>country(r).name).join(' + ')} · ${offer.accepted.length}/${offer.roster.length} approvals · ${Math.max(0,offer.expiresAt-state.tick)}s left. ${offer.accepted.includes(state.you)?'':`Your maximum share: ${mine.maximumShare.toFixed(1)} points; ${mine.keepsMaturity?'you keep your earned tenure':'your maturity restarts at zero'}. ${forecast.economy}/${forecast.threshold} industry together.`}`;
+      note=`${offer.name}: ${offer.roster.map(r=>country(r).name).join(' + ')} · ${offer.accepted.length}/${offer.roster.length} approvals · ${Math.max(0,offer.expiresAt-state.tick)}s left. ${offer.accepted.includes(state.you)?'':`Your prize share: ${Math.round(100*mine.victoryShare)}% (up to ${mine.maximumShare.toFixed(0)} points); ${mine.keepsMaturity?'you keep your earned tenure':'your maturity restarts at zero'}. ${forecast.economy}/${forecast.threshold} industry together.`}`;
       if(offer.accepted.includes(state.you))actions.push({label:offer.creator===state.you?'Withdraw offer':'Withdraw approval',act:'decline',arg:offer.id});
       else actions.push({label:'Accept alliance',act:'accept',arg:offer.id,primary:true,disabled:pendingCommand,id:'primary'},{label:'Decline',act:'decline',arg:offer.id,disabled:pendingCommand});
     }else if(peaceOffer)actions.push({label:'Accept peace',act:'vote-peace',arg:peaceOffer.id,primary:true,disabled:pendingCommand,id:'primary'});
@@ -638,7 +667,7 @@ function proposalForm(id){
   if(joining){
     const label=el('label','', 'Alliance name');const input=el('input');input.id='coalition-name';input.maxLength=40;input.value=$('coalition-name')?.value || `${faction(state.you).short}–${faction(id).short} Pact`;label.append(input);box.append(label);
   }else box.append(el('p','small',`${country(id).name} would join ${namedSide(me.side)}; every member must accept.`));
-  box.append(el('p','small muted',`Together: ${f.economy}/${f.threshold} industry to win. Each member’s maximum share: ${f.members[0].maximumShare.toFixed(1)} points. Sending is your approval; the alliance starts ${state.rules.notice} game seconds after everyone accepts.`));
+  box.append(el('p','small muted',`Together: ${f.economy}/${f.threshold} industry to win. The prize splits by industry: ${f.members.map(m=>`${m.country===state.you?'you':country(m.country).name} ${Math.round(100*m.victoryShare)}%`).join(', ')}. Sending is your approval; the alliance starts ${state.rules.notice} game seconds after everyone accepts.`));
   return box;
 }
 function allianceCard(){
@@ -656,13 +685,13 @@ function allianceCard(){
   const members=side?side.members:[];
   const list=el('div','card-members');
   if(!side)status.append(el('small','card-note','You are independent. Select a country — a standard on the leaderboard or a province’s owner — to propose an alliance.'));
-  for(const m of members){const b=button('',{openCountry:m},'member');b.append(flag(m),el('span','',country(m).name));const pr=state.projections.find(p=>p.country===m);if(pr)b.append(el('small','',`${Math.round(pr.maturity*100)}% earned`));if(m===state.you)b.disabled=true;list.append(b);}
+  for(const m of members){const b=button('',{openCountry:m},'member');b.append(flag(m),el('span','',country(m).name));const pr=state.projections.find(p=>p.country===m);if(pr)b.append(el('small','',`${Math.round(100*(pr.victoryShare ?? 0))}% of the prize · ${Math.round(pr.maturity*100)}% earned`));if(m===state.you)b.disabled=true;list.append(b);}
   status.append(list);
   const votes=decisionsFor(state).filter(d=>d.kind.endsWith('_vote'));
   const actions=votes.map((d,i)=>({label:`${d.kind==='war_vote'?'Approve war on':'Approve peace with'} ${d.motion.toRoster.map(id=>country(id).name).join(' + ')}`,act:d.kind==='war_vote'?'vote-war':'vote-peace',arg:d.id,primary:i===0,id:i===0?'primary':undefined,danger:d.kind==='war_vote',disabled:pendingCommand}));
   if(side && active())actions.push({label:'Leave alliance',act:'leave',danger:true,disabled:pendingCommand || state.departures?.some(d=>d.country===state.you)});
   return {flag:state.you,title:side?side.name:country(state.you).name,sub:[el('span','card-meta',side?`${side.members.length} members · your alliance`:'Your country · no alliance')],subKey:[side?.id,side?.members.length],
-    status,statusKey:[side?.id,side?.name,members,team?.economy,state.economyThreshold,projection?.projectedPrestige,forming?.id,enemies,state.projections.map(p=>p.maturity)],relation:side?'ally':'',
+    status,statusKey:[side?.id,side?.name,members,team?.economy,state.economyThreshold,projection?.projectedPrestige,forming?.id,enemies,state.projections.map(p=>[p.maturity,p.victoryShare])],relation:side?'ally':'',
     more:null,actions:[...(side && active()?[{label:'Alliance chat',act:'compose',primary:!actions.some(a=>a.primary),id:actions.some(a=>a.primary)?undefined:'primary'}]:[]),...actions]};
 }
 /** The alliance-offer form (name + terms) in the expanded country card. */
@@ -701,6 +730,8 @@ function describe(e){
   const c=id=>country(id)?.name || id;
   switch(e.type){
     case 'joined':return`${e.name} takes ${c(e.country)}.`;
+    case 'seat_claimed':return`${e.name} takes command of ${c(e.country)} from a bot.`;
+    case 'opening_started':return'The opening council convenes. Leaders introduce themselves before the armies move.';
     case 'started':return'The council is in session. Armies may move.';
     case 'army_departed':return`${c(e.country)} commits ${e.amount} troops: ${place(e.from).name} → ${place(e.to).name}.`;
     case 'development_started':return`${c(e.country)} invests ${e.cost} manpower in ${place(e.province).name}; level ${e.level} completes at ${time(e.completesAt)}.`;
@@ -737,23 +768,37 @@ function resetPresentation(){
   signalCursor=null;clearTimeout(toastTimer);$('toast').hidden=true;
   toggleJournal(false);
 }
+/** The lobby, and the opening council after the host starts: the same dossier and rack of standards. */
 function renderLobby(){
-  const chosen=$('country-choice').value;
+  const chosen=$('country-choice').value,opening=state.status==='opening';
+  // The host of a room full of practice bots may take one of those seats (before the start).
+  const claimable=p=>!opening && state.isHost && !state.you && p?.kind==='bot';
   for(const b of $('faction-choices').querySelectorAll('button')){
     const id=b.dataset.countrySeat,occupant=state.players.find(p=>p.id===id);
-    b.disabled=Boolean(occupant);b.setAttribute('aria-pressed',String(chosen===id || occupant?.id===state.you && Boolean(state.you)));
-    b.title=occupant?`${seatType(occupant)} · ${occupant.displayName || occupant.name}`:startingSummary(country(id));
-    b.querySelector('small').textContent=occupant?`${seatType(occupant)} · ${occupant.displayName || occupant.name}`:`${country(id).start.length} holdings`;
+    b.disabled=opening || Boolean(occupant) && !claimable(occupant);b.setAttribute('aria-pressed',String(chosen===id || occupant?.id===state.you && Boolean(state.you)));
+    const who=occupant?`${seatType(occupant)} · ${occupant.leaderName || occupant.displayName || occupant.name}`:'';
+    const text=opening?(occupant?`${occupant.openingLocked?'Ready':'Choosing'} · ${occupant.leaderName || occupant.displayName || occupant.name}`:'Empty'):occupant?(claimable(occupant)?`${who} · take over`:who):`${country(id).start.length} holdings`;
+    b.title=occupant?text:startingSummary(country(id));b.querySelector('small').textContent=text;
   }
-  $('lobby').hidden=state.status!=='lobby';$('join-form').hidden=Boolean(state.you);
-  if(chosen && state.players.some(p=>p.id===chosen))$('country-choice').value='';
-  $('host-controls').hidden=!state.isHost;$('fill-bots').disabled=state.players.length===8;$('start-match').disabled=state.players.length<2 || !state.you;
+  $('lobby').hidden=!['lobby','opening'].includes(state.status);$('join-form').hidden=Boolean(state.you) || opening;
+  if(chosen && state.players.some(p=>p.id===chosen && !claimable(p)))$('country-choice').value='';
+  $('dossier-title').textContent=opening?'Opening council':'Choose your country';
+  const me=myPlayer(),locked=Boolean(me?.openingLocked);
+  $('opening-countdown').hidden=!opening;$('opening-form').hidden=!opening || !seated() || locked;
+  if(opening){
+    $('opening-countdown').textContent=`${state.openingRemaining ?? 0}s until the campaign begins`;
+    if(seated() && !locked && !$('leader-name').value && document.activeElement!==$('leader-name'))$('leader-name').value=identity?.name || '';
+  }
+  $('host-controls').hidden=!state.isHost || opening;$('fill-bots').disabled=state.players.length===8 || !state.you && !$('country-choice').value;$('start-match').disabled=state.players.length<2 || !state.you;
+  $('fill-bots').textContent=state.you?'Fill empty seats with bots':'Take this seat and fill the rest with bots';
   const selected=country(state.you || $('country-choice').value);
   const head=selected?`${insignia(selected.id)}<div><h3>${esc(selected.name)}</h3><p>${state.you?'Your country':'Open seat'}</p></div>`:`${insignia(null)}<div><h3>Pick a standard</h3><p>Choose an open country from the rack.</p></div>`;
   if($('dossier-head').dataset.key!==head){$('dossier-head').dataset.key=head;setHTML($('dossier-head'),head);} // country names are authored map data
   $('starting-holdings').textContent=selected?startingSummary(selected):'Industrial homelands, colonial footholds. Unequal strengths, the same rules.';
   $('join-form').querySelector('button').disabled=!country($('country-choice').value);
-  $('lobby-note').textContent=state.you?`You command ${country(state.you).name}. ${state.isHost?'Invite players, attach agents or add bots, then start.':'Waiting for the host to start.'}`:`${state.players.length}/8 seats taken. Choose an open country to join.`;
+  const ready=state.players.filter(p=>p.openingLocked).length;
+  $('lobby-note').textContent=opening?(locked?`Your declaration is out. ${ready}/${state.players.length} ready; the campaign begins when all are ready or the time runs out.`:seated()?'Study the map. Name your leader and tell the world who you are — then the campaign begins.':`${ready}/${state.players.length} leaders ready. The campaign begins soon.`)
+    :state.you?`You command ${country(state.you).name}. ${state.isHost?'Invite players, attach agents or add bots, then start.':'Waiting for the host to start.'}`:state.isHost && state.players.length===8 && state.players.some(p=>p.kind==='bot')?'Bots fill every seat. Choose one to take command, then start.':`${state.players.length}/8 seats taken. Choose an open country to join.`;
 }
 /** One sound control: in the ☰ menu during a live room, in the masthead on the home page and in review. */
 function placeSound(){
@@ -768,7 +813,7 @@ function render(){
   document.querySelector('.scenario-note').textContent=map.notice;
   $('game-name').textContent=state.name;$('lobby-room').textContent=state.name;$('room-label').textContent=`${state.eligible?'League · ':''}${state.players.length}/8 seats`;
   renderLobby();
-  $('phase').textContent=state.status==='lobby'?'Assembling':state.status==='finished'?'Concluded':seated()?'In session':'Watching';
+  $('phase').textContent=state.status==='lobby'?'Assembling':state.status==='opening'?'Opening council':state.status==='finished'?'Concluded':seated()?'In session':'Watching';
   $('clock').textContent=time(state.tick);$('clock-total').textContent=`/ ${time(state.rules.duration ?? 1800)}`;$('pace-badge').textContent=state.speed===1?'Standard pace':`Quick · ${state.speed}×`;
   placeSound();
   paintMap();renderHud();renderResult();renderLeaderboard();
@@ -839,10 +884,11 @@ async function perform(act,arg,b){
 }
 
 /* ── Wiring ── */
-$('create-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('display-name').value);const g=await request('/api/games','POST',{name:$('room-name').value,preset:$('preset').value,ruleset:$('ruleset').value});await openRoom(g.id);}));
+$('create-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('display-name').value);const g=await request('/api/games','POST',{name:$('room-name').value,preset:$('preset').value});await openRoom(g.id);}));
 $('join-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('join-name').value);await request(`/api/games/${matchId}/join`,'POST',{country:$('country-choice').value,kind:'human'});await poll();toast('Your seat is reserved.');}));
-$('fill-bots').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/bots`,'POST',{});await poll();}));
-$('start-match').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/start`,'POST',{});await poll();toast('The council is in session.');}));
+$('fill-bots').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/bots`,'POST',state?.you?{}:{country:$('country-choice').value});await poll();}));
+$('start-match').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/start`,'POST',{});await poll();toast('The opening council has begun.');}));
+$('opening-form').addEventListener('submit',safely(async event=>{event.preventDefault();await request(`/api/games/${matchId}/opening`,'POST',{leaderName:$('leader-name').value,openingMessage:$('opening-message').value});await poll();toast('Your declaration is out.');}));
 $('amount-slider').addEventListener('input',()=>{fraction=Math.max(.01,Math.min(1,Number($('amount-slider').value)/100));try{localStorage.setItem('coi.fraction',String(fraction));}catch{}if(state){renderCard();paintMapDraftOnly();}});
 $('lb-toggle').addEventListener('click',()=>{
   const open=!standings.open;standings.setOpen(open);
@@ -936,7 +982,6 @@ document.addEventListener('click',safely(async event=>{
   if(b.id==='journal-close'){toggleJournal(false);$('menu-button').focus();}
   if(b.dataset.homeTab){for(const t of document.querySelectorAll('[data-home-tab]'))t.setAttribute('aria-selected',String(t===b));$('rooms').hidden=b.dataset.homeTab!=='rooms';$('standings').hidden=b.dataset.homeTab!=='standings';}
   if(b.dataset.preset){$('preset').value=b.dataset.preset;for(const t of document.querySelectorAll('[data-preset]'))t.setAttribute('aria-checked',String(t===b));}
-  if(b.dataset.ruleset){$('ruleset').value=b.dataset.ruleset;for(const t of document.querySelectorAll('[data-ruleset]'))t.setAttribute('aria-checked',String(t===b));}
   if(b.dataset.countrySeat){$('country-choice').value=b.dataset.countrySeat;if(state)renderLobby();atlas.home(b.dataset.countrySeat);}
   if(b.dataset.room)await openRoom(b.dataset.room,b.dataset.spectate==='true');
   if(b.dataset.home)await home();
