@@ -73,7 +73,7 @@ def main():
                 page.locator('#replay-slider').fill(str(tick))
                 expect(page.locator('#replay-stage')).to_have_attribute('data-tick',str(tick))
                 board=api(f'/api/games/review-fixture/replay?tick={tick}')
-                for province in ['north-india','low-countries','central-us']:
+                for province in ['india','low-countries','central-us']:
                     expected=next(p['troops'] for p in board['provinces'] if p['id']==province)
                     expect(page.locator('#review-map-troops-'+province)).to_have_text(str(expected))
             assert page.locator('#review-map-province-mexico').get_attribute('fill')!=opening_fill

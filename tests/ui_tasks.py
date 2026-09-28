@@ -109,20 +109,20 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     assert any(o['type'] == 'march' and o['to'] == 'north-france' and o['amount'] == amount for o in s['orders']), s['orders']
     w.end()
 
-    # (a) Attack a neighbouring enemy province with 50%: Normandy (France, now at war).
+    # (a) Attack an enemy province with 50%: Southern France (France, now at war), beyond the Low Countries.
     w.begin('attack')
     before = {p['id']: p['troops'] for p in s['provinces']}
     if touch:
-        w.tap(w.counter('normandy'), 'target')
+        w.tap(w.counter('south-france'), 'target')
     else:
-        w.drag('england', 'normandy', 'drag')
+        w.drag('england', 'south-france', 'drag')
     expect(page.locator('#card')).to_have_attribute('data-relation', 'enemy')
     w.tap(page.locator('[data-fraction="0.5"]'), 'half')
-    expect(primary).to_contain_text('Attack Normandy with')
+    expect(primary).to_contain_text('Attack Southern France with')
     w.tap(primary, 'sent')
     s = w.state()
-    free = before['england'] - 1 - sum(o['amount'] for o in s['orders'] if o['from'] == 'england' and o['to'] != 'normandy')
-    order = next(o for o in s['orders'] if o['to'] == 'normandy')
+    free = before['england'] - 1 - sum(o['amount'] for o in s['orders'] if o['from'] == 'england' and o['to'] != 'south-france')
+    order = next(o for o in s['orders'] if o['to'] == 'south-france')
     assert order['from'] == 'england' and order['amount'] == max(1, free // 2), (order, free)
     w.end()
 
@@ -132,7 +132,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     army = None
     for _ in range(8):
         page.wait_for_timeout(900)
-        s = w.state(); army = next((a for a in s['armies'] if a['country'] == 'britain' and a['to'] == 'normandy' and not a.get('returning')), None)
+        s = w.state(); army = next((a for a in s['armies'] if a['country'] == 'britain' and a['to'] == 'south-france' and not a.get('returning')), None)
         if army and page.locator(f'[data-army="{army["id"]}"]:not(.tap-blocked) .army-hit').count(): break
         w.stdin(f'war {s["tick"] + 1}')
     assert army, 'no marching army to recall'
@@ -143,29 +143,29 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
         w.tap(primary, 'recalled')
     else:  # the column still sits on a counter (counter taps win): recall from the province it left
         w.tap(w.counter('england'), 'province'); w.results['recallPath'] = 'source province card'
-        w.tap(page.locator('#card-actions button', has_text='→ Normandy'), 'recalled')
+        w.tap(page.locator('#card-actions button', has_text='→ Southern France'), 'recalled')
     expect(lane(page)).to_contain_text('Recall queued')
     w.end()
 
-    # March again: the recalled column is on its way home; send it back toward Normandy from where it is.
+    # March again: the recalled column is on its way home; send it back toward Southern France from where it is.
     s = w.state(); back = None
     for _ in range(4):
         back = next((a for a in s['armies'] if a['id'] == army['id']), None)
         if back and back.get('returning'): break
         w.stdin(f'war {s["tick"] + 1}'); page.wait_for_timeout(900); s = w.state()
-    assert back and back.get('returning') and back['resume']['target'] == 'normandy', back
+    assert back and back.get('returning') and back['resume']['target'] == 'south-france', back
     page.keyboard.press('Escape'); page.wait_for_timeout(900)  # start from a closed card (not counted)
     w.begin('turn')
     hit = page.locator(f'[data-army="{army["id"]}"]:not(.tap-blocked) .army-hit')
     if hit.count() and page.evaluate('([x,y])=>Boolean(document.elementFromPoint(x,y)?.closest("[data-army]"))', list(w.at(hit))):
         w.tap(hit, 'returning-army'); w.results['turnPath'] = 'army marker'
         expect(page.locator('#card')).to_have_attribute('data-kind', 'army'); expect(page.locator('#card-status')).to_contain_text('RETURNING')
-        expect(primary).to_contain_text('March again → Normandy (arrives'); w.snap('card')
+        expect(primary).to_contain_text('March again → Southern France (arrives'); w.snap('card')
         w.tap(primary, 'marched')
     else:  # still on England's counter (counter taps win): the province card lists the troops heading home there
         w.tap(w.counter('england'), 'province'); w.results['turnPath'] = 'home province card'
         w.tap(page.locator('#card-actions button', has_text='March again'), 'marched')
-    expect(lane(page)).to_contain_text('Marching again → Normandy')
+    expect(lane(page)).to_contain_text('Marching again → Southern France')
     s = w.state(); assert any(o['type'] == 'turn_around' and o['target'] == army['id'] for o in s['orders']), s['orders']
     w.end()
 
@@ -216,33 +216,33 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     w.end()
     close_comms(page)
 
-    # Develop a province: East Canada (level II) once natural recruitment pays for level III (48 troops).
+    # Develop a province: Canada (level II) once natural recruitment pays for level III (48 troops).
     w.begin('develop')
     w.stdin('war 400')
-    w.bring('east-canada')
-    w.tap(w.counter('east-canada'), 'province')
+    w.bring('canada')
+    w.tap(w.counter('canada'), 'province')
     develop = page.locator('#develop-province'); expect(develop).to_contain_text('Develop · 48 troops'); expect(develop).to_be_enabled(timeout=5000)
     w.tap(develop, 'confirm-open')
     w.tap(page.locator('#confirm-dialog [value="confirm"]'), 'invested')
     expect(lane(page)).to_contain_text('Investment committed')
-    s = w.state(); assert any(o['type'] == 'develop' and o['from'] == 'east-canada' for o in s['orders']), s['orders']
+    s = w.state(); assert any(o['type'] == 'develop' and o['from'] == 'canada' for o in s['orders']), s['orders']
     w.end()
 
-    # Rally point: tap a province of yours → "Rally troops to…" → tap the rally province (Scotland → Southern England;
+    # Rally point: tap a province of yours → "Rally troops to…" → tap the rally province (Ireland → Great Britain;
     # the British seat's analogue of "always send Mexico's new troops to Pacific States").
     w.begin('rally')
     w.stdin('war 420')
-    page.keyboard.press('Escape'); w.bring('scotland')
-    w.tap(w.counter('scotland'), 'source')
+    page.keyboard.press('Escape'); w.bring('ireland')
+    w.tap(w.counter('ireland'), 'source')
     rally = page.locator('#rally-province'); expect(rally).to_have_text('Rally troops to…'); expect(rally).to_be_enabled(timeout=5000)
     w.tap(rally, 'pick')
     expect(lane(page)).to_contain_text('Tap one of your provinces')
     w.tap(w.counter('england'), 'set')
     expect(lane(page)).to_contain_text('Rally set', timeout=5000)
     s = w.state(); order = next(o for o in s['orders'] if o['type'] == 'rally')
-    assert order['sources'] == ['scotland'] and order['to'] == 'england', order
+    assert order['sources'] == ['ireland'] and order['to'] == 'england', order
     w.stdin('war 422'); page.wait_for_timeout(1500)
-    expect(page.locator('[data-rally="scotland"]').first).to_be_attached(timeout=5000)
+    expect(page.locator('[data-rally="ireland"]').first).to_be_attached(timeout=5000)
     w.snap('arrow')
     w.end()
 
@@ -295,7 +295,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     # Long moves through friendly land: tap your province, tap the destination anywhere, one button. The card's one-line
     # preview names the way (the server's /plan route); the arrow on the map follows it leg by leg.
     routes = w.results.setdefault('routes', {})
-    for task, source, dest, ally in [('long', 'scotland', 'low-countries', False), ('through-ally', 'scotland', 'rhineland', True)]:
+    for task, source, dest, ally in [('long', 'ireland', 'low-countries', False), ('through-ally', 'ireland', 'bavaria', True)]:
         page.keyboard.press('Escape'); w.bring(source)
         w.begin(task)
         w.tap(w.counter(source), 'source')
@@ -313,7 +313,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
         w.tap(primary, 'sent')
         s = w.state(); order = next(o for o in s['orders'] if o['type'] == 'march' and o['from'] == source and o['to'] == dest)
         owners = {p['id']: p['owner'] for p in s['provinces']}
-        path = order['path']; assert len(path) >= 3, path
+        path = order['path']; assert len(path) >= 2, path  # not a neighbour: at least one province on the way
         routes[task] = {'source': source, 'via': path[:-1], 'target': dest, 'arrivesAt': order['arrivesAt'], 'preview': text}
         allied = [v for v in path[:-1] if owners[v] not in (None, 'britain')]
         assert (allied and all(owners[v] == 'germany' for v in allied)) if ally else not allied, (path, owners)

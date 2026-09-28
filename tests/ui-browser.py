@@ -218,7 +218,7 @@ def wrap_checks(page,report,capture):
     assert not result['badSums'] and not result['missing'] and not result['overlaps'],result
     # Pacific links take the short way across the dateline; no duplicate IDs from the copies.
     widths=page.evaluate('''() => [...document.querySelectorAll('#map .sea-connections path')].map(p=>[p.dataset.edge,p.getBBox().width])''')
-    pacific=[wd for e,wd in widths if set(e.split('|')) in [{'west-us','south-japan'},{'alaska','far-east'},{'west-us','philippines'}]]
+    pacific=[wd for e,wd in widths if set(e.split('|')) in [{'hawaii','japan'},{'alaska','far-east'},{'west-us','hawaii'}]]
     assert len(pacific)==3 and all(wd<640 for wd in pacific),widths
     assert all(wd<640 for _,wd in widths),widths
     ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
@@ -631,7 +631,7 @@ def expand_checks(browser,url,identity,report,out):
         page.keyboard.press('Escape');expect(page.locator('#stage')).not_to_have_class(re.compile('map-expanded'))
         expect(page.locator('#hud')).to_be_visible();expect(live).to_be_focused()
         # Popups on phones are compact toasts under the HUD, never over the order sheet or its commit.
-        select(page,'england','midlands')  # (the Netherlands is a battle by now; its clash marker replaces the counter)
+        select(page,'england','ireland')
         sheet=page.locator('#card').bounding_box();commit=page.locator('#primary').bounding_box();sizes=page.evaluate(TOAST_SIZE)
         for name,r in sizes.items():
             assert r['height']<=min(80 if name=='declaration' else 72,h*.22)+.5 and r['top']>=0,(w,h,name,r)
@@ -679,7 +679,7 @@ EFFECT_CHECK='''async () => {
   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.id='effect-test-map';svg.setAttribute('viewBox','0 0 1280 680');svg.style.cssText='width:640px;height:340px';
   host.append(svg);document.body.append(host);
   const atlas=new Atlas(svg,map,()=>{});atlas.update(state,null,null);
-  const good=[['industry_up',{province:'ruhr',level:3}],['captured',{province:'alpine-france',owner:'germany'}],
+  const good=[['industry_up',{province:'ruhr',level:3}],['captured',{province:'south-france',owner:'germany'}],
     ['alliance',{countries:['britain','france']}],['war',{from:['germany'],to:['france']}],['peace',{from:['usa'],to:['japan']}],['eliminated',{country:'qing'}]];
   const bad=[[],['nope',{}],['industry_up'],['industry_up',null],['industry_up',{province:'atlantis'}],['captured',{province:'ruhr',owner:'<b>x</b>'}],
     ['alliance',{countries:'britain'}],['alliance',{countries:['britain']}],['war',{from:['x'],to:['y']}],['peace',{from:null,to:[{}]}],['eliminated',{country:{}}],['eliminated',{country:'atlantis'}]];
@@ -694,8 +694,8 @@ EFFECT_CHECK='''async () => {
     still:effects.every(e=>e.classList.contains('still')),
     animations:[...svg.querySelectorAll('.map-effect *')].map(e=>getComputedStyle(e).animationName).filter(n=>n!=='none').length};
   // A march across the Pacific: its trace and marker take the short way over the dateline.
-  const t=state.tick,from=map.provinces.find(p=>p.id==='west-us'),to=map.provinces.find(p=>p.id==='south-japan');
-  atlas.update({...state,you:'usa',armies:[...state.armies,{id:'wrap-test',country:'usa',from:'west-us',to:'south-japan',amount:30,departedAt:t-5,arrivesAt:t+5}]},null,'south-japan');
+  const t=state.tick,from=map.provinces.find(p=>p.id==='west-us'),to=map.provinces.find(p=>p.id==='japan');
+  atlas.update({...state,you:'usa',armies:[...state.armies,{id:'wrap-test',country:'usa',from:'west-us',to:'japan',amount:30,departedAt:t-5,arrivesAt:t+5}]},null,'japan');
   const trail=[...svg.querySelectorAll('.army-trail')].map(p=>p.getBBox().width);
   const marker=[...svg.querySelectorAll('.moving-army')].map(g=>Number(g.getAttribute('transform').slice('translate('.length).split(' ')[0]));
   const wrap=d=>Math.abs(d-1280*Math.round(d/1280));
@@ -792,23 +792,23 @@ def mobile_checks(browser,url,identity,report,out):
         for _ in range(14):page.keyboard.press('e')  # touch: no +/− buttons (pinch, double tap, E)
         page.wait_for_timeout(200);level=page.locator('#map').get_attribute('data-lod')
         assert px(page)>=DESKTOP_OLD_MAX and px(page)>=MAX_PX-.05 and level=='near',(w,px(page),level)
-        sizes=page.evaluate('''()=>['belgium','low-countries','ruhr','rhineland','saxony','serbia'].map(id=>{const r=document.querySelector('#province-'+id).getBoundingClientRect();return [id,Math.min(r.width,r.height)];})''')
+        sizes=page.evaluate('''()=>['low-countries','ruhr','bavaria','prussia','italy','balkans'].map(id=>{const r=document.querySelector('#province-'+id).getBoundingClientRect();return [id,Math.min(r.width,r.height)];})''')
         assert all(s>=32 for _,s in sizes),sizes
         camera(page,'europe');page.keyboard.press('e');page.keyboard.press('e');page.keyboard.press('e');page.wait_for_timeout(200)
         result=page.evaluate(MAP_AUDIT,'ui-mobile');assert not result['overlaps'] and not result['missing'] and not result['badSums'],result
         if w==390:page.screenshot(path=str(out/'19-mobile-max-zoom.png'))
         if w==390:
-            # A column that has just left Scotland sits on the Scotland counter: a tap must still select Scotland.
+            # A column that has just left Great Britain sits on its counter: a tap must still select Great Britain.
             camera(page,'world');page.locator('#home-view').click()
             for _ in range(5):page.keyboard.press('e')
             page.locator('#map').scroll_into_view_if_needed();page.wait_for_timeout(250)
-            departing=page.evaluate('''()=>{const c=document.querySelector('#marker-scotland .counter-body').getBoundingClientRect();
+            departing=page.evaluate('''()=>{const c=document.querySelector('#marker-england .counter-body').getBoundingClientRect();
               return [...document.querySelectorAll('#map .moving-army:not(.engaged)')].map(g=>{const r=g.querySelector('.army-arrow').getBoundingClientRect();
                 return {blocked:g.classList.contains('tap-blocked'),hit:g.querySelector('.army-hit').getBoundingClientRect().width,over:r.left<c.right+4&&c.left-4<r.right&&r.top<c.bottom+4&&c.top-4<r.bottom};}).filter(a=>a.over);}''')  # touching within 4 px
             assert departing and all(a['blocked'] for a in departing) and all(a['hit']<=18 for a in departing),departing
-            body=page.locator('#marker-scotland .counter-body').bounding_box()
+            body=page.locator('#marker-england .counter-body').bounding_box()
             page.touchscreen.tap(body['x']+body['width']/2,body['y']+body['height']/2)
-            expect(page.locator('#card-title')).to_have_text('Scotland')
+            expect(page.locator('#card-title')).to_have_text('Great Britain')
         context.close()
     report['assertions'].append(f'Phones (390×844 and 844×390, touch emulation) reach {MAX_PX} px per map unit (desktop previously {DESKTOP_OLD_MAX:.1f}) by + button and by a real two-finger pinch; double tap zooms 2×; near LOD with names is reachable; small Europe provinces are ≥32 CSS px; a tap on a counter under a just-departed army selects the province; the viewBox fills the element (no letterboxing); counters stay non-overlapping.')
 
@@ -856,11 +856,11 @@ def coach_and_drag_checks(browser,url,identity,report,out):
     assert page.evaluate("localStorage.getItem('coi.coach')")=='done'
     page.reload();expect(page.locator('#commander-title')).to_have_text('Britain');page.wait_for_timeout(1200);expect(coach).to_be_hidden()
     menu(page);page.locator('#coach-replay').click();expect(coach).to_be_visible();page.keyboard.press('Escape');expect(coach).to_be_hidden()
-    # Drag with a real touch point from Southern England's counter to the Midlands (the Netherlands is a battle by now).
+    # Drag with a real touch point from Great Britain's counter to Ireland.
     page.locator('#home-view').click();page.wait_for_timeout(250)
     def centre(sel):
         b=page.locator(sel).bounding_box();return b['x']+b['width']/2,b['y']+b['height']/2
-    (x0,y0),(x1,y1)=centre('#marker-england .counter-body'),centre('#marker-midlands .counter-body')
+    (x0,y0),(x1,y1)=centre('#marker-england .counter-body'),centre('#marker-ireland .counter-body')
     cdp=context.new_cdp_session(page)
     cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':x0,'y':y0,'id':1}]})
     for i in range(1,13):cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':x0+(x1-x0)*i/12,'y':y0+(y1-y0)*i/12,'id':1}]})
@@ -1121,7 +1121,7 @@ def main():
             page.locator('#journal-close').click();expect(page.locator('#war-journal')).to_be_hidden()
             report['assertions'].append('Powers rows keep keyboard focus across polling and open the country card; the War log opens from the menu or L and closes with Escape or Close.')
             select(page,'england','low-countries','full');capture('03-order-expanded.png')
-            select(page,'scotland',None,'full');capture('04-own-province.png')
+            select(page,'ireland',None,'full');capture('04-own-province.png')
             open_country(page,'germany',False);capture('05-country.png');page.keyboard.press('Escape')
             select(page,'england','low-countries','peek');camera(page,'world');capture('06-order-world.png')
             # Templates with authored static symbols cannot execute arbitrary player inputs.

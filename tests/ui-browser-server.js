@@ -31,11 +31,11 @@ const w=warRoom('ui-war','The Rhine front');
 const taskRooms=Object.fromEntries(['ui-tasks-m','ui-tasks-d','ui-turn'].map(id=>[id,warRoom(id,'The Rhine front · walkthrough')]));
 // Britain (the browser seat) also declares war on the USA at tick 0: no armies move on that front, so the
 // recorded battles are unchanged, but the viewer has a real war for the v0.7 relation UI.
-const warOrders={0:[['britain',{type:'declare_war',country:'usa'}],['russia',{type:'declare_war',country:'ottoman'}],['russia',{type:'march',from:'ukraine',to:'east-anatolia',amount:10}],['germany',{type:'declare_war',country:'france'}]],
-  25:[['germany',{type:'march',from:'rhineland',to:'alpine-france',amount:11}]],
+const warOrders={0:[['britain',{type:'declare_war',country:'usa'}],['russia',{type:'declare_war',country:'ottoman'}],['russia',{type:'march',from:'ukraine',to:'caucasus',amount:10}],['germany',{type:'declare_war',country:'france'}]],
+  25:[['germany',{type:'march',from:'ruhr',to:'south-france',amount:11}]],
   // Columns still on the march at tick 55, for army-layer checks.
-  56:[['britain',{type:'march',from:'scotland',to:'ireland',amount:6}]],
-  40:[['britain',{type:'march',from:'england',to:'low-countries',amount:8}],['france',{type:'march',from:'occitania',to:'iberia',amount:8}],['germany',{type:'march',from:'saxony',to:'balkans',amount:8}]]};
+  56:[['britain',{type:'march',from:'england',to:'ireland',amount:6}]],
+  40:[['britain',{type:'march',from:'england',to:'low-countries',amount:8}],['france',{type:'march',from:'south-france',to:'iberia',amount:8}],['germany',{type:'march',from:'bavaria',to:'danube',amount:8}]]};
 // Tick 50: an approved alliance still inside its activation delay (a "forming" bloc).
 const pact=room=>{const q=act(room,map,'usa',{type:'propose',country:'japan',name:'Pacific Pact'},`${room.id}-pact`);act(room,map,'japan',{type:'accept',proposalId:q.proposalId},`${room.id}-pact-accept`);};
 // 'ui-turn' (turned-back notice): Britain also goes to war with France; Germany's 12 from Bavaria reach Île-de-France (north-france)
@@ -45,7 +45,7 @@ const roomOrders={'ui-turn':{55:[['britain',{type:'declare_war',country:'france'
 const stepRoom=(room,to)=>{while(room.tick<to){for(const [country,action] of [...warOrders[room.tick]||[],...roomOrders[room.id]?.[room.tick]||[]])act(room,map,country,action,`${room.id}-${room.tick}-${country}-${action.type}`);if(room.tick===50)pact(room);tick(room);}};
 const stepWar=to=>stepRoom(w,to);
 for(const room of [w,...Object.values(taskRooms)]){stepRoom(room,55);app.games.set(room.id,room);app.store.save(room);}
-// The phone map suite needs the column that has just left Scotland (it departs at tick 57; internal links are fast, so it is still on the counter only then).
+// The phone map suite needs the column that has just left Great Britain (it departs at tick 57; internal links are fast, so it is still on the counter only then).
 const mobileRoom=warRoom('ui-mobile','The Rhine front · phone');stepRoom(mobileRoom,57);app.games.set(mobileRoom.id,mobileRoom);app.store.save(mobileRoom);
 app.server.listen(0,'127.0.0.1',()=>console.log(JSON.stringify({url:`http://127.0.0.1:${app.server.address().port}`,identity:profiles.britain})));
 for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>app.close().then(()=>process.exit(0)));
