@@ -254,7 +254,11 @@ export class Atlas {
     return null;
   }
   /** The x of the repeated copy nearest the view centre. */
-  near(x) { const cx = this.view.x + this.view.w / 2; return cx + wrapDelta(x - cx); }
+  near(x) {
+    const rect = { width: this.rectWidth || 0 }, l = this.insets?.left || 0, r = this.insets?.right || 0; // cached per view change
+    const cx = rect.width > l + r ? this.view.x + (l + (rect.width - r)) / 2 * this.view.w / rect.width : this.view.x + this.view.w / 2;
+    return cx + wrapDelta(x - cx);
+  }
   pan(dx, dy) { this.view.x += dx; this.view.y += dy; this.applyView(); }
   hover(event) {
     const { cluster, id, army } = this.hit(event);
@@ -293,10 +297,20 @@ export class Atlas {
   /** [min, max] view width in map units: max zoom is MAX_PX_PER_UNIT on this element's width;
    * zoom-out stops at one world width, so each province and counter is seen once. */
   widthLimits(rect = this.svg.getBoundingClientRect()) {
-    return [rect.width > 0 ? Math.min(WORLD, rect.width / MAX_PX_PER_UNIT) : 135, WORLD];
+    // With a persistent side panel over the map (setInsets), one world width fits the uncovered part.
+    const covered = Math.min(rect.width * .6, (this.insets?.left || 0) + (this.insets?.right || 0));
+    return [rect.width > 0 ? Math.min(WORLD, rect.width / MAX_PX_PER_UNIT) : 135, rect.width > 0 ? WORLD * rect.width / (rect.width - covered) : WORLD];
+  }
+  /** Optional (v0.8.1): screen px permanently covered by the host's panels ({left,right}). World view,
+   * the zoom-out limit and the copy chosen for counters and names use the uncovered part of the map. */
+  setInsets(insets) {
+    const next = { left: Math.max(0, insets?.left || 0), right: Math.max(0, insets?.right || 0) };
+    if (this.insets && next.left === this.insets.left && next.right === this.insets.right) return;
+    this.insets = next; this.applyView();
   }
   applyView() {
     const rect = this.svg.getBoundingClientRect(), aspect = rect.width > 0 && rect.height > 0 ? rect.width / rect.height : 0;
+    this.rectWidth = rect.width;
     const cx = this.view.x + this.view.w / 2, cy = this.view.y + this.view.h / 2;
     if (aspect) {
       // The viewBox takes the element's own aspect (no letterboxing), so portrait phones fill
@@ -325,7 +339,10 @@ export class Atlas {
     this.view = { x: anchor.x - (anchor.x - this.view.x) * ratio, y: anchor.y - (anchor.y - this.view.y) * ratio, w, h: this.view.h * ratio };
     this.applyView();
   }
-  world() { this.view = { x: 0, y: 0, w: 1280, h: 680 }; this.applyView(); }
+  world() {
+    const rect = this.svg.getBoundingClientRect(), [, maxW] = this.widthLimits(rect), l = this.insets?.left || 0;
+    this.view = { x: -l * maxW / (rect.width || 1), y: 0, w: maxW, h: 680 * maxW / WORLD }; this.applyView();
+  }
   europe() { this.view = { x: 595, y: 105, w: 210, h: 111.6 }; this.applyView(); }
   /** Optional trailing `{ insets: {top,right,bottom,left} px, width: map units }`: centre the target in the
    * part of the screen the host's overlays leave uncovered; `width` sets the zoom (default 390 units). */

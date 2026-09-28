@@ -187,7 +187,7 @@ async function openRoom(id,watch=false){
   const epoch=generation,loaded=await request(`/api/games/${id}/map`,'GET',undefined,watch?null:identity?.token);
   if(epoch!==generation || matchId!==id)return;
   map=loaded;initMap();mapReadyFor=id;
-  await poll();
+  await poll();syncInsets();atlas.world();
 }
 async function poll(){
   if(!matchId || mapReadyFor!==matchId || state?.status==='finished' && review?.id===matchId)return;
@@ -208,7 +208,7 @@ async function poll(){
     }
     if(!state.hasMore)messageCatchupComplete=true;
     announce(liveDeclarations);sounds.update(state,liveDeclarations,live);
-    setConnection(state.status==='finished'?'Review':'Live');render();renderFeed(live);renderCard();coach();
+    setConnection(state.status==='finished'?'Review':'Live');render();renderFeed(live);renderCard();coach();syncInsets();
   }catch(e){if(e.name!=='AbortError' && epoch===generation){setConnection('Reconnecting');toast(e.message,true);}}
   finally{if(polling===epoch)polling=false;}
 }
@@ -255,6 +255,13 @@ function view(){
   return {insets:{top,right:rail && rail.left>stage.width/2?stage.right-rail.left:0,left:panel && !sheet?panel.right-stage.left:0,bottom}};
 }
 /** Home: your country, close enough on phones to drag from a province counter. */
+/** Panels that stay over the map on wide screens (the right column): the atlas keeps the map beside them. */
+function syncInsets(){
+  if(!atlas)return;const stage=$('stage').getBoundingClientRect(),rail=document.querySelector('.right-rail');
+  const box=!compact.matches && rail?.checkVisibility()?[...rail.children].filter(e=>e.checkVisibility()).map(e=>e.getBoundingClientRect()):[];
+  const left=box.length?Math.min(...box.map(r=>r.left)):stage.right;
+  atlas.setInsets({left:0,right:box.length?Math.max(0,stage.right-left):0});
+}
 function focusCountry(){if(state?.you)atlas.home(state.you,{...view(),width:compact.matches?Math.max(120,$('stage').clientWidth/2.8):undefined});}
 /** Phones: if the bottom sheet now covers the chosen province, pan (no zoom) so it sits above the sheet. */
 function revealUnderCard(id){
@@ -935,4 +942,5 @@ compact.addEventListener('change',event=>{
   let saved=null;try{saved=localStorage.getItem('coi.leaderboard');}catch{}standings.setOpen(saved!=='collapsed');
 });
 try{map=await request('/map.json','GET',undefined,null);initMap();showIdentity();const params=new URL(location).searchParams,initial=params.get('match');if(initial)await openRoom(initial,params.get('spectate')==='1');else await rooms();setConnection(state?.status==='finished'?'Review':'Live');}catch(e){toast(e.message,true);}
+addEventListener('resize',()=>requestAnimationFrame(syncInsets));
 setInterval(()=>{if(matchId)poll();},750);
