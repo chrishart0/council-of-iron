@@ -32,7 +32,9 @@ const taskRooms=Object.fromEntries(['ui-tasks-m','ui-tasks-d','ui-turn'].map(id=
 // Britain (the browser seat) also declares war on the USA at tick 0: no armies move on that front, so the
 // recorded battles are unchanged, but the viewer has a real war for the v0.7 relation UI.
 const warOrders={0:[['britain',{type:'declare_war',country:'usa'}],['russia',{type:'declare_war',country:'ottoman'}],['russia',{type:'march',from:'ukraine',to:'caucasus',amount:10}],['germany',{type:'declare_war',country:'france'}]],
-  25:[['germany',{type:'march',from:'ruhr',to:'south-france',amount:11}]],
+  // Two real battles in progress at tick 55 (and a round at 57): Germany in Southern France, France in the Rhineland.
+  15:[['germany',{type:'march',from:'ruhr',to:'south-france',amount:11}]],
+  20:[['france',{type:'march',from:'south-france',to:'ruhr',amount:6}]],
   // Columns still on the march at tick 55, for army-layer checks.
   56:[['britain',{type:'march',from:'england',to:'ireland',amount:6}]],
   40:[['britain',{type:'march',from:'england',to:'low-countries',amount:8}],['france',{type:'march',from:'south-france',to:'iberia',amount:8}],['germany',{type:'march',from:'bavaria',to:'danube',amount:8}]]};
