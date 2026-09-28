@@ -51,7 +51,8 @@ const record = { runId, client: 'codex', access, model: modelId, country, preset
   interfaceVersion: taskMode === 'fixed' ? 'fixed-v1' : turnMode === 'episodic' ? 'board-turn-v2' : 'continuous-v1',
   ...(turnMode === 'episodic' ? { maxTurnSeconds, decisionIntervalTicks, maxTurns } : {}),
   taskId: taskMode === 'fixed' ? FIXED_TASK_ID : null,
-  startedAt: new Date().toISOString(), events: [], actions: [], httpActions: [], turnLog: [], usage: null };
+  startedAt: new Date().toISOString(), events: [], actions: [], httpActions: [], turnLog: [], usage: null,
+  usageAccounting: 'cumulative' };
 const save = () => writeFileSync(file, JSON.stringify(record, null, 2), { mode: 0o600 });
 let app, child;
 try {
@@ -130,10 +131,11 @@ try {
               inputTokens: usage.input_tokens ?? null,
               outputTokens: usage.output_tokens ?? null, cacheReadTokens: usage.cached_input_tokens ?? null });
             delete record.currentTurnStartedAt;
-            const totals = record.turnLog.reduce((sum, turn) => ({ input: sum.input + (turn.inputTokens || 0),
-              output: sum.output + (turn.outputTokens || 0), cacheRead: sum.cacheRead + (turn.cacheReadTokens || 0) }),
-            { input: 0, output: 0, cacheRead: 0 });
-            record.usage = { ...totals, total: totals.input + totals.output };
+            // Codex reports cumulative session usage on every resumed turn.
+            const totals = { input: usage.input_tokens ?? null, output: usage.output_tokens ?? null,
+              cacheRead: usage.cached_input_tokens ?? null };
+            record.usage = { ...totals, total: totals.input === null || totals.output === null
+              ? null : totals.input + totals.output };
             save();
           }
           if (event.type === 'item.completed' || event.type === 'item.started' || event.type === 'turn.failed' || event.type === 'error') {
@@ -179,9 +181,11 @@ try {
       clearTimeout(timer);
       if (timedOut || exitCode !== 0) {
         record.usageIncomplete = true;
-        record.turnFailures = (record.turnFailures || 0) + 1;
+        // A capped response is an ordinary incomplete turn in the Pi runner too.
+        // Only repeated process errors make the Codex session unusable.
+        record.turnFailures = timedOut ? 0 : (record.turnFailures || 0) + 1;
         save();
-      }
+      } else record.turnFailures = 0;
       if (!record.threadId) { record.error = 'Codex did not publish a resumable thread ID.'; break; }
       const after = await client.observe(0);
       if (after.status === 'finished') { record.outcome = after.outcome; break; }

@@ -50,6 +50,17 @@ test('benchmark export does not invent missing historical action or token counts
   assert.equal(partial.totalTokens, null);
   assert.equal(partial.meanTurnSeconds, null);
   assert.equal(summarizeRun({ ...rawForCodex(), turnMode: 'episodic' }, 'qwen').sessionMode, 'episodic');
+  const resumed = summarizeRun({ ...rawForCodex(), turnMode: 'episodic',
+    usage: { input: 450, output: 45, cacheRead: 360, total: 495 },
+    turnLog: [{ inputTokens: 100, outputTokens: 10, cacheReadTokens: 80, wallMs: 1000 },
+      { inputTokens: 350, outputTokens: 35, cacheReadTokens: 280, wallMs: 2000 }] }, 'qwen');
+  assert.equal(resumed.totalTokens, 385);
+  assert.equal(resumed.uncachedTokens, 105);
+  assert.equal(resumed.meanTurnSeconds, 1.5);
+  const direct = summarizeRun({ ...rawForCodex(), events: [{ itemType: 'command_execution',
+    command: 'curl http://127.0.0.1:1234/api/games/test/actions -H "Authorization: secret"' }] }, 'qwen');
+  assert.equal(direct.access, 'shell HTTP');
+  assert.doesNotMatch(JSON.stringify(direct), /Authorization|secret|127\.0\.0\.1/);
   assert.throws(() => summarizeRun({ status: 'running' }, 'qwen'), /finished score/);
 });
 

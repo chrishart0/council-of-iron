@@ -27,7 +27,12 @@ export function summarizeRun(raw, modelGroup) {
   if (!raw.runId || !raw.startedAt || !raw.match || raw.status !== 'finished' || !Number.isFinite(raw.score?.prestige))
     throw new Error(`Run ${raw.runId || '(unknown)'} has no authoritative finished score.`);
   const client = raw.client === 'codex' ? 'Codex' : 'Pi';
-  const access = client === 'Codex' ? raw.access : 'MCP';
+  const commands = client === 'Codex' ? (raw.events || []).filter(event =>
+    event.itemType === 'command_execution' && typeof event.command === 'string').map(event => event.command) : [];
+  const usedDirectHttp = commands.some(command => /\/api\/games\/[^\s'"?]+\/actions\b/.test(command));
+  const usedCli = commands.some(command => command.includes('/game/agents/cli.js'));
+  const access = client !== 'Codex' ? 'MCP' : raw.access === 'cli' && usedDirectHttp
+    ? usedCli ? 'CLI + direct HTTP' : 'shell HTTP' : raw.access;
   const completed = (raw.events || []).filter(event => event.type === 'item.completed' &&
     ['mcp_tool_call', 'command_execution'].includes(event.itemType));
   const calls = client === 'Pi' ? raw.toolCalls || [] : completed;
@@ -47,7 +52,12 @@ export function summarizeRun(raw, modelGroup) {
     : completed.some(event => event.name === 'board' || event.name?.endsWith('__board'));
   const usedView = client === 'Pi' ? calls.some(call => call.name === 'view_map')
     : completed.some(event => event.name === 'view_map' || event.name?.endsWith('__view_map'));
-  const tokenUsage = raw.usageIncomplete ? null : raw.usage;
+  // Resumed Codex turns report cumulative thread usage. Historical raw files
+  // summed those snapshots in raw.usage, so use the last completed snapshot.
+  const lastTurn = turns.at(-1);
+  const tokenUsage = raw.usageIncomplete ? null : client === 'Codex' && lastTurn && raw.usageAccounting !== 'per_turn'
+    ? { input: lastTurn.inputTokens, output: lastTurn.outputTokens,
+      cacheRead: lastTurn.cacheReadTokens } : raw.usage;
   const inputTokens = number(tokenUsage?.input);
   const outputTokens = number(tokenUsage?.output);
   const cacheReadTokens = number(tokenUsage?.cacheRead);
