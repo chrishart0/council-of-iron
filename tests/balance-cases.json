@@ -1,7 +1,13 @@
 {
   "v01": {},
   "v6-open-manchuria": {
-    "note": "Candidate (not published): Manchuria starts neutral, a contested neutral for Japan (via Korea), Russia and Qing.",
-    "starts": { "qing": ["north-china", "south-china", "tibet"] }
+    "note": "Rejected candidate (2026-09-28, 256 diplomacy + 256 solo seeds): Manchuria neutral at the start. It moved winning-side appearances from Qing (87\u219260) to Japan (70\u219288) without narrowing the spread; not published.",
+    "starts": {
+      "qing": [
+        "north-china",
+        "south-china",
+        "tibet"
+      ]
+    }
   }
 }
