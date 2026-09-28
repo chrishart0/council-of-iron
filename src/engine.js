@@ -198,7 +198,7 @@ export function marchPlan(g, map, country, action, { assumeWar = false } = {}) {
     const route = mapProvince(map, source.id).neighbors.includes(target.id)
       ? { path: [target.id], travel: journeyTicks(g, source.id, target.id, country) }
       : friendlyPath(g, country, source.id, target.id);
-    requireRule(route, `No route from ${source.id} to ${target.id} through your or allied land.`);
+    requireRule(route, `No route from ${source.id} to ${target.id}: a march passes only through your own or allied provinces (not through battles) and may end one step beyond them. March to a nearer province, or ally with or conquer the land between.`);
     const available = Math.max(0, source.troops - reservedTroops(g, country, source.id) - 1);
     requireRule((input.amount !== undefined) !== (input.percent !== undefined), 'Supply exactly one of amount or percent per source.');
     if (input.percent !== undefined) requireRule(Number.isFinite(input.percent) && input.percent > 0 && input.percent <= 100,
@@ -680,7 +680,11 @@ function executeOrders(g) {
     let error = source.owner !== o.country ? 'Source is no longer yours.' : o.amount >= source.troops ? 'Not enough troops remain.' : null;
     if (!error && o.type === 'march') {
       if (!mayEnter(g, o.country, province(g, o.to).owner)) error = 'War ended before departure.';
-      else if (o.path.slice(0, -1).some(id => !allied(g, o.country, province(g, id).owner))) error = 'The route changed before departure.';
+      else if (o.path.slice(0, -1).some(id => !allied(g, o.country, province(g, id).owner))) {
+        // The way changed hands while this source waited: take the quickest friendly way now, if any.
+        const route = friendlyPath(g, o.country, o.from, o.to);
+        if (route) o.path = route.path; else error = 'No route through your or allied land any more.';
+      }
     }
     if (!error && o.type === 'develop' && (source.developing || source.development !== o.level - 1)) error = 'Development state changed.';
     if (error) { event(g, 'order_failed', { country: o.country, orderId: o.id, reason: error }, [o.country]); continue; }
@@ -713,12 +717,18 @@ function resolveArrivals(g) {
     for(const army of byTarget.get(target.id)||[]) {
       if(army.path && !army.returning && army.pathIndex<army.path.length-1) {
         // A column passes only through friendly land that is not a battlefield.
-        if(allied(g,army.country,target.owner) && !g.battles.some(b=>b.province===target.id)) {
+        const passable=id=>allied(g,army.country,province(g,id).owner) && !g.battles.some(b=>b.province===id);
+        const rest=army.path.slice(army.pathIndex+1),goal=army.path.at(-1);
+        // Re-checked leg by leg: when the planned way is no longer friendly, take the quickest friendly way from here.
+        const reroute=passable(target.id) && !rest.slice(0,-1).every(passable) ? friendlyPath(g,army.country,target.id,goal) : null;
+        if(passable(target.id) && (rest.slice(0,-1).every(passable) || reroute)) {
+          if(reroute){army.path=[...army.path.slice(0,army.pathIndex+1),...reroute.path];
+            event(g,'army_rerouted',{country:army.country,armyId:army.id,province:target.id,to:goal,path:reroute.path},[army.country]);}
           army.from=target.id;army.pathIndex++;army.to=army.path[army.pathIndex];
           army.departedAt=g.tick;army.arrivesAt=g.tick+journeyTicks(g,army.from,army.to,army.country);
           g.armies.push(army);event(g,'army_transited',{country:army.country,province:target.id,to:army.to,amount:army.amount});
         } else {turnArmy(g,army,'transit_blocked',{owner:target.owner,
-          ...(allied(g,army.country,target.owner)?{battleAttackerSide:g.battles.find(b=>b.province===target.id).attackerSide}:{})});g.armies.push(army);}
+          ...(passable(target.id)?{noRoute:true}:allied(g,army.country,target.owner)?{battleAttackerSide:g.battles.find(b=>b.province===target.id).attackerSide}:{})});g.armies.push(army);}
       } else if(army.rally && !army.returning && !allied(g,army.country,target.owner)) {
         // A rally column only reinforces; it never attacks the land it was sent to hold.
         turnArmy(g,army,'rally_blocked',{owner:target.owner});g.armies.push(army);

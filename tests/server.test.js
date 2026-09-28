@@ -455,3 +455,23 @@ test('turn around over HTTP, CLI and MCP: bring a march home, march a returning 
 });
 
 
+test('a long march has the same path and arrival for the browser (HTTP /plan), MCP and CLI',async t=>{
+  const f=await fixture(t),host=await f.register('Host'),other=await f.register('Other');
+  const id=await f.room(host),usa=await f.seat(id,host,'usa');await f.seat(id,other,'britain');
+  await f.launch(id,usa.token);
+  const g=f.app.games.get(id);for(const p of ['mexico','west-canada'])Object.assign(g.provinces.find(v=>v.id===p),{owner:'usa',troops:30});
+  const action={to:'alaska',from:'mexico',amount:20};
+  const http=(await f.call(`/api/games/${id}/plan`,'POST',action,usa.token)).data;
+  assert.ok(http.sources[0].path.length>=3,JSON.stringify(http));
+  const env={COUNCIL_URL:f.url,COUNCIL_SESSION:pathJoin(f.dir,'long.session.json'),COUNCIL_TOKEN:usa.token,COUNCIL_MATCH:id};
+  const mcp=await subprocess('agents/mcp.js',[],env,[
+    {jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-06-18'}},{jsonrpc:'2.0',method:'notifications/initialized'},
+    {jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'preview',arguments:action}},
+  ].map(x=>JSON.stringify(x)).join('\n')+'\n');
+  const out=mcp.stdout.trim().split('\n').map(x=>JSON.parse(x)),viaMcp=JSON.parse(out[1].result.content[0].text);
+  assert.deepEqual(viaMcp.sources.map(s=>[s.path,s.travel]),http.sources.map(s=>[s.path,s.travel]));assert.equal(viaMcp.arrivesAt,http.arrivesAt);
+  const cli=await subprocess('agents/cli.js',['preview','alaska','20','mexico'],env);assert.equal(cli.code,0,cli.stderr);
+  assert.deepEqual(JSON.parse(cli.stdout).sources[0].path,http.sources[0].path);
+  const sent=JSON.parse((await subprocess('agents/cli.js',['march','alaska','20','mexico'],env)).stdout);
+  assert.deepEqual(sent.orders[0].path,http.sources[0].path);assert.equal(sent.arrivesAt,http.arrivesAt);
+});
