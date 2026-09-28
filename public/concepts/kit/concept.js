@@ -71,6 +71,8 @@ export function mountAtlas(svg, m, { state = m.live, selected = null, target = n
     if (focus === 'world') worldFit(atlas, svg, opts.insets);
     else if (focus === 'home') atlas.home(state.you || 'britain', opts);
     else atlas.focus(focus, opts);
+    // The draft label is sized for the current zoom: repaint it once the camera has settled.
+    if (draft) requestAnimationFrame(() => requestAnimationFrame(() => atlas.setDraft(draft)));
   };
   requestAnimationFrame(frame); addEventListener('resize', () => requestAnimationFrame(frame));
   return atlas;
