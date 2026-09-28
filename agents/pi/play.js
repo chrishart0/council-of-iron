@@ -35,6 +35,11 @@ const sessionMode = arg('--session-mode', 'fresh');
 const turnView = arg('--turn-view', 'decision');
 const combatSeed = arg('--combat-seed', undefined);
 const taskMode = arg('--task', 'match');
+const liveUrl = arg('--url', undefined);
+const liveMatch = arg('--match', undefined);
+if (Boolean(liveUrl) !== Boolean(liveMatch)) throw new Error('Live play needs both --url and --match.');
+if (liveUrl && taskMode !== 'match') throw new Error('Live play supports match mode only.');
+if (liveMatch && !/^[a-zA-Z0-9-]+$/.test(liveMatch)) throw new Error('Invalid live room ID.');
 const config = loadPiConfig(playerModel);
 const { baseUrl: endpoint, id: modelId, contextWindow, playerName: label } = config;
 const vision = config.provider === 'openai-codex' || config.inputImages;
@@ -94,7 +99,7 @@ const resources = new DefaultResourceLoader({ cwd: workspaceRoot, agentDir: outp
 });
 
 let server, session, mcp;
-const runId = new Date().toISOString().replace(/[:.]/g, '-');
+const runId = `${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0,8)}`;
 mkdirSync(outputDir, { recursive: true, mode: 0o700 });
 const file = resolve(outputDir, `${runId}.json`);
 const record = { runId, country, preset, playerModel, modelId, provider: config.provider,
@@ -131,18 +136,21 @@ try {
     };
   }
   // Test server and credentials are isolated from the LAN match and ignored by git.
-  const app = makeServer({ dbPath: resolve(outputDir, `${runId}.db`), league: false, automatic: taskMode !== 'fixed',
+  const app = liveUrl ? null : makeServer({ dbPath: resolve(outputDir, `${runId}.db`), league: false, automatic: taskMode !== 'fixed',
     ...(combatSeed ? { gameIdFactory: () => combatSeed } : {}) });
   server = app;
-  await new Promise(resolveListen => app.server.listen(0, '127.0.0.1', resolveListen));
-  const gameUrl = `http://127.0.0.1:${app.server.address().port}`;
-  const client = new CouncilClient({ url: gameUrl, sessionPath: resolve(outputDir, `${runId}.session.json`) });
-  await client.register(label);
-  const created = await client.create(`${label} solo test`, preset);
-  await client.join(created.id, country, label, modelId, 'diplomatic strategist', 'public');
-  await client.bots();
-  await client.start();
+  if (app) await new Promise(resolveListen => app.server.listen(0, '127.0.0.1', resolveListen));
+  const gameUrl = liveUrl || `http://127.0.0.1:${app.server.address().port}`;
+  const sessionPath = liveUrl ? resolve(outputDir, 'live', `${liveMatch}-${country}-${playerModel}.session.json`) : resolve(outputDir, `${runId}.session.json`);
+  const client = new CouncilClient({ url: gameUrl, sessionPath });
+  if (!client.session.profileToken) await client.register(label);
+  const created = liveUrl ? { id: liveMatch } : await client.create(`${label} solo test`, preset);
+  if (client.match !== created.id || client.session.country !== country || !client.session.seatToken)
+    await client.join(created.id, country, label, modelId, 'diplomatic strategist', 'public');
+  if (!liveUrl) { await client.bots(); await client.start(); }
   const gameMap = await client.map();
+  const initialState = await readWithRetry(() => client.observe(0));
+  if (liveUrl && initialState.speed !== 1) throw new Error(`Expected a normal-speed live room, got speed ${initialState.speed}.`);
   record.match = created.id;
   record.url = gameUrl;
   save();
@@ -225,7 +233,16 @@ try {
   const defaultOpening = { leaderName: config.leaderName,
     openingMessage: `${country[0].toUpperCase()}${country.slice(1)} enters the council ready to bargain, build, and defend its interests.` };
   let opening = defaultOpening;
-  if (taskMode === 'match') {
+  if (taskMode === 'match' && (!liveUrl || ['lobby','opening'].includes(initialState.status))) {
+    if (liveUrl) {
+      for (;;) {
+        const waiting = await readWithRetry(() => client.observe(0));
+        if (waiting.status === 'opening') break;
+        if (waiting.status === 'running') break;
+        if (waiting.status !== 'lobby') throw new Error(`Room entered ${waiting.status} before the opening declaration.`);
+        await sleep(1000);
+      }
+    }
     const openingResources = new DefaultResourceLoader({ cwd: workspaceRoot, agentDir: outputDir,
       settingsManager: settings, noExtensions: true, noSkills: true, noPromptTemplates: true,
       noThemes: true, noContextFiles: true,
@@ -247,8 +264,23 @@ try {
     finally { openingSession?.dispose(); }
   }
   record.opening = opening;
-  await client.opening(opening.leaderName, opening.openingMessage);
+  if (!liveUrl || (await readWithRetry(() => client.observe(0))).status === 'opening') {
+    try { await client.opening(opening.leaderName, opening.openingMessage); }
+    catch (error) {
+      const state = await readWithRetry(() => client.observe(0));
+      if (!liveUrl || state.status !== 'running' || error.status !== 409) throw error;
+      record.openingError = `Opening window closed: ${error.message}`;
+    }
+  }
   save();
+  if (liveUrl) {
+    for (;;) {
+      const waiting = await readWithRetry(() => client.observe(0));
+      if (waiting.status === 'running' || waiting.status === 'finished') break;
+      if (waiting.status !== 'opening') throw new Error(`Room entered ${waiting.status} while waiting for play.`);
+      await sleep(1000);
+    }
+  }
   async function freshSession() {
     session?.dispose();
     await resources.reload();
@@ -258,7 +290,7 @@ try {
   const activeTools = session.getActiveToolNames();
   if (activeTools.some(name => !tools.some(t => t.name === name))) throw new Error(`Unexpected Pi tool access: ${activeTools.join(', ')}`);
   record.tools = activeTools;
-  console.log(`Pi ${modelId} test: ${created.id} (${country} vs 7 practice bots), ${preset}`);
+  console.log(`Pi ${modelId}: ${created.id} (${country}${liveUrl ? ' live' : ' vs 7 practice bots'}), ${preset}`);
   const deadline = Date.now() + maxMinutes * 60_000;
   const cumulativeUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
   let consecutiveModelErrors = 0;

@@ -26,6 +26,7 @@ For a short interface check, `--task fixed` starts that isolated room with its c
 npm ci --prefix agents/pi
 npm --prefix agents/pi run play -- --model qwen --country britain --preset quick --max-minutes 12
 npm --prefix agents/pi run play -- --model luna --country britain --preset standard --max-minutes 35
+node agents/pi/play.js --model qwen --country britain --preset standard --url http://127.0.0.1:3107 --match ROOM --max-minutes 50
 npm --prefix agents/pi run play -- --model sample --country britain --preset quick --max-minutes 8
 node agents/pi/codex-play.js --preset quick --max-minutes 12
 node agents/pi/codex-play.js --access cli --preset quick --max-minutes 12
@@ -35,6 +36,8 @@ node agents/pi/play.js --model qwen --task fixed --preset standard --max-minutes
 node agents/pi/codex-play.js --model qwen --access cli --task fixed --preset standard --max-minutes 6
 node agents/pi/codex-play.js --model luna --access mcp --task fixed --preset standard --max-minutes 6
 ```
+
+For a shared lobby, `--url` and `--match` join the existing normal-speed room instead of creating an isolated bot match. The client waits in the lobby, locks a model-written opening during the opening window, and waits for actual play before taking turns. Live seat credentials use an ignored, stable file under `data/pi/live/` so the same model/country/room can reconnect after a process restart. The match time budget starts when play begins. A seatless organizer can use `POST /api/games/ROOM/bots` with `{ "count": 2 }` to keep two practice seats filled, then `agents/pi/start-when-full.js` to begin the 90-second opening when the eighth player joins. `agents/pi/cli-seat.js` runs an already joined Grok CLI or Hermes profile in short turns through the same Council MCP API; each CLI must be configured with its own session file.
 
 For a normal-speed matched comparison, use one model service at a time and give both clients the same country and combat seed:
 

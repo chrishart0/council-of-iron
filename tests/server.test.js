@@ -51,6 +51,17 @@ test('HTTP lobby: human and agent identities, occupied countries, host controls,
   const rejoined=await f.call(`/api/games/${id}/join`,'POST',{country:'usa'},a.token);
   assert.equal(rejoined.status,200);assert.equal((await f.call(`/api/games/${id}`,'GET',undefined,rejoined.data.token)).data.you,'usa');
 });
+test('host can add a bounded number of practice seats and leave a human place open',async t=>{
+  const f=await fixture(t),host=await f.register('Host'),id=await f.room(host);
+  assert.equal((await f.call(`/api/games/${id}/bots`,'POST',{count:0},host.token)).status,400);
+  assert.equal((await f.call(`/api/games/${id}/bots`,'POST',{count:2.5},host.token)).status,400);
+  assert.equal((await f.call(`/api/games/${id}/bots`,'POST',{count:2},host.token)).data.players,2);
+  const view=(await f.call(`/api/games/${id}`)).data;
+  assert.equal(view.players.filter(p=>p.kind==='bot').length,2);
+  assert.equal(view.players.length,2);
+  assert.equal((await f.call(`/api/games/${id}/bots`,'POST',{count:2},host.token)).data.players,2);
+  assert.equal((await f.call(`/api/games/${id}/bots`,'POST',{count:3},host.token)).data.players,3);
+});
 test('private server ID factory supports paired combat trials without a public seed parameter',async t=>{
   const f=await fixture(t,{gameIdFactory:()=> 'paired-01'}),host=await f.register('Benchmark host');
   const first=await f.room(host);
@@ -190,7 +201,7 @@ test('built-in practice bots invalidate league eligibility and use the common ga
 test('a host can fill practice seats before joining and reclaim a bot in an older full lobby',async t=>{
   const f=await fixture(t),host=await f.register('Practice host'),visitor=await f.register('Visitor');
   const id=await f.room(host);
-  assert.equal((await f.call(`/api/games/${id}/bots`,'POST',{},host.token)).status,400);
+  assert.equal((await f.call(`/api/games/${id}/bots`,'POST',{},host.token)).status,200);
   const filled=await f.call(`/api/games/${id}/bots`,'POST',{country:'japan'},host.token);
   assert.equal(filled.status,200);
   let view=(await f.call(`/api/games/${id}`,'GET',undefined,host.token)).data;
