@@ -71,7 +71,7 @@ createInterface({input:process.stdin}).on('line',input=>{
   if(line.startsWith('ally ')){const who=line.slice(5).trim(),offer=w.proposals.find(q=>q.status==='open'&&q.roster.includes(who));if(!offer)throw new Error('No open offer');
     act(w,map,who,{type:'accept',proposalId:offer.id},`ui-war-accept-${offer.id}`);app.store.save(w);console.log(JSON.stringify({tick:w.tick,status:offer.status}));return;}
   if(line.startsWith('war ')){const to=Number(line.slice(4));if(!Number.isSafeInteger(to)||to<w.tick||to>120)throw new Error('Invalid war fixture tick');stepWar(to);app.store.save(w);console.log(JSON.stringify({tick:w.tick,battles:w.battles.length}));return;}
-  const to=Number(line);if(!Number.isSafeInteger(to)||to<g.tick||to>700)throw new Error('Invalid fixture tick');
+  const to=Number(line);if(!Number.isSafeInteger(to)||to<g.tick||to>800)throw new Error('Invalid fixture tick');
   recorded.to(to);
   app.store.save(g);console.log(JSON.stringify({tick:g.tick}));
 });
