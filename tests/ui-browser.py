@@ -270,7 +270,7 @@ ARMY_AUDIT='''() => {
 
 def relations_checks(page,report,capture):
     page.set_viewport_size({'width':1366,'height':768})
-    # Alliances in the default political view (legacy recorded match with three coalitions).
+    # Alliances in the default political view (recorded match with three coalitions).
     go_back(page);page.locator('[data-room="ui-fixture"][data-resume]').click()
     expect(page.locator('#commander-title')).to_have_text('British Empire');camera(page,'world');page.wait_for_timeout(200)
     first=page.evaluate(RELATIONS_AUDIT,'ui-fixture')
@@ -280,7 +280,7 @@ def relations_checks(page,report,capture):
         assert b['name'] in first['legend'],(b,first['legend'])
     assert len({b['color'] for b in first['blocs']})==3 and not first['badTicks'],first
     assert first['labels'],'no alliance name placed at world view'
-    assert first['fronts']==[] and first['sea']==[],first  # legacy rules: no formal war fronts
+    assert first['fronts'] and first['fronts']==first['expectedFronts'] and first['sea']==first['expectedSea'],first  # the recorded wars draw their fronts
     capture('15-alliance-blocs.png',900)
     page.wait_for_timeout(1300);again=page.evaluate(RELATIONS_AUDIT,'ui-fixture')
     assert [b['color'] for b in again['blocs']]==[b['color'] for b in first['blocs']]
@@ -400,7 +400,7 @@ def battle_checks(page,server,report,capture):
             assert abs(r['measured']-ratio)<.01,(label,r)
             assert r['attackFill']==r['expected']['attacker'] and r['defendFill']==r['expected']['defender'] and r['distance']>=20,(label,r)
         return rows
-    before=check('tick 56')
+    before=check('tick 57')
     assert all(r['transition'].startswith('0.4') for r in before),before
     server.stdin.write('war 58\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==58
     page.wait_for_timeout(2600);after=check('tick 58')
@@ -440,7 +440,8 @@ def map_checks(page,server,report,capture):
         close_comms(page)
         audit_zooms(page,'ui-war',f'war {w}',views)
     page.set_viewport_size({'width':1366,'height':768});camera(page,'europe')
-    server.stdin.write('war 56\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==56
+    # Battle rounds land on 4 of every 5 ticks: tick 57 adjudicates a round in both recorded battles.
+    server.stdin.write('war 57\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==57
     expect(page.locator('#map .round-loss').first).to_be_attached(timeout=6000)
     capture('13-battle-round.png',600)
     report['assertions'].append('Real phased battles show a persistent attacker-vs-defender clash marker at every zoom (never merged), matching engaged armies and garrison, and flash the losses of a newly adjudicated round.')
@@ -628,7 +629,7 @@ def expand_checks(browser,url,identity,report,out):
         page.keyboard.press('Escape');expect(page.locator('#stage')).not_to_have_class(re.compile('map-expanded'))
         expect(page.locator('#hud')).to_be_visible();expect(live).to_be_focused()
         # Popups on phones are compact toasts under the HUD, never over the order sheet or its commit.
-        select(page,'england','low-countries')
+        select(page,'england','midlands')  # (the Netherlands is a battle by now; its clash marker replaces the counter)
         sheet=page.locator('#card').bounding_box();commit=page.locator('#primary').bounding_box();sizes=page.evaluate(TOAST_SIZE)
         for name,r in sizes.items():
             assert r['height']<=min(80 if name=='declaration' else 72,h*.22)+.5 and r['top']>=0,(w,h,name,r)
@@ -801,7 +802,7 @@ def mobile_checks(browser,url,identity,report,out):
             page.locator('#map').scroll_into_view_if_needed();page.wait_for_timeout(250)
             departing=page.evaluate('''()=>{const c=document.querySelector('#marker-scotland .counter-body').getBoundingClientRect();
               return [...document.querySelectorAll('#map .moving-army:not(.engaged)')].map(g=>{const r=g.querySelector('.army-arrow').getBoundingClientRect();
-                return {blocked:g.classList.contains('tap-blocked'),hit:g.querySelector('.army-hit').getBoundingClientRect().width,over:r.left<c.right&&c.left<r.right&&r.top<c.bottom&&c.top<r.bottom};}).filter(a=>a.over);}''')
+                return {blocked:g.classList.contains('tap-blocked'),hit:g.querySelector('.army-hit').getBoundingClientRect().width,over:r.left<c.right+4&&c.left-4<r.right&&r.top<c.bottom+4&&c.top-4<r.bottom};}).filter(a=>a.over);}''')  # touching within 4 px
             assert departing and all(a['blocked'] for a in departing) and all(a['hit']<=18 for a in departing),departing
             body=page.locator('#marker-scotland .counter-body').bounding_box()
             page.touchscreen.tap(body['x']+body['width']/2,body['y']+body['height']/2)
@@ -853,11 +854,11 @@ def coach_and_drag_checks(browser,url,identity,report,out):
     assert page.evaluate("localStorage.getItem('coi.coach')")=='done'
     page.reload();expect(page.locator('#commander-title')).to_have_text('Britain');page.wait_for_timeout(1200);expect(coach).to_be_hidden()
     menu(page);page.locator('#coach-replay').click();expect(coach).to_be_visible();page.keyboard.press('Escape');expect(coach).to_be_hidden()
-    # Drag with a real touch point from Southern England's counter to the Low Countries.
+    # Drag with a real touch point from Southern England's counter to the Midlands (the Netherlands is a battle by now).
     page.locator('#home-view').click();page.wait_for_timeout(250)
     def centre(sel):
         b=page.locator(sel).bounding_box();return b['x']+b['width']/2,b['y']+b['height']/2
-    (x0,y0),(x1,y1)=centre('#marker-england .counter-body'),centre('#marker-low-countries .counter-body')
+    (x0,y0),(x1,y1)=centre('#marker-england .counter-body'),centre('#marker-midlands .counter-body')
     cdp=context.new_cdp_session(page)
     cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':x0,'y':y0,'id':1}]})
     for i in range(1,13):cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':x0+(x1-x0)*i/12,'y':y0+(y1-y0)*i/12,'id':1}]})
@@ -866,7 +867,7 @@ def coach_and_drag_checks(browser,url,identity,report,out):
     assert re.fullmatch(r'\d+ · \d+s',page.locator('#map .draft-label text').text_content()),page.locator('#map .draft-label text').text_content()  # troops · ETA
     page.screenshot(path=str(out/'22-touch-drag.png'))
     cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
-    expect(page.locator('#card')).to_have_attribute('data-kind','province');expect(page.locator('#card-title')).to_have_text('Netherlands')  # low-countries is named Netherlands on this map
+    expect(page.locator('#card')).to_have_attribute('data-kind','province');expect(page.locator('#card-title')).to_have_text('Midlands')
     expect(page.locator('#card-sub')).to_contain_text('from Southern England');check_commit(page,'390 after drag')
     assert page.locator('#map .draft-arrow').count()==1  # the order arrow stays while the card is open
     page.screenshot(path=str(out/'23-after-drag.png'))
@@ -1153,6 +1154,22 @@ def main():
                 page.set_viewport_size({'width':w,'height':h});page.wait_for_timeout(150);check_layout(page,f'lobby {w}x{h}')
             page.set_viewport_size({'width':1500,'height':1150})
             report['assertions'].append('Responsive layouts pass at 1024px, 390px and short landscape; faction standards select real seats, show the country in the dossier and disable occupied countries; the lobby regions never overlap.')
+            # The opening council: the same dossier and rack; bots are ready at once, your declaration starts the match.
+            page.locator('#fill-bots').click();expect(page.locator('#room-label')).to_contain_text('8/8')
+            page.locator('#start-match').click();expect(page.locator('#phase')).to_have_text('Opening council')
+            expect(page.locator('#dossier-title')).to_have_text('Opening council');expect(page.locator('#opening-form')).to_be_visible()
+            expect(page.locator('[data-country-seat="france"] small')).to_contain_text('Ready')
+            expect(page.locator('[data-country-seat="germany"] small')).to_contain_text('Choosing')
+            for w,h in [(1500,1150),(1366,768),(390,844),(844,390)]:
+                page.set_viewport_size({'width':w,'height':h});page.wait_for_timeout(150)
+                check_layout(page,f'opening {w}x{h}');check_contrast(page,f'opening {w}x{h}')
+                if w==390:capture('08b-opening-390.png')
+            page.set_viewport_size({'width':1500,'height':1150})
+            page.locator('#leader-name').fill('<b>Kaiser</b> Test');page.locator('#opening-message').fill('<img src=x onerror=window.OPENING_XSS=1> Germany arrives.')
+            page.locator('#opening-form button[type=submit]').click();expect(page.locator('#phase')).to_have_text('In session')
+            rows=open_thread(page,'world');expect(rows).to_contain_text('Germany arrives.');assert page.locator('#comms img').count()==0 and not page.evaluate('Boolean(window.OPENING_XSS)')
+            close_comms(page)
+            report['assertions'].append('The opening council reuses the lobby regions without overlap or contrast failures at 1500×1150, 1366×768, 390×844 and 844×390; bots are ready at once; your leader name and declaration (hostile markup stays text) go to the World thread and start the match.')
             go_back(page);page.locator('[data-room="ui-review"]').click()
             expect(page.locator('#aar-standings tr[data-result-country]')).to_have_count(8)
             expect(page.locator('.v-standards .insignia')).to_have_count(3)

@@ -96,7 +96,7 @@ ${medal ? `<div class="v-medal">${icon('laurel')}<b>${signed(medal.value)}</b><s
 <section id="aar-replay" class="aar-replay" aria-label="Replay" hidden></section>`;
     this.overview();
     if (!r.historyAvailable) {
-      const note = `<div class="aar-empty"><h3>History unavailable</h3><p>${esc(r.historyError || 'This older match cannot be replayed exactly.')}</p><p>No estimated replay is shown. The Overview keeps the original scores.</p></div>`;
+      const note = `<div class="aar-empty"><h3>History unavailable</h3><p>${esc(r.historyError || 'This match cannot be replayed exactly.')}</p><p>No estimated replay is shown. The Overview keeps the original scores.</p></div>`;
       for (const id of ['military', 'economy', 'diplomacy']) this.el(`aar-${id}`).innerHTML = note;
       this.el('aar-replay').innerHTML = `<header class="topbar replay-bar" data-region="replay-top"><button type="button" class="bezel-btn" id="replay-exit" data-aar-tab="overview" aria-label="Back to the report" data-sfx="press">${icon('back')}</button><div class="lobby-title"><b>Replay</b><small>${esc(r.name || '')}</small></div></header><div class="replay-unavailable plate" data-region="replay-note">${note}</div>`;
       return;

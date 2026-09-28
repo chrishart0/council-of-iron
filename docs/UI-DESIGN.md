@@ -28,11 +28,12 @@ The camera gets the regions as insets (`atlas.setInsets({left,right,top})` and `
 
 ## Screens
 
-- **Title:** the iron gate (emblem, name, commander, sound), *The Assembly* (rooms by state with Resume/Watch/Enter/Review; a Prestige tab), *Open a council* (name, room, Pace and Rules as segmented controls, one primary).
-- **Lobby:** a rack of the eight standards along the bottom, the dossier of the chosen country (holdings, commander name, *Take this seat*), host controls (bots, *Start match*), invite link.
-- **Match:** the HUD, the card (orders with the brass slider and 25/50/75/100 chips; country with the relation in large type, strength and *Propose alliance* / *Declare war* / *Message*; army with *Recall* or *Turn around*; your alliance), Powers with nested alliance totals and the war fronts always listed under the rows, Messages, heralds for what affects you (compact on phones), the menu (map views, sound and voice, map key, controls, war log, room, identity, tips), rally points (card action, keep-N field, dashed arrow, pause notices).
-- **Replay:** top bar, the map, the right column = one team leaderboard at the scrubbed tick above the History thread up to the tick (rows seek; alliance chat only where the room revealed it), a timeline band (big play, ±10 s, first/last, speed chips, event marks, next-event line).
-- **After-action report:** victory/defeat/armistice band with the winners' standards and a Prestige medal, final standings grouped by alliance (alliance = sum of member Prestige), land-share chart, turning points that open the replay at that moment, Military/Economy/Diplomacy tabs, one primary *Watch the replay*.
+- **Title:** the iron gate (emblem, name, commander, sound), *The Assembly* (rooms by state with Resume/Watch/Enter/Review; a Prestige tab), *Open a council* (name, room, Pace as a segmented control, one primary; there is one ruleset).
+- **Lobby:** a rack of the eight standards along the bottom, the dossier of the chosen country (holdings, commander name, *Take this seat*), host controls (bots, *Start match*; a host who filled every seat with bots can take one over), invite link.
+- **Opening council** (after *Start match*): the same dossier and rack — the plaque reads *Opening council*, a countdown, *Leader name* and *Opening declaration* with one primary (*Announce to the world*), and each standard shows *Ready* or *Choosing*. Declarations are World messages (text only). Play begins when every seat is ready or the window closes.
+- **Match:** the HUD, the card (orders with the brass slider and 25/50/75/100 chips — to a neighbour or, through your own provinces, beyond them, with the route drawn leg by leg and the arrival capture chance in the details; a province in battle shows the live odds and recent rounds; country with the relation in large type, strength and *Propose alliance* / *Declare war* / *Message*; army with *Recall* or *Turn around*; your alliance), Powers with nested alliance totals and the war fronts always listed under the rows, Messages, heralds for what affects you (compact on phones), the menu (map views, sound and voice, map key, controls, war log, room, identity, tips), rally points (card action, keep-N field, dashed arrow, pause notices).
+- **Replay:** top bar, the map, the right column = one team leaderboard at the scrubbed tick above the History thread up to the tick (rows seek; alliance chat only where the room revealed it, and messages public AI seats disclosed), a timeline band (big play, ±10 s, first/last, speed chips, event marks, next-event line).
+- **After-action report:** victory/defeat/armistice band with the winners' standards and a Prestige medal, final standings grouped by alliance (alliance = sum of member Prestige), land-share chart, turning points that open the replay at that moment, Military/Economy/Diplomacy tabs (Diplomacy: the disclosed messages of public AI seats by conversation, searchable, each opening the replay at its moment), one primary *Watch the replay*.
 
 ## Comms: one model for notifications and messages
 
@@ -63,7 +64,7 @@ Not verified: real devices and iOS Safari, screen-reader output beyond the ARIA 
 ## Known issues
 
 - With a card open on a phone the map shows about 41% of the screen (the card is the focus there).
-- In the legacy recorded room, an incoming attack warning (ACTION) holds the one toast slot, so a "Province lost" notice waits until it is dismissed — this follows the tier rule, but it is a visible change from v0.8.
+- An incoming attack warning (ACTION) holds the one toast slot, so a battle notice waits until it is dismissed — this follows the tier rule, but it is a visible change from v0.8.
 - The replay's phone map is short while the standings sheet is open.
 
 
@@ -407,7 +408,7 @@ A compact ranked panel pinned to the map's top-right corner (the feed owns botto
 
 ## Verified
 
-- `tests/feed.test.js`: the threshold and floor, minor battles excluded, legacy battle casualties, private events never classified, level II excluded, identical headline for spectator/player observations, public-only chronological feed with cursor and unsplittable pages, deterministic headlines, legacy saves without the field, a real elimination, and the banner/effect plan (own vs other elimination).
+- `tests/feed.test.js`: the threshold and floor, minor battles excluded, battle casualties, private events never classified, level II excluded, identical headline for spectator/player observations, public-only chronological feed with cursor and unsplittable pages, deterministic headlines, a real elimination, and the banner/effect plan (own vs other elimination).
 - `tests/server.test.js`: `/feed` over HTTP, CLI `feed` and MCP `world_feed` return identical items; DMs excluded; invalid cursor/limit rejected.
 - `tests/browser.py` (12× live match): a CLI war declaration appears as a feed headline; the alliance seal shows both standards and names; hostile HTML from an agent and from the feed reply renders as inert text for player and spectator; the reply reaches the public feed API; a reconnect rebuilds the feed and shows no banner for any pre-reconnect headline.
 - `tests/ui-browser.py` (recorded position): catch-up shows history with no flashes/banners; the real tick-535 battle (128 of 2,367 troops) raises one “Major battle at Northern India” banner and fresh row; reopening replays nothing; reduced motion disables every new animation.

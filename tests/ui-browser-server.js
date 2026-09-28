@@ -18,7 +18,7 @@ talks.rules.revealAllianceChatAfterMatch=true;talks.rules.duration=150;start(tal
 while(talks.status==='running'){
   if(talks.tick===1){const q=act(talks,MAP,'usa',{type:'propose',country:'japan',name:'Pacific Pact'},'ui-chat-p');act(talks,MAP,'japan',{type:'accept',proposalId:q.proposalId},'ui-chat-a');}
   if(talks.tick===45)act(talks,MAP,'usa',{type:'chat',channel:'alliance',text:'Hold the Pacific <b>line</b>.'},'ui-chat-c');
-  if(talks.tick===50)act(talks,MAP,'usa',{type:'move',from:'west-us',to:'mexico',amount:5},'ui-chat-m');
+  if(talks.tick===60)act(talks,MAP,'usa',{type:'move',from:'west-us',to:'mexico',amount:10},'ui-chat-m');  // arrives 02:02, captures 02:05
   tick(talks);}
 app.games.set(talks.id,talks);app.store.save(talks);
 const finished=replay().game;finished.id='ui-review';finished.name='The Atlantic campaign';app.games.set(finished.id,finished);app.store.save(finished);
@@ -41,8 +41,8 @@ const pact=room=>{const q=act(room,MAP,'usa',{type:'propose',country:'japan',nam
 const stepRoom=(room,to)=>{while(room.tick<to){for(const [country,action] of warOrders[room.tick]||[])act(room,MAP,country,action,`${room.id}-${room.tick}-${country}-${action.type}`);if(room.tick===50)pact(room);tick(room);}};
 const stepWar=to=>stepRoom(w,to);
 for(const room of [w,...Object.values(taskRooms)]){stepRoom(room,55);app.games.set(room.id,room);app.store.save(room);}
-// The phone map suite needs the column that has just left Scotland (tick 58), independent of later war-room steps.
-const mobileRoom=warRoom('ui-mobile','The Rhine front · phone');stepRoom(mobileRoom,58);app.games.set(mobileRoom.id,mobileRoom);app.store.save(mobileRoom);
+// The phone map suite needs the column that has just left Scotland (it departs at tick 57; internal links are fast, so it is still on the counter only then).
+const mobileRoom=warRoom('ui-mobile','The Rhine front · phone');stepRoom(mobileRoom,57);app.games.set(mobileRoom.id,mobileRoom);app.store.save(mobileRoom);
 app.server.listen(0,'127.0.0.1',()=>console.log(JSON.stringify({url:`http://127.0.0.1:${app.server.address().port}`,identity:profiles.britain})));
 for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>app.close().then(()=>process.exit(0)));
 
@@ -55,7 +55,7 @@ createInterface({input:process.stdin}).on('line',input=>{
   if(room!==w){
     if(line.startsWith('dm ')){const [,from,to,...words]=line.split(' ');act(room,MAP,from,{type:'chat',channel:'dm',to,text:words.join(' ')},`${room.id}-dm-${room.tick}-${from}-${to}`);return reply({});}
     if(line.startsWith('offer ')){const [,from,to,...name]=line.split(' ');const r=act(room,MAP,from,{type:'propose',country:to,name:name.join(' ') || 'Iron Triangle'},`${room.id}-offer-${room.tick}-${from}-${to}`);return reply({proposalId:r.proposalId});}
-    if(line.startsWith('war ')){const to=Number(line.slice(4));if(!Number.isSafeInteger(to)||to<room.tick||to>200)throw new Error('Invalid task room tick');stepRoom(room,to);return reply({});}
+    if(line.startsWith('war ')){const to=Number(line.slice(4));if(!Number.isSafeInteger(to)||to<room.tick||to>500)throw new Error('Invalid task room tick');stepRoom(room,to);return reply({});}
     throw new Error('Unknown task room command');
   }
   // Test-only: another seat in the war room sends a DM or an alliance offer (the same act() path as any client).

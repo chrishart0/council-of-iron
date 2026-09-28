@@ -519,7 +519,8 @@ body:is([data-status=lobby],[data-status=opening]) .war-room>:is(.topbar#hud,.st
   .card-actions>button.primary{min-height:42px;font-size:17px}.card-actions>button:not(.primary){min-height:36px}
   .lobby{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:calc(var(--top) + var(--safe-t)) minmax(0,1fr);grid-template-areas:"top top" "dossier rack"}
   .rack{flex-wrap:wrap;align-content:center;border-top:0;border-left:2px solid;border-image:var(--rim) 1}
-  .dossier{overflow:auto}
+  .dossier{overflow:auto;min-height:0;max-height:100%;align-self:stretch}
+  .slot textarea{min-height:44px}.opening-countdown{font-size:19px}
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 /* Sound settings (public/sound.js): a brass toggle with a popover on the title screen; inline in the menu. */

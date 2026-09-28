@@ -69,12 +69,14 @@ class Walk:
         """Camera only (not counted): pan the map by dragging empty map so the province is on screen."""
         self.page.keyboard.press('Escape')
         vw, vh = self.page.viewport_size['width'], self.page.viewport_size['height']
-        for _ in range(4):
+        for _ in range(8):
             x, y = self.at(self.counter(province))
-            if 40 < x < vw - 40 and vh * .25 < y < vh * .55: return
+            clear = self.counter(province).evaluate('(el,[x,y])=>el.contains(document.elementFromPoint(x,y))', [x, y]) if 0 <= x < vw and 0 <= y < vh else False
+            if 40 < x < vw - 40 and vh * .25 < y < vh * .55 and clear: return
             start = self.page.evaluate('''([w,h])=>{for(let y=h*.35;y<h*.6;y+=13)for(let x=w*.3;x<w*.7;x+=13){const e=document.elementFromPoint(x,y);
               if(e&&e.closest('#map')&&!e.closest('.map-counter,.map-cluster,.battle-counter,.moving-army'))return [x,y];}return null;}''', [vw, vh])
-            sx, sy = start; dx, dy = vw / 2 - x, vh * .4 - y
+            # One drag stays inside the viewport (a pointer leaving it ends the pan): several drags cover long distances.
+            sx, sy = start; dx, dy = max(-vw * .25, min(vw * .25, vw / 2 - x)), max(-vh * .2, min(vh * .2, vh * .4 - y))
             self.page.mouse.move(sx, sy); self.page.mouse.down()
             for i in range(1, 11): self.page.mouse.move(sx + dx * i / 10, sy + dy * i / 10)
             self.page.mouse.up(); self.page.wait_for_timeout(120); self.camera += 1
@@ -214,12 +216,12 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     w.end()
     close_comms(page)
 
-    # Develop a province: East Canada (level II) once natural recruitment pays for level III.
+    # Develop a province: East Canada (level II) once natural recruitment pays for level III (48 troops).
     w.begin('develop')
-    w.stdin('war 140')
+    w.stdin('war 400')
     w.bring('east-canada')
     w.tap(w.counter('east-canada'), 'province')
-    develop = page.locator('#develop-province'); expect(develop).to_contain_text('Develop · 24 troops'); expect(develop).to_be_enabled(timeout=5000)
+    develop = page.locator('#develop-province'); expect(develop).to_contain_text('Develop · 48 troops'); expect(develop).to_be_enabled(timeout=5000)
     w.tap(develop, 'confirm-open')
     w.tap(page.locator('#confirm-dialog [value="confirm"]'), 'invested')
     expect(lane(page)).to_contain_text('Investment committed')
@@ -229,7 +231,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     # Rally point: tap a province of yours → "Rally troops to…" → tap the rally province (Scotland → Southern England;
     # the British seat's analogue of "always send Mexico's new troops to Pacific States").
     w.begin('rally')
-    w.stdin('war 160')
+    w.stdin('war 420')
     page.keyboard.press('Escape'); w.bring('scotland')
     w.tap(w.counter('scotland'), 'source')
     rally = page.locator('#rally-province'); expect(rally).to_have_text('Rally troops to…'); expect(rally).to_be_enabled(timeout=5000)
@@ -239,7 +241,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     expect(lane(page)).to_contain_text('Rally set', timeout=5000)
     s = w.state(); order = next(o for o in s['commandBudget']['reserved'] if o['type'] == 'rally')
     assert order['sources'] == ['scotland'] and order['to'] == 'england' and order['keep'] is None, order
-    w.stdin('war 162'); page.wait_for_timeout(1500)
+    w.stdin('war 422'); page.wait_for_timeout(1500)
     expect(page.locator('[data-rally="scotland"]').first).to_be_attached(timeout=5000)
     w.snap('arrow')
     w.end()
@@ -258,7 +260,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     steps['openDm'] = w.count - before; assert steps['openDm'] <= 2, steps
     expect(page.locator('#comms .cx-title')).to_have_text('Empire of Japan')
     expect(page.locator('#cx-text')).to_be_focused()
-    w.stdin('war 172'); expect(page.locator('#comms .cx-send')).to_be_enabled(timeout=5000)
+    w.stdin('war 432'); expect(page.locator('#comms .cx-send')).to_be_enabled(timeout=5000)
     page.keyboard.type('Tokyo and London share an enemy.'); w.tap(page.locator('#comms .cx-send'), 'dm-sent')
     expect(page.locator('#comms .cx-msg[data-mine="true"]').last).to_contain_text('share an enemy', timeout=5000)
     expect(page.locator('#cx-text')).to_be_focused()
@@ -269,7 +271,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     assert page.locator('#toasts .cx-toast[data-thread="dm:japan"]').count() == 0, 'no toast for the open thread'
     expect(page.locator('#comms-button')).to_have_attribute('data-unread', unread)  # read on arrival in the open thread
     page.keyboard.type('A pact, and the Philippines stay yours.')
-    w.stdin('war 184'); page.wait_for_timeout(1600)  # polling while a draft is typed
+    w.stdin('war 444'); page.wait_for_timeout(1600)  # polling while a draft is typed
     expect(page.locator('#cx-text')).to_have_value('A pact, and the Philippines stay yours.'); expect(page.locator('#cx-text')).to_be_focused()
     expect(page.locator('#comms .cx-send')).to_be_enabled(timeout=5000)
     w.tap(page.locator('#comms .cx-send'), 'dm-reply')
@@ -280,7 +282,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     steps['toAlliance'] = w.count - before; assert steps['toAlliance'] <= 1, steps
     expect(page.locator('#comms .cx-members')).to_be_visible(); expect(page.locator('#comms .cx-members')).to_contain_text('Germany')
     expect(page.locator('#cx-text')).to_have_value('')
-    w.stdin('war 196'); expect(page.locator('#comms .cx-send')).to_be_enabled(timeout=5000)
+    w.stdin('war 456'); expect(page.locator('#comms .cx-send')).to_be_enabled(timeout=5000)
     page.keyboard.type('Japan is ready to talk. I will keep the Pacific quiet.'); w.tap(page.locator('#comms .cx-send'), 'alliance-sent')
     expect(page.locator('#comms .cx-msg[data-mine="true"]').last).to_contain_text('Pacific quiet', timeout=5000)
     before = w.count
