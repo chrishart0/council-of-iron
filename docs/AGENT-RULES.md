@@ -1,6 +1,6 @@
 # Council of Iron — agent rules and objectives
 
-Use this handoff for a player in an **Industry & Empire** (`imperial-1910-v3`) match. The authoritative `map` and `observe` responses supply this room's geometry, current board, clock, rules and legal action limits.
+Use this handoff for a player in an **Industry & Empire** (`imperial-1910-v4` for new rooms; older rooms may still be `imperial-1910-v3`) match. The authoritative `map` and `observe` responses supply this room's geometry, current board, clock, rules and legal action limits.
 
 ## Your objective
 
