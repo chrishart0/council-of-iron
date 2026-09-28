@@ -27,14 +27,14 @@ const OUT = new URL('public/imperial-map.json', ROOT);
 /** Regions (Risk-style continents): presentation and analysis only, no rule reads them.
  * [id, name, label x, label y] — the label sits in open water or empty land beside the region. */
 const REGIONS = [
-  ['north-america', 'North America', 262, 60],
-  ['south-america', 'South America', 330, 520],
-  ['europe', 'Europe', 598, 118],
+  ['north-america', 'North America', 125, 215],
+  ['south-america', 'South America', 292, 572],
+  ['europe', 'Europe', 560, 140],
   ['russia', 'Russia', 900, 40],
-  ['middle-east', 'Near East', 790, 190],
+  ['middle-east', 'Near East', 862, 352],
   ['africa', 'Africa', 590, 400],
-  ['asia', 'Asia', 1075, 300],
-  ['pacific', 'Pacific', 1180, 440],
+  ['asia', 'Asia', 1188, 262],
+  ['oceania', 'Oceania', 1110, 612],
 ];
 
 /** [id, name, region, v5 members]. The first member's published anchor picks the home landmass. */
@@ -94,10 +94,10 @@ const PROVINCES = [
   ['korea', 'Korea', 'asia', ['korea']],
   ['japan', 'Japan', 'asia', ['south-japan', 'north-japan']],
   ['indochina', 'Indochina', 'asia', ['indochina']],
-  ['east-indies', 'East Indies', 'pacific', ['east-indies']],
-  ['philippines', 'Philippines', 'pacific', ['philippines']],
-  ['australia', 'Australasia', 'pacific', ['australia', 'new-zealand']],
-  ['hawaii', 'Hawaii', 'pacific', ['hawaii']],
+  ['east-indies', 'East Indies', 'oceania', ['east-indies']],
+  ['philippines', 'Philippines', 'oceania', ['philippines']],
+  ['australia', 'Australasia', 'oceania', ['australia', 'new-zealand']],
+  ['hawaii', 'Hawaii', 'oceania', ['hawaii']],
 ];
 
 /** Every connection that is not a shared land border. [a, b, why]. Travel time follows map distance. */
@@ -145,7 +145,7 @@ const COUNTRIES = [
     india: [2, 16], egypt: [2, 12], 'south-africa': [1, 8], australia: [1, 8] }],
   ['france', 'French Republic', '#668dac', ['north-france', 'south-france'], {
     'north-france': [3, 16], 'south-france': [3, 14], maghreb: [1, 8], 'west-africa': [1, 7], indochina: [1, 7], madagascar: [1, 6] }],
-  ['germany', 'German Empire', '#8e8b7d', ['ruhr', 'prussia', 'bavaria'], {
+  ['germany', 'German Empire', '#76808c', ['ruhr', 'prussia', 'bavaria'], {
     ruhr: [3, 16], prussia: [2, 15], bavaria: [3, 15], tanganyika: [1, 7], namibia: [1, 6] }],
   ['russia', 'Russian Empire', '#859361', ['west-russia', 'baltic', 'poland', 'ukraine', 'siberia', 'central-asia', 'far-east'], {
     'west-russia': [3, 16], baltic: [2, 12], poland: [2, 14], ukraine: [2, 12], siberia: [1, 10], 'central-asia': [1, 10], 'far-east': [1, 10] }],
@@ -264,11 +264,6 @@ function generalise(arc, tolerance) {
   }
   return chaikin(douglasPeucker(pts, tolerance), SMOOTHING).map(round);
 }
-// A few coastline specks in the source touch or cross each other; those are left exactly as they were.
-for (const arc of arcs) { arc.tolerance = 0; arc.points = generalise(arc, 0); }
-const sourceCrossings = crossings();
-for (const arc of arcs) { arc.tolerance = arc.shared ? TOLERANCE : 0; arc.points = generalise(arc, arc.tolerance); }
-// Planarity: generalising may not add a crossing. Retry the offending shared arcs with half the tolerance.
 function crossings() {
   const CELL = 6, grid = new Map(), bad = new Set();
   const cross = (p, q, r, s) => {
@@ -289,17 +284,28 @@ function crossings() {
       grid.get(c).push({ arc: arc.id, i, a, b });
     }
   }
+  // Near misses count too: a vertex may lie on another line (a junction) or clearly apart from it, never
+  // a hair away, which would draw as a sliver.
+  for (const arc of arcs) for (const p of arc.points) {
+    for (const o of grid.get(`${Math.floor(p[0] / CELL)},${Math.floor(p[1] / CELL)}`) || []) {
+      if (o.arc === arc.id) continue;
+      const d = segDist(p, o.a, o.b);
+      if (d > 1e-6 && d < .12) bad.add(arc.id < o.arc ? `${arc.id}|${o.arc}` : `${o.arc}|${arc.id}`);
+    }
+  }
   return bad;
 }
+for (const arc of arcs) { arc.tolerance = arc.shared ? TOLERANCE : 0; arc.points = generalise(arc, arc.tolerance); }
+// Planarity: a generalised border may not cross or nearly touch another line. Offending borders are retried
+// with half the tolerance, down to the source line itself; the source's own coastline specks stay as they were.
 for (let pass = 0; ; pass++) {
-  const fresh = [...crossings()].filter(k => !sourceCrossings.has(k));
-  const bad = [...new Set(fresh.flatMap(k => k.split('|').map(Number)))].map(id => arcs[id]).filter(a => a.shared && a.tolerance > 0);
+  const bad = [...new Set([...crossings()].flatMap(k => k.split('|').map(Number)))].map(id => arcs[id]).filter(a => a.tolerance > 0);
   if (!bad.length) break;
   if (pass > 12) throw new Error(`Cannot untangle arcs ${bad.map(a => a.label)}`);
   for (const arc of bad) { arc.tolerance = arc.tolerance > .1 ? arc.tolerance / 2 : 0; arc.points = generalise(arc, arc.tolerance); }
 }
-if ([...crossings()].some(k => !sourceCrossings.has(k))) throw new Error('Generalised borders cross.');
-if (sourceCrossings.size) console.log(`Source crossings kept as they were: ${[...sourceCrossings].map(k => k.split('|').map(i => arcs[i].label).join(' x ')).join('; ')}`);
+const kept = arcs.filter(a => a.shared && a.tolerance < TOLERANCE);
+if (kept.length) console.log(`Borders kept closer to the source to stay clear of other lines: ${kept.map(a => `${a.label} (${a.tolerance})`).join(', ')}`);
 
 // ---------------------------------------------------------------------------------------------------
 // Province rings: walk each province's boundary segments, then substitute the generalised arcs.
@@ -390,9 +396,11 @@ const provinces = PROVINCES.map(([id, name, region, from]) => {
     const hole = depth % 2 === 1, area = signedArea(r);
     return (hole ? area > 0 : area < 0) ? [...r].reverse() : r;
   });
-  // Home landmass: the exterior containing the first member's published anchor, else the largest.
-  const primary = sourceById.get(from[0]), exteriors = oriented.filter(r => signedArea(r) > 0);
-  const home = exteriors.find(r => inside([primary.x, primary.y], r)) || exteriors.sort((a, b) => signedArea(b) - signedArea(a))[0];
+  // Home landmass: the exterior containing the first member's published anchor (so Scandinavia's counter stays
+  // in Sweden, not Greenland), unless that is a minor island; then the largest landmass.
+  const primary = sourceById.get(from[0]), exteriors = oriented.filter(r => signedArea(r) > 0).sort((a, b) => signedArea(b) - signedArea(a));
+  const anchored = exteriors.find(r => inside([primary.x, primary.y], r));
+  const home = anchored && signedArea(anchored) >= .3 * signedArea(exteriors[0]) ? anchored : exteriors[0];
   const holes = oriented.filter(r => signedArea(r) < 0 && inside(r[0], home));
   const [x, y, clearance] = polylabel([home, ...holes]);
   const path = oriented.map(r => 'M' + r.map(v => `${f2(v[0])},${f2(v[1])}`).join('L') + 'Z').join('');

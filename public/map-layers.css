@@ -1,12 +1,24 @@
 /* v0.6 map layers: border hierarchy, level-of-detail counters, battles and decorative effects.
    Kept separate from style.css. Every stroke is screen-constant (non-scaling). */
 .atlas-v6 .province:not(.selected):not(.destination):not(.neighbor){stroke:transparent}
-.coast-shelf{fill:none;stroke:#a9cfc6;stroke-opacity:.16;stroke-width:5;stroke-linejoin:round;vector-effect:non-scaling-stroke}
-.coastline{fill:none;stroke:#0c1b21;stroke-opacity:.85;stroke-width:1.05;stroke-linejoin:round;vector-effect:non-scaling-stroke}
-.province-borders path{fill:none;stroke:#f3ead0;stroke-opacity:.36;stroke-width:.6;stroke-dasharray:2.5 2;vector-effect:non-scaling-stroke}
-.atlas-v6[data-lod=far] .province-borders path{stroke-opacity:.2;stroke-dasharray:none}
-.country-borders path{fill:none;stroke:#10232b;stroke-opacity:.92;stroke-width:1.7;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
-.atlas-v6[data-lod=near] .country-borders path{stroke-width:2.2}
+.coast-shelf{fill:none;stroke:#a9cfc6;stroke-opacity:.2;stroke-width:4;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.coast-shelf-wide{stroke-opacity:.07;stroke-width:13}
+.atlas-v6[data-lod=far] .coast-shelf-wide{stroke-width:9}
+/* Coast: a pale casing under a dark line (an engraved double line); the casing also lifts the land edge. */
+.coastline-casing{fill:none;stroke:#e6dcb8;stroke-opacity:.42;stroke-width:2.6;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.coastline{fill:none;stroke:#0c1b21;stroke-opacity:.9;stroke-width:1;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.atlas-v6[data-lod=far] .coastline-casing{stroke-width:2;stroke-opacity:.3}
+/* Province borders inside one country: a clean light hairline (the smoothed v6 borders need no dashes). */
+.province-borders path{fill:none;stroke:#f6edd2;stroke-opacity:.5;stroke-width:.75;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.atlas-v6[data-lod=far] .province-borders path{stroke-opacity:.3}
+.atlas-v6[data-lod=near] .province-borders path{stroke-width:1;stroke-opacity:.55}
+/* Borders between countries: a strong dark line, heavier as you zoom in. */
+.country-borders path{fill:none;stroke:#0e1e25;stroke-opacity:.95;stroke-width:1.9;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.atlas-v6[data-lod=far] .country-borders path{stroke-width:1.5}
+.atlas-v6[data-lod=near] .country-borders path{stroke-width:2.6}
+/* Region (continent) names at world zoom only: large, spaced, quiet; they sit in open sea or empty land. */
+.region-names text{display:none;font:italic 600 13px var(--map-serif);letter-spacing:5px;text-anchor:middle;fill:#efe2b9;fill-opacity:.5;paint-order:stroke;stroke:#0f2530;stroke-opacity:.55;stroke-width:2.5;stroke-linejoin:round}
+.atlas-v6[data-world=true] .region-names text{display:inline}
 /* Borders between members of one coalition: softer than a border between unrelated owners. */
 .allied-borders path{fill:none;stroke:#10232b;stroke-opacity:.45;stroke-width:.9;stroke-dasharray:5 2.5;vector-effect:non-scaling-stroke}
 /* Alliance blocs: an inner glow band (clipped to the bloc) plus a crisp outline in the alliance colour. */

@@ -318,7 +318,7 @@ def relations_checks(page,report,capture):
     camera(page,'world');capture('16-diplomacy-mode.png',900)
     key();toggle.click();menu(page,False);expect(page.locator('#map')).to_have_attribute('data-mode','political')
     for pid,owner,fill in fills():
-        if owner=='germany':assert fill=='#8e8b7d',(pid,fill)
+        if owner=='germany':assert fill=='#76808c',(pid,fill)
     camera(page,'europe');page.wait_for_timeout(150)
     box=page.locator('#marker-bavaria .counter-body').bounding_box();page.mouse.move(box['x']+box['width']/2,box['y']+box['height']/2);page.wait_for_timeout(450)
     expect(page.locator('#map')).to_have_attribute('data-outline-focus','germany')

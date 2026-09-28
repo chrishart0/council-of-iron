@@ -22,7 +22,7 @@ export const LEGEND_PLACEMENTS = Object.freeze(['bottom-left', 'top-left']);
 /** Zoom limit in screen pixels per map unit, identical on every device (phones included). */
 export const MAX_PX_PER_UNIT = 14;
 /** Level of detail by on-screen pixels per map unit: country totals, merged counters, every province. */
-export const LOD = Object.freeze({ far: 1.2, near: 2.6 });
+export const LOD = Object.freeze({ far: 1.2, near: 2.6, world: 1.7, regionMin: .75 });
 const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
 const NEUTRAL = '#a5a28c', ALLIANCE = '#f6d77f', COUNTER_H = 21, PAD = 3;
 const SWORDS = 'M-6-6L5 5M2.4 6.6L6.6 2.4M6-6L-5 5M-6.6 2.4L-2.4 6.6';
@@ -79,13 +79,19 @@ export class Atlas {
     for (const [label, x, y] of [['NORTH ATLANTIC', 435, 235], ['SOUTH ATLANTIC', 525, 485], ['PACIFIC OCEAN', 105, 380], ['INDIAN OCEAN', 830, 487]]) {
       const text = node('text', { x, y }); text.textContent = label; oceans.append(text);
     }
+    // Region (continent) names: authored map data above the land, below counters; shown only at world zoom (CSS keys on data-world).
+    const regions = node('g', { class: 'region-names', 'pointer-events': 'none', 'aria-hidden': 'true' });
+    for (const r of map.regions || []) {
+      const text = node('text', { x: r.x, y: r.y, 'data-region': r.id }); text.textContent = r.name.toUpperCase(); regions.append(text);
+    }
     this.base.append(oceans); this.seas = node('g', { class: 'sea-connections', 'pointer-events': 'none' });
     for (const edge of map.edges.filter(e => e.sea)) this.seas.append(node('path', { d: this.path(edge.from, edge.to), 'data-edge': `${edge.from}|${edge.to}` }));
     this.base.append(this.seas);
     // Borders are classified once per map: shared province edges versus coastline.
     if (!networks.has(map)) networks.set(map, borderNetwork(map));
     const network = networks.get(map), coast = [...network.coast.values()].flat().join('');
-    this.base.append(node('path', { d: coast, class: 'coast-shelf', 'pointer-events': 'none' }));
+    // Coast: a soft wide shelf and a tighter glow in the sea, drawn under the land.
+    this.base.append(node('path', { d: coast, class: 'coast-shelf coast-shelf-wide', 'pointer-events': 'none' }), node('path', { d: coast, class: 'coast-shelf', 'pointer-events': 'none' }));
     this.territories = node('g');
     for (const p of map.provinces) {
       const shape = node('path', { d: p.path, id: `${this.prefix}province-${p.id}`, 'data-province': p.id, class: 'province', fill: '#b9b6a3' });
@@ -106,7 +112,9 @@ export class Atlas {
     this.relationLines = node('g', { class: 'relation-outlines', 'pointer-events': 'none', 'aria-hidden': 'true' });
     this.relationPaths = Object.fromEntries(['ally', 'enemy', 'focus'].map(kind => [kind, node('path', { class: `relation-${kind}` })]));
     this.relationLines.append(...Object.values(this.relationPaths));
-    this.base.append(this.provinceBorders, this.alliedBorders, this.countryBorders, node('path', { d: coast, class: 'coastline', 'pointer-events': 'none' }));
+    // Coastline: a light casing under a dark line reads as an engraved double line at every zoom.
+    this.base.append(this.provinceBorders, this.alliedBorders, this.countryBorders,
+      node('path', { d: coast, class: 'coastline-casing', 'pointer-events': 'none' }), node('path', { d: coast, class: 'coastline', 'pointer-events': 'none' }), regions);
     const compass = node('g', { 'aria-hidden': 'true', 'pointer-events': 'none', transform: 'translate(110 560)', opacity: .38, stroke: '#ddc591', fill: 'none' });
     compass.append(node('circle', { r: 27, 'stroke-width': .7 }), node('circle', { r: 22, 'stroke-width': .4 }), node('path', { d: 'M0-40L6-6 40 0 6 6 0 40-6 6-40 0-6-6Z', 'stroke-width': .8 }), node('path', { d: 'M0-40V0H-40L-6-6Z', fill: '#ddc591', 'stroke-width': .4 }));
     const north = node('text', { y: -46, 'text-anchor': 'middle', stroke: 'none', fill: '#eed9ac', 'font-size': 12, 'font-family': 'Georgia' }); north.textContent = 'N'; compass.append(north); this.base.append(compass);
@@ -450,6 +458,8 @@ export class Atlas {
     const px = matrix.a, scale = 1 / px, level = this.level(px);
     this.grain.setAttribute('patternTransform', `scale(${scale})`);
     this.svg.dataset.lod = level; this.svg.classList.toggle('atlas-zoomed', level === 'near');
+    // Region names are drawn in map units: shown only between legible and crowded sizes.
+    this.svg.dataset.world = String(px >= LOD.regionMin && px < LOD.world);
     // Keep the mode chip inside the visible map, whatever else shares the container.
     // Expose the visible map's insets so CSS can place the key inside it, whatever shares the container.
     const box = this.svg.getBoundingClientRect(), host = this.chip.parentElement?.getBoundingClientRect();
