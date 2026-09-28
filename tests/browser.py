@@ -318,7 +318,7 @@ def main():
                     batch=http(f'/api/games/{room}?after={event_cursor}'); public_events.extend(batch['events']); event_cursor=batch['cursor']
                     if not batch['hasMore']: break
                 report['events']={kind:sum(e['type']==kind for e in public_events) for kind in ['battle','army_departed','alliance_activated']}
-                expect(page.locator('#result')).to_contain_text('Experimental result recorded')
+                expect(page.locator('#result')).not_to_contain_text('Experimental')
                 expect(page.locator('#aar-player-scores tbody tr')).to_have_count(8)
                 after_action=cli('review')
                 assert after_action['historyAvailable']
