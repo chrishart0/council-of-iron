@@ -53,6 +53,12 @@ def main():
                 result = subprocess.run(['node','agents/cli.js',*arguments],cwd=ROOT,env={**os.environ,'COUNCIL_URL':url,'COUNCIL_SESSION':str(Path(tmp)/'agent.session.json'),'COUNCIL_TOKEN':'','COUNCIL_MATCH':''},capture_output=True,text=True,timeout=20)
                 assert result.returncode == 0, result.stderr
                 return json.loads(result.stdout)
+            def cli_events():
+                # Busy opponents can produce more than one event page before a DM.
+                events=[]; cursor=0
+                while True:
+                    view=cli('state',str(cursor)); events.extend(view['events']); cursor=view['cursor']
+                    if not view['hasMore']: return events
             with sync_playwright() as playwright:
                 launch={'headless':True}
                 if args.executable: launch['executable_path']=args.executable
@@ -128,15 +134,15 @@ def main():
                 expect(page.locator('#confirm-dialog')).to_be_visible()
                 page.keyboard.press('Escape')
                 expect(page.locator('#confirm-dialog')).not_to_be_visible()
-                assert not http(f'/api/games/{room}')['departures']
+                assert not any(d['country']=='usa' for d in http(f'/api/games/{room}')['departures'])
                 report['assertions'].append('Leaving an alliance requires explicit confirmation; Escape leaves membership untouched.')
                 page.locator('[data-tab="dispatches"]').click()
                 page.locator('#channel').select_option('dm')
                 page.locator('#recipient').select_option('britain')
                 page.locator('#chat-text').fill('Hold the Atlantic. This dispatch is private.')
-                page.locator('#chat-form button').click()
+                page.locator('#chat-form button[type=submit]').click()
                 expect(page.locator('#messages')).to_contain_text('This dispatch is private.')
-                assert any(e.get('text')=='Hold the Atlantic. This dispatch is private.' for e in cli('state')['events'])
+                assert any(e.get('text')=='Hold the Atlantic. This dispatch is private.' for e in cli_events())
                 cli('chat','dm','usa','<img src=x onerror="window.INJECTED=true"> Agreed. I will hold.')
                 expect(page.locator('#messages')).to_contain_text('Agreed. I will hold.')
                 assert page.locator('#messages img').count()==0
@@ -166,9 +172,9 @@ def main():
                 expect(spectator.locator('body')).to_have_class(re.compile('spectator-map-fullscreen'))
                 assert spectator.locator('.war-room').bounding_box()['height'] >= 1049
                 page.locator('#channel').select_option('world')
-                expect(page.locator('#chat-form button')).to_be_enabled(timeout=10000)
+                expect(page.locator('#chat-form button[type=submit]')).to_be_enabled(timeout=10000)
                 page.locator('#chat-text').fill('<img src=x onerror="window.INJECTED=true"> Public call to the council.')
-                page.locator('#chat-form button').click()
+                page.locator('#chat-form button[type=submit]').click()
                 expect(spectator.locator('#spectator-bubbles')).to_contain_text('Public call to the council.',timeout=10000)
                 assert spectator.locator('#spectator-bubbles img').count()==0
                 spectator.screenshot(path=str(artifacts/'spectator-fullscreen.png'),full_page=True)
@@ -252,8 +258,15 @@ def main():
                 assert json.loads(stdout)['scores']==result['outcome']['scores']
                 report['assertions'].append('Wall-clock match reached a final result; browser and external agent observed identical final scores.')
                 page.locator('[data-home]').click()
-                expect(page.locator('#standings')).to_contain_text('Browser Commander')
-                report['assertions'].append('Persistent experimental standings included the browser player after returning to the lobby.')
+                identity=json.loads(page.evaluate('localStorage.getItem("coi.identity")'))
+                saved_result=http('/api/me',token=identity['token'])['history']
+                assert any(row['game_id']==room for row in saved_result)
+                if result['outcome']['draw']:
+                    expect(page.locator('#standings')).to_contain_text('No decisive matches recorded')
+                    report['assertions'].append('Draw persisted in personal history without contaminating decisive-match standings.')
+                else:
+                    expect(page.locator('#standings')).to_contain_text('Browser Commander')
+                    report['assertions'].append('Persistent experimental standings included the browser player after returning to the lobby.')
                 # Local UI interactions: distinct source selection, keyboard tabs and a real next room.
                 page.locator('#room-name').fill('Second Council')
                 page.locator('#create-form button').click()
@@ -361,5 +374,9 @@ def main():
     if args.executable:ui_command.extend(['--executable',args.executable])
     if args.ui_gif:ui_command.extend(['--gif',args.ui_gif])
     subprocess.run(ui_command,cwd=ROOT,check=True)
+    bot_command=[sys.executable,str(ROOT/'tests/bots-browser.py'),'--artifacts',str(artifacts/'bots')]
+    if args.bridge:bot_command.append('--bridge')
+    if args.executable:bot_command.extend(['--executable',args.executable])
+    subprocess.run(bot_command,cwd=ROOT,check=True)
 
 if __name__=='__main__':main()

@@ -1,0 +1,720 @@
+{
+  "baseCommit": "cd46a424c7ad4cb5e609c952f46b32651632404a",
+  "controllerVersion": "council-bot-v6",
+  "date": "2026-09-27",
+  "recordedSimulationMatches": 312,
+  "freshSeedHoldoutMatches": 224,
+  "localNodeTestsPassed": 123,
+  "unchangedFiles": {
+    "src/engine.js": "3c3c9c46baa60e52062e03d679d72614a5ca1d6ff3e9dfd565d14a3b3f367c81",
+    "src/review.js": "b6be1487e95e326c4ae95c40b19b9ca0091e7c7cd13ac8c899a0e1aceff70134",
+    "public/replay-model.js": "ba15980c4b89254dbfb10cbcbfbee108b21b36ba5acbddc5f95cc812c240acd0",
+    "public/insights.js": "1f7eca135f8e567fec33fbe8bafe076d4d90ba8a903848251a29bb82ae8d09d4",
+    "public/movement.js": "30bfbc1ad7d1aac6f3dc5139ce801e092511a9cd5f2fa56778bcaf19dde490ce",
+    "public/imperial-map.json": "5e71abad601fbb2411415eb3371eef02c1814cdc93f5467bf3befb06201ed8f1",
+    "public/map.json": "976799ae74ff7c318c34bb28af29e2888b028510c79526c229f52d80c63a8b55",
+    "agents/policy.js": "274ce33dc4f398b9e18b9eef6bbeae4dd6c9557ecd532fdf799b62dcd5d39c19",
+    "agents/industrial-policy.js": "00917fa32b520b0cb43a4fbeabe294ebb29376b260875de0d2f9b8ac7bb510cd",
+    "tests/fixtures/handplay-20260927.json.gz": "400efef666e1e0f9518a9bb7e70958c2fee5ee1d19550fb485a36c08a9b52189"
+  },
+  "reports": {
+    "discovery-mixed": {
+      "rounds": 24,
+      "seedStart": 16000,
+      "seedEnd": 16023,
+      "mode": "mixed",
+      "difficulty": "standard",
+      "diplomacy": false,
+      "mapSha256": "5e71abad601fbb2411415eb3371eef02c1814cdc93f5467bf3befb06201ed8f1",
+      "draws": 0,
+      "meanDuration": 1797.4166666666667,
+      "byPolicy": {
+        "standard": {
+          "seats": 96,
+          "winningSeats": 18,
+          "meanPrestige": 50
+        },
+        "legacy": {
+          "seats": 96,
+          "winningSeats": 6,
+          "meanPrestige": -50
+        }
+      },
+      "countryWins": {
+        "britain": 6,
+        "france": 8,
+        "germany": 0,
+        "russia": 2,
+        "ottoman": 0,
+        "qing": 0,
+        "japan": 0,
+        "usa": 8
+      },
+      "rejectedNew": 0,
+      "rejectedLegacy": 0,
+      "invariantsFailed": 0,
+      "meanMessages": 0,
+      "meanAlliances": 0,
+      "meanDepartures": 0,
+      "decisionMeanMs": 1.4187955576788713,
+      "decisionP95Ms": 2.8445519999995668,
+      "maxMemoryBytes": 2569,
+      "elapsedSeconds": 51.81462054600001,
+      "actions": {
+        "attack": 16062,
+        "move": 12689,
+        "route": 3046,
+        "recall": 1633,
+        "develop": 222
+      },
+      "decisionsByReason": {
+        "Legacy policy": 11274,
+        "Expand into unclaimed territory": 674,
+        "Evacuate an indefensible garrison": 2885,
+        "Reinforce before the enemy arrives": 2494,
+        "Bring idle reserves toward a useful front": 6936,
+        "Attack an exposed front": 7124,
+        "Direct local recruitment toward the front": 1042,
+        "Recall an outmatched attack": 729,
+        "Keep new recruits on the threatened frontier": 306,
+        "Invest in secure industry that can repay its manpower": 77,
+        "Cancel a departure to defend its source": 111
+      },
+      "executionFailures": 32
+    },
+    "discovery-difficulty": {
+      "rounds": 16,
+      "seedStart": 17000,
+      "seedEnd": 17015,
+      "mode": "difficulty",
+      "difficulty": "standard",
+      "diplomacy": false,
+      "mapSha256": "5e71abad601fbb2411415eb3371eef02c1814cdc93f5467bf3befb06201ed8f1",
+      "draws": 0,
+      "meanDuration": 1800,
+      "byPolicy": {
+        "easy": {
+          "seats": 32,
+          "winningSeats": 1,
+          "meanPrestige": -75
+        },
+        "standard": {
+          "seats": 64,
+          "winningSeats": 7,
+          "meanPrestige": -12.5
+        },
+        "hard": {
+          "seats": 32,
+          "winningSeats": 8,
+          "meanPrestige": 100
+        }
+      },
+      "countryWins": {
+        "britain": 3,
+        "france": 4,
+        "germany": 0,
+        "russia": 4,
+        "ottoman": 0,
+        "qing": 0,
+        "japan": 0,
+        "usa": 5
+      },
+      "rejectedNew": 0,
+      "rejectedLegacy": 0,
+      "invariantsFailed": 0,
+      "meanMessages": 0,
+      "meanAlliances": 0,
+      "meanDepartures": 0,
+      "decisionMeanMs": 1.1502080980633493,
+      "decisionP95Ms": 2.4152200000007724,
+      "maxMemoryBytes": 4632,
+      "elapsedSeconds": 53.673675458999995,
+      "actions": {
+        "attack": 12632,
+        "move": 10814,
+        "recall": 1435,
+        "route": 1626,
+        "develop": 66
+      },
+      "decisionsByReason": {
+        "Expand into unclaimed territory": 871,
+        "Bring idle reserves toward a useful front": 6779,
+        "Recall an outmatched attack": 1295,
+        "Attack an exposed front": 9005,
+        "Evacuate an indefensible garrison": 4035,
+        "Direct local recruitment toward the front": 1321,
+        "Reinforce before the enemy arrives": 2756,
+        "Keep new recruits on the threatened frontier": 305,
+        "Cancel a departure to defend its source": 140,
+        "Invest in secure industry that can repay its manpower": 66
+      },
+      "executionFailures": 24
+    },
+    "refinement-mixed": {
+      "rounds": 24,
+      "seedStart": 18000,
+      "seedEnd": 18023,
+      "mode": "mixed",
+      "difficulty": "standard",
+      "diplomacy": false,
+      "mapSha256": "5e71abad601fbb2411415eb3371eef02c1814cdc93f5467bf3befb06201ed8f1",
+      "draws": 0,
+      "meanDuration": 1771.875,
+      "byPolicy": {
+        "standard": {
+          "seats": 96,
+          "winningSeats": 16,
+          "meanPrestige": 33.333333333333336
+        },
+        "legacy": {
+          "seats": 96,
+          "winningSeats": 8,
+          "meanPrestige": -33.333333333333336
+        }
+      },
+      "countryWins": {
+        "britain": 6,
+        "france": 9,
+        "germany": 2,
+        "russia": 2,
+        "ottoman": 0,
+        "qing": 0,
+        "japan": 0,
+        "usa": 5
+      },
+      "rejectedNew": 0,
+      "rejectedLegacy": 0,
+      "invariantsFailed": 0,
+      "meanMessages": 0,
+      "meanAlliances": 0,
+      "meanDepartures": 0,
+      "decisionMeanMs": 1.72356649435536,
+      "decisionP95Ms": 3.2984489999980724,
+      "maxMemoryBytes": 2766,
+      "elapsedSeconds": 60.50487922200001,
+      "actions": {
+        "attack": 15505,
+        "move": 12407,
+        "route": 3557,
+        "recall": 1720,
+        "develop": 299
+      },
+      "decisionsByReason": {
+        "Legacy policy": 11708,
+        "Expand into unclaimed territory": 667,
+        "Evacuate an indefensible garrison": 3008,
+        "Reinforce before the enemy arrives": 2309,
+        "Bring idle reserves toward a useful front": 6505,
+        "Direct local recruitment toward the front": 1216,
+        "Attack an exposed front": 6680,
+        "Recall an outmatched attack": 788,
+        "Keep new recruits on the threatened frontier": 389,
+        "Invest in secure industry that can repay its manpower": 97,
+        "Cancel a departure to defend its source": 112,
+        "Break the leading coalition\u2019s victory hold": 9
+      },
+      "executionFailures": 49
+    },
+    "refinement-selfplay": {
+      "rounds": 16,
+      "seedStart": 19000,
+      "seedEnd": 19015,
+      "mode": "selfplay",
+      "difficulty": "standard",
+      "diplomacy": true,
+      "mapSha256": "5e71abad601fbb2411415eb3371eef02c1814cdc93f5467bf3befb06201ed8f1",
+      "draws": 0,
+      "meanDuration": 1184.3125,
+      "byPolicy": {
+        "standard": {
+          "seats": 128,
+          "winningSeats": 37,
+          "meanPrestige": 8.881784197001252e-16
+        }
+      },
+      "countryWins": {
+        "britain": 12,
+        "france": 12,
+        "germany": 3,
+        "russia": 3,
+        "ottoman": 0,
+        "qing": 1,
+        "japan": 2,
+        "usa": 4
+      },
+      "rejectedNew": 0,
+      "rejectedLegacy": 0,
+      "invariantsFailed": 0,
+      "meanMessages": 29.25,
+      "meanAlliances": 4.125,
+      "meanDepartures": 0.3125,
+      "decisionMeanMs": 1.5401786571803562,
+      "decisionP95Ms": 3.222453000000314,
+      "maxMemoryBytes": 5654,
+      "elapsedSeconds": 46.093209740000006,
+      "actions": {
+        "attack": 6849,
+        "move": 9055,
+        "recall": 779,
+        "route": 1259,
+        "propose": 258,
+        "accept": 114,
+        "decline": 116,
+        "chat": 468,
+        "develop": 187,
+        "leave": 5
+      },
+      "decisionsByReason": {
+        "Expand into unclaimed territory": 944,
+        "Bring idle reserves toward a useful front": 6711,
+        "Recall an outmatched attack": 680,
+        "Direct local recruitment toward the front": 1085,
+        "Attack an exposed front": 4228,
+        "Seek a useful ally without dividing the prize unnecessarily": 258,
+        "Evacuate an indefensible garrison": 1854,
+        "Accept a coalition that improves our expected share": 114,
+        "Decline dilution, late membership or an all-player draw": 116,
+        "Send a bounded diplomatic dispatch": 468,
+        "Reinforce before the enemy arrives": 1435,
+        "Cancel a departure to defend its source": 99,
+        "Save an allied province": 203,
+        "Invest in secure industry that can repay its manpower": 187,
+        "Keep new recruits on the threatened frontier": 174,
+        "Support an ally instead of stranding reserves behind their border": 490,
+        "Leave a long-standing alliance whose cost outweighs its support": 5,
+        "Break the leading coalition\u2019s victory hold": 39
+      },
+      "executionFailures": 9
+    },
+    "refinement-classic": {
+      "rounds": 8,
+      "seedStart": 20000,
+      "seedEnd": 20007,
+      "mode": "selfplay",
+      "difficulty": "standard",
+      "diplomacy": true,
+      "mapSha256": "976799ae74ff7c318c34bb28af29e2888b028510c79526c229f52d80c63a8b55",
+      "draws": 0,
+      "meanDuration": 1350,
+      "byPolicy": {
+        "standard": {
+          "seats": 64,
+          "winningSeats": 19,
+          "meanPrestige": 2.6645352591003757e-15
+        }
+      },
+      "countryWins": {
+        "britain": 1,
+        "france": 2,
+        "germany": 1,
+        "russia": 2,
+        "ottoman": 5,
+        "qing": 2,
+        "japan": 4,
+        "usa": 2
+      },
+      "rejectedNew": 0,
+      "rejectedLegacy": 0,
+      "invariantsFailed": 0,
+      "meanMessages": 21.875,
+      "meanAlliances": 4.375,
+      "meanDepartures": 0.625,
+      "decisionMeanMs": 0.6284699317999987,
+      "decisionP95Ms": 1.203478000000132,
+      "maxMemoryBytes": 5184,
+      "elapsedSeconds": 11.005736584000001,
+      "actions": {
+        "move": 6255,
+        "propose": 99,
+        "accept": 47,
+        "chat": 175,
+        "route": 1720,
+        "decline": 26,
+        "leave": 5
+      },
+      "decisionsByReason": {
+        "Expand into unclaimed territory": 431,
+        "Bring idle reserves toward a useful front": 2193,
+        "Seek a useful ally without dividing the prize unnecessarily": 99,
+        "Accept a coalition that improves our expected share": 47,
+        "Send a bounded diplomatic dispatch": 175,
+        "Attack an exposed front": 2320,
+        "Evacuate an indefensible garrison": 1222,
+        "Direct local recruitment toward the front": 1334,
+        "Decline dilution, late membership or an all-player draw": 26,
+        "Keep new recruits on the threatened frontier": 386,
+        "Break the leading coalition\u2019s victory hold": 41,
+        "Support an ally instead of stranding reserves behind their border": 48,
+        "Leave a long-standing alliance whose cost outweighs its support": 5
+      },
+      "executionFailures": 0
+    },
+    "holdout-mixed": {
+      "rounds": 96,
+      "seedStart": 36000,
+      "seedEnd": 36095,
+      "mode": "mixed",
+      "difficulty": "standard",
+      "diplomacy": false,
+      "mapSha256": "5e71abad601fbb2411415eb3371eef02c1814cdc93f5467bf3befb06201ed8f1",
+      "draws": 2,
+      "meanDuration": 1787.03125,
+      "byPolicy": {
+        "standard": {
+          "seats": 384,
+          "winningSeats": 67,
+          "meanPrestige": 41.666666666666664
+        },
+        "legacy": {
+          "seats": 384,
+          "winningSeats": 27,
+          "meanPrestige": -41.666666666666664
+        }
+      },
+      "countryWins": {
+        "britain": 17,
+        "france": 30,
+        "germany": 10,
+        "russia": 8,
+        "ottoman": 1,
+        "qing": 0,
+        "japan": 4,
+        "usa": 24
+      },
+      "rejectedNew": 0,
+      "rejectedLegacy": 0,
+      "invariantsFailed": 0,
+      "meanMessages": 0,
+      "meanAlliances": 0,
+      "meanDepartures": 0,
+      "decisionMeanMs": 2.6077162227840964,
+      "decisionP95Ms": 5.822981000004802,
+      "maxMemoryBytes": 2822,
+      "elapsedSeconds": 364.120386085,
+      "actions": {
+        "attack": 62935,
+        "move": 49740,
+        "route": 13514,
+        "recall": 6378,
+        "develop": 916
+      },
+      "decisionsByReason": {
+        "Legacy policy": 45117,
+        "Expand into unclaimed territory": 2650,
+        "Evacuate an indefensible garrison": 11782,
+        "Reinforce before the enemy arrives": 9412,
+        "Bring idle reserves toward a useful front": 26734,
+        "Direct local recruitment toward the front": 4843,
+        "Attack an exposed front": 27899,
+        "Keep new recruits on the threatened frontier": 1472,
+        "Cancel a departure to defend its source": 477,
+        "Recall an outmatched attack": 2722,
+        "Invest in secure industry that can repay its manpower": 343,
+        "Break the leading coalition\u2019s victory hold": 32
+      },
+      "executionFailures": 163
+    },
+    "holdout-difficulty": {
+      "rounds": 64,
+      "seedStart": 46000,
+      "seedEnd": 46063,
+      "mode": "difficulty",
+      "difficulty": "standard",
+      "diplomacy": false,
+      "mapSha256": "5e71abad601fbb2411415eb3371eef02c1814cdc93f5467bf3befb06201ed8f1",
+      "draws": 1,
+      "meanDuration": 1798.234375,
+      "byPolicy": {
+        "easy": {
+          "seats": 128,
+          "winningSeats": 0,
+          "meanPrestige": -98.4375
+        },
+        "standard": {
+          "seats": 256,
+          "winningSeats": 31,
+          "meanPrestige": -1.5625
+        },
+        "hard": {
+          "seats": 128,
+          "winningSeats": 32,
+          "meanPrestige": 101.5625
+        }
+      },
+      "countryWins": {
+        "britain": 22,
+        "france": 18,
+        "germany": 0,
+        "russia": 6,
+        "ottoman": 1,
+        "qing": 0,
+        "japan": 2,
+        "usa": 14
+      },
+      "rejectedNew": 0,
+      "rejectedLegacy": 0,
+      "invariantsFailed": 0,
+      "meanMessages": 0,
+      "meanAlliances": 0,
+      "meanDepartures": 0,
+      "decisionMeanMs": 2.0780419248015414,
+      "decisionP95Ms": 4.966013999997813,
+      "maxMemoryBytes": 4772,
+      "elapsedSeconds": 380.903314998,
+      "actions": {
+        "attack": 49258,
+        "move": 45153,
+        "route": 7196,
+        "recall": 5488,
+        "develop": 402
+      },
+      "decisionsByReason": {
+        "Expand into unclaimed territory": 3515,
+        "Bring idle reserves toward a useful front": 29862,
+        "Attack an exposed front": 34866,
+        "Direct local recruitment toward the front": 5828,
+        "Reinforce before the enemy arrives": 10873,
+        "Evacuate an indefensible garrison": 15291,
+        "Recall an outmatched attack": 4902,
+        "Keep new recruits on the threatened frontier": 1368,
+        "Invest in secure industry that can repay its manpower": 402,
+        "Cancel a departure to defend its source": 586,
+        "Break the leading coalition\u2019s victory hold": 4
+      },
+      "executionFailures": 76
+    },
+    "holdout-selfplay": {
+      "rounds": 64,
+      "seedStart": 56000,
+      "seedEnd": 56063,
+      "mode": "selfplay",
+      "difficulty": "standard",
+      "diplomacy": true,
+      "mapSha256": "5e71abad601fbb2411415eb3371eef02c1814cdc93f5467bf3befb06201ed8f1",
+      "draws": 2,
+      "meanDuration": 1473.21875,
+      "byPolicy": {
+        "standard": {
+          "seats": 512,
+          "winningSeats": 149,
+          "meanPrestige": -0.06076388888888662
+        }
+      },
+      "countryWins": {
+        "britain": 48,
+        "france": 36,
+        "germany": 10,
+        "russia": 18,
+        "ottoman": 7,
+        "qing": 2,
+        "japan": 6,
+        "usa": 22
+      },
+      "rejectedNew": 0,
+      "rejectedLegacy": 0,
+      "invariantsFailed": 0,
+      "meanMessages": 32.046875,
+      "meanAlliances": 4.296875,
+      "meanDepartures": 0.46875,
+      "decisionMeanMs": 2.343820034766374,
+      "decisionP95Ms": 5.00236899999436,
+      "maxMemoryBytes": 5943,
+      "elapsedSeconds": 336.42712235899995,
+      "actions": {
+        "attack": 33068,
+        "move": 47884,
+        "route": 5925,
+        "propose": 1097,
+        "chat": 2051,
+        "decline": 591,
+        "recall": 4084,
+        "accept": 474,
+        "develop": 739,
+        "leave": 30
+      },
+      "decisionsByReason": {
+        "Expand into unclaimed territory": 3745,
+        "Bring idle reserves toward a useful front": 35305,
+        "Attack an exposed front": 20982,
+        "Direct local recruitment toward the front": 4918,
+        "Seek a useful ally without dividing the prize unnecessarily": 1097,
+        "Evacuate an indefensible garrison": 9868,
+        "Send a bounded diplomatic dispatch": 2051,
+        "Decline dilution, late membership or an all-player draw": 591,
+        "Recall an outmatched attack": 3638,
+        "Accept a coalition that improves our expected share": 474,
+        "Reinforce before the enemy arrives": 6999,
+        "Support an ally instead of stranding reserves behind their border": 2711,
+        "Cancel a departure to defend its source": 446,
+        "Invest in secure industry that can repay its manpower": 739,
+        "Save an allied province": 1079,
+        "Keep new recruits on the threatened frontier": 1007,
+        "Leave a long-standing alliance whose cost outweighs its support": 30,
+        "Break the leading coalition\u2019s victory hold": 263
+      },
+      "executionFailures": 63
+    }
+  },
+  "eventDigestAggregates": {
+    "discovery-mixed": "05e5e72777d2519ca436c54a7b67e26235b10e3c66c5d5c29a5212b3bfe2debe",
+    "discovery-difficulty": "c1fd57257f93c97eb7b03367d71a0b708f3b44e7609883e61917e6756a2fa4f3",
+    "refinement-mixed": "ff61a32b1c6ec52634fcceb9e4d9faeb4bdb15b82976f32859fe6af65c87e427",
+    "refinement-selfplay": "38ecc37e9d830054f3d7e1584fa68d5d4b7ae4f687832b5cbbdcd0ec78efec5a",
+    "refinement-classic": "1ee488ed8df9ba77a8710daa2277e715c43904cc5d122bc15f6e678fb2f7515e",
+    "holdout-mixed": "1c3206e9debd717eb4ebdf3db4a2d47c21b00270ef938ef8b6ccbd389dab5b4d",
+    "holdout-difficulty": "8524c3934b6b9a6cacff91f919c0454b33fa3bbdf12a18e3efbc1723b4b4ced1",
+    "holdout-selfplay": "8da4df1a010530db03c2d7aab495a91e3416e9d92a61f13415e0dd88faf280d9"
+  },
+  "method": "Traditional deterministic bots; seat rotation; equal assets, normal adjudication and private observations. Mixed Standard-vs-legacy tests disable diplomacy and both controller families think every five ticks. Legacy family uses four pre-existing seeded variants, not just the runtime default.",
+  "executionFailures": "All proposed actions were legal at submission. Some accepted delayed orders later failed during wartime. The highest-count cases in seeds 36077, 46011 and 56018 were source capture or depleted troops and reproduce exact event hashes; these were not illegal submissions.",
+  "limitations": [
+    "Simulation win rates are not human enjoyment ratings or live LLM performance.",
+    "Self-play controller family is related; geography and doctrines still affect results.",
+    "Repeated seeds in CI/regressions are verification, not additional independent matches.",
+    "Recorded timing includes CPU contention and is not a production capacity benchmark.",
+    "Local browser verification uses explicit Python HTTP bridge because managed Chromium blocks normal URL navigation. Native verification is recorded separately when actually run."
+  ],
+  "localBrowser": {
+    "full-browser-final": {
+      "transport": "python-http-bridge",
+      "assertions": [
+        "Human browser created room and joined USA through UI.",
+        "Separate CLI process joined Britain; six practice bots filled seats; host started eight-seat match.",
+        "Browser and CLI committed armies; browser set a standing reinforcement route.",
+        "Browser proposed coalition; CLI accepted; public notice elapsed; both shared the coalition and payout projection.",
+        "Leaving an alliance requires explicit confirmation; Escape leaves membership untouched.",
+        "Reading the wire clears the unread badge; an unsent draft survives live polling.",
+        "Private diplomacy delivered both ways; spectator API excluded DMs; HTML in agent speech rendered as text, not executable markup.",
+        "Lobby spectator opened a full-viewport map on desktop and mobile; new world chat appeared as escaped bubbles, while private dispatches stayed hidden.",
+        "Browser-issued attack captured Mexico after travel and combat; world and Europe zoom rendered.",
+        "Same-seat reconnect restored country and private inbox without duplicate orders.",
+        "390-pixel mobile layout displayed controls without horizontal page overflow.",
+        "Completed live match opened player/alliance review, scrubbable playback and all report tabs; CLI review and historical board agreed.",
+        "Wall-clock match reached a final result; browser and external agent observed identical final scores.",
+        "Persistent experimental standings included the browser player after returning to the lobby.",
+        "A second room starts with the same browser identity; map targeting, Max, Shift-source selection and keyboard tabs work.",
+        "Browser previewed and committed a two-source synchronized attack, then recalled the group with real return time.",
+        "Browser funded, confirmed and completed province development using naturally recruited manpower."
+      ],
+      "pageErrors": [],
+      "outcome": {
+        "winningSide": "coalition-362",
+        "reason": "deadline",
+        "tick": 1800,
+        "draw": false,
+        "scores": [
+          {
+            "country": "usa",
+            "maturity": 1,
+            "maximumShare": 400,
+            "projectedPrestige": 300,
+            "payout": 0,
+            "prestige": -100
+          },
+          {
+            "country": "britain",
+            "maturity": 1,
+            "maximumShare": 400,
+            "projectedPrestige": 300,
+            "payout": 0,
+            "prestige": -100
+          },
+          {
+            "country": "france",
+            "maturity": 1,
+            "maximumShare": 400,
+            "projectedPrestige": 300,
+            "payout": 0,
+            "prestige": -100
+          },
+          {
+            "country": "germany",
+            "maturity": 1,
+            "maximumShare": 400,
+            "projectedPrestige": 300,
+            "payout": 0,
+            "prestige": -100
+          },
+          {
+            "country": "russia",
+            "maturity": 1,
+            "maximumShare": 200,
+            "projectedPrestige": 100,
+            "payout": 200,
+            "prestige": 100
+          },
+          {
+            "country": "ottoman",
+            "maturity": 1,
+            "maximumShare": 200,
+            "projectedPrestige": 100,
+            "payout": 200,
+            "prestige": 100
+          },
+          {
+            "country": "qing",
+            "maturity": 1,
+            "maximumShare": 200,
+            "projectedPrestige": 100,
+            "payout": 200,
+            "prestige": 100
+          },
+          {
+            "country": "japan",
+            "maturity": 1,
+            "maximumShare": 200,
+            "projectedPrestige": 100,
+            "payout": 200,
+            "prestige": 100
+          }
+        ]
+      },
+      "events": {
+        "battle": 244,
+        "army_departed": 1551,
+        "alliance_activated": 5
+      },
+      "status": "passed"
+    },
+    "ui": {
+      "status": "passed",
+      "transport": "python-http-bridge",
+      "assertions": [
+        "Live HUD fits 1366\u00d7768, 1600\u00d71000 and 1920\u00d71080 without document scrolling; map, roster and commit control stay visible.",
+        "Country roster preserves keyboard focus across polling and inspects the map; War log opens by click/J and closes with Escape or Close.",
+        "March/Coordinate/Develop and Council render in the same shell; recruitment disclosure remains open through refresh; SVG IDs are unique.",
+        "Actual recorded losses and defense trigger factual, dismissible notices; broken hold explains itself; reopening suppresses old battle popups.",
+        "Responsive layouts pass at 1024px, 390px and short landscape; faction standards select real seats and disable occupied countries.",
+        "After-action standards identify all winning members; exact map playback keeps separate SVG IDs and no live command surface."
+      ],
+      "pageErrors": [],
+      "fixture": "Recorded game at tick 480, not a new balance sample"
+    },
+    "review": {
+      "transport": "python-http-bridge",
+      "assertions": [
+        "Finished room opens Overview: all eight player scores and three alliance aggregates; live commands are hidden.",
+        "Forward/backward scrubbing matches exact API troop states and ownership; province inspector and zoom work.",
+        "Play, pause, rate change, keyboard slider, event jumps, opening/final controls and automatic end-of-replay stop work.",
+        "Military/economy comparison charts filter by country; battle links seek exact history; diplomacy shows membership intervals and broken holds.",
+        "Keyboard tab navigation and 390px layouts pass; tables scroll within their panels, not the document.",
+        "Classic draw renders correctly, malicious coalition name stays inert, and unverifiable legacy history fails closed while scores remain visible.",
+        "Leaving and reopening reviews releases playback state; watching history does not alter the match or scores."
+      ],
+      "pageErrors": [],
+      "status": "passed"
+    },
+    "bots": {
+      "status": "passed",
+      "transport": "python-http-bridge",
+      "assertions": [
+        "Host adds a Hard Industrialist to one country and reconfigures it as Easy Diplomat through real controls; assets remain identical.",
+        "Fill empty seats preserves existing settings and human seats, resolves visible mixed doctrines, and fits a 390-pixel lobby.",
+        "Started bots answer the human\u2019s supported /status DM through the same chat API; draft buttons do not send until approved, and controls describe limited language support; public spectator data excludes DMs.",
+        "A non-ally cannot issue tactical requests to a traditional bot; reply explains the formal-alliance requirement."
+      ],
+      "pageErrors": [],
+      "clock": "test-stepped, not a latency test"
+    }
+  }
+}

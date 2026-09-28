@@ -147,3 +147,15 @@ footer{display:flex;justify-content:space-between;gap:14px;margin:0 3vw;padding:
 .declaration{--seal:#7d2931;position:fixed;z-index:24;top:82px;left:50%;width:min(560px,calc(100vw - 30px));padding:21px 28px 23px;background:#efe8d7;color:#22353a;border:1px solid #baa67c;border-top:5px solid var(--seal);box-shadow:0 17px 45px #071d27a8;text-align:center;transform:translateX(-50%);pointer-events:none;animation:decree 4.4s both}.declaration:before{content:'✦';display:block;color:var(--seal);font:24px var(--serif);line-height:1}.declaration span{display:block;color:var(--seal);font:700 9px var(--sans);letter-spacing:2.5px;margin:8px 0 4px}.declaration strong{display:block;font:32px var(--serif);letter-spacing:.5px}.declaration p{margin:8px 0 0;font-size:12px;line-height:1.5}.declaration.peace{--seal:#2b6970}.declaration.alliance{--seal:#9b773a}.declaration.broken{--seal:#6d6674}
 @keyframes decree{0%{opacity:0;transform:translate(-50%,-20px) scale(.96)}10%,80%{opacity:1;transform:translate(-50%,0) scale(1)}100%{opacity:0;transform:translate(-50%,10px) scale(.99)}}
 @media(prefers-reduced-motion:reduce){.declaration{animation:none}}
+
+/* Lobby-only bot controls reuse the game's command materials. */
+.bot-setup{border:1px solid #aa9470;border-radius:5px;padding:12px 14px;margin:0 0 12px;min-width:0;width:100%}
+.bot-setup legend{font:600 12px var(--sans);letter-spacing:1px;text-transform:uppercase;padding:0 8px}
+.bot-choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.bot-choices label{margin-bottom:0}
+.bot-roster{display:flex;gap:8px 18px;flex-wrap:wrap;margin:12px 0;color:var(--muted);font-size:12px}
+.bot-roster:empty{display:none}
+.bot-roster b{color:var(--ink);margin-right:5px}
+.bot-chat-hint{border-left:2px solid var(--gold);padding-left:10px}
+#host-controls{flex-wrap:wrap}
+@media(max-width:600px){.bot-choices{grid-template-columns:1fr}.bot-setup{box-sizing:border-box}.bot-roster{gap:8px}}

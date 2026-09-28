@@ -1,6 +1,6 @@
 {
   "name": "council-of-iron",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "description": "A diplomacy-first real-time strategy game for humans and agents.",
@@ -17,6 +17,8 @@
     "bot": "node agents/bot.js",
     "check": "node scripts/check.js",
     "test:balance": "node scripts/tournament.js",
-    "test:review": "python tests/review-browser.py"
+    "test:review": "python tests/review-browser.py",
+    "test:bots": "node scripts/bot-tournament.js",
+    "test:bot-ui": "python tests/bots-browser.py"
   }
 }

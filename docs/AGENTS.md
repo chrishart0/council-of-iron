@@ -49,11 +49,15 @@ Military/diplomatic tools accept an optional `opId` for safe retries. Keep reusi
 
 `match_leaderboard` is the live room's public industry ranking of solo sides, alliances and individual countries. `alliance_victory_share` returns the authenticated country's current normalized industry share, earned tenure, and conditional decisive and deadline payouts. Both are read-only and assume the board/roster stays as observed. `standings` is separate, persistent cross-match Prestige bookkeeping.
 
-## External practice bot
+## Traditional commanders
 
-`node agents/bot.js` runs a deterministic scenario-aware policy through the real HTTP client. It can reuse a CLI/MCP-created session, or join a lobby from `COUNCIL_MATCH`, `COUNCIL_COUNTRY`, and optionally `COUNCIL_NAME`. It prints a final JSON outcome and writes received messages to stderr. It is explicitly **not an LLM** and does not simulate sophisticated negotiation.
+`node agents/bot.js` runs the same v0.6 controller as newly added built-in opponents through the real HTTP client. It reuses a joined CLI/MCP session, or joins with `COUNCIL_MATCH`, `COUNCIL_COUNTRY` and optionally `COUNCIL_NAME`. It is **not an LLM** and requires no inference provider. Difficulty and doctrine are configured with `COUNCIL_BOT_DIFFICULTY` and `COUNCIL_BOT_PERSONALITY`; a repeatable tie-break seed can be supplied through `COUNCIL_BOT_SEED`.
 
-Built-in practice bots run the same policy in the server, consume the same game-command budget and see the same observation. The engine has no privileged military action for them. The industrial policy invests, forecasts recruitment, coordinates arrivals and recalls losing commitments. They accept small proposed coalitions but do not model trust, natural-language deception or long-term bargaining.
+Private memory is stored at `${COUNCIL_SESSION}.bot.json` by default (`.council.session.json.bot.json` when unset). Override with `COUNCIL_BOT_STATE`. The file is scoped to URL/match/country, atomically saved owner-only, and excluded from git. A pending decision and operation ID are saved **before** sending; retrying a lost response does not duplicate an action. On restart, settings and memory remain pinned. A conflicting explicit difficulty/doctrine fails with a clear message; resolve pending receipts before intentionally selecting a different memory file. Do not share a brain file between processes.
+
+The bot reserves defenders, forecasts public arrivals and recruitment, evacuates doomed positions, synchronizes attacks, recalls bad commitments, moves old reserves and develops safe industry with a payback horizon. Its coalition heuristic weighs relative strength, individual payout and maturity, with trust/loyalty inertia. It supports only the explicit DM commands `/help`, `/status`, `/attack PROVINCE_ID`, and `/defend PROVINCE_ID`; the latter two require an active alliance and are requests, not compulsory orders. No arbitrary player text becomes executable code or model instructions.
+
+Built-in bots use normal observations and the same adjudicator. Their memory persists privately in the match snapshot. Legacy saved opponents keep their original policy; new ones carry public settings in `players[].bot`. The MCP `add_practice_bots` tool accepts optional country/difficulty/personality settings; the existing tool name is retained for compatibility. See [the bot guide](BOT-AI.md) for behavior, limits and reproducible comparisons.
 
 ## Experiments and competitive limits
 

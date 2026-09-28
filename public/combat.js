@@ -37,3 +37,6 @@ export function combatForecast(attackers,defenders,development=1) {
   }
   return {attackers,defenders,development,defenseBonus:Math.floor(development/2),attackDice,defendDice,attackerWinChance:chance(attackers,defenders),expectedAttackerLoss,expectedDefenderLoss,exact:true};
 }
+
+// Shared public probability distribution; no access to a match's seeded rolls.
+export { distribution as combatDistribution };

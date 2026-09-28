@@ -1,0 +1,701 @@
+{
+  "date": "2026-09-27",
+  "baseCommit": "054b56536a78448d2688d89425d66690b86f447c",
+  "controllerVersion": "council-bot-v6",
+  "localNodeTestsPassed": 141,
+  "recordedSimulationMatches": 176,
+  "freshSeedHoldoutMatches": 112,
+  "unchangedFiles": {
+    "src/engine.js": "fd2f1cfb3b41916889151cf257f72a61c22e21893fa838099f374940c9534cbd",
+    "src/store.js": "85e701bfcafbc644d0e8b88f34abc75a18883f88b026f2b40cfff9585e011e64",
+    "src/review.js": "7ed085bb5e3d5c5231ed64770b5936fdd872ea03050f7e793993f241764404a5",
+    "public/replay-model.js": "55b824d84b92980337b25d9a36881ffb2363f43f40449c8cafccfa9c289fe217",
+    "public/insights.js": "343d3187d5c75e250200216ad75ceafb9b8e86f0f975621b098dd69da5b29215",
+    "public/movement.js": "6b1ad5bdbe1233532f02e52d773f4086824661a32e4a49ce9642862e6b40104b",
+    "public/imperial-map.json": "5e71abad601fbb2411415eb3371eef02c1814cdc93f5467bf3befb06201ed8f1",
+    "public/map.json": "976799ae74ff7c318c34bb28af29e2888b028510c79526c229f52d80c63a8b55",
+    "agents/policy.js": "84e27fa3646d12323b1ed0a0e60dd130e8a57af34008887ef99f37de6c81d70c",
+    "agents/industrial-policy.js": "5a710b4f04fe5dde1c955635923b922c5156afcce5659cb74dbd4244cae22522",
+    "tests/fixtures/handplay-20260927.json.gz": "400efef666e1e0f9518a9bb7e70958c2fee5ee1d19550fb485a36c08a9b52189"
+  },
+  "combatHelperChange": "Exports the existing public dice distribution; no combat formula or RNG changes.",
+  "reports": {
+    "discovery-mixed": {
+      "rounds": 16,
+      "seedStart": 81000,
+      "seedEnd": 81015,
+      "mode": "mixed",
+      "difficulty": "standard",
+      "diplomacy": false,
+      "mapSha256": "5e71abad601fbb2411415eb3371eef02c1814cdc93f5467bf3befb06201ed8f1",
+      "draws": 0,
+      "meanDuration": 1684.8125,
+      "byPolicy": {
+        "standard": {
+          "seats": 64,
+          "winningSeats": 11,
+          "meanPrestige": 18.75
+        },
+        "legacy": {
+          "seats": 64,
+          "winningSeats": 5,
+          "meanPrestige": -18.75
+        }
+      },
+      "countryWins": {
+        "britain": 5,
+        "france": 2,
+        "germany": 5,
+        "russia": 4,
+        "ottoman": 0,
+        "qing": 0,
+        "japan": 0,
+        "usa": 0
+      },
+      "rejectedNew": 0,
+      "rejectedLegacy": 0,
+      "invariantsFailed": 0,
+      "meanMessages": 0,
+      "meanAlliances": 0,
+      "meanDepartures": 0,
+      "decisionMeanMs": 4.616803222688497,
+      "decisionP95Ms": 9.580687000008766,
+      "maxMemoryBytes": 2896,
+      "elapsedSeconds": 161.526943335
+    },
+    "discovery-selfplay": {
+      "rounds": 8,
+      "seedStart": 82000,
+      "seedEnd": 82007,
+      "mode": "selfplay",
+      "difficulty": "standard",
+      "diplomacy": true,
+      "mapSha256": "5e71abad601fbb2411415eb3371eef02c1814cdc93f5467bf3befb06201ed8f1",
+      "draws": 0,
+      "meanDuration": 1679.625,
+      "byPolicy": {
+        "standard": {
+          "seats": 64,
+          "winningSeats": 23,
+          "meanPrestige": -1.7763568394002505e-15
+        }
+      },
+      "countryWins": {
+        "britain": 6,
+        "france": 2,
+        "germany": 5,
+        "russia": 1,
+        "ottoman": 0,
+        "qing": 1,
+        "japan": 5,
+        "usa": 3
+      },
+      "rejectedNew": 128,
+      "rejectedLegacy": 0,
+      "invariantsFailed": 0,
+      "meanMessages": 15.5,
+      "meanAlliances": 4.5,
+      "meanDepartures": 0,
+      "decisionMeanMs": 2.9223721302392396,
+      "decisionP95Ms": 6.973145000000386,
+      "maxMemoryBytes": 5640,
+      "elapsedSeconds": 83.862081808
+    },
+    "refined-selfplay": {
+      "rounds": 8,
+      "seedStart": 83000,
+      "seedEnd": 83007,
+      "mode": "selfplay",
+      "difficulty": "standard",
+      "diplomacy": true,
+      "mapSha256": "5e71abad601fbb2411415eb3371eef02c1814cdc93f5467bf3befb06201ed8f1",
+      "draws": 0,
+      "meanDuration": 1778.25,
+      "byPolicy": {
+        "standard": {
+          "seats": 64,
+          "winningSeats": 23,
+          "meanPrestige": -1.3322676295501878e-15
+        }
+      },
+      "countryWins": {
+        "britain": 4,
+        "france": 4,
+        "germany": 2,
+        "russia": 3,
+        "ottoman": 3,
+        "qing": 4,
+        "japan": 0,
+        "usa": 3
+      },
+      "privateMotionConflicts": 195,
+      "invalidNew": 0,
+      "rejectedNew": 195,
+      "rejectedLegacy": 0,
+      "invariantsFailed": 0,
+      "meanMessages": 16,
+      "meanAlliances": 4.75,
+      "meanDepartures": 0,
+      "decisionMeanMs": 1.3943314277561285,
+      "decisionP95Ms": 2.950929000000542,
+      "maxMemoryBytes": 5668,
+      "elapsedSeconds": 56.145213020999996
+    },
+    "backoff-selfplay": {
+      "rounds": 8,
+      "seedStart": 84000,
+      "seedEnd": 84007,
+      "mode": "selfplay",
+      "difficulty": "standard",
+      "diplomacy": true,
+      "mapSha256": "5e71abad601fbb2411415eb3371eef02c1814cdc93f5467bf3befb06201ed8f1",
+      "draws": 0,
+      "meanDuration": 1703.75,
+      "byPolicy": {
+        "standard": {
+          "seats": 64,
+          "winningSeats": 23,
+          "meanPrestige": 4.440892098500626e-16
+        }
+      },
+      "countryWins": {
+        "britain": 5,
+        "france": 3,
+        "germany": 1,
+        "russia": 4,
+        "ottoman": 2,
+        "qing": 3,
+        "japan": 1,
+        "usa": 4
+      },
+      "privateMotionConflicts": 91,
+      "invalidNew": 0,
+      "rejectedNew": 91,
+      "rejectedLegacy": 0,
+      "invariantsFailed": 0,
+      "meanMessages": 15.875,
+      "meanAlliances": 4.875,
+      "meanDepartures": 0,
+      "decisionMeanMs": 1.3549795732177987,
+      "decisionP95Ms": 2.8409909999973024,
+      "maxMemoryBytes": 5146,
+      "elapsedSeconds": 51.605584734
+    },
+    "discovery-difficulty": {
+      "rounds": 8,
+      "seedStart": 85000,
+      "seedEnd": 85007,
+      "mode": "difficulty",
+      "difficulty": "standard",
+      "diplomacy": false,
+      "mapSha256": "5e71abad601fbb2411415eb3371eef02c1814cdc93f5467bf3befb06201ed8f1",
+      "draws": 0,
+      "meanDuration": 1800,
+      "byPolicy": {
+        "easy": {
+          "seats": 16,
+          "winningSeats": 2,
+          "meanPrestige": 0
+        },
+        "standard": {
+          "seats": 32,
+          "winningSeats": 4,
+          "meanPrestige": 6.25
+        },
+        "hard": {
+          "seats": 16,
+          "winningSeats": 2,
+          "meanPrestige": -12.5
+        }
+      },
+      "countryWins": {
+        "britain": 8,
+        "france": 0,
+        "germany": 0,
+        "russia": 0,
+        "ottoman": 0,
+        "qing": 0,
+        "japan": 0,
+        "usa": 0
+      },
+      "privateMotionConflicts": 0,
+      "invalidNew": 0,
+      "rejectedNew": 0,
+      "rejectedLegacy": 0,
+      "invariantsFailed": 0,
+      "meanMessages": 0,
+      "meanAlliances": 0,
+      "meanDepartures": 0,
+      "decisionMeanMs": 1.2132760707328458,
+      "decisionP95Ms": 2.5651189999989583,
+      "maxMemoryBytes": 5270,
+      "elapsedSeconds": 69.52518986700001
+    },
+    "industrial-difficulty": {
+      "rounds": 8,
+      "seedStart": 86000,
+      "seedEnd": 86007,
+      "mode": "difficulty",
+      "difficulty": "standard",
+      "diplomacy": false,
+      "mapSha256": "5e71abad601fbb2411415eb3371eef02c1814cdc93f5467bf3befb06201ed8f1",
+      "draws": 0,
+      "meanDuration": 1800,
+      "byPolicy": {
+        "easy": {
+          "seats": 16,
+          "winningSeats": 1,
+          "meanPrestige": -43.75
+        },
+        "standard": {
+          "seats": 32,
+          "winningSeats": 4,
+          "meanPrestige": 18.75
+        },
+        "hard": {
+          "seats": 16,
+          "winningSeats": 3,
+          "meanPrestige": 6.25
+        }
+      },
+      "countryWins": {
+        "britain": 4,
+        "france": 0,
+        "germany": 0,
+        "russia": 0,
+        "ottoman": 0,
+        "qing": 0,
+        "japan": 0,
+        "usa": 4
+      },
+      "privateMotionConflicts": 0,
+      "invalidNew": 0,
+      "rejectedNew": 0,
+      "rejectedLegacy": 0,
+      "invariantsFailed": 0,
+      "meanMessages": 0,
+      "meanAlliances": 0,
+      "meanDepartures": 0,
+      "decisionMeanMs": 1.1263233779261446,
+      "decisionP95Ms": 2.314524999999776,
+      "maxMemoryBytes": 5723,
+      "elapsedSeconds": 59.054251035
+    },
+    "industrial-selfplay": {
+      "rounds": 8,
+      "seedStart": 87000,
+      "seedEnd": 87007,
+      "mode": "selfplay",
+      "difficulty": "standard",
+      "diplomacy": true,
+      "mapSha256": "5e71abad601fbb2411415eb3371eef02c1814cdc93f5467bf3befb06201ed8f1",
+      "draws": 0,
+      "meanDuration": 1800,
+      "byPolicy": {
+        "standard": {
+          "seats": 64,
+          "winningSeats": 22,
+          "meanPrestige": 1.7763568394002505e-15
+        }
+      },
+      "countryWins": {
+        "britain": 5,
+        "france": 1,
+        "germany": 3,
+        "russia": 1,
+        "ottoman": 4,
+        "qing": 1,
+        "japan": 1,
+        "usa": 6
+      },
+      "privateMotionConflicts": 52,
+      "invalidNew": 1,
+      "rejectedNew": 53,
+      "rejectedLegacy": 0,
+      "invariantsFailed": 0,
+      "meanMessages": 23.5,
+      "meanAlliances": 4.875,
+      "meanDepartures": 0,
+      "decisionMeanMs": 1.0701920195384187,
+      "decisionP95Ms": 2.203670000000784,
+      "maxMemoryBytes": 5515,
+      "elapsedSeconds": 44.094121322999996
+    },
+    "holdout-mixed": {
+      "rounds": 48,
+      "seedStart": 90000,
+      "seedEnd": 90047,
+      "mode": "mixed",
+      "difficulty": "standard",
+      "diplomacy": false,
+      "mapSha256": "5e71abad601fbb2411415eb3371eef02c1814cdc93f5467bf3befb06201ed8f1",
+      "draws": 1,
+      "meanDuration": 1774.3541666666667,
+      "byPolicy": {
+        "standard": {
+          "seats": 192,
+          "winningSeats": 36,
+          "meanPrestige": 51.041666666666664
+        },
+        "legacy": {
+          "seats": 192,
+          "winningSeats": 11,
+          "meanPrestige": -51.041666666666664
+        }
+      },
+      "countryWins": {
+        "britain": 13,
+        "france": 7,
+        "germany": 5,
+        "russia": 10,
+        "ottoman": 1,
+        "qing": 0,
+        "japan": 0,
+        "usa": 11
+      },
+      "privateMotionConflicts": 0,
+      "invalidNew": 0,
+      "rejectedNew": 0,
+      "rejectedLegacy": 0,
+      "invariantsFailed": 0,
+      "meanMessages": 0,
+      "meanAlliances": 0,
+      "meanDepartures": 0,
+      "decisionMeanMs": 2.39682240194873,
+      "decisionP95Ms": 5.428922000050079,
+      "maxMemoryBytes": 2994,
+      "elapsedSeconds": 390.92058329699995
+    },
+    "holdout-difficulty": {
+      "rounds": 32,
+      "seedStart": 91000,
+      "seedEnd": 91031,
+      "mode": "difficulty",
+      "difficulty": "standard",
+      "diplomacy": false,
+      "mapSha256": "5e71abad601fbb2411415eb3371eef02c1814cdc93f5467bf3befb06201ed8f1",
+      "draws": 2,
+      "meanDuration": 1800,
+      "byPolicy": {
+        "easy": {
+          "seats": 64,
+          "winningSeats": 1,
+          "meanPrestige": -29.6875
+        },
+        "standard": {
+          "seats": 128,
+          "winningSeats": 21,
+          "meanPrestige": 7.8125
+        },
+        "hard": {
+          "seats": 64,
+          "winningSeats": 8,
+          "meanPrestige": 14.0625
+        }
+      },
+      "countryWins": {
+        "britain": 12,
+        "france": 0,
+        "germany": 0,
+        "russia": 0,
+        "ottoman": 0,
+        "qing": 0,
+        "japan": 1,
+        "usa": 17
+      },
+      "privateMotionConflicts": 0,
+      "invalidNew": 0,
+      "rejectedNew": 0,
+      "rejectedLegacy": 0,
+      "invariantsFailed": 0,
+      "meanMessages": 0,
+      "meanAlliances": 0,
+      "meanDepartures": 0,
+      "decisionMeanMs": 1.7058179081301776,
+      "decisionP95Ms": 3.623545999998896,
+      "maxMemoryBytes": 5636,
+      "elapsedSeconds": 360.30488197100004
+    },
+    "holdout-selfplay": {
+      "rounds": 32,
+      "seedStart": 92000,
+      "seedEnd": 92031,
+      "mode": "selfplay",
+      "difficulty": "standard",
+      "diplomacy": true,
+      "mapSha256": "5e71abad601fbb2411415eb3371eef02c1814cdc93f5467bf3befb06201ed8f1",
+      "draws": 2,
+      "meanDuration": 1718.4375,
+      "byPolicy": {
+        "standard": {
+          "seats": 256,
+          "winningSeats": 82,
+          "meanPrestige": -1.6485812871843533
+        }
+      },
+      "countryWins": {
+        "britain": 19,
+        "france": 10,
+        "germany": 7,
+        "russia": 11,
+        "ottoman": 7,
+        "qing": 6,
+        "japan": 8,
+        "usa": 14
+      },
+      "privateMotionConflicts": 198,
+      "invalidNew": 0,
+      "rejectedNew": 198,
+      "rejectedLegacy": 0,
+      "invariantsFailed": 0,
+      "meanMessages": 22.875,
+      "meanAlliances": 4.53125,
+      "meanDepartures": 0,
+      "decisionMeanMs": 1.930240430413831,
+      "decisionP95Ms": 4.553434000001289,
+      "maxMemoryBytes": 5752,
+      "elapsedSeconds": 302.63720846600006
+    }
+  },
+  "eventDigestAggregates": {
+    "discovery-mixed": "d78d406fab1c91691da9c083bed60ea6031c08f229082298f2482b4b13f1438d",
+    "discovery-selfplay": "aef5d2c682691a954486f96ffdab4f6edab70a0c1910ba04ba3af57d2c544fb0",
+    "refined-selfplay": "14faeb1e479bb9c8c59b3a24226e36ec0d3b36a3143bab7cccec3254450f63c1",
+    "backoff-selfplay": "82571f2eed51ff55e69b002c6acc40db2f26126b8be87f22c8035df1714f5fc2",
+    "discovery-difficulty": "6589cb1be4e183b926905dda78a97f46c38ee08feff62379406f9879f8a09f7a",
+    "industrial-difficulty": "4bab355969cb2fa3b6827946837ee5b2e75624bb0a212f34d1652d1f01e2b459",
+    "industrial-selfplay": "7c874f9985ed74edb9b6046895fb9f3622851ef16c3af737529379ac543fad78",
+    "holdout-mixed": "d82c6a25de09b8c7d1a2ae5755bccd1b752b3ca58947e3326ba138f2b9d3a5b2",
+    "holdout-difficulty": "81649e7560436286bd3d71f21a0547f955ac6f63ddc3610cb68e3408fec47173",
+    "holdout-selfplay": "97a16c70df4b75db73d7b57cfe7ca82dd3e68c1cce622c7a2460e00e4cfcc423"
+  },
+  "heldoutActivity": {
+    "holdout-mixed": {
+      "acceptedActions": {
+        "attack": 26273,
+        "declare_war": 1593,
+        "develop": 296,
+        "move": 31528,
+        "offer_peace": 800,
+        "recall": 3712,
+        "route": 5518,
+        "vote_peace": 799
+      },
+      "executionFailures": 154
+    },
+    "holdout-difficulty": {
+      "acceptedActions": {
+        "attack": 17344,
+        "declare_war": 1600,
+        "develop": 176,
+        "move": 39206,
+        "offer_peace": 1558,
+        "recall": 3282,
+        "route": 2346,
+        "vote_peace": 1409
+      },
+      "executionFailures": 47
+    },
+    "holdout-selfplay": {
+      "acceptedActions": {
+        "accept": 225,
+        "attack": 15782,
+        "chat": 732,
+        "declare_war": 960,
+        "decline": 181,
+        "develop": 278,
+        "move": 34884,
+        "offer_peace": 806,
+        "propose": 398,
+        "recall": 3161,
+        "route": 2508,
+        "transit": 191,
+        "vote_peace": 1626,
+        "vote_war": 348
+      },
+      "executionFailures": 35
+    }
+  },
+  "browser": {
+    "gameplay": {
+      "transport": "python-http-bridge",
+      "assertions": [
+        "Human browser created room and joined USA through UI.",
+        "Separate CLI process joined Britain; six practice bots filled seats; host started eight-seat match.",
+        "Browser and CLI committed armies; browser set a standing reinforcement route.",
+        "Browser proposed coalition; CLI accepted; public notice elapsed; both shared the coalition and payout projection.",
+        "Leaving an alliance requires explicit confirmation; Escape leaves membership untouched.",
+        "Reading the wire clears the unread badge; an unsent draft survives live polling.",
+        "Private diplomacy delivered both ways; spectator API excluded DMs; HTML in agent speech rendered as text, not executable markup.",
+        "Lobby spectator opened a full-viewport map on desktop and mobile; new world chat appeared as escaped bubbles, while private dispatches stayed hidden.",
+        "Browser-issued attack fought for Mexico after travel and multiple combat rounds; world and Europe zoom rendered.",
+        "Same-seat reconnect restored country and private inbox without duplicate orders.",
+        "390-pixel mobile layout displayed controls without horizontal page overflow.",
+        "Completed live match opened player/alliance review, scrubbable playback and all report tabs; CLI review and historical board agreed.",
+        "Wall-clock match reached a final result; browser and external agent observed identical final scores.",
+        "Persistent experimental standings included the browser player after returning to the lobby.",
+        "A second room starts with the same browser identity; map targeting, Max, Shift-source selection and keyboard tabs work.",
+        "Browser previewed and committed a two-source synchronized attack, then recalled the group with real return time.",
+        "Browser funded, confirmed and completed province development using naturally recruited manpower."
+      ],
+      "pageErrors": [],
+      "outcome": {
+        "winningSide": "coalition-436",
+        "reason": "deadline",
+        "tick": 1800,
+        "draw": false,
+        "scores": [
+          {
+            "country": "usa",
+            "maturity": 1,
+            "maximumShare": 277.0164000940532,
+            "projectedPrestige": 177.0164000940532,
+            "victoryShare": 0.3462705001175665,
+            "strengthIndustry": 6,
+            "projectedDeadlinePayout": 69.2541000235133,
+            "payout": 69.2541000235133,
+            "prestige": -30.745899976486697
+          },
+          {
+            "country": "britain",
+            "maturity": 1,
+            "maximumShare": 522.9835999059469,
+            "projectedPrestige": 422.9835999059469,
+            "victoryShare": 0.6537294998824336,
+            "strengthIndustry": 14,
+            "projectedDeadlinePayout": 130.74589997648673,
+            "payout": 130.74589997648673,
+            "prestige": 30.745899976486726
+          },
+          {
+            "country": "france",
+            "maturity": 1,
+            "maximumShare": 434.95285541804424,
+            "projectedPrestige": 334.95285541804424,
+            "victoryShare": 0.5436910692725553,
+            "strengthIndustry": 24,
+            "projectedDeadlinePayout": 217.47642770902212,
+            "payout": 217.47642770902212,
+            "prestige": 117.47642770902212
+          },
+          {
+            "country": "germany",
+            "maturity": 1,
+            "maximumShare": 321.4399049184057,
+            "projectedPrestige": 221.43990491840572,
+            "victoryShare": 0.40179988114800713,
+            "strengthIndustry": 10,
+            "projectedDeadlinePayout": 80.35997622960143,
+            "payout": 80.35997622960143,
+            "prestige": -19.64002377039857
+          },
+          {
+            "country": "russia",
+            "maturity": 1,
+            "maximumShare": 556.0608999747515,
+            "projectedPrestige": 456.06089997475146,
+            "victoryShare": 0.6950761249684393,
+            "strengthIndustry": 12,
+            "projectedDeadlinePayout": 0,
+            "payout": 0,
+            "prestige": -100
+          },
+          {
+            "country": "ottoman",
+            "maturity": 1,
+            "maximumShare": 365.0471445819559,
+            "projectedPrestige": 265.0471445819559,
+            "victoryShare": 0.45630893072744483,
+            "strengthIndustry": 19,
+            "projectedDeadlinePayout": 182.52357229097794,
+            "payout": 182.52357229097794,
+            "prestige": 82.52357229097794
+          },
+          {
+            "country": "qing",
+            "maturity": 1,
+            "maximumShare": 243.93910002524854,
+            "projectedPrestige": 143.93910002524854,
+            "victoryShare": 0.30492387503156065,
+            "strengthIndustry": 4,
+            "projectedDeadlinePayout": 0,
+            "payout": 0,
+            "prestige": -100
+          },
+          {
+            "country": "japan",
+            "maturity": 1,
+            "maximumShare": 478.5600950815943,
+            "projectedPrestige": 378.5600950815943,
+            "victoryShare": 0.5982001188519929,
+            "strengthIndustry": 17,
+            "projectedDeadlinePayout": 119.64002377039857,
+            "payout": 119.64002377039857,
+            "prestige": 19.64002377039857
+          }
+        ]
+      },
+      "events": {
+        "battle": 237,
+        "army_departed": 1597,
+        "alliance_activated": 4
+      },
+      "status": "passed"
+    },
+    "review": {
+      "transport": "python-http-bridge",
+      "assertions": [
+        "Finished room opens Overview: all eight player scores and three alliance aggregates; live commands are hidden.",
+        "Forward/backward scrubbing matches exact API troop states and ownership; province inspector and zoom work.",
+        "Play, pause, rate change, keyboard slider, event jumps, opening/final controls and automatic end-of-replay stop work.",
+        "Military/economy comparison charts filter by country; battle links seek exact history; diplomacy shows membership intervals and broken holds.",
+        "Keyboard tab navigation and 390px layouts pass; tables scroll within their panels, not the document.",
+        "Disclosed AI conversations filter by thread and search, jump to exact replay time, stay inert under hostile text, and fit mobile.",
+        "Negotiated draw renders correctly, malicious coalition name stays inert, and unverifiable legacy history fails closed while scores remain visible.",
+        "Leaving and reopening reviews releases playback state; watching history does not alter the match or scores."
+      ],
+      "pageErrors": [],
+      "status": "passed"
+    },
+    "interface": {
+      "status": "passed",
+      "transport": "python-http-bridge",
+      "assertions": [
+        "Live HUD fits 1366\u00d7768, 1600\u00d71000 and 1920\u00d71080 without document scrolling; map, roster and commit control stay visible.",
+        "Country roster preserves keyboard focus across polling and inspects the map; War log opens by click/J and closes with Escape or Close.",
+        "March/Coordinate/Develop and Council render in the same shell; recruitment disclosure remains open through refresh; SVG IDs are unique.",
+        "Actual recorded losses and defense trigger factual, dismissible notices; broken hold explains itself; reopening suppresses old battle popups.",
+        "Responsive layouts pass at 1024px, 390px and short landscape; faction standards select real seats and disable occupied countries.",
+        "After-action standards identify all winning members; exact map playback keeps separate SVG IDs and no live command surface.",
+        "Recorded active battle opens a read-only odds and per-roll casualty modal; this fixture is a recorded position, not a live match."
+      ],
+      "pageErrors": [],
+      "fixture": "Recorded game at tick 480, not a new balance sample"
+    },
+    "bots": {
+      "status": "passed",
+      "transport": "python-http-bridge",
+      "assertions": [
+        "Host adds a Hard Industrialist to one country and reconfigures it as Easy Diplomat through real controls; assets remain identical.",
+        "Fill empty seats preserves existing settings and human seats, resolves visible mixed doctrines, and fits a 390-pixel lobby.",
+        "Started bots answer the human\u2019s supported /status DM through the same chat API; draft buttons do not send until approved, and controls describe limited language support; public spectator data excludes DMs.",
+        "A non-ally cannot issue tactical requests to a traditional bot; reply explains the formal-alliance requirement."
+      ],
+      "pageErrors": [],
+      "clock": "test-stepped, not a latency test"
+    }
+  },
+  "discoveryFindings": [
+    "Initial current-rule integration inherited a removed distanceMovement feature flag. Early current discovery games did not exercise coordinated attacks, recalls and investment fully; corrected before the final holdout seeds.",
+    "Private opposing war votes can cause legitimate 409 conflicts. Response-based 90-second backoff was added without exposing private motions.",
+    "The industrial-selfplay discovery at seed 87005 exposed an attempted rescue before future ally membership activated. Current ownership/war permission now gates acceptance; regression test and final holdouts pass."
+  ],
+  "historicalOriginalRulesRecord": "v06-original-rules.json",
+  "limitations": [
+    "Traditional controllers, not an independent human enjoyment study or a new live-LLM tournament.",
+    "112 held-out games use the final integrated controller; 64 discovery games include earlier iterations and exposed bugs.",
+    "Local Chromium requires the explicit Python-HTTP bridge: native browser navigation/storage/security are verified separately by CI.",
+    "Private-motion conflicts are reported separately from invalid visible-state commands; accepted orders may still fail when the board changes.",
+    "Repeating these same seeds in CI verifies deterministic fingerprints, not extra independent match samples."
+  ]
+}

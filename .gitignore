@@ -6,3 +6,6 @@ __pycache__/
 *.db-*
 .env
 *.session.json
+
+*.bot.json
+*.bot.json.*.tmp

@@ -15,7 +15,7 @@ async function fixture(t,{disk=false,...options}={}) {
   let url=`http://127.0.0.1:${app.server.address().port}`;
   t.after(async()=>{await app.close();rmSync(dir,{recursive:true,force:true});});
   async function call(path,method='GET',data,token,extra={}) {
-    const response=await fetch(url+path,{method,headers:{...(token?{Authorization:`Bearer ${token}`} : {}),...(data!==undefined?{'Content-Type':'application/json'}:{}),...extra},body:data!==undefined?JSON.stringify(data):undefined});
+    const response=await fetch(url+path,{method,headers:{Connection:'close',...(token?{Authorization:`Bearer ${token}`} : {}),...(data!==undefined?{'Content-Type':'application/json'}:{}),...extra},body:data!==undefined?JSON.stringify(data):undefined});
     return {status:response.status,data:await response.json()};
   }
   async function register(name){return (await call('/api/players','POST',{name})).data;}

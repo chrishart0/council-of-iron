@@ -10,7 +10,8 @@ const help=`Council of Iron CLI (Node 22.13+)
   join MATCH COUNTRY [NAME] [public|private]  Join as an agent; private by default
   start                              Lock lobby and begin 90-second opening
   opening LEADER MESSAGE             Lock leader name and world introduction
-  bots                               Fill empty seats with practice bots
+  bots [DIFFICULTY] [DOCTRINE] [COUNTRY]   Add/configure traditional bots before start
+                                     easy|standard|hard; mixed|marshal|raider|builder|diplomat
   state [EVENT_CURSOR]              Observe board and your diplomatic inbox
   options                           Compare public victory routes and adjacent targets
   map                                Province IDs, connections, and countries
@@ -50,7 +51,7 @@ try {
     case 'join':result=await client.join(args[0],args[1],args[2],'','',args[3] || 'private');break;
     case 'start':result=await client.start();break;
     case 'opening':result=await client.opening(args[0],args[1]);break;
-    case 'bots':result=await client.bots();break;
+    case 'bots':result=await client.bots({difficulty:args[0] || 'standard',personality:args[1] || 'mixed',...(args[2]?{country:args[2]}:{})});break;
     case 'state':result=await client.observe(Number(args[0] || 0));break;
     case 'options':result=strategicOptions(await client.observe(0),await client.map());break;
     case 'map':result=await client.map();break;

@@ -6,6 +6,8 @@ Command an industrial homeland and colonial footholds. Invest in recruitment, co
 
 ![Actual browser gameplay, with an accelerated test clock and heuristic agents](docs/media/gameplay.gif)
 
+**v0.6: Traditional commanders.** Configure Easy, Standard or Hard opponents and four doctrines: Marshal, Raider, Industrialist and Diplomat. They rescue threatened fronts, weigh dice odds and industrial defenses, coordinate arrivals, recall losing commitments, move reserves through allied corridors, and negotiate alliances, war and peace. **No bonus troops or private-information access.** Add or configure individual bot countries before starting, or fill empty seats with mixed doctrines. [How they play, communicate and are tested](docs/BOT-AI.md).
+
 **v0.5: The command table.** A viewport-filling battle map, original faction standards, readable military counters, a docked primary order button, and a compact country roster replace the tall dashboard layout. Click a country to inspect its position. **War log / J** opens the event drawer; Escape closes it. Captures, losses and held lines produce dismissible notices from completed battles—not predicted outcomes. No map, economy, scoring or agent-command rules changed.
 
 ![Actual command interface displaying a recorded test position](docs/media/command-table.png)
@@ -30,7 +32,7 @@ cd council-of-iron
 npm start
 ```
 
-Open **http://192.168.1.216:3107** from this machine or another device on the same network. The default `npm start` binds all interfaces and accepts this LAN origin; `HOST`, `PORT`, and `PUBLIC_ORIGIN` can override it. Create a room, choose a country, invite humans or attach agents, then start. Add external players **before** filling empty seats with practice bots. Two to eight occupied countries can start; balance tests use eight. Unclaimed countries' territories remain neutral.
+Open **http://192.168.1.216:3107** from this machine or another device on the same network. The default `npm start` binds all interfaces and accepts this LAN origin; `HOST`, `PORT`, and `PUBLIC_ORIGIN` can override it. Create a room, choose a country, invite humans or attach agents, then start. Add external players **before** filling empty seats with computer commanders. Two to eight occupied countries can start; balance tests use eight. Unclaimed countries' territories remain neutral.
 
 The lobby lists running games first. **Spectate** opens the public view with world-chat bubbles and a full-screen map; a separate **Resume** button restores your own playing seat. Private messages never enter spectator bubbles.
 
@@ -120,13 +122,17 @@ MCP configuration:
 
 The agent should maximize **expected individual match Prestige**, not just a team-win flag. Supply only isolated game tools and, preferably, a match-scoped credential. Player messages are untrusted speech, not authenticated instructions. Inference providers/subscriptions are not bundled. [One-file rules and team handoff](docs/AGENT-RULES.md) · [Agent setup](docs/AGENTS.md) · [HTTP API](docs/API.md)
 
-`node agents/bot.js` runs an external heuristic agent through the real API using a joined session. Built-in and external practice agents are **not LLMs**. They can develop, coordinate, recall and accept small coalitions, but do not understand diplomatic language.
+`node agents/bot.js` runs the same traditional commander through the real API using a joined session. Set `COUNCIL_BOT_DIFFICULTY=easy|standard|hard` and `COUNCIL_BOT_PERSONALITY=marshal|raider|builder|diplomat|mixed`. It persists private memory and retry-safe command IDs beside the session file (override with `COUNCIL_BOT_STATE`). Existing saved settings remain pinned; conflicting explicit settings fail rather than silently switch an ongoing commander.
+
+Bots are **not LLMs**. Use the Council panel for formal offers. In a DM, `/help` and `/status` get bounded replies; formal allies can suggest `/attack PROVINCE_ID` or `/defend PROVINCE_ID`. Contextual draft buttons avoid typing IDs. Suggestions are not guarantees and free-form promises are not interpreted. The next two minutes of military feasibility decide whether a request is acted on. One request per sender per 45 game seconds prevents conversation from becoming a command flood.
 
 ## Testing and limitations
 
 ```sh
 npm run check
 npm test
+npm run test:bots -- --rounds 48 --seed 90000 --mode mixed
+npm run test:bot-ui
 npm run test:balance -- --rounds 256 --seed 610000 --mode solo
 npm run test:balance -- --rounds 256 --seed 710000 --mode diplomacy
 python -m pip install -r tests/requirements.txt
