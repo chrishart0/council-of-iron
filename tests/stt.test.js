@@ -46,7 +46,7 @@ async function fixture(t, options = {}) {
 
 test('voice input is off without STT_URL: capability false and 503 for seated players', async t => {
   const f = await fixture(t);
-  assert.deepEqual((await f.call('/api/stt')).data, { available: false });
+  assert.deepEqual((await f.call('/api/stt')).data, { available: false, provider: null });
   const r = await f.voice();
   assert.equal(r.status, 503);
   assert.match(r.data.error, /Voice input unavailable/);
@@ -54,7 +54,7 @@ test('voice input is off without STT_URL: capability false and 503 for seated pl
 
 test('voice input proxies seated players only and returns the transcript without sending chat', async t => {
   const side = await fakeSidecar(t), f = await fixture(t, { sttUrl: side.url });
-  assert.deepEqual((await f.call('/api/stt')).data, { available: true });
+  assert.deepEqual((await f.call('/api/stt')).data, { available: true, provider: 'local' });
   assert.equal((await f.voice(undefined, { token: null })).status, 401, 'spectators have no credential');
   assert.equal((await f.voice(undefined, { token: f.b.token })).status, 403, 'unseated profiles are refused');
   assert.equal((await f.voice(undefined, { token: 'bogus' })).status, 401);
@@ -97,7 +97,7 @@ test('voice input maps sidecar failures and never logs transcripts', async t => 
   await gone.close();
   const down = await h.voice();
   assert.equal(down.status, 503);
-  assert.deepEqual((await h.call('/api/stt')).data, { available: false });
+  assert.deepEqual((await h.call('/api/stt')).data, { available: false, provider: 'local' });
   assert.ok(!logs.some(line => line.includes('Belgium') || line.includes('betray')), 'transcript text never reaches logs');
 });
 
