@@ -16,6 +16,9 @@ import time
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import sys
+sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
+from browser_helpers import open_thread
 from playwright.sync_api import sync_playwright, expect
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -99,25 +102,29 @@ def main():
                 page = context.new_page()
                 page.on('pageerror', lambda error: report['pageErrors'].append(str(error)))
                 page.goto(f'{url}/?match={room}')
-                feed_input = page.locator('#feed-text')
+                expect(page.locator('#comms')).to_be_visible(timeout=15000)
+                open_thread(page, 'world')  # v0.9: one composer, in the open Messages thread (World = public chat)
+                feed_input = page.locator('#cx-text')
                 expect(feed_input).to_be_visible(timeout=15000)
-                mic = page.locator('#feed-form .voice-mic')
+                mic = page.locator('#comms .cx-composer .voice-mic')
                 expect(mic).to_be_visible()
                 expect(mic).to_have_attribute('aria-label', 'Voice input (local GPU speech-to-text)')
-                expect(page.locator('#composer .voice-mic')).to_have_count(1)
-                # v0.8: the country card's message box is the private composer.
+                expect(page.locator('.voice-mic')).to_have_count(1)
+                # The country card's Message opens that conversation: the same composer, the same mic.
                 page.locator('#lb-rows .lb-row[data-id="germany"]').click()
-                expect(page.locator('#composer .voice-mic')).to_be_visible()
-                expect(page.locator('#composer .voice-mic')).to_have_text('')
-                expect(page.locator('#composer button[type=submit]')).to_contain_text('Send')
-                page.keyboard.press('Escape')
+                page.locator('#card-actions button', has_text='Message').click()
+                expect(page.locator('#comms .cx-title')).to_have_text('German Empire')
+                expect(mic).to_be_visible()
+                expect(mic).to_have_text('')
+                expect(page.locator('#comms .cx-composer button[type=submit]')).to_contain_text('Send')
+                open_thread(page, 'world')
                 ok('mic attached to the world composer and the country-card composer')
 
                 # Tap to start, tap to stop.
                 feed_input.fill('Proposal:')
                 mic.click()
                 expect(mic).to_have_attribute('aria-pressed', 'true')
-                expect(page.locator('#feed-form .voice-meter')).to_be_visible()
+                expect(page.locator('#comms .cx-composer .voice-meter')).to_be_visible()
                 page.wait_for_timeout(1500)
                 page.screenshot(path=str(artifacts / 'recording.png'))
                 # The clip is speech then silence: recording stops by itself after ~1.5 s of trailing silence.
@@ -130,14 +137,14 @@ def main():
                     assert value == f'Proposal: {PHRASE}', value
                     assert seen[-1]['type'].startswith('audio/webm') and seen[-1]['bytes'] > 1000, seen
                 expect(feed_input).to_be_focused()
-                expect(page.locator('#feed-form .voice-status')).to_contain_text('Review, then Send')
+                expect(page.locator('#comms .cx-composer .voice-status')).to_contain_text('Review, then Send')
                 ok('tap-to-talk auto-stops on trailing silence, transcribes, appends after existing text with a space and focuses the input')
                 page.screenshot(path=str(artifacts / 'inserted.png'))
 
                 page.wait_for_timeout(1500)
                 state = http(f'/api/games/{room}', token=me['token'])
                 assert not [e for e in state['events'] if e['type'] == 'message'], 'voice input must not send chat'
-                expect(page.locator('#feed-list')).not_to_contain_text('proposes an alliance')
+                expect(page.locator('#comms .cx-rows')).not_to_contain_text('proposes an alliance')
                 ok('transcript is not sent automatically')
 
                 # Escape cancels a recording without inserting or uploading.
@@ -146,7 +153,7 @@ def main():
                 expect(mic).to_have_attribute('aria-pressed', 'true')
                 page.keyboard.press('Escape')
                 expect(mic).to_have_attribute('aria-pressed', 'false')
-                expect(page.locator('#feed-form .voice-status')).to_contain_text('cancelled')
+                expect(page.locator('#comms .cx-composer .voice-status')).to_contain_text('cancelled')
                 page.wait_for_timeout(800)
                 assert feed_input.input_value() == before and len(seen) == count
                 ok('Escape cancels without uploading')
@@ -177,17 +184,18 @@ def main():
                 insecure = context.new_page()
                 insecure.add_init_script("Object.defineProperty(window,'isSecureContext',{get:()=>false})")
                 insecure.goto(f'{url}/?match={room}')
-                imic = insecure.locator('#feed-form .voice-mic')
+                expect(insecure.locator('#comms')).to_be_visible(timeout=15000); open_thread(insecure, 'world')
+                imic = insecure.locator('#comms .cx-composer .voice-mic')
                 expect(imic).to_have_attribute('title', 'Voice input needs HTTPS', timeout=15000)
                 imic.click()
-                expect(insecure.locator('#feed-form .voice-status')).to_contain_text('needs HTTPS')
+                expect(insecure.locator('#comms .cx-composer .voice-status')).to_contain_text('needs HTTPS')
                 ok('insecure context shows "Voice input needs HTTPS"')
 
                 # Spectators get no mic.
                 spectator = browser.new_context(viewport={'width': 1366, 'height': 768}).new_page()
                 spectator.goto(f'{url}/?match={room}&spectate=1')
                 expect(spectator.locator('#map')).to_be_visible(timeout=15000)
-                expect(spectator.locator('#feed-form .voice-mic')).to_be_hidden()
+                expect(spectator.locator('#comms .cx-composer .voice-mic')).to_be_hidden()
                 ok('spectators have no mic')
                 browser.close()
             assert not report['pageErrors'], report['pageErrors']

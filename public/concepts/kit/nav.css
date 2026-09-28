@@ -1,7 +1,0 @@
-/* Reviewer-only screen switcher (not part of any concept's design). Hidden in screenshots (?clean=1). */
-.concept-nav{position:fixed;z-index:9999;left:50%;bottom:calc(6px + env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;align-items:center;gap:4px;padding:4px 6px;border-radius:8px;background:#000c;color:#fff;font:12px/1.2 system-ui,sans-serif;opacity:.35;transition:opacity .15s;max-width:calc(100vw - 12px)}
-.concept-nav:hover,.concept-nav:focus-within{opacity:1}
-.concept-nav a{color:#fff;font-weight:700;text-decoration:none;white-space:nowrap;padding:4px}
-.concept-nav button,.concept-nav select{font:inherit;color:#fff;background:#333;border:1px solid #666;border-radius:5px;min-height:28px}
-.concept-nav button{width:28px}.concept-nav span{display:none}
-@media(pointer:coarse){.concept-nav{opacity:.8;top:auto}}
