@@ -10,22 +10,22 @@ const root = new URL('../', import.meta.url);
 const v3 = JSON.parse(readFileSync(new URL('public/maps/imperial-1910-v3.json', root)));
 import { provinceRings } from '../public/map-geometry.js';
 // In v3 the real Hawaiian islands were three small rings inside west-us (Pacific States), a
-// by-product of the nearest-seed partition. v4 moves exactly those rings into Hawaii, each
-// enlarged 1.5× about its own centroid so the chain stays visible and tappable.
+// by-product of the nearest-seed partition. v4 moves exactly those rings into Hawaii and
+// enlarges the whole chain 2.2× about its centre, so the islands stay visible and tappable
+// next to the counter at every zoom (open ocean; nothing else is nearby).
 const westUs = v3.provinces.find(p => p.id === 'west-us');
 const inHawaii = ring => ring.every(([x, y]) => x < 110 && y > 280 && y < 315);
 const rings = provinceRings(westUs.path), islands = rings.filter(inHawaii);
 if (islands.length !== 3) throw new Error(`expected 3 Hawaiian rings in west-us, found ${islands.length}`);
 const path = rs => rs.map(r => 'M' + r.map(([x, y]) => `${x},${y}`).join('L') + 'Z').join('');
-const enlarge = ring => {
-  const pts = ring.slice(0, -1), cx = pts.reduce((n, p) => n + p[0], 0) / pts.length, cy = pts.reduce((n, p) => n + p[1], 0) / pts.length;
-  return ring.map(([x, y]) => [+(cx + (x - cx) * 1.5).toFixed(2), +(cy + (y - cy) * 1.5).toFixed(2)]);
-};
-const bigIsland = islands.reduce((a, b) => (Math.max(...a.map(p => p[0])) > Math.max(...b.map(p => p[0])) ? a : b)); // easternmost
-const anchor = bigIsland.slice(0, -1).reduce((n, p) => [n[0] + p[0], n[1] + p[1]], [0, 0]).map(v => v / (bigIsland.length - 1));
-const [x, y] = anchor;
+const centroid = ring => ring.slice(0, -1).reduce((n, p) => [n[0] + p[0] / (ring.length - 1), n[1] + p[1] / (ring.length - 1)], [0, 0]);
+const all = islands.flatMap(r => r.slice(0, -1)), [ccx, ccy] = [all.reduce((n, p) => n + p[0], 0) / all.length, all.reduce((n, p) => n + p[1], 0) / all.length];
+const enlarge = ring => ring.map(([x, y]) => [+(ccx + (x - ccx) * 2.2).toFixed(2), +(ccy + (y - ccy) * 2.2).toFixed(2)]);
+const chain = islands.map(enlarge).sort((a, b) => centroid(a)[0] - centroid(b)[0]);
+// Counter on the middle island (Maui/Oahu), leaving the Big Island visible to the south-east.
+const [x, y] = centroid(chain[1]);
 const LINKS = ['west-us', 'south-japan', 'philippines'];
-const hawaii = { id: 'hawaii', name: 'Hawaii', x: +x.toFixed(2), y: +y.toFixed(2), path: path(islands.map(enlarge)), neighbors: [...LINKS].sort() };
+const hawaii = { id: 'hawaii', name: 'Hawaii', x: +x.toFixed(2), y: +y.toFixed(2), path: path(chain), neighbors: [...LINKS].sort() };
 
 const v4 = structuredClone(v3);
 v4.id = 'imperial-1910-v4';

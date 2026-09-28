@@ -133,7 +133,9 @@ def main():
             assert page.locator('#result img').count()==0
             assert not page.evaluate('Boolean(window.REVIEW_XSS)')
             page.locator('#aar-tab-replay').click();expect(page.locator('#replay-stage')).to_be_visible()
-            assert page.locator('#review-map .province').count()==79
+            # New rooms use imperial-1910-v4 (80 provinces incl. Hawaii); the recorded v3 match keeps its v3 map.
+            assert page.locator('#review-map .province').count()==80 and page.locator('#review-map-province-hawaii').count()==1
+            assert api('/api/games/review-fixture/map')['id']=='imperial-1910-v3' and api('/api/games/review-fixture/replay')['map']['id']=='imperial-1910-v3'
             page.locator('#back').click();page.locator('[data-room="old-fixture"]').click()
             expect(page.locator('#aar-player-scores tbody tr')).to_have_count(8)
             page.locator('#aar-tab-replay').click();expect(page.locator('#aar-replay')).to_contain_text('History unavailable')

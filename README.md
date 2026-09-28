@@ -20,7 +20,7 @@ Command an industrial homeland and colonial footholds. Invest in recruitment, co
 
 After-action review still shows every player's and alliance's score, exact map replay, military/economy charts and the public diplomatic timeline. Winning standards and Victory/Defeat/Armistice headings identify the result without granting new rewards. Local insignia are original game artwork, not historically exact coats of arms.
 
-**Industry & Empire** remains the scenario. The map has 79 authored provinces, denser European fronts, visible starting industry and overseas possessions. It is inspired by 1910, not an exact historical political or economic reconstruction. Countries deliberately have different strengths. [Rules](docs/design-v0.3.md) · [Balance results](docs/BALANCE.md) · [Test record](docs/PLAYTEST.md)
+**Industry & Empire** remains the scenario. The map has 80 authored provinces (v4 added a neutral Hawaii stepping stone in the Pacific), denser European fronts, visible starting industry and overseas possessions. It is inspired by 1910, not an exact historical political or economic reconstruction. Countries deliberately have different strengths. [Rules](docs/design-v0.3.md) · [Balance results](docs/BALANCE.md) · [Test record](docs/PLAYTEST.md)
 
 ## Run
 

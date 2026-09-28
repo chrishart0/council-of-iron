@@ -42,7 +42,7 @@ test('v4 is v3 plus one neutral Hawaii with three sea links; nothing else change
   assert.deepEqual(g.provinces.find(p => p.id === 'hawaii'), { id: 'hawaii', owner: null, troops: 2, nextRecruit: null, route: null, development: 1, developing: null });
   // The Pacific crossing times this produces (game seconds at the current rules).
   assert.deepEqual([g.travelTimes['west-us'].hawaii, g.travelTimes.hawaii['south-japan'], g.travelTimes.hawaii.philippines,
-    g.travelTimes['west-us']['south-japan'], g.travelTimes['west-us'].philippines], [137, 222, 266, 281, 345]);
+    g.travelTimes['west-us']['south-japan'], g.travelTimes['west-us'].philippines], [136, 219, 264, 281, 345]);
 });
 
 test('a v3 room keeps resolving against v3: observe, act, tick and review without Hawaii', () => {
