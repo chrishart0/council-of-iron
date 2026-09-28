@@ -41,7 +41,7 @@ function polylines(d) {
 }
 /** Small upright mountain chevrons along border runs, spaced and sized in screen pixels at `px` per map unit. */
 function peaks(runs, px) {
-  const step = 12 / px, w = 4.2 / px, h = 4.6 / px, out = [];
+  const step = 11 / px, w = 4.4 / px, h = 6.4 / px, out = [];
   for (const run of runs) {
     let carry = step / 2, k = 0;
     for (let i = 0; i < run.length - 1; i++) {
@@ -49,7 +49,7 @@ function peaks(runs, px) {
       let t = carry;
       for (; t < len; t += step, k++) {
         const x = ax + (bx - ax) * t / len, y = ay + (by - ay) * t / len, s = k % 3 === 1 ? .78 : 1;
-        out.push(`M${(x - w * s).toFixed(2)},${(y + h * s / 2).toFixed(2)}L${x.toFixed(2)},${(y - h * s / 2).toFixed(2)}L${(x + w * s).toFixed(2)},${(y + h * s / 2).toFixed(2)}`);
+        out.push(`M${(x - w * s).toFixed(2)},${(y + h * s / 2).toFixed(2)}L${x.toFixed(2)},${(y - h * s / 2).toFixed(2)}L${(x + w * s).toFixed(2)},${(y + h * s / 2).toFixed(2)}Z`);
       }
       carry = t - len;
     }
@@ -159,7 +159,7 @@ export class Atlas {
     this.allianceNames = node('g', { class: 'alliance-names', 'pointer-events': 'none', 'aria-hidden': 'true' });
     this.connections = node('g', { 'pointer-events': 'none' }); this.routes = node('g', { 'pointer-events': 'none' });
     this.marches = node('g', { class: 'map-armies' }); this.seaFronts = node('g', { class: 'sea-fronts', 'aria-hidden': 'true' });
-    this.trails = node('g', { 'pointer-events': 'none' }); this.base.append(this.areaEffects, this.blocs, this.fronts, this.relationLines);
+    this.trails = node('g', { 'pointer-events': 'none' }); this.base.append(this.areaEffects, this.blocs, this.fronts, this.relationLines, this.terrain); // terrain reads above bloc glow
     this.lines.append(this.seaFronts, this.connections, this.routes, this.trails);
     this.leaders = node('g', { class: 'counter-leaders', 'pointer-events': 'none', 'aria-hidden': 'true' });
     const markers = node('g', { class: 'map-counters' });
