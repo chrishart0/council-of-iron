@@ -641,5 +641,22 @@
       ]
     }
   },
-  "v01": {}
+  "v01": {},
+  "logistics-1": {
+    "rules": {
+      "moveSpeedPercent": 120,
+      "internalSpeedPercent": 200,
+      "battleSlowdownPercent": 125,
+      "developmentCosts": [
+        0,
+        24,
+        48
+      ],
+      "developmentTicks": [
+        0,
+        120,
+        180
+      ]
+    }
+  }
 }

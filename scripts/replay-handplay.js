@@ -61,7 +61,7 @@ export async function replayHttp() {
   }
   try {
     for(const c of map.countries)profiles[c.id]=(await request('/api/players','POST',{name:`Single-controller ${c.id}`})).data;
-    const room=(await request('/api/games','POST',{name:'Recorded all-seat HTTP replay',preset:'standard'},profiles.britain.token)).data.id;
+    const room=(await request('/api/games','POST',{name:'Recorded all-seat HTTP replay',preset:'standard',ruleset:'classic'},profiles.britain.token)).data.id;
     for(const c of map.countries)tokens[c.id]=(await request(`/api/games/${room}/join`,'POST',{country:c.id,kind:'agent'},profiles[c.id].token)).data.token;
     assert.equal((await request(`/api/games/${room}/start`,'POST',{},tokens.britain)).status,200);
     const g=app.games.get(room);g.rules.warRequired=false;
