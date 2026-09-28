@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { createServer as createTlsServer } from 'node:https';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -54,6 +54,15 @@ const staticFiles = new Map([
   ['/icon-512.png', ['public/icon-512.png', 'image/png']],
   ['/apple-touch-icon.png', ['public/apple-touch-icon.png', 'image/png']],
 ]);
+// v0.9 UI concept prototypes (static, read-only): an allowlist built once at startup from public/concepts,
+// so request paths never touch the filesystem directly. Temporary until a direction is chosen.
+const conceptTypes = { html: 'text/html; charset=utf-8', css: 'text/css; charset=utf-8', js: 'text/javascript; charset=utf-8', json: 'application/json', svg: 'image/svg+xml', woff2: 'font/woff2', txt: 'text/plain; charset=utf-8', png: 'image/png' };
+if (existsSync(resolve(root, 'public/concepts'))) for (const entry of readdirSync(resolve(root, 'public/concepts'), { recursive: true, withFileTypes: true })) {
+  const type = entry.isFile() && conceptTypes[entry.name.split('.').pop()]; if (!type) continue;
+  const rel = resolve(entry.parentPath, entry.name).slice(resolve(root, 'public').length).split('\\').join('/');
+  staticFiles.set(rel, [`public${rel}`, type]);
+  if (rel === '/concepts/index.html') staticFiles.set('/concepts/', [`public${rel}`, type]);
+}
 async function body(req) {
   requireRule((req.headers['content-type'] || '').startsWith('application/json'), 'Use application/json.', 415);
   const chunks = []; let size = 0;
