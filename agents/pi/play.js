@@ -95,7 +95,7 @@ try {
   let credentials;
   if (config.provider !== 'openai-codex') {
     const modelsResponse = await fetch(`${endpoint}/models`, { signal: AbortSignal.timeout(5000) });
-    if (!modelsResponse.ok) throw new Error(`Qwen endpoint returned HTTP ${modelsResponse.status}`);
+    if (!modelsResponse.ok) throw new Error(`Model endpoint returned HTTP ${modelsResponse.status}`);
     const advertised = (await modelsResponse.json()).data?.map(model => model.id) || [];
     if (!advertised.includes(modelId)) throw new Error(`Model endpoint does not advertise ${modelId}; found ${advertised.join(', ')}`);
   } else {
