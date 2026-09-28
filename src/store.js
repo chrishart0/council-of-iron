@@ -46,14 +46,15 @@ export class Store {
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
-  standings(eligible = false, scenario = 'imperial-1910-v3') {
+  standings(eligible = false, scenarios = ['imperial-1910-v3']) {
+    const list = [scenarios].flat();
     return this.db.prepare(`WITH recent AS (
       SELECT *, ROW_NUMBER() OVER (PARTITION BY profile_id ORDER BY finished_at DESC,game_id) AS n
-      FROM results WHERE eligible=? AND scenario=? AND draw=0
+      FROM results WHERE eligible=? AND scenario IN (${list.map(() => '?').join(',')}) AND draw=0
         AND game_id IN (SELECT id FROM games WHERE json_extract(snapshot,'$.rules.economyShare')=0.6))
       SELECT p.id,p.name,AVG(r.prestige) AS prestige,COUNT(*) AS matches
       FROM recent r JOIN profiles p ON p.id=r.profile_id WHERE r.n<=20
-      GROUP BY p.id ORDER BY prestige DESC`).all(Number(eligible),scenario).map(p => ({ ...p, provisional: p.matches < 10 }));
+      GROUP BY p.id ORDER BY prestige DESC`).all(Number(eligible),...list).map(p => ({ ...p, provisional: p.matches < 10 }));
   }
   history(profileId) {
     return this.db.prepare('SELECT * FROM results WHERE profile_id=? ORDER BY finished_at DESC LIMIT 50').all(profileId);

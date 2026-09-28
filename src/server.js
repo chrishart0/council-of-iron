@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { Store } from './store.js';
-import { act, attackPlan, turnAroundPlan, createGame, join, observe, preview, start, tick, worldFeed, RuleError, requireRule, text } from './engine.js';
+import { act, attackPlan, rallyPlan, RULESETS, turnAroundPlan, createGame, join, observe, preview, start, tick, worldFeed, RuleError, requireRule, text } from './engine.js';
 import { buildReview, unavailableReview } from './review.js';
 import { replayReader } from '../public/replay-model.js';
 import { operationalInsights } from '../public/insights.js';
@@ -14,8 +14,12 @@ import { choose } from '../agents/policy.js';
 import { makeStt } from './stt.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-export const MAP = JSON.parse(readFileSync(resolve(root, 'public/imperial-map.json'), 'utf8'));
+import { CURRENT, MAPS, STANDING_SCENARIOS, mapFor } from './maps.js';
+/** The map new rooms use. Existing rooms resolve through mapFor(g) (their own scenario version). */
+export const MAP = CURRENT;
 const PRESETS = { standard: 1, quick: 6 };
+/** New rooms use logistics-1 unless the host asks for classic. Existing rooms keep stored rules. */
+export const DEFAULT_RULESET = 'logistics-1';
 export const ALLIANCE_CHAT_NOTICE = 'Alliance chat becomes public in the replay after the match ends.';
 const staticFiles = new Map([
   ['/', ['public/index.html', 'text/html; charset=utf-8']],
@@ -69,12 +73,14 @@ function json(res, status, data) { res.writeHead(status, { 'Content-Type': 'appl
 /** `clockScale` accelerates ALL game timing in local tests; no HTTP endpoint can advance time. */
 export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScale = 1,
   publicOrigin = process.env.PUBLIC_ORIGIN || '', league = process.env.LEAGUE_MODE === '1', automatic = true,
-  sttUrl = process.env.STT_URL || '', tls = null } = {}) {
+  sttUrl = process.env.STT_URL || '', tls = null, newRoomMap = CURRENT } = {}) {
+  // Tests replaying a match recorded on an older published map create rooms on that map.
+  if (MAPS.get(newRoomMap?.id) !== newRoomMap) throw new Error('newRoomMap must be a published map.');
   // PUBLIC_ORIGIN may list several comma-separated origins (e.g. LAN http plus an HTTPS name for phones).
   const publicOrigins = publicOrigin.split(',').map(o=>o.trim()).filter(Boolean);
   const stt = makeStt({ url: sttUrl });
   const store = new Store(dbPath), games = new Map(store.load()
-    .filter(g=>g.scenario===MAP.id && (g.rules?.economyShare===.6 || g.status==='finished' && g.afterAction))
+    .filter(g=>MAPS.has(g.scenario) && (g.rules?.economyShare===.6 || g.status==='finished' && g.afterAction))
     .map(g=>[g.id,g]));
   const fractions = new Map(), ipBudgets = new Map();
   let previous = performance.now();
@@ -82,7 +88,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
   function afterAction(g) {
     requireRule(g.status === 'finished' && g.outcome, 'After-action review is available only when the match is finished.', 409);
     if (!g.afterAction) {
-      try { g.afterAction = buildReview(g, MAP); }
+      try { g.afterAction = buildReview(g, mapFor(g)); }
       catch (error) {
         console.error('Review reconstruction withheld:', g.id, error.message);
         g.afterAction = unavailableReview(g, 'This match could not be reconstructed exactly. Final scores are intact; no approximate replay is shown.');
@@ -95,8 +101,8 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
   function runBots(g) {
     if (g.tick % 5 !== 0) return;
     for (const p of g.players.filter(p=>p.kind==='bot')) {
-      const action=choose(observe(g,p.id,g.sequence),MAP,p.id);
-      if (action) try { act(g,MAP,p.id,action,`bot-${g.tick}-${p.id}`); }
+      const action=choose(observe(g,p.id,g.sequence),mapFor(g),p.id);
+      if (action) try { act(g,mapFor(g),p.id,action,`bot-${g.tick}-${p.id}`); }
       catch (e) { if (!(e instanceof RuleError)) throw e; }
     }
   }
@@ -147,14 +153,14 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         const me=auth(); return json(res,200,{id:me.id,name:me.name,history:store.history(me.id)});
       }
       if(path==='/api/standings' && req.method==='GET') {
-        requireRule(!url.searchParams.has('scenario') || url.searchParams.get('scenario')===MAP.id,'Unknown scenario.');
-        const eligible=url.searchParams.get('eligible')==='true'; return json(res,200,{eligible,standings:store.standings(eligible,MAP.id)});
+        requireRule(!url.searchParams.has('scenario') || STANDING_SCENARIOS.includes(url.searchParams.get('scenario')),'Unknown scenario.');
+        const eligible=url.searchParams.get('eligible')==='true'; return json(res,200,{eligible,standings:store.standings(eligible,STANDING_SCENARIOS)});
       }
       if(path==='/api/games' && req.method==='GET') {
         const all=[...games.values()],active=all.filter(g=>g.status!=='finished').reverse();
         const listed=[...active,...all.filter(g=>g.status==='finished').reverse().slice(0,50-active.length)];
         return json(res,200,{games:listed.map(g=>({
-          id:g.id,name:g.name,status:g.status,tick:g.tick,speed:g.speed,
+          id:g.id,name:g.name,status:g.status,tick:g.tick,speed:g.speed,ruleset:g.rules?.ruleset || 'classic',
           you:identity && (!identity.gameId || identity.gameId===g.id) ? g.players.find(p=>p.profileId===identity.id)?.id || null : null,
           players:g.players.map(p=>({id:p.id,name:p.name,kind:p.kind})),eligible:g.eligible}))});
       }
@@ -162,9 +168,10 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         const me=auth(), data=await body(req);
         requireRule(Object.hasOwn(PRESETS,data.preset || 'standard'),'Unknown time preset.');
         requireRule([...games.values()].filter(g=>g.status!=='finished').length<32,'This prototype supports 32 active rooms.',429);
-        requireRule(data.scenario===undefined || data.scenario===MAP.id,'Unknown scenario.');
+        requireRule(data.scenario===undefined || data.scenario===newRoomMap.id,'Unknown scenario.');
+        requireRule(data.ruleset===undefined || typeof data.ruleset==='string' && Object.hasOwn(RULESETS,data.ruleset),'Unknown ruleset.');
         const g=createGame({id:randomUUID().slice(0,8),name:data.name || 'Council chamber',hostId:me.id,
-          speed:PRESETS[data.preset || 'standard'],eligible:league},MAP);
+          speed:PRESETS[data.preset || 'standard'],eligible:league,ruleset:data.ruleset || DEFAULT_RULESET},newRoomMap);
         // New rooms only (never inside createGame): alliance chat is published in the finished replay.
         g.rules.revealAllianceChatAfterMatch=true;
         games.set(g.id,g);save(g);return json(res,201,{id:g.id});
@@ -172,7 +179,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
       const match=path.match(/^\/api\/games\/([a-zA-Z0-9-]+)(?:\/(join|start|bots|actions|preview|plan|turn-around|map|review|replay|feed|stt))?$/);
       if(match) {
         const g=games.get(match[1]);requireRule(g,'Room not found.',404);
-        const endpoint=match[2], gameMap=MAP;
+        const endpoint=match[2], gameMap=mapFor(g);
         function seat() { const me=auth(g.id),p=g.players.find(p=>p.profileId===me.id);requireRule(p,'Join a country first.',403);return p; }
         function host() { const me=auth(g.id);requireRule(me.id===g.hostId,'Only the host can do that.',403); }
         if(!endpoint && req.method==='GET') {
@@ -209,7 +216,8 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         }
         if(endpoint==='plan' && req.method==='POST') {
           const p=seat(), data=await body(req);
-          return json(res,200,attackPlan(g,gameMap,p.id,data));
+          // Read-only: a rally plan (fastest friendly path + ETA) or a one-target attack plan.
+          return json(res,200,data.type==='rally'?rallyPlan(g,p.id,data):attackPlan(g,gameMap,p.id,data));
         }
         if(endpoint==='turn-around' && req.method==='GET') {
           // Read-only: what "Turn around" would do for one of your moving armies if sent now.

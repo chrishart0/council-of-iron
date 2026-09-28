@@ -146,7 +146,7 @@ def go_back(page):
     if page.locator('#menu-button').is_visible():menu(page);page.locator('#back').click()
     else:
         if page.locator('#replay-exit').is_visible():page.locator('#replay-exit').click()
-        page.locator('#aar-back').click()
+        page.locator('[data-home]:visible').first.click()  # the report's Back to rooms, or the lobby's back
 
 audit=[]
 def audit_zooms(page,room,label,views):

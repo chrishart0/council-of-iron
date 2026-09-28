@@ -151,16 +151,44 @@ test('stdio MCP negotiates, validates schemas, joins an agent, calls real HTTP, 
   ].map(x=>JSON.stringify(x)).join('\n')+'\n';
   const result=await subprocess('agents/mcp.js',[],env,input);assert.equal(result.code,0,result.stderr);
   const output=result.stdout.trim().split('\n').map(x=>JSON.parse(x));assert.equal(output.length,7);
-  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,32);
+  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,34);
   assert.ok(output[1].result.tools.some(t=>t.name==='turn_around')&&output[1].result.tools.some(t=>t.name==='preview_turn_around'));
   assert.equal(JSON.parse(output[2].result.content[0].text).country,'britain');
   assert.equal(JSON.parse(output[3].result.content[0].text).you,'britain');
   assert.equal(output[4].error.code,-32602);assert.equal(output[5].error.code,-32602);assert.deepEqual(output[6].result,{});
 });
 
+test('new rooms default to logistics-1; classic stays selectable; rally plans and orders go over HTTP',async t=>{
+  const f=await fixture(t,{disk:true}),host=await f.register('Logistics host'),agent=await f.register('Logistics agent');
+  assert.equal((await f.call('/api/games','POST',{name:'Bad',ruleset:'turbo'},host.token)).status,400);
+  const id=(await f.call('/api/games','POST',{name:'Logistics'},host.token)).data.id;
+  const classic=(await f.call('/api/games','POST',{name:'Old timings',ruleset:'classic'},host.token)).data.id;
+  const listed=(await f.call('/api/games')).data.games;
+  assert.equal(listed.find(g=>g.id===id).ruleset,'logistics-1');assert.equal(listed.find(g=>g.id===classic).ruleset,'classic');
+  assert.equal(f.app.games.get(classic).internalTravelTimes,undefined);
+  const usa=await f.seat(id,host,'usa'),germany=await f.seat(id,agent,'germany','agent');
+  await f.call(`/api/games/${id}/start`,'POST',{},usa.token);
+  const view=(await f.call(`/api/games/${id}`,'GET',undefined,usa.token)).data;
+  assert.equal(view.rules.ruleset,'logistics-1');assert.equal(view.internalTravelTimes['west-us']['central-us'],24);
+  assert.deepEqual(view.rallies,[]);
+  const rally={type:'rally',from:['central-us','east-us'],to:'west-us',keep:5};
+  const plan=await f.call(`/api/games/${id}/plan`,'POST',rally,usa.token);
+  assert.equal(plan.status,200,JSON.stringify(plan.data));assert.deepEqual(plan.data.sources.map(s=>s.path),[['west-us'],['central-us','west-us']]);
+  assert.equal(plan.data.sources[1].travel,24+25);
+  assert.equal((await f.call(`/api/games/${id}/plan`,'POST',{type:'rally',from:'alaska',to:'west-us'},usa.token)).status,409,'no friendly path');
+  assert.equal(f.app.games.get(id).orders.length,0,'a plan spends nothing');
+  assert.equal((await f.call(`/api/games/${id}/plan`,'POST',rally,germany.token)).status,403);
+  const set=await f.call(`/api/games/${id}/actions`,'POST',{opId:'rally-1',action:{type:'rally',from:'central-us',to:'west-us',keep:5}},usa.token);
+  assert.equal(set.status,200,JSON.stringify(set.data));
+  f.app.step(f.app.games.get(id),1);await f.restart();
+  const mine=(await f.call(`/api/games/${id}`,'GET',undefined,usa.token)).data.rallies;
+  assert.deepEqual(mine.map(x=>[x.from,x.to,x.keep]),[['central-us','west-us',5]]);
+  assert.deepEqual((await f.call(`/api/games/${id}`,'GET',undefined,germany.token)).data.rallies,[]);
+});
+
 test('industrial HTTP plans are private, atomic, synchronized, recallable and persistent',async t=>{
   const f=await fixture(t,{disk:true}),host=await f.register('Industrial human'),agent=await f.register('Industrial agent');
-  const id=(await f.call('/api/games','POST',{name:'Industry'},host.token)).data.id;
+  const id=(await f.call('/api/games','POST',{name:'Industry',ruleset:'classic'},host.token)).data.id;
   const usa=await f.seat(id,host,'usa'),germany=await f.seat(id,agent,'germany','agent');
   await f.call(`/api/games/${id}/start`,'POST',{},usa.token);
   const map=(await f.call(`/api/games/${id}/map`)).data;
@@ -173,7 +201,7 @@ test('industrial HTTP plans are private, atomic, synchronized, recallable and pe
   assert.equal(new Set(receipt.orders.map(o=>o.arrivesAt)).size,1);
   f.app.step(f.app.games.get(id),1);await f.restart();
   const restored=(await f.call(`/api/games/${id}`,'GET',undefined,usa.token)).data;
-  assert.equal(restored.scenario,'imperial-1910-v3');assert.ok(restored.armies.some(a=>a.groupId===receipt.groupId));
+  assert.equal(restored.scenario,'imperial-1910-v4');assert.ok(restored.armies.some(a=>a.groupId===receipt.groupId));
   const recall={opId:'return',action:{type:'recall',id:receipt.groupId}};
   assert.equal((await f.call(`/api/games/${id}/actions`,'POST',recall,usa.token)).status,200);
   f.app.step(f.app.games.get(id),10);
@@ -209,7 +237,7 @@ test('the active scenario contributes to standings and player history',async t=>
   const g=f.app.games.get(id);g.provinces.find(p=>p.id==='mexico').owner='usa';g.provinces.find(p=>p.id==='mexico').nextRecruit=20;f.app.step(g,1800);
   assert.equal((await f.call('/api/standings')).data.standings.length,2);
   assert.equal((await f.call('/api/standings?scenario=classic-64')).status,400);
-  assert.equal((await f.call('/api/me','GET',undefined,a.token)).data.history[0].scenario,'imperial-1910-v3');
+  assert.equal((await f.call('/api/me','GET',undefined,a.token)).data.history[0].scenario,'imperial-1910-v4');
 });
 
 

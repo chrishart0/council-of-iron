@@ -11,7 +11,7 @@ import { LeaderboardPanel } from './leaderboard-panel.js';
 import { ExpandableMap } from './expand.js';
 // Relations and alliance colours: the same DOM-free helpers the atlas and agent tools use.
 import { relationsOf, allianceColors, threatening } from './relations.js';
-import { turnAroundArrival } from './movement.js';
+import { turnAroundArrival, legTicks } from './movement.js';
 import { SoundBoard } from './sound.js';
 /* v0.9 — the War Room. One map, two nouns: a PROVINCE (troops) opens the order card; a COUNTRY (diplomacy)
  * opens the country card; your own standard opens your alliance card. Each card has one primary action.
@@ -28,9 +28,12 @@ const pastSides=new Set(); // coalitions this seat belonged to ("your alliance d
 let comms, herald, standings, expander;
 // Selection: one or more of your provinces (sources) and a target province; or a moving army.
 let sources=[], target=null, armyId=null;
+/** Rally pick mode: the next tapped province of yours becomes `rallyFrom`'s rally point. */
+let rallyFrom=null, rallyKeep=null;
 // The one context card: { kind: 'province' | 'army' | 'country' | 'alliance', id }.
 let card=null, cardSize='peek', cardOpener=null, proposing=false;
 let fraction=.5;try{const f=Number(localStorage.getItem('coi.fraction'));if(f>0 && f<=1)fraction=f;}catch{}
+const rallyPaused=new Map(); // rally source → pause reason already announced
 const turnedBack=new Map(); // army id → its "turned back" notice key, withdrawn once the troops are home or moving again
 const compact=matchMedia('(max-width:1023px), (max-height:499px)');
 const country = id => map.countries.find(c=>c.id===id);
@@ -43,6 +46,8 @@ const playerOf = id => state?.players.find(p=>p.id===id);
 const seatType = p => !p ? 'Open' : p.kind==='bot' || p.model?.startsWith('heuristic-') ? 'Bot' : p.kind==='agent' ? 'AI' : 'Human';
 const atWar = (a,b) => Boolean(a && b && a!==b && (state?.wars || []).includes([a,b].sort().join(':')));
 const sameSide = (a,b) => Boolean(a && b && playerOf(a)?.side===playerOf(b)?.side);
+/** Ticks the engine charges for your march on one link: internal (both ends yours/allied) links are faster in logistics rooms. */
+const travelOf = (from,to) => legTicks(state,from,to,sameSide(prov(from)?.owner,state.you) && sameSide(prov(to)?.owner,state.you));
 const mayEnter = (a,b) => !b || sameSide(a,b) || !state.rules.warRequired || atWar(a,b);
 const seated = () => Boolean(state?.you) && !spectating;
 const active = () => seated() && state.status==='running' && myPlayer()?.eliminatedAt===null;
@@ -131,6 +136,11 @@ function renderComms(live){
     comms.notify({key:`n-${r.key}`,standard:state.you,sticky:true,title:`Your ${item.amount} troops turned back${item.province?` from ${place(item.province).name}`:''}`,detail:`${why[0].toUpperCase()}${why.slice(1)}.`,buttons});
   }
   for(const [army,key] of turnedBack)if(!state.armies.some(a=>a.id===army && a.returning)){comms.withdraw(key);turnedBack.delete(army);}
+  // A rally point of yours that pauses (under attack, rally province lost, no path) is a PERSONAL notice (owner-only data).
+  const rallies=new Map((state.rallies || []).map(r=>[r.from,r]));
+  if(live && seated())for(const [from,r] of rallies)if(r.status==='paused' && rallyPaused.get(from)!==r.reason)
+    comms.notify({key:`rally-${from}-${r.reason}-${state.tick}`,standard:state.you,title:`Rally from ${place(from).name} paused`,detail:`${(RALLY_PAUSE[r.reason] || 'paused').replace(/^paused(: |\s)/,'')}.`.replace(/^./,c=>c.toUpperCase()),view:{province:from}});
+  rallyPaused.clear();for(const [from,r] of rallies)if(r.status==='paused')rallyPaused.set(from,r.reason);
   battleNotices(); // after the inbox update, so a battle result is not replaced by the headline of the same battle
 }
 /** Completed battles of this seat (Secured, Lost, Line held): a PERSONAL notice, never replayed on reconnect. */
@@ -171,7 +181,10 @@ async function rooms(){
   const standingsData=await request('/api/standings');
   $('standings').innerHTML=standingsData.standings.length?standingsData.standings.map(p=>`<div class="standing-row"><span>${esc(p.name)} <small class="muted">${p.matches} ${p.matches===1?'match':'matches'}</small></span><b>${signed(p.prestige)}</b></div>`).join(''):'<p class="empty-note">No results yet. Finish a match to earn Prestige.</p>';
 }
-function clearSelection(){sources=[];target=null;armyId=null;proposing=false;}
+function clearSelection(){sources=[];target=null;armyId=null;proposing=false;rallyFrom=null;}
+const rallyOf=id=>(state?.rallies || []).find(r=>r.from===id);
+const RALLY_PAUSE={under_attack:'paused while it is under attack',destination_lost:'paused: the rally province is not yours',no_path:'paused: no path through your or allied land'};
+function rallyText(r){return `Rally → ${place(r.to).name}${r.keep===null?' (new recruits)':` (keeps ${r.keep})`}${r.status==='paused'?` · ${RALLY_PAUSE[r.reason] || 'paused'}`:''}`;}
 async function openRoom(id,watch=false){
   generation++;pollController?.abort();review?.destroy();review=null;document.body.classList.remove('reviewing');
   closeCard();closeMenu();pastSides.clear();turnedBack.clear();spectating=watch;messageCatchupComplete=false;herald.reset();comms.reset();comms.room=null;
@@ -233,7 +246,7 @@ function initMap(){
   atlas=new Atlas(replacement,map,selectProvince,{legend:{placement:'bottom-left',container:$('map-key'),collapsed:false},
     drag:{start:(id,{counter})=>active() && prov(id)?.owner===state.you && (counter || sources.includes(id)) && freeTroops(id)>0,
       begin:from=>{sources=[from];target=null;armyId=null;proposing=false;paintMap();},
-      label:(from,to)=>`${amountFor(from)} · ${state.travelTimes?.[from]?.[to] ?? '?'}s`,
+      label:(from,to)=>`${amountFor(from)} · ${travelOf(from,to) ?? '?'}s`,
       end:(from,to)=>{sources=[from];target=to;armyId=null;openCard('province',to || from);paintMap();revealUnderCard(to || from);}},
     onArmy:id=>{const a=state?.armies.find(a=>a.id===id);if(!a)return false;armyId=id;sources=[];target=null;openCard('army',id);paintMap();return true;}});
   $('landing-map').innerHTML=map.provinces.map(p=>`<path d="${p.path}"/>`).join('');
@@ -283,6 +296,12 @@ const amountFor=id=>{const free=freeTroops(id);return free>0?Math.max(1,Math.flo
 function selectProvince(id,modifiers={}){
   if(!state)return;
   const p=prov(id),mine=active() && p.owner===state.you;
+  if(rallyFrom){ // second tap of "Rally troops to…": the rally province
+    const from=rallyFrom,keep=rallyKeep;rallyFrom=null;
+    if(id===from || !mine){toast(id===from?'Rally cancelled.':'Choose one of your own provinces as the rally point.',id!==from);renderCard();paintMap();return;}
+    command({type:'rally',from,to:id,...(keep?{keep}:{})}).then(r=>{if(r)toast(`Rally set: ${keep?`troops above ${keep}`:'new recruits'} in ${place(from).name} march to ${place(id).name} (${r.sources[0].travel}s).`);}).catch(e=>toast(e.message,true));
+    return;
+  }
   armyId=null;proposing=false;
   if(modifiers.shiftKey && mine){sources=[id];target=null;}
   else if(target===id || (!target && sources.length===1 && sources[0]===id)){closeCard({restoreFocus:false});return;}
@@ -313,7 +332,7 @@ function warPlan(owner){
 /** Everything the order card shows for the current sources → target, and its one primary action. */
 function orderPlan(){
   const tp=prov(target),owner=tp?.owner || null,name=place(target).name,who=owner?faction(owner).short:null;
-  const parts=sources.map(from=>({from,free:freeTroops(from),amount:amountFor(from),travel:state.travelTimes?.[from]?.[target] ?? 0}));
+  const parts=sources.map(from=>({from,free:freeTroops(from),amount:amountFor(from),travel:travelOf(from,target) ?? 0}));
   const total=parts.reduce((n,s)=>n+s.amount,0),travel=Math.max(0,...parts.map(s=>s.travel)),war=warPlan(owner);
   const relation=!owner?'unclaimed':owner===state.you?'own':sameSide(state.you,owner)?'ally':war?'neutral':state.rules.warRequired?'enemy':'open';
   const words={unclaimed:['UNCLAIMED','No declaration needed.'],own:['YOUR PROVINCE','Move troops within your land.'],ally:['ALLIED',`Troops you send become ${who}’s.`],
@@ -489,6 +508,9 @@ function provinceCard(){
     actions.push({label:p.developing?`Building level ${p.developing.level} · ${Math.max(0,p.developing.completesAt-state.tick)}s`:queued?'Construction queued':`Develop · ${cost} troops`,act:'develop',arg:id,disabled:Boolean(p.developing) || queued || freeTroops(id)<cost || pendingCommand || !state.commandBudget?.remaining,id:'develop-province'});
   }
   if(mine && active()){
+    const rally=rallyOf(id);
+    actions.push({label:rallyFrom===id?'Tap your rally province…':rally?`${rallyText(rally)} · change`:'Rally troops to…',act:'rally-pick',arg:id,id:'rally-province',disabled:pendingCommand || !state.commandBudget?.remaining});
+    if(rally)actions.push({label:'Clear rally',act:'rally-clear',arg:id,id:'rally-clear',disabled:pendingCommand || !state.commandBudget?.remaining});
     // Troops that left (or are about to leave) this province: recall them from here too.
     const outgoing=[...(state.commandBudget?.reserved || []).filter(o=>o.type==='move' && o.from===id).map(o=>({id:o.id,amount:o.amount,to:o.to,queued:true})),
       ...state.armies.filter(a=>a.country===state.you && a.from===id && !a.returning && !(state.commandBudget?.reserved || []).some(o=>o.type==='recall' && [a.id,a.groupId].includes(o.target))).map(a=>({id:a.id,amount:a.amount,to:a.to}))];
@@ -522,6 +544,8 @@ function moreProvince(id,order){
   }else if(mine){
     const reserved=(state.commandBudget?.reserved || []).filter(o=>o.from===id).reduce((n,o)=>n+o.amount,0);
     html+=`<div class="province-readout"><div><span>FREE</span><strong>${freeTroops(id)}</strong></div><div><span>GARRISON</span><strong>${p.troops}</strong></div><div><span>RECRUIT IN</span><strong>${p.nextRecruit===null?'—':Math.max(0,p.nextRecruit-state.tick)+'s'}</strong></div></div>${reserved?`<p class="small muted">${reserved} troops reserved for queued orders.</p>`:''}`;
+    const rally=rallyOf(id);
+    html+=`<p class="small" id="rally-status">${rally?esc(rallyText(rally)):'No rally point. “Rally troops to…” then tap one of your provinces: troops march there along your own or allied land at each recruitment.'}</p><label class="small">Rally keeps at least <input id="rally-keep" type="number" min="1" max="9999" inputmode="numeric" placeholder="blank: new recruits only"> troops here</label>`;
     if(p.route)html+=`<p class="small">Recruitment arrow: new recruits → ${esc(place(p.route).name)}. <button data-act="route-clear" data-arg="${esc(id)}" class="quiet">Clear</button></p>`;
     const f=developmentForecast(state,id);
     if(f)html+=`<p id="development-payback" class="development-payback">${f.alreadyInvested?'Investment already spent. ':''}Develop to level ${f.level} for ${f.cost} troops. Earliest payback ${time(f.paybackAt)} game time; up to ${f.additionalRecruits} extra recruits by 30:00 (net ${signed(f.netBeforeDeadline)}). ${f.paysBackBeforeDeadline?'':'This will not repay before the deadline. '}${esc(f.assumption)}</p>`;
@@ -785,6 +809,12 @@ async function perform(act,arg,b){
     case 'turn-around':{const a=state.armies.find(a=>a.id===arg),r=await command({type:'turn_around',armyId:arg});
       if(r)toast(r.mode==='recall'?'Recall queued. The troops turn around at their actual position.':`Turning around: ${a?.amount ?? ''} troops head back to ${place(r.to).name}, arriving ${time(r.arrivesAt)}.`.replace('  ',' '));return;}
     case 'route':{const r=await command({type:'route',from:sources[0],to:arg || null});if(r)toast(arg?'Recruitment arrow queued.':'Arrow removal queued.');return;}
+    case 'rally-pick':{
+      if(rallyFrom===arg){rallyFrom=null;renderCard();return;}
+      const keep=Number($('rally-keep')?.value);rallyKeep=Number.isSafeInteger(keep) && keep>=1?keep:null;
+      rallyFrom=arg;toast(`Tap one of your provinces: ${rallyKeep?`troops above ${rallyKeep}`:'new recruits'} in ${place(arg).name} will march there.`);renderCard();paintMap();return;
+    }
+    case 'rally-clear':{const r=await command({type:'rally',from:arg,to:null});if(r)toast('Rally point cleared next tick.');return;}
     case 'route-clear':{const r=await command({type:'route',from:arg,to:null});if(r)toast('Arrow removal queued.');return;}
     case 'draft':{sources=[arg];target=b.dataset.to;fraction=1;openCard('province',target);paintMap();toast('Transfer drafted; review the garrison before sending.');return;}
     case 'compose':openMessages(card?.kind==='country'?`dm:${card.id}`:'alliance');return;
@@ -809,7 +839,7 @@ async function perform(act,arg,b){
 }
 
 /* ── Wiring ── */
-$('create-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('display-name').value);const g=await request('/api/games','POST',{name:$('room-name').value,preset:$('preset').value});await openRoom(g.id);}));
+$('create-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('display-name').value);const g=await request('/api/games','POST',{name:$('room-name').value,preset:$('preset').value,ruleset:$('ruleset').value});await openRoom(g.id);}));
 $('join-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('join-name').value);await request(`/api/games/${matchId}/join`,'POST',{country:$('country-choice').value,kind:'human'});await poll();toast('Your seat is reserved.');}));
 $('fill-bots').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/bots`,'POST',{});await poll();}));
 $('start-match').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/start`,'POST',{});await poll();toast('The council is in session.');}));
@@ -906,6 +936,7 @@ document.addEventListener('click',safely(async event=>{
   if(b.id==='journal-close'){toggleJournal(false);$('menu-button').focus();}
   if(b.dataset.homeTab){for(const t of document.querySelectorAll('[data-home-tab]'))t.setAttribute('aria-selected',String(t===b));$('rooms').hidden=b.dataset.homeTab!=='rooms';$('standings').hidden=b.dataset.homeTab!=='standings';}
   if(b.dataset.preset){$('preset').value=b.dataset.preset;for(const t of document.querySelectorAll('[data-preset]'))t.setAttribute('aria-checked',String(t===b));}
+  if(b.dataset.ruleset){$('ruleset').value=b.dataset.ruleset;for(const t of document.querySelectorAll('[data-ruleset]'))t.setAttribute('aria-checked',String(t===b));}
   if(b.dataset.countrySeat){$('country-choice').value=b.dataset.countrySeat;if(state)renderLobby();atlas.home(b.dataset.countrySeat);}
   if(b.dataset.room)await openRoom(b.dataset.room,b.dataset.spectate==='true');
   if(b.dataset.home)await home();

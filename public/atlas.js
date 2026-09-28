@@ -679,6 +679,9 @@ export class Atlas {
     for (const id of neighbors) this.connections.append(node('path', { d: this.path(source, id), class: id === destination ? 'target-connection' : 'adjacent-connection', ...(id === destination ? { 'marker-end': `url(#${this.prefix}march-head)` } : {}) }));
     this.routes.replaceChildren();
     for (const p of state.provinces) if (p.route && (p.owner === state.you || p.id === source)) this.routes.append(node('path', { d: this.path(p.id, p.route), class: 'recruit-connection', 'marker-end': `url(#${this.prefix}march-head)` }));
+    // Your rally points (private to you): a dashed arrow in your colour from source to rally province.
+    for (const r of state.rallies || []) this.routes.append(node('path', { d: this.path(r.from, r.to), class: 'rally-halo' }), node('path', { d: this.path(r.from, r.to), stroke: this.countries.get(r.country)?.color || NEUTRAL,
+      class: `rally-connection${r.status === 'paused' ? ' paused' : ''}`, 'data-rally': r.from, 'marker-end': `url(#${this.prefix}march-head)` }));
     this.trails.replaceChildren();
     for (const a of state.armies) if (a.amount >= 5 && !a.engaged && (a.country === state.you || a.to === destination || a.from === source)) {
       this.trails.append(node('path', { d: this.pointPath(a.startPoint || this.places.get(a.from), this.places.get(a.to)), class: `army-trail${a.returning ? ' returning' : ''}` }));

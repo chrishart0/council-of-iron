@@ -37,6 +37,19 @@ for (const [from,to] of fixture.seaConnections || []) {
   if (!a.neighbors.includes(to)) {a.neighbors.push(to);b.neighbors.push(from);map.edges.push({from,to,sea:true});}
 }
 for (const p of map.provinces) p.neighbors.sort();
+// Rules candidates (e.g. logistics-1) change only timing/cost fields for this run, never the published map.
+if (fixture.rules) map.rules = { ...map.rules, ...fixture.rules };
+const seaLinks = new Set(map.edges.filter(e => e.sea).flatMap(e => [`${e.from}|${e.to}`, `${e.to}|${e.from}`]));
+const placeOf = new Map(map.provinces.map(p => [p.id, p]));
+/** Coarse theatre of a province from its map position (for travel-time reporting only). */
+function region(id) {
+  const p = placeOf.get(id), lon = p.lon ?? (p.x - 10) / 3.5 - 180, lat = p.lat ?? 83 - (p.y - 10) / 4.6;
+  if (lon < -30) return 'americas';
+  if (lat > 36 && lon < 45) return 'europe';
+  if (lon < 60) return 'africa-mideast';
+  return 'asia-pacific';
+}
+const IDLE_AFTER = 120, SAMPLE_EVERY = 30;
 const out = option('--out', 'artifacts/tournament.json'), results = [], began = performance.now();
 const total = g => g.provinces.reduce((n,p) => n+p.troops,0) + g.armies.reduce((n,a) => n+a.amount,0);
 function invariant(condition, reason, g) { if (!condition) throw new Error(`Seed ${g.name}, tick ${g.tick}: ${reason}`); }
@@ -59,6 +72,9 @@ function run(seed) {
   let developments = 0, recalls = 0, synchronized = 0;
   let firstBattle = null, firstElimination = null, alliances = 0, departures = 0;
   const checkpoints = {};
+  // Logistics metrics: leg durations by link class/theatre/country, idle surplus, battle lengths, industry.
+  const legs = [], lastDeparture = new Map(), battleDurations = [], seenLegs = new Set();
+  let idleSamples = 0, idleShare = 0, interiorIdleShare = 0, firstLevel2 = null, firstLevel3 = null;
   const command = (id, action) => {
     try { act(g, map, id, action, `s-${++serial}`); if (['move','attack'].includes(action.type)) moves++; if (action.type==='develop') developments++; if (action.type==='recall') recalls++; if(action.type==='attack'&&action.sources.length>1)synchronized++; }
     catch (e) { if (!(e instanceof RuleError)) throw e; rejected++; }
@@ -94,6 +110,24 @@ function run(seed) {
       if (e.type === 'eliminated' && firstElimination === null) firstElimination = g.tick;
       if (e.type === 'alliance_activated') alliances++;
       if (e.type === 'departed') departures++;
+      if (e.type === 'battle' && Number.isSafeInteger(e.duration)) battleDurations.push(e.duration);
+      if (e.type === 'development_completed' && e.level === 2 && firstLevel2 === null) firstLevel2 = g.tick;
+      if (e.type === 'development_completed' && e.level === 3 && firstLevel3 === null) firstLevel3 = g.tick;
+    }
+    const sideOf = new Map(g.players.map(p => [p.id, p.side])), owner = new Map(g.provinces.map(p => [p.id, p.owner]));
+    const friendly = (country, id) => owner.get(id) && sideOf.get(owner.get(id)) === sideOf.get(country);
+    for (const a of g.armies) if (a.departedAt === g.tick && !a.returning && !seenLegs.has(`${a.id}:${a.departedAt}`)) {
+      seenLegs.add(`${a.id}:${a.departedAt}`); lastDeparture.set(a.from, g.tick);
+      const kind = seaLinks.has(`${a.from}|${a.to}`) ? 'sea' : friendly(a.country, a.from) && friendly(a.country, a.to) ? 'internal' : 'foreign';
+      legs.push({ country: a.country, kind, region: region(a.from), ticks: a.arrivesAt - a.departedAt });
+    }
+    if (g.tick % SAMPLE_EVERY === 0) {
+      const all = total(g); let idle = 0, interior = 0;
+      for (const p of g.provinces) if (p.owner && g.tick - (lastDeparture.get(p.id) ?? 0) > IDLE_AFTER) {
+        idle += Math.max(0, p.troops - 1);
+        if (placeOf.get(p.id).neighbors.every(id => friendly(p.owner, id))) interior += Math.max(0, p.troops - 1);
+      }
+      if (all) { idleSamples++; idleShare += idle / all; interiorIdleShare += interior / all; }
     }
     const born=g.economy.recruited-oldEconomy.recruited,lost=(g.economy.casualties||0)-(oldEconomy.casualties||0);
     const interned=events.filter(e=>e.type==='army_interned').reduce((n,e)=>n+e.amount,0);
@@ -113,13 +147,35 @@ function run(seed) {
     prestige:Object.fromEntries(outcome.scores.map(s=>[s.country,s.prestige])),
     eliminatedAt:Object.fromEntries(g.players.map(p=>[p.id,p.eliminatedAt])),
     styles:Object.fromEntries(g.players.map((p,i)=>[p.id,STYLES[(i+seed)%STYLES.length].name])),
+    legs,battleDurations,unresolvedBattles:g.battles.length,idleShare:idleSamples?idleShare/idleSamples:0,
+    interiorIdleShare:idleSamples?interiorIdleShare/idleSamples:0,firstLevel2,firstLevel3,
+    finalDevelopment:(()=>{const owned=g.provinces.filter(p=>p.owner);return owned.reduce((n,p)=>n+p.development,0)/Math.max(1,owned.length);})(),
     cadence:Object.fromEntries(cadence),developments,recalls,synchronized,moves,battles,casualties,recruited,rejected,firstBattle,firstElimination,alliances,departures,checkpoints};
 }
 for(let n=0;n<rounds;n++) {
   results.push(run(seedStart+n));
   if((n+1)%8===0) console.error(`${mode}: ${n+1}/${rounds} matches; ${((performance.now()-began)/1000).toFixed(1)}s`);
 }
-const mean = values => values.reduce((a,b)=>a+b,0)/values.length;
+const mean = values => values.length ? values.reduce((a,b)=>a+b,0)/values.length : null;
+const median = values => { if (!values.length) return null; const v=[...values].sort((a,b)=>a-b), m=v.length>>1; return v.length%2 ? v[m] : (v[m-1]+v[m])/2; };
+const allLegs = results.flatMap(r => r.legs), allBattles = results.flatMap(r => r.battleDurations);
+const legMean = filter => { const v = allLegs.filter(filter).map(l => l.ticks); return v.length ? { mean: +mean(v).toFixed(1), median: median(v), count: v.length } : null; };
+const logistics = {
+  decisive: results.filter(r => r.reason === 'domination').length,
+  deadlineStalemates: results.filter(r => r.reason === 'deadline' && r.draw).length,
+  deadlineWins: results.filter(r => r.reason === 'deadline' && !r.draw).length,
+  medianDuration: median(results.map(r => r.tick)),
+  battleDuration: { mean: mean(allBattles), median: median(allBattles), p90: [...allBattles].sort((a,b)=>a-b)[Math.floor(allBattles.length*.9)] ?? null,
+    longOver120: allBattles.filter(d => d > 120).length / Math.max(1, allBattles.length), unresolvedAtEnd: mean(results.map(r => r.unresolvedBattles)) },
+  idleShare: mean(results.map(r => r.idleShare)), interiorIdleShare: mean(results.map(r => r.interiorIdleShare)),
+  legTicksByKind: Object.fromEntries(['internal', 'foreign', 'sea'].map(k => [k, legMean(l => l.kind === k)])),
+  legTicksByRegion: Object.fromEntries(['americas', 'europe', 'africa-mideast', 'asia-pacific'].map(k => [k, legMean(l => l.region === k)])),
+  legTicksByCountry: Object.fromEntries(map.countries.map(c => [c.id, legMean(l => l.country === c.id)])),
+  firstLevel2: mean(results.filter(r => r.firstLevel2 !== null).map(r => r.firstLevel2)),
+  firstLevel3: mean(results.filter(r => r.firstLevel3 !== null).map(r => r.firstLevel3)),
+  matchesWithLevel3: results.filter(r => r.firstLevel3 !== null).length,
+  finalDevelopment: mean(results.map(r => r.finalDevelopment)) };
+for (const r of results) delete r.legs;
 const summary = {rounds,mode,variant,policy,seedStart,seedEnd:seedStart+rounds-1,
   mapSha256:createHash('sha256').update(mapBytes).digest('hex'), engineSha256:createHash('sha256').update(readFileSync(enginePath)).digest('hex'),
   draws:results.filter(r=>r.draw).length,meanDuration:mean(results.map(r=>r.tick)),meanFirstBattle:mean(results.filter(r=>r.firstBattle!==null).map(r=>r.firstBattle)),
@@ -129,5 +185,5 @@ const summary = {rounds,mode,variant,policy,seedStart,seedEnd:seedStart+rounds-1
   eliminatedByMinute5:Object.fromEntries(map.countries.map(c=>[c.id,results.filter(r=>r.eliminatedAt[c.id]!==null && r.eliminatedAt[c.id]<=300).length])),
   countryWins:Object.fromEntries(map.countries.map(c=>[c.id,results.filter(r=>r.winningCountries.includes(c.id)).length])),
   averageLand:Object.fromEntries(map.countries.map(c=>[c.id,mean(results.map(r=>r.land[c.id]))])),
-  invariantFailures:0,elapsedSeconds:(performance.now()-began)/1000};
+  logistics,invariantFailures:0,elapsedSeconds:(performance.now()-began)/1000};
 mkdirSync(dirname(out),{recursive:true});writeFileSync(out,JSON.stringify({summary,results},null,2)+'\n');console.log(JSON.stringify(summary,null,2));

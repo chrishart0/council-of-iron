@@ -26,6 +26,7 @@
 <label class="field">Your name<span class="slot"><input id="display-name" name="name" maxlength="40" placeholder="e.g. Chris" autocomplete="nickname" required></span></label>
 <label class="field">Room name<span class="slot"><input id="room-name" maxlength="80" value="The evening council" required></span></label>
 <div class="field"><span id="pace-label">Pace</span><div class="seg" role="radiogroup" aria-labelledby="pace-label"><button type="button" role="radio" aria-checked="true" data-preset="standard" data-sfx="press">Standard · 30 min</button><button type="button" role="radio" aria-checked="false" data-preset="quick" data-sfx="press">Quick · 5 min</button></div><input type="hidden" id="preset" value="standard"></div>
+<div class="field"><span id="rules-label">Rules</span><div class="seg" role="radiogroup" aria-labelledby="rules-label"><button type="button" role="radio" aria-checked="true" data-ruleset="logistics-1" data-sfx="press" title="Faster marches, twice as fast inside your lines, slower battles, costlier industry">Logistics</button><button type="button" role="radio" aria-checked="false" data-ruleset="classic" data-sfx="press" title="The original timings">Classic</button></div><input type="hidden" id="ruleset" value="logistics-1"></div>
 </div>
 <footer class="card-foot"><button class="btn btn-primary wide" type="submit" data-sfx="confirm">Create a room</button><p class="foot-note">Invite by link, attach an agent, or fill seats with bots.</p></footer>
 </form>
