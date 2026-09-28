@@ -1,6 +1,6 @@
 # Hands-on eight-seat playtest — 27 September 2026
 
-> **Historical record, earlier rules.** This match was played with recruitment arrows, coalition war votes, a command budget and Prestige scoring, none of which exist now. Its findings #1 (coordinated arrivals and recalls earn their complexity) and #2 (recruitment arrows are a trap) motivated the single `march` order and rally-only reinforcement in the [simplification pass](SIMPLIFY-PLAN.md). Replayed under today's rules the same decisions end at tick 553, not 630.
+> **Historical record, earlier rules.** This match was played with recruitment arrows, coalition war votes, a command budget and Prestige scoring, none of which exist now. Its findings #1 (coordinated arrivals and recalls earn their complexity) and #2 (recruitment arrows are a trap) motivated the single `march` order and rally-only reinforcement in the [simplification pass](SIMPLIFY-PLAN.md). Replayed under today's rules on the v6 board (merged province ids mapped by the replay adapter), the same decisions reach the 1800-tick deadline, where the same Atlantic Accord wins on industry.
 
 **One complete game, controlled by one ChatGPT assistant across all eight countries.** This is not a subagent tournament, live model comparison, or independent human usability test. Production base: `e9d8d768d27e04b6555aeb5c772e80f12d9e4512`, industrial scenario `imperial-1910-v3`. No production rules, starting assets, or balance settings were changed for this test.
 
