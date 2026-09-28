@@ -168,7 +168,7 @@ Land links are exactly the pairs that share a border arc. Every other link is in
   - Timor (East Indies–Australasia)
   - Hawaii–Pacific States, Hawaii–Japan, Hawaii–Philippines
 
-v5's direct Pacific States–Japan and Pacific States–Philippines lanes are gone. **Hawaii is now the only mid-Pacific crossing** (the Bering Strait remains in the north), a real stepping stone that the USA and Japan both want. At the end of the 256 diplomacy matches the USA held it in 153, Japan in 55 and Qing in 39. The transatlantic Atlantic States–Great Britain lane is gone too. The Atlantic crossings are the northern Canada–Ireland lane and the southern Brazil–West Africa narrows, so Britain and the USA meet in Canada rather than across open sea.
+v5's direct Pacific States–Japan and Pacific States–Philippines lanes are gone. **Hawaii is now the only mid-Pacific crossing** (the Bering Strait remains in the north), a real stepping stone that the USA and Japan both want. At the end of the 256 final diplomacy matches the USA held it in 160, Qing in 43 and Japan in 38. The transatlantic Atlantic States–Great Britain lane is gone too. The Atlantic crossings are the northern Canada–Ireland lane and the southern Brazil–West Africa narrows, so Britain and the USA meet in Canada rather than across open sea.
 
 ### Impassable terrain (user request: "use mountains/deserts … to bottleneck gameplay")
 
