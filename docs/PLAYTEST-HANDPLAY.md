@@ -1,5 +1,7 @@
 # Hands-on eight-seat playtest — 27 September 2026
 
+> **Historical record, earlier rules.** This match was played with recruitment arrows, coalition war votes, a command budget and Prestige scoring, none of which exist now. Its findings #1 (coordinated arrivals and recalls earn their complexity) and #2 (recruitment arrows are a trap) motivated the single `march` order and rally-only reinforcement in the [simplification pass](SIMPLIFY-PLAN.md). Replayed under today's rules the same decisions end at tick 553, not 630.
+
 **One complete game, controlled by one ChatGPT assistant across all eight countries.** This is not a subagent tournament, live model comparison, or independent human usability test. Production base: `e9d8d768d27e04b6555aeb5c772e80f12d9e4512`, industrial scenario `imperial-1910-v3`. No production rules, starting assets, or balance settings were changed for this test.
 
 ## Method
@@ -98,6 +100,8 @@ npm test
 node scripts/replay-handplay.js
 node scripts/replay-handplay.js --http
 ```
+
+The runner now replays the recorded decisions under the current rules through an adapter (war declarations before marches, rejected orders skipped and counted), so its output no longer matches the tick-630 result described above.
 
 The gzip fixture at `tests/fixtures/handplay-20260927.json.gz` contains every accepted command, the rejected inputs, clock advances and expected final state. The replay runner does not contain a decision policy. Read the fixture with `gzip -dc tests/fixtures/handplay-20260927.json.gz` or Node's built-in zlib. Messages are synthetic dialogue authored for this test, not real participants' private communications. No credential or database is included.
 

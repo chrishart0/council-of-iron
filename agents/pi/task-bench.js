@@ -18,7 +18,7 @@ export function summarizeTaskRun(raw, modelGroup) {
   const completed = (raw.events || []).filter(event => event.type === 'item.completed' &&
     ['mcp_tool_call', 'command_execution'].includes(event.itemType));
   const usedCouncilMcp = completed.some(event => event.itemType === 'mcp_tool_call' &&
-    ['situation', 'strategic_options', 'move', 'declare_war', 'observe', 'map'].some(name =>
+    ['board', 'news', 'preview', 'march', 'declare_war', 'observe', 'map'].some(name =>
       event.name === name || event.name?.endsWith(`__${name}`)));
   const usedShell = completed.some(event => event.itemType === 'command_execution');
   const calls = client === 'Pi' ? raw.toolCalls || [] : completed;

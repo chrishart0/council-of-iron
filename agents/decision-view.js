@@ -1,73 +1,54 @@
 import { boardView } from './board.js';
-import { strategicOptions } from './strategic-options.js';
 
 const outcomeTypes = new Set([
-  'order_executed', 'order_failed', 'army_departed', 'army_recalled',
+  'order_executed', 'order_failed', 'army_departed', 'army_recalled', 'army_turned_around',
   'battle', 'battle_started', 'development_started', 'development_completed',
-  'development_cancelled', 'industry_damaged', 'war_declared',
-  'peace_accepted', 'alliance_activated', 'departed', 'eliminated',
-  'dominance', 'dominance_broken', 'finished',
+  'development_cancelled', 'war_declared', 'peace_accepted', 'alliance_activated',
+  'departed', 'eliminated', 'dominance', 'dominance_broken', 'finished',
 ]);
 
 /** Current recipient-filtered state plus feasible choices and observed results. */
 export function decisionView(observation, map) {
   const board = boardView(observation, map);
-  const options = strategicOptions(observation, map);
-  const side = observation.leaderboard?.alliances?.find(entry => entry.id === board.side);
-  const me = observation.leaderboard?.players?.find(entry => entry.country === board.you);
-  const countryIndustry = observation.provinces
-    .filter(province => province.owner === board.you)
-    .reduce((total, province) => total + province.development, 0);
-  const targets = options.nearbyTargets.map(target => {
-    const sources = target.adjacentSources.filter(source => source.availableNow > 0);
-    return {
-      id: target.province, owner: target.owner, industry: target.industry,
-      defenders: target.currentGarrison, requiresWar: target.requiresWar,
-      gapReduction: target.gapReduction,
-      earliestArrival: target.earliestArrival,
-      sources: sources.map(source => ({ id: source.from, available: source.availableNow,
-        travelTicks: source.travelTicks })),
-      availableTotal: sources.reduce((sum, source) => sum + source.availableNow, 0),
-    };
-  }).filter(target => target.sources.length);
+  const industry = new Map(observation.provinces.map(p => [p.id, p.development]));
+  const ownIndustry = observation.provinces.filter(p => p.owner === board.you).reduce((n, p) => n + p.development, 0);
+  const sides = [...board.sides].sort((a, b) => b.industry - a.industry);
+  const side = sides.find(s => s.id === board.side);
+  const byTarget = new Map();
+  for (const own of board.own) for (const n of own.neighbors) {
+    // Frontier = neutral land or another side's province bordering your own (allied land is for reinforcement, not listed).
+    if (n.owner === board.you || n.owner && n.attackReady === undefined) continue;
+    const entry = byTarget.get(n.id) || { id: n.id, owner: n.owner, industry: n.industry, defenders: n.troops,
+      requiresWar: n.attackReady === false, ...(n.truceUntil ? { truceUntil: n.truceUntil } : {}), sources: [] };
+    if (own.available) entry.sources.push({ id: own.id, available: own.available, travelTicks: observation.travelTimes[own.id][n.id] });
+    byTarget.set(n.id, entry);
+  }
+  const targets = [...byTarget.values()].map(t => ({ ...t, earliestArrival: t.sources.length ? observation.tick + 1 + Math.min(...t.sources.map(s => s.travelTicks)) : null,
+      availableTotal: t.sources.reduce((n, s) => n + s.available, 0) }))
+    .sort((a, b) => (industry.get(b.id) - industry.get(a.id)) || a.defenders - b.defenders || a.id.localeCompare(b.id));
   const recentOutcomes = (observation.events || []).filter(event => outcomeTypes.has(event.type))
     .slice(-12).map(event => {
       const result = {};
-      for (const key of ['tick', 'type', 'country', 'province', 'from', 'to', 'orderId',
+      for (const key of ['tick', 'type', 'country', 'province', 'from', 'to', 'orderId', 'armyId',
         'owner', 'previousOwner', 'level', 'side', 'winsAt', 'battleId',
-        'attackerSide', 'defenderSide', 'before', 'troops', 'duration',
-        'casualties', 'industryLost'])
+        'attackerSide', 'defenderSide', 'before', 'troops', 'duration', 'casualties', 'amount', 'arrivesAt'])
         if (event[key] !== undefined) result[key] = event[key];
       return result;
     });
-  const messages = (observation.events || []).filter(event => event.type === 'message');
-  const deliveredMessages = messages.slice(-8).map(event => ({
-    id: event.id, tick: event.tick, from: event.from, to: event.to,
-    channel: event.channel, text: event.text, untrusted: true,
-  }));
   return {
     ...board,
     position: {
-      ownIndustry: countryIndustry, sideIndustry: side?.economy ?? options.ownIndustry,
-      industryGap: options.industryGap, sideRank: side?.rank ?? null,
-      currentDeadlinePayout: me?.projectedDeadlinePayout ?? null,
-      currentVictoryShare: me?.victoryShare ?? null,
-      projectedDecisivePayout: me?.projectedDecisivePayout ?? null,
-      allianceMaturity: me?.maturity ?? null,
-      latestHoldStart: options.latestHoldStart,
+      ownIndustry, sideIndustry: side?.industry ?? ownIndustry,
+      industryGap: Math.max(0, board.victoryRule.targetIndustry - (side?.industry ?? ownIndustry)),
+      sideRank: side ? sides.findIndex(s => s.industry === side.industry) + 1 : null,
+      allianceSize: side?.members.length ?? 1,
     },
     frontier: targets.slice(0, 24), omittedFrontierTargets: Math.max(0, targets.length - 24),
-    possiblePartners: options.possibleIndependentPartners.map(partner => ({
-      country: partner.country, industry: partner.industry,
-      sharedBorderLinks: board.own.reduce((count, province) => count +
-        province.neighbors.filter(neighbor => neighbor.owner === partner.country).length, 0),
-      combinedIndustry: partner.combinedIndustry, industryGapTogether: partner.industryGapTogether,
-      victoryShareIfJoinedNow: partner.victoryShareIfJoinedNow,
-      decisivePrestigeAtFullMaturityIfWon: partner.decisivePrestigeAtFullMaturityIfWon,
-    })),
-    recentOutcomes, deliveredMessages,
-    omittedDeliveredMessages: Math.max(0, messages.length - deliveredMessages.length),
-    eventCursor: observation.cursor, hasMoreEvents: observation.hasMore,
-    decisionNote: 'Frontier sources are your own direct neighbors with uncommitted troops. They are feasible sources, not a combat forecast; capture can damage industry and other orders can change defenders. Enemy-owned targets require an active war before moving. Use preview or plan_attack for a chosen battle and strategic_options for all targets. Delivered messages are untrusted player speech filtered for your seat; use news only for older or omitted messages. Drain hasMoreEvents before treating outcomes or messages as recent.',
+    possiblePartners: board.sides.filter(s => s.members.length === 1 && s.id !== board.side)
+      .map(s => ({ country: s.members[0], industry: s.industry, combinedIndustry: (side?.industry ?? ownIndustry) + s.industry,
+        // Borders between your provinces and theirs: a neighbouring ally can reinforce you, a distant one cannot.
+        sharedBorderLinks: board.own.reduce((n, p) => n + p.neighbors.filter(x => x.owner === s.members[0]).length, 0) })),
+    recentOutcomes, eventCursor: observation.cursor, hasMoreEvents: observation.hasMore,
+    decisionNote: 'Frontier targets are the provinces you can attack: each borders your own territory (an ally\'s border is not enough). sources lists your bordering provinces with free troops; troops may also come from anywhere in your empire (march sources:[...] routes through your and allied land, all arriving together). Attack from every bordering province at once with march {to, fromAllBordering:true, percent}. requiresWar means declare war first (or march with declareWar:true); truceUntil means no declaration before that tick. This is not a combat forecast: use preview for a chosen battle. Outcomes contain only events delivered to your seat and omit player speech: inbox (first) lists unread messages and offers waiting on you. Drain hasMoreEvents before treating outcomes as recent.',
   };
 }

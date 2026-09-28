@@ -14,7 +14,7 @@ test('Pi resolves arbitrary local model profile entirely from config', () => {
   };
   assert.deepEqual(loadPiConfig('sample', env), {
     alias: 'sample', provider: 'openai-completions', id: 'vendor/model', playerName: 'Sample Pi',
-    name: 'Sample Pi', leaderName: 'The Visiting Regent', baseUrl: 'http://127.0.0.1:8000/v1',
+    name: 'Sample Pi', baseUrl: 'http://127.0.0.1:8000/v1',
     transport: 'chat_completions', apiKey: 'local', contextWindow: 1048576, maxTokens: 4096,
     thinkingLevel: 'off', reasoning: false, inputImages: false, thinkingFormat: undefined, chatTemplateKwargs: undefined,
     offReasoningEffort: undefined,

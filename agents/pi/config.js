@@ -33,8 +33,7 @@ export function loadPiConfig(alias, env = process.env) {
     if (!chatTemplateKwargs || typeof chatTemplateKwargs !== 'object' || Array.isArray(chatTemplateKwargs) || thinkingFormat !== 'chat-template')
       throw new Error(`Profile ${alias} needs THINKING_FORMAT=chat-template with object CHAT_TEMPLATE_KWARGS.`);
   }
-  return { alias, provider, id, playerName, name: key('NAME') || playerName,
-    leaderName: key('LEADER_NAME') || 'The Visiting Regent', baseUrl, transport,
+  return { alias, provider, id, playerName, name: key('NAME') || playerName, baseUrl, transport,
     apiKey: key('API_KEY') || 'local', contextWindow, maxTokens, thinkingLevel, reasoning, inputImages,
     thinkingFormat, chatTemplateKwargs, offReasoningEffort };
 }

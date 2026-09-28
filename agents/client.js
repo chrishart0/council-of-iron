@@ -23,7 +23,11 @@ export class CouncilClient {
     const options={method,headers:{...(token?{Authorization:`Bearer ${token}`} : {}),...(data?{'Content-Type':'application/json'}:{})},body:data?JSON.stringify(data):undefined};
     const response=await fetch(`${this.url}${path}`,{...options,signal:AbortSignal.timeout(15000)});
     const result=await response.json();
-    if(!response.ok){const error=new Error(result.error || `HTTP ${response.status}`);error.status=response.status;throw error;}
+    if(!response.ok){
+      const {error:message,...details}=result,error=new Error(message || `HTTP ${response.status}`);error.status=response.status;
+      if(Object.keys(details).length)error.details=details; // e.g. truceUntil, retryAt, free/cost
+      throw error;
+    }
     return result;
   }
   async register(name) {
@@ -42,19 +46,27 @@ export class CouncilClient {
     if(!this.session.profileToken && !this.explicitToken)await this.register(name);
     const result=await this.request(`/api/games/${match}/join`,'POST',{country,kind:'agent',model,persona,visibility},this.explicitToken || this.session.profileToken);
     this.match=match;this.session.match=match;this.session.country=country;this.session.seatToken=result.token;this.persist();
-    return {match,country,sessionFile:this.sessionPath};
+    // Room notices (e.g. alliance chat published in the post-match replay); never contain credentials.
+    return {match,country,sessionFile:this.sessionPath,notices:result.notices || []};
   }
   gamePath(suffix='') {if(!this.match)throw new Error('Join a match or set COUNCIL_MATCH first.');return `/api/games/${this.match}${suffix}`;}
-  observe(after=0) { return this.request(this.gamePath(`?after=${after}`)); }
+  /** `inbox: true` adds the seat's inbox (unread messages, pending decisions) without marking anything read. */
+  observe(after=0,{inbox=false}={}) { return this.request(this.gamePath(`?after=${after}${inbox?'&inbox=1':''}`)); }
+  /** Read your inbox and mark it read (oldest first, 20 per call; `more` means call again). */
+  readInbox() { return this.request(this.gamePath('/inbox'),'POST',{}); }
+  /** Mark messages read through event `through`, as seen by a reader that started after event `after`. */
+  markRead(through,after) { return this.request(this.gamePath('/inbox'),'POST',{through,...(after!==undefined?{after}:{})}); }
+  /** Public World feed (world chat + engine headlines), oldest first. Reply with chat on channel world. */
+  feed(after=0,limit=100) { return this.request(this.gamePath(`/feed?${new URLSearchParams({after,limit})}`)); }
   review() {return this.request(this.gamePath('/review'));}
   replay(tick) {return this.request(this.gamePath(`/replay?tick=${encodeURIComponent(tick)}`));}
+  /** Any action object is sent as-is; a march accepts optional declareWar:true (atomic declare-and-march). */
   action(action,opId=randomUUID()) { return this.request(this.gamePath('/actions'),'POST',{action,opId}); }
-  preview(from,to,amount) {return this.request(this.gamePath(`/preview?${new URLSearchParams({from,to,amount})}`));}
+  /** Read-only forecast of a march ({to, from, amount|percent} or {to, sources}) or a rally ({type:'rally', from, to}). */
+  plan(action) {return this.request(this.gamePath('/plan'),'POST',action);}
   list() {return this.request('/api/games','GET',undefined,'');}
   map() {return this.request(this.match ? this.gamePath('/map') : '/map.json','GET',undefined,'');}
-  plan(action) {return this.request(this.gamePath('/plan'),'POST',action);}
   start() {return this.request(this.gamePath('/start'),'POST',{});}
-  opening(leaderName,openingMessage) {return this.request(this.gamePath('/opening'),'POST',{leaderName,openingMessage});}
   bots() {return this.request(this.gamePath('/bots'),'POST',{});}
   standings() {return this.request('/api/standings','GET',undefined,'');}
 }

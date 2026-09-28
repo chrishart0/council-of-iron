@@ -24,8 +24,9 @@ export function codexToolFailure(event) {
 
 export function summarizeRun(raw, modelGroup) {
   if (!['qwen', 'luna', 'external'].includes(modelGroup)) throw new Error('Specify a qwen, luna, or external model group.');
-  if (!raw.runId || !raw.startedAt || !raw.match || raw.status !== 'finished' || !Number.isFinite(raw.score?.prestige))
-    throw new Error(`Run ${raw.runId || '(unknown)'} has no authoritative finished score.`);
+  if (!raw.runId || !raw.startedAt || !raw.match || raw.status !== 'finished' ||
+      !['win', 'loss', 'draw'].includes(raw.score?.result) || !Number.isFinite(raw.score.industry))
+    throw new Error(`Run ${raw.runId || '(unknown)'} has no authoritative finished result.`);
   const client = raw.client === 'codex' ? 'Codex' : 'Pi';
   const commands = client === 'Codex' ? (raw.events || []).filter(event =>
     event.itemType === 'command_execution' && typeof event.command === 'string').map(event => event.command) : [];
@@ -37,29 +38,23 @@ export function summarizeRun(raw, modelGroup) {
     ['mcp_tool_call', 'command_execution'].includes(event.itemType));
   const calls = client === 'Pi' ? raw.toolCalls || [] : completed;
   const failed = client === 'Pi' ? calls.filter(call => call.ok === false).length : calls.filter(codexToolFailure).length;
-  const acceptedActions = client === 'Pi' ? (raw.actions || []).filter(action => action.ok).length
-    : Array.isArray(raw.httpActions) ? raw.httpActions.filter(action => action.status === 200).length : null;
-  const rejectedActions = client === 'Pi' ? (raw.actions || []).filter(action => action.ok === false).length
-    : Array.isArray(raw.httpActions) ? raw.httpActions.filter(action => action.status !== 200).length : null;
-  const firstAcceptedAt = client === 'Pi' ? (raw.actions || []).find(action => action.ok && action.at)?.at
-    : raw.httpActions?.find(action => action.status === 200)?.at;
+  const acceptedActions = client === 'Pi' ? raw.actions.filter(action => action.ok).length
+    : raw.httpActions.filter(action => action.status === 200).length;
+  const rejectedActions = client === 'Pi' ? raw.actions.filter(action => action.ok === false).length
+    : raw.httpActions.filter(action => action.status !== 200).length;
+  const firstAcceptedAt = client === 'Pi' ? raw.actions.find(action => action.ok && action.at)?.at
+    : raw.httpActions.find(action => action.status === 200)?.at;
   const turns = raw.turnLog || [];
-  const timedOutTurns = client === 'Pi'
-    ? turns.length && turns.every(turn => typeof turn.timedOut === 'boolean')
-      ? turns.filter(turn => turn.timedOut).length : null
-    : number(raw.timedOutTurns);
-  const usedSituation = client === 'Pi' ? calls.some(call => call.name === 'situation')
-    : completed.some(event => event.name === 'situation' || event.name?.endsWith('__situation'));
+  const timedOutTurns = client === 'Pi' ? turns.filter(turn => turn.timedOut).length : number(raw.timedOutTurns);
   const usedNews = client === 'Pi' ? calls.some(call => call.name === 'news')
     : completed.some(event => event.name === 'news' || event.name?.endsWith('__news'));
   const usedBoard = client === 'Pi' ? calls.some(call => call.name === 'board')
     : completed.some(event => event.name === 'board' || event.name?.endsWith('__board'));
   const usedView = client === 'Pi' ? calls.some(call => call.name === 'view_map')
     : completed.some(event => event.name === 'view_map' || event.name?.endsWith('__view_map'));
-  // Resumed Codex turns report cumulative thread usage. Historical raw files
-  // summed those snapshots in raw.usage, so use the last completed snapshot.
+  // Resumed Codex turns report cumulative thread usage, so use the last completed snapshot.
   const lastTurn = turns.at(-1);
-  const tokenUsage = raw.usageIncomplete ? null : client === 'Codex' && lastTurn && raw.usageAccounting !== 'per_turn'
+  const tokenUsage = raw.usageIncomplete ? null : client === 'Codex' && lastTurn
     ? { input: lastTurn.inputTokens, output: lastTurn.outputTokens,
       cacheRead: lastTurn.cacheReadTokens } : raw.usage;
   const inputTokens = number(tokenUsage?.input);
@@ -73,18 +68,18 @@ export function summarizeRun(raw, modelGroup) {
     ? !raw.outcome.draw && raw.score.side === raw.outcome.winningSide : null;
   return {
     id: raw.runId, match: raw.match, combatSeed: raw.combatSeed || null,
-    startedAt: raw.startedAt, modelGroup, client, access, country: raw.country || 'britain',
-    interfaceVersion: raw.interfaceVersion || null,
+    startedAt: raw.startedAt, modelGroup, client, access, country: raw.country,
+    interfaceVersion: raw.interfaceVersion, turnView: raw.turnView || null,
     strategy: raw.embeddedBoard ? usedView ? `${raw.turnView === 'decision' ? 'decision view' : 'board'} prompt + visual`
       : raw.turnView === 'decision' ? 'decision view in prompt' : 'board in prompt'
       : raw.turnView === 'tools' ? 'tool-led turns'
       : usedView ? 'visual map' : usedBoard ? usedNews ? 'compact board + news' : 'compact board'
-      : usedSituation ? 'concise situation' : usedNews ? 'news' : raw.maxTurnSeconds ? 'full observation, capped' : 'full observation',
+      : usedNews ? 'news' : raw.maxTurnSeconds ? 'full observation, capped' : 'full observation',
     maxTurnSeconds: number(raw.maxTurnSeconds),
     decisionIntervalTicks: number(raw.decisionIntervalTicks),
-    sessionMode: raw.sessionMode || raw.turnMode || (client === 'Pi' ? 'persistent' : null),
+    sessionMode: raw.sessionMode || raw.turnMode,
     preset: raw.preset, status: raw.status, resultReason: raw.outcome?.reason || null,
-    finalTick: number(raw.finalTick), prestige: round(raw.score.prestige), won,
+    finalTick: number(raw.finalTick), result: raw.score.result, industry: raw.score.industry,
     acceptedActions, rejectedActions, toolCalls: calls.length, failedToolCalls: failed,
     firstActionSeconds: firstAcceptedAt ? round((Date.parse(firstAcceptedAt) - Date.parse(raw.startedAt)) / 1000) : null,
     failureRatePct: calls.length ? round(100 * failed / calls.length) : null,

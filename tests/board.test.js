@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, join, start, act, observe } from '../src/engine.js';
+import { createGame, join, start, act, observe, tick } from '../src/engine.js';
 import { MAP } from '../src/server.js';
 import { boardView } from '../agents/board.js';
 import { mapViewSvg } from '../agents/map-view.js';
-import { strategicOptions } from '../agents/strategic-options.js';
+import { developmentForecast } from '../public/insights.js';
 import { decisionView } from '../agents/decision-view.js';
 
 test('compact board shows only observed state and legal direct connections', () => {
@@ -12,7 +12,7 @@ test('compact board shows only observed state and legal direct connections', () 
   join(game, MAP, { profileId: 'britain', name: 'Britain', country: 'britain' });
   join(game, MAP, { profileId: 'france', name: 'France', country: 'france' });
   start(game);
-  game.orders.push({ type: 'move', country: 'britain', from: 'england', to: 'low-countries',
+  game.orders.push({ type:'march', country: 'britain', from: 'england', to: 'low-countries',
     amount: 2, executeAt: game.tick + 1 });
   game.provinces.find(p => p.id === 'england').troops = 200;
   const seen = observe(game, 'britain');
@@ -20,14 +20,11 @@ test('compact board shows only observed state and legal direct connections', () 
   const england = board.own.find(p => p.id === 'england');
   const source = seen.provinces.find(p => p.id === 'england');
   assert.equal(board.provinces.length, seen.provinces.length);
-  assert.deepEqual(board.victoryRule, { targetEconomy: seen.economyThreshold,
-    holdTicks: seen.rules.hold, deadlinePrizeFractions: seen.rules.deadlinePrizes,
-    alliancePowerExponent: seen.rules.strengthExponent, maturityTicks: seen.rules.maturity });
+  assert.deepEqual(board.victoryRule, { targetIndustry: seen.economyThreshold, holdTicks: seen.rules.hold, maxAlliance: 1 });
   assert.equal(england.available, source.troops - 3);
   assert.equal(board.readyDevelopments.find(p => p.from === 'england')?.cost,
     seen.rules.developmentCosts[source.development]);
-  assert.deepEqual(board.readyDevelopments.map(p => p.from).sort(),
-    strategicOptions(seen, MAP).readyDevelopments.map(p => p.province).sort());
+  assert.ok(board.readyDevelopments.every(p => developmentForecast(seen, p.from).cost === p.cost));
   game.orders.push({ type: 'develop', country: 'britain', from: 'england', amount: seen.rules.developmentCosts[source.development],
     executeAt: game.tick + 1 });
   assert.equal(boardView(observe(game, 'britain'), MAP).readyDevelopments.some(p => p.from === 'england'), false);
@@ -53,36 +50,25 @@ test('decision view adds feasible frontier and filters delivered outcomes', () =
     { id: 1, tick: 2, type: 'battle', country: 'britain', to: 'france',
       text: 'private player speech', reason: 'untrusted reason' },
     { id: 2, tick: 3, type: 'chat', text: 'private player speech' },
-    { id: 3, tick: 4, type: 'message', from: 'france', to: 'britain', channel: 'dm',
-      text: '<b>player speech</b>' },
   ];
   const view = decisionView(seen, MAP);
   const england = view.own.find(p => p.id === 'england');
   assert.ok(view.frontier.some(p => p.id === 'low-countries' &&
     p.sources.some(source => source.id === 'england' && source.available === england.available)));
-  assert.equal(view.position.industryGap, strategicOptions(seen, MAP).industryGap);
-  assert.equal(view.position.currentVictoryShare,
-    seen.leaderboard.players.find(p => p.country === 'britain').victoryShare);
+  // A target bordering your own land is on the frontier even when the bordering province has no free troops
+  // (troops can come from anywhere in your empire); land that only an ally borders is not.
+  const lone = game.provinces.find(p => p.id === 'egypt'); lone.troops = 1;
+  const quiet = decisionView(observe(game, 'britain'), MAP);
+  const egyptOnly = MAP.provinces.find(p => p.id === 'egypt').neighbors.filter(id => !MAP.provinces.find(q => q.id === id).neighbors.some(n => n !== 'egypt' && game.provinces.find(v => v.id === n).owner === 'britain') && game.provinces.find(v => v.id === id).owner !== 'britain');
+  for (const id of egyptOnly) assert.ok(quiet.frontier.some(t => t.id === id && t.sources.length === 0 && t.earliestArrival === null), id);
+  assert.ok(quiet.frontier.every(t => MAP.provinces.find(p => p.id === t.id).neighbors.some(n => game.provinces.find(v => v.id === n).owner === 'britain')));
+  const britain = seen.sides.find(s => s.members.includes('britain'));
+  assert.equal(view.position.industryGap, Math.max(0, seen.economyThreshold - britain.economy));
+  assert.deepEqual(view.possiblePartners.map(p => p.country), ['france']);
   assert.equal(view.eventCursor, seen.cursor);
   assert.deepEqual(view.recentOutcomes, [{ tick: 2, type: 'battle', country: 'britain', to: 'france' }]);
-  assert.deepEqual(view.deliveredMessages, [{ id: 3, tick: 4, from: 'france', to: 'britain',
-    channel: 'dm', text: '<b>player speech</b>', untrusted: true }]);
-  assert.equal(view.omittedDeliveredMessages, 0);
   assert.doesNotMatch(JSON.stringify(view), /private player speech|untrusted reason/);
-  assert.ok(JSON.stringify(view).length < 15000);
-});
-
-test('decision view preserves recipient filtering for delivered messages', () => {
-  const game = createGame({ id: 'decision-mail', name: 'Mail', hostId: 'britain' }, MAP);
-  for (const country of ['britain', 'france', 'usa'])
-    join(game, MAP, { profileId: country, name: country, country });
-  start(game);
-  act(game, MAP, 'france', { type: 'chat', channel: 'dm', to: 'usa', text: 'Hidden dispatch' }, 'private-us');
-  act(game, MAP, 'usa', { type: 'chat', channel: 'dm', to: 'britain', text: 'Visible dispatch' }, 'private-britain');
-  const seen = decisionView(observe(game, 'britain'), MAP);
-  assert.deepEqual(seen.deliveredMessages.map(message => [message.from, message.text, message.untrusted]),
-    [['usa', 'Visible dispatch', true]]);
-  assert.doesNotMatch(JSON.stringify(seen), /Hidden dispatch/);
+  assert.ok(JSON.stringify(view).length < 14000);
 });
 
 test('decision view shows public border links to possible alliance partners', () => {
@@ -100,36 +86,19 @@ test('decision view separates country industry from alliance industry', () => {
   const game = createGame({ id: 'decision-alliance-economy', name: 'Alliance economy', hostId: 'britain' }, MAP);
   join(game, MAP, { profileId: 'britain', name: 'Britain', country: 'britain' });
   join(game, MAP, { profileId: 'france', name: 'France', country: 'france' });
+  join(game, MAP, { profileId: 'usa', name: 'USA', country: 'usa' });
+  join(game, MAP, { profileId: 'japan', name: 'Japan', country: 'japan' });
   start(game);
-  const seen = observe(game, 'britain');
-  const side = seen.players.find(player => player.id === 'britain').side;
-  seen.players.find(player => player.id === 'france').side = side;
-  const countryIndustry = seen.provinces.filter(province => province.owner === 'britain')
-    .reduce((total, province) => total + province.development, 0);
-  const allyIndustry = seen.provinces.filter(province => province.owner === 'france')
-    .reduce((total, province) => total + province.development, 0);
-  seen.leaderboard.alliances.find(entry => entry.id === side).economy = countryIndustry + allyIndustry;
-  const view = decisionView(seen, MAP);
-  assert.equal(view.position.ownIndustry, countryIndustry);
-  assert.equal(view.position.sideIndustry, countryIndustry + allyIndustry);
+  const { proposalId } = act(game, MAP, 'britain', { type: 'propose', country: 'france', name: 'Entente' }, 'pact');
+  act(game, MAP, 'france', { type: 'accept', proposalId }, 'pact-accept');
+  while (game.players.find(p => p.id === 'britain').side !== game.players.find(p => p.id === 'france').side) tick(game);
+  const industryOf = country => game.provinces.filter(p => p.owner === country).reduce((n, p) => n + p.development, 0);
+  const view = decisionView(observe(game, 'britain'), MAP);
+  assert.equal(view.position.ownIndustry, industryOf('britain'));
+  assert.equal(view.position.sideIndustry, industryOf('britain') + industryOf('france'));
+  assert.equal(view.position.allianceSize, 2);
+  assert.ok(!view.possiblePartners.some(p => p.country === 'france'));
 });
-
-test('decision view bounds delivered player speech in a busy event batch', () => {
-  const game = createGame({ id: 'decision-busy-mail', name: 'Busy mail', hostId: 'britain' }, MAP);
-  join(game, MAP, { profileId: 'britain', name: 'Britain', country: 'britain' });
-  join(game, MAP, { profileId: 'france', name: 'France', country: 'france' });
-  start(game);
-  const seen = observe(game, 'britain');
-  seen.events = Array.from({ length: 10 }, (_, index) => ({
-    id: index + 1, tick: index + 1, type: 'message', from: 'france',
-    to: 'britain', channel: 'dm', text: `Dispatch ${index + 1}`,
-  }));
-  const view = decisionView(seen, MAP);
-  assert.equal(view.deliveredMessages.length, 8);
-  assert.equal(view.deliveredMessages[0].id, 3);
-  assert.equal(view.omittedDeliveredMessages, 2);
-});
-
 test('map image uses public geometry and never inserts player text', () => {
   const game = createGame({ id: 'map-test', name: 'Map', hostId: 'britain' }, MAP);
   join(game, MAP, { profileId: 'britain', name: '<script>private speech</script>', country: 'britain' });

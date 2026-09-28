@@ -1,6 +1,15 @@
-/** Replay the recorded single-controller game; this does NOT generate new decisions.
- * Default: deterministic engine replay. --http: replay through eight authenticated
- * HTTP clients with a locally stepped clock and no public advance-time endpoint.
+/** Replay the recorded single-controller decisions (tests/fixtures/handplay-20260927.json.gz)
+ * under the CURRENT rules and map. This does NOT generate new strategy: every submitted order is a
+ * recorded one. The recording predates formal war, the single march order, rally points and the current
+ * timings, so a small, explicit adapter bridges it (see adapt()):
+ *   - recorded move/attack orders become one march (a recorded arrival time is dropped); a march into a
+ *     non-allied country declares war in the same action (declareWar), exactly what a player adds today;
+ *   - a recorded recruitment arrow to one of the mover's own provinces becomes a rally point there;
+ *   - recorded alliance-offer IDs are mapped to the offers the replay actually created, in order;
+ *   - recorded orders that the current rules reject (too few troops, lost source, stale recall, an
+ *     arrow to an ally) are skipped and counted, never forced.
+ * Default: deterministic engine replay. --http: the same adapted orders through eight authenticated
+ * HTTP seats with a locally stepped clock and no public advance-time endpoint.
  */
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -8,62 +17,92 @@ import { gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
-import { createGame, join, start, act, tick, sides } from '../src/engine.js';
-import { travelTicks } from '../public/movement.js';
+import { createGame, join, start, act, tick, sides, RuleError } from '../src/engine.js';
 
 export const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../tests/fixtures/handplay-20260927.json.gz', import.meta.url))));
-// The recording was played on the v3 board; later map revisions must not rewrite its history.
-export const map = JSON.parse(readFileSync(new URL('../tests/fixtures/imperial-map-v3.json', import.meta.url)));
+// The board the recording was played on; the published map's borders have since been redrawn.
+export const map = JSON.parse(readFileSync(new URL('../tests/fixtures/handplay-map.json', import.meta.url)));
 export const projection = g => ({ tick:g.tick, status:g.status, provinces:g.provinces, armies:g.armies, sides:sides(g), outcome:g.outcome });
 export const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const troopTotal = g => g.provinces.reduce((n,p)=>n+p.troops,0)+g.armies.reduce((n,a)=>n+a.amount,0);
 const counts = (items,key) => items.reduce((result,item)=>{const k=key(item);result[k]=(result[k]||0)+1;return result;},{});
-export function recordedRules(g){
-  Object.assign(g.rules,{warRequired:false,marchSetup:15,kmPerTick:35,maxDevelopment:3,
-    developmentCosts:[0,12,24],developmentTicks:[0,60,90]});
-  const byId=new Map(map.provinces.map(p=>[p.id,p]));
-  g.travelTimes=Object.fromEntries(map.provinces.map(p=>[p.id,Object.fromEntries(p.neighbors.map(id=>[id,travelTicks(p,byId.get(id),g.rules)]))]));
+/** Recorded accept IDs, in creation order; the n-th recorded propose created the n-th of them. */
+const recordedOffers=[...new Set(fixture.actions.filter(a=>a.action.type==='accept').map(a=>a.action.proposalId))]
+  .sort((a,b)=>Number(a.split('-')[1])-Number(b.split('-')[1]));
+/** The orders to submit for one recorded action, in order: [{country, action, opId}]. */
+export function adapt(g, a, offers) {
+  const recorded=structuredClone(a.action);let action=recorded;
+  if(recorded.type==='accept')action.proposalId=offers.map.get(recorded.proposalId) ?? recorded.proposalId;
+  if(recorded.type==='move')action={type:'march',from:recorded.from,to:recorded.to,
+    ...(recorded.percent!==undefined?{percent:recorded.percent}:{amount:recorded.amount})};
+  if(recorded.type==='attack')action={type:'march',to:recorded.to,sources:recorded.sources};
+  if(recorded.type==='route')action={type:'rally',from:recorded.from,to:recorded.to};
+  if(action.type==='march') {
+    const owner=g.provinces.find(p=>p.id===action.to)?.owner,me=g.players.find(p=>p.id===a.country),them=g.players.find(p=>p.id===owner);
+    if(them && them.side!==me.side && !g.wars.includes([me.id,them.id].sort().join(':')))action.declareWar=true;
+  }
+  return [{country:a.country,action,opId:a.opId,recorded:recorded.type}];
 }
 function validator(g) {
-  const initial=troopTotal(g);let casualties=0,eventIndex=0,checks=0;
+  const initial=troopTotal(g);let checks=0;
   return () => {
-    for(const e of g.events.slice(eventIndex))if(e.type==='battle')casualties+=e.before+e.arrivals.reduce((n,a)=>n+a.amount,0)-e.troops;
-    eventIndex=g.events.length;
     for(const p of g.provinces)assert.ok(Number.isInteger(p.troops)&&p.troops>=0);
     for(const a of g.armies)assert.ok(Number.isInteger(a.amount)&&a.amount>0);
-    assert.equal(troopTotal(g),initial+g.economy.recruited-g.economy.invested-casualties,`Troop ledger at ${g.tick}`);
-    return {initial,recruited:g.economy.recruited,invested:g.economy.invested,casualties,remaining:troopTotal(g),tickChecks:++checks};
+    const interned=g.events.filter(e=>e.type==='army_interned').reduce((n,e)=>n+e.amount,0),casualties=g.economy.casualties;
+    assert.equal(troopTotal(g),initial+g.economy.recruited-g.economy.invested-casualties-interned,`Troop ledger at ${g.tick}`);
+    return {initial,recruited:g.economy.recruited,invested:g.economy.invested,casualties,interned,remaining:troopTotal(g),tickChecks:++checks};
   };
 }
-function summary(g,ledger,transport) {
-  // This recording's military board is unchanged; the outcome digest changes with the new point formula.
-  const militaryStateSha256=digest({tick:g.tick,status:g.status,provinces:g.provinces,armies:g.armies,sides:sides(g)});
-  assert.equal(militaryStateSha256,'a3c30e7797817ee51c575864d151e0195764e1787ffe61c22352c1cb2f37ad5d');
-  assert.equal(digest(projection(g)),'138dedbacf6f4aa2da9da2555aff81dc58412e8bc5d16c6ee0ff7ad8e8e56f94');
+function summary(g,ledger,transport,skipped) {
   return {baseCommit:fixture.baseCommit,method:fixture.method,transport,status:'passed',
-    simulatedTicks:g.tick,decisionTicks:fixture.decisionTicks,acceptedActions:g.actionLog.length,
+    simulatedTicks:g.tick,decisionTicks:fixture.decisionTicks,acceptedActions:g.actionLog.length,skipped,
     byAction:counts(g.actionLog,a=>a.action.type),byCountry:counts(g.actionLog,a=>a.country),
-    rejectedInputs:fixture.rejectedActions.filter(a=>a.tick<g.tick).length,events:counts(g.events,e=>e.type),ledger,
-    finalStateSha256:digest(projection(g)),militaryStateSha256,eventLogSha256:digest(g.events),outcome:g.outcome,
+    events:counts(g.events,e=>e.type),ledger,
+    finalStateSha256:digest(projection(g)),eventLogSha256:digest(g.events),outcome:g.outcome,
     countryTerritories:counts(g.provinces,p=>p.owner),
-    note:'Replaying one recorded game is not another independent match or a balance sample.'};
+    note:'Recorded decisions replayed under the current rules through an explicit adapter; not an independent match or a balance sample.'};
 }
-export function replay() {
-  const g=createGame({id:'handplay',name:'Handplay replay',hostId:'britain'},map);
-  // This immutable pre-war recording retains its original room rules.
-  recordedRules(g);
-  for(const c of map.countries)join(g,map,{profileId:c.id,name:`Single-controller ${c.id}`,country:c.id,kind:'agent'});
-  start(g);const validate=validator(g);let ledger=validate(),index=0;
-  while(g.status==='running') {
-    while(fixture.actions[index]?.tick===g.tick){const a=fixture.actions[index++];act(g,map,a.country,a.action,a.opId);}
-    tick(g);ledger=validate();
+/** Submit one recorded action through `submit(country, action, opId)` (returns the result or throws RuleError). */
+function play(g,a,offers,submit,skipped) {
+  for(const step of adapt(g,a,offers)) {
+    try {
+      const result=submit(step.country,step.action,step.opId);
+      if(step.recorded==='propose')offers.map.set(recordedOffers[offers.next++],result.proposalId);
+    } catch(e) {
+      if(!(e instanceof RuleError))throw e;
+      const key=`${step.action.type}: ${e.message}`;skipped[key]=(skipped[key]||0)+1;
+    }
   }
-  assert.equal(index,fixture.actions.filter(a=>a.tick<g.tick).length,'Every command before the new finish must be replayed.');
-  return {game:g,report:summary(g,ledger,'deterministic-engine-replay')};
+}
+/** `onTick(g)` (optional) sees the board at the start of every tick, before that tick's orders. */
+/** Seat the eight recorded countries and start. */
+export function seatRecorded(g, profiles = null) {
+  for(const c of map.countries)join(g,map,{profileId:profiles?.[c.id]?.id ?? c.id,name:profiles?.[c.id]?.name ?? `Single-controller ${c.id}`,country:c.id,kind:'agent'});
+  start(g);
+}
+/** Step a started game through the recorded decisions: `to(tick)` plays every recorded order before `tick`. */
+export function stepper(g, { onTick } = {}) {
+  const offers={map:new Map(),next:0},skipped={};let index=0;
+  return { skipped, get index(){return index;}, to(until=Infinity) {
+    while(g.status==='running' && g.tick<until) {
+      onTick?.(g);
+      while(fixture.actions[index]?.tick===g.tick)play(g,fixture.actions[index++],offers,(country,action,opId)=>act(g,map,country,action,opId),skipped);
+      tick(g);
+    }
+  } };
+}
+/** `onTick(g)` (optional) sees the board at the start of every tick, before that tick's orders. */
+export function replay({ onTick } = {}) {
+  const g=createGame({id:'handplay',name:'Handplay replay',hostId:'britain'},map);
+  seatRecorded(g);
+  const validate=validator(g),run=stepper(g,{onTick:g=>{onTick?.(g);if(g.tick)ledger=validate();}});let ledger=validate();
+  run.to();ledger=validate();
+  assert.equal(run.index,fixture.actions.filter(a=>a.tick<g.tick).length,'Every command before the finish must be offered to the engine.');
+  return {game:g,report:summary(g,ledger,'deterministic-engine-replay',run.skipped)};
 }
 export async function replayHttp() {
   const {makeServer}=await import('../src/server.js');
-  const app=makeServer({dbPath:':memory:',automatic:false,league:false,board:map});
+  const app=makeServer({dbPath:':memory:',automatic:false,gameIdFactory:()=>'handplay',map});
   await new Promise(r=>app.server.listen(0,'127.0.0.1',r));
   const origin=`http://127.0.0.1:${app.server.address().port}`,profiles={},tokens={};
   async function request(path,method='GET',data,token) {
@@ -72,32 +111,34 @@ export async function replayHttp() {
   }
   try {
     for(const c of map.countries)profiles[c.id]=(await request('/api/players','POST',{name:`Single-controller ${c.id}`})).data;
-    const room=(await request('/api/games','POST',{name:'Recorded all-seat HTTP replay',preset:'standard'},profiles.britain.token)).data.id;
+    const room=(await request('/api/games','POST',{name:'Handplay replay',preset:'standard'},profiles.britain.token)).data.id;
     for(const c of map.countries)tokens[c.id]=(await request(`/api/games/${room}/join`,'POST',{country:c.id,kind:'agent'},profiles[c.id].token)).data.token;
     assert.equal((await request(`/api/games/${room}/start`,'POST',{},tokens.britain)).status,200);
-    const g=app.games.get(room);recordedRules(g);
-    // The old recording predates the opening ceremony; restore its exact tick-zero event stream.
-    g.status='lobby';g.events.pop();g.sequence--;start(g);
-    const validate=validator(g);let ledger=validate(),index=0;
+    const g=app.games.get(room);assert.equal(g.status,'running');
+    // The HTTP room announces alliance-chat publication; the engine replay room does not. Same rules otherwise.
+    delete g.rules.revealAllianceChatAfterMatch;g.name='Handplay replay';
+    const validate=validator(g),offers={map:new Map(),next:0},skipped={};let ledger=validate(),index=0;
+    // Transport: a 4xx is a RuleError the engine raised (and did not apply); anything else fails the replay.
     while(g.status==='running') {
-      for(const a of fixture.rejectedActions.filter(a=>a.tick===g.tick)) {
-        const before=JSON.stringify(g),r=await request(`/api/games/${room}/actions`,'POST',{action:a.action,opId:a.opId},tokens[a.country]);
-        assert.equal(r.status,a.status);assert.equal(r.data.error,a.error);assert.equal(JSON.stringify(g),before,'Rejected input must not mutate the match.');
-      }
       while(fixture.actions[index]?.tick===g.tick) {
-        const a=fixture.actions[index++],r=await request(`/api/games/${room}/actions`,'POST',{action:a.action,opId:a.opId},tokens[a.country]);
-        assert.equal(r.status,200,JSON.stringify({tick:g.tick,action:a,error:r.data}));
+        const a=fixture.actions[index++];
+        for(const step of adapt(g,a,offers)) {
+          const r=await request(`/api/games/${room}/actions`,'POST',{action:step.action,opId:step.opId},tokens[step.country]);
+          if(r.status>=500)throw new Error(JSON.stringify(r.data));
+          if(r.status!==200){const key=`${step.action.type}: ${r.data.error}`;skipped[key]=(skipped[key]||0)+1;continue;}
+          if(step.recorded==='propose')offers.map.set(recordedOffers[offers.next++],r.data.proposalId);
+        }
       }
       app.step(g,1);ledger=validate();
     }
     assert.equal(index,fixture.actions.filter(a=>a.tick<g.tick).length);
+    const standings=(await request('/api/standings')).data.standings;
+    assert.equal(standings.reduce((n,s)=>n+s.matches,0),map.countries.length);
     for(const id of Object.keys(tokens)) {
       const view=(await request(`/api/games/${room}`,'GET',undefined,tokens[id])).data;
       assert.deepEqual(view.outcome,g.outcome);assert.equal(view.you,id);
-      const history=(await request('/api/me','GET',undefined,profiles[id].token)).data.history;
-      assert.equal(history.length,1);assert.equal(history[0].eligible,0);
     }
-    return summary(g,ledger,'eight-authenticated-HTTP-seats; test-stepped clock');
+    return summary(g,ledger,'eight-authenticated-HTTP-seats; test-stepped clock',skipped);
   } finally {await app.close();}
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)) {

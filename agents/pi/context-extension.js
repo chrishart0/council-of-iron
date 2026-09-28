@@ -20,7 +20,7 @@ export function compactOldToolResults(messages, keepLast = 16) {
     const size = message.content?.reduce((sum, part) => sum + (part.type === 'text' ? part.text.length : 0), 0) || 0;
     if (size <= 1200) return message;
     trimmed++;
-    return { ...message, content: [{ type: 'text', text: '[Older game tool output omitted from this model request. Call situation or the original read tool for current details.]' }] };
+    return { ...message, content: [{ type: 'text', text: '[Older game tool output omitted from this model request. Call board, news or the original read tool for current details.]' }] };
   });
   return { messages: compacted, trimmed };
 }

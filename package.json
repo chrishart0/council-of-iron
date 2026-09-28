@@ -18,6 +18,13 @@
     "pi:play": "npm --prefix agents/pi run play --",
     "check": "node scripts/check.js",
     "test:balance": "node scripts/tournament.js",
-    "test:review": "python tests/review-browser.py"
+    "test:review": "python tests/review-browser.py",
+    "test:voice": "python tests/voice-browser.py",
+    "stt": "cd tools/stt && uv run server.py",
+    "test:stt": "cd tools/stt && uv run test_sidecar.py",
+    "bench:stt": "cd tools/stt && uv run bench.py"
+  },
+  "devDependencies": {
+    "tone": "^15.1.22"
   }
 }

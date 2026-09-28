@@ -1,0 +1,90 @@
+{
+ "generator": "scripts/sound/generate.py (Tone.js offline synthesis)",
+ "formats": [
+  "ogg",
+  "mp3"
+ ],
+ "loops": {
+  "theme": {
+   "loopStart": 1.0,
+   "loopEnd": 65.0,
+   "period": 64
+  },
+  "tension": {
+   "loopStart": 1.0,
+   "loopEnd": 17.0,
+   "period": 16
+  }
+ },
+ "cues": {
+  "war": {
+   "start": 0.25,
+   "duration": 4.971479
+  },
+  "alliance": {
+   "start": 5.471479,
+   "duration": 3.66
+  },
+  "peace": {
+   "start": 9.381479,
+   "duration": 3.86
+  },
+  "battle": {
+   "start": 13.491479,
+   "duration": 3.26
+  },
+  "fallen": {
+   "start": 17.001479,
+   "duration": 4.42375
+  },
+  "defeat": {
+   "start": 21.675229,
+   "duration": 6.270187
+  },
+  "industry_up": {
+   "start": 28.195417,
+   "duration": 2.06
+  },
+  "industry_down": {
+   "start": 30.505417,
+   "duration": 2.26
+  },
+  "countdown": {
+   "start": 33.015417,
+   "duration": 3.06
+  },
+  "countdown_stop": {
+   "start": 36.325417,
+   "duration": 2.86
+  },
+  "victory": {
+   "start": 39.435417,
+   "duration": 5.26
+  },
+  "draw": {
+   "start": 44.945417,
+   "duration": 4.044646
+  },
+  "dispatch": {
+   "start": 49.240063,
+   "duration": 1.96
+  },
+  "click": {
+   "start": 51.450063,
+   "duration": 0.2
+  },
+  "march": {
+   "start": 51.900063,
+   "duration": 1.06
+  },
+  "warning": {
+   "start": 53.210063,
+   "duration": 1.16
+  },
+  "chat": {
+   "start": 54.620063,
+   "duration": 0.36
+  }
+ },
+ "version": "c26258713488"
+}

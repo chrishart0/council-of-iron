@@ -18,9 +18,52 @@ import time
 import urllib.error
 import urllib.request
 from playwright.sync_api import sync_playwright, expect
-from browser_helpers import load_bridge
+from browser_helpers import load_bridge, lane, open_thread, close_comms
 
 ROOT = Path(__file__).resolve().parents[1]
+
+def centre(locator):
+    box=locator.bounding_box();return box['x']+box['width']/2,box['y']+box['height']/2
+def bring(page,province):
+    """Camera only: pan by dragging empty map until the province counter is well inside the view."""
+    vw,vh=page.viewport_size['width'],page.viewport_size['height']
+    for _ in range(5):
+        x,y=centre(page.locator(f'#marker-{province} .counter-body'))
+        if vw*.15<x<vw*.6 and vh*.2<y<vh*.6:return
+        sx,sy=page.evaluate("""([w,h])=>{for(let y=h*.3;y<h*.6;y+=13)for(let x=w*.25;x<w*.6;x+=13){const e=document.elementFromPoint(x,y);
+          if(e&&e.closest('#map')&&!e.closest('.map-counter,.map-cluster,.battle-counter,.moving-army'))return [x,y];}return null;}""",[vw,vh])
+        page.mouse.move(sx,sy);page.mouse.down()
+        for i in range(1,11):page.mouse.move(sx+(vw*.38-x)*i/10,sy+(vh*.4-y)*i/10)
+        page.mouse.up();page.wait_for_timeout(120)
+    raise AssertionError(('not in view',province))
+def confirmed(page,text,timeout=6000):
+    """An order confirmation shows in the one toast slot, unless a decision (an ACTION toast, e.g. an army about to
+    land on you) holds it: then the confirmation is not shown over it, by design. Either state passes."""
+    deadline=time.monotonic()+timeout/1000
+    while time.monotonic()<deadline:
+        if text in lane(page).inner_text():return
+        if lane(page).get_attribute('data-state')=='action':return
+        page.wait_for_timeout(100)
+    raise AssertionError(('no confirmation',text,lane(page).inner_text()))
+def province(page,pid):
+    """v0.8: select your province on the map (its card opens)."""
+    page.keyboard.press('Escape');page.locator('#home-view').click();page.wait_for_timeout(150)
+    clusters=page.locator(f'#map .map-cluster[data-cluster*="{pid}"]')
+    if clusters.count() and clusters.first.is_visible():clusters.first.click();page.wait_for_timeout(150)
+    bring(page,pid);x,y=centre(page.locator(f'#marker-{pid} .counter-body'));page.mouse.click(x,y)
+    expect(page.locator('#card')).to_have_attribute('data-kind','province')
+def order(page,src,dst):
+    """Your province, then (keyboard fallback in the expanded card) a neighbour: the order card."""
+    province(page,src)
+    if page.locator('#card').get_attribute('data-size')!='full':page.locator('#card-size').click()
+    page.locator('#destination').select_option(dst);expect(page.locator('#primary')).to_be_visible()
+    if page.locator('#card').get_attribute('data-size')!='full':page.locator('#card-size').click()
+def camera(page,view):
+    if not page.locator('#hud-menu').is_visible():page.locator('#menu-button').click()
+    page.locator(f'#{view}-view').click()
+def country_card(page,cid):
+    page.keyboard.press('Escape');page.locator(f'#lb-rows .lb-row[data-id="{cid}"]').click()
+    expect(page.locator('#card')).to_have_attribute('data-kind','country')
 
 def main():
     parser = argparse.ArgumentParser()
@@ -58,6 +101,7 @@ def main():
                 if args.executable: launch['executable_path']=args.executable
                 browser=playwright.chromium.launch(**launch)
                 context=browser.new_context(viewport={'width':1600,'height':1050},device_scale_factor=1)
+                context.add_init_script("window.__cues=[];document.addEventListener('coi:sound',e=>window.__cues.push(e.detail))")  # test-only listener
                 def load_page(page, match=None, saved=None):
                     page.on('pageerror',lambda error: report['pageErrors'].append(str(error)))
                     if not args.bridge:
@@ -71,11 +115,11 @@ def main():
                 page.screenshot(path=str(artifacts/'01-lobby.png'),full_page=True)
                 page.locator('#display-name').fill('Browser Commander')
                 page.locator('#room-name').fill('The First Council')
-                page.locator('#preset').select_option('standard')
-                page.locator('#create-form button').click()
+                page.locator('[data-preset="standard"]').click()
+                page.locator('#create-form button[type=submit]').click()
                 expect(page.locator('#lobby')).to_be_visible()
                 room=http('/api/games')['games'][0]['id']
-                page.locator('#country-choice').select_option('usa')
+                page.locator('[data-country-seat="usa"]').click()
                 page.locator('#join-form button').click()
                 expect(page.locator('#lobby-note')).to_contain_text('You command United States')
                 report['assertions'].append('Human browser created room and joined USA through UI.')
@@ -83,108 +127,164 @@ def main():
                 page.locator('#fill-bots').click()
                 expect(page.locator('#room-label')).to_contain_text('8/8')
                 page.locator('#start-match').click()
-                expect(page.locator('#phase')).to_have_text('OPENING COUNCIL')
-                page.locator('#leader-name').fill('President Meridian')
-                page.locator('#opening-message').fill('The republic enters the council with open eyes and steady resolve.')
-                page.locator('#opening-form button').click()
-                cli('opening','Envoy Ash','Britain comes to listen, bargain, and stand by its allies.')
-                expect(page.locator('#phase')).to_have_text('IN SESSION')
-                report['assertions'].append('Separate CLI process joined Britain; six practice bots filled seats; host started eight-seat match.')
+                expect(page.locator('#phase')).to_have_text('In session')  # Start means start
+                assert http(f'/api/games/{room}')['status']=='running'
+                report['assertions'].append('Separate CLI process joined Britain; six practice bots filled seats; the host pressed Start and the match began at once.')
                 if args.gif:
                     page.evaluate('''() => { const note=document.createElement('div');note.textContent='ACTUAL BROWSER CAPTURE · 12× TEST CLOCK · HEURISTIC AGENTS';note.style.cssText='position:fixed;right:18px;bottom:10px;z-index:20;padding:6px 10px;background:#142c34ee;border:1px solid #c6a87280;color:#e4d6ae;font:9px system-ui;letter-spacing:.7px;border-radius:3px;pointer-events:none';document.body.append(note); }''')
                 capture(page,800)
                 # Simulate the randomUUID restriction of plain-HTTP LAN browsers.
                 page.evaluate('crypto.randomUUID = undefined')
                 # Real DOM inputs -> shared action endpoint. No direct state mutation.
-                page.locator('#source').select_option('west-us')
-                page.locator('#destination').select_option('mexico')
-                page.locator('#amount').fill('7')
-                expect(page.locator('#preview')).to_contain_text('Risk-style rounds')
-                page.locator('#send-army').click()
-                expect(page.locator('#toast')).to_contain_text('Army committed')
+                expect(page.locator('#card')).to_be_hidden()  # nothing is open until the player asks
+                if page.locator('#coach').is_visible():page.locator('#coach-skip').click()  # first-match tips (covered by ui-browser)
+                order(page,'west-us','mexico')
+                page.locator('[data-fraction="0.5"]').click()
+                expect(page.locator('#order-details')).to_contain_text('dice rounds')
+                expect(page.locator('#sound-control')).to_have_attribute('data-loaded','ogg')  # decoded after the first click
+                page.locator('#primary').click()
+                confirmed(page,'Sent')
+                assert {'cue':'march','priority':1,'audible':True} in page.evaluate('window.__cues'),page.evaluate('window.__cues')
+                report['assertions'].append('Committing the march through the UI played the audible march cue (toast is the visible counterpart).')
                 cli('war','france')
-                cli('move','england','north-france','6')
-                page.locator('#source').select_option('central-us')
-                page.locator('#destination').select_option('west-us')
-                page.locator('.standing-order summary').click()
-                page.locator('#set-route').click()
-                expect(page.locator('#route-status')).to_contain_text('New recruits',timeout=10000)
-                report['assertions'].append('Browser and CLI committed armies; browser set a standing reinforcement route.')
+                # Engine headline -> the same World feed row for every viewer, with a live banner.
+                open_thread(page,'world')
+                # Practice bots may declare their own wars first; find this one by its parties.
+                expect(page.locator('#comms .cx-rows [data-kind="war"]').filter(has_text='French Republic').filter(has_text='British Empire').first).to_be_visible(timeout=10000)
+                close_comms(page)
+                report['assertions'].append('A CLI war declaration appeared as a war marker in the browser’s World thread (the history).')
+                cli('march','north-france','6','england')
+                province(page,'central-us');page.locator('#rally-province').click()
+                confirmed(page,'Tap one of your provinces')
+                page.mouse.click(*centre(page.locator('#marker-west-us .counter-body')))
+                confirmed(page,'Rally set')
+                expect(page.locator('#map [data-rally="central-us"]').first).to_be_attached(timeout=10000)
+                province(page,'central-us');expect(page.locator('#rally-province')).to_contain_text('Rally →')
+                page.keyboard.press('Escape')
+                report['assertions'].append('Browser and CLI committed armies; the browser set a rally point (Central US → West US) that the map draws.')
                 capture(page,1000)
-                page.locator('[data-tab="council"]').click()
-                page.locator('#ally-choice').select_option('britain')
+                country_card(page,'britain')
+                page.locator('#primary').click()  # Propose alliance: an inline name field with a default
+                expect(page.locator('#card-body .proposal')).to_contain_text('Sending is your approval')
                 page.locator('#coalition-name').fill('Atlantic Accord')
-                page.locator('#alliance-form button').click()
-                expect(page.locator('#offers')).to_contain_text('Atlantic Accord')
+                page.keyboard.press('Escape')  # leaving the card sends nothing
+                assert not http(f'/api/games/{room}')['proposals']
+                country_card(page,'britain');page.locator('#primary').click()
+                page.locator('#coalition-name').fill('Atlantic Accord');page.locator('#primary').click()
+                expect(page.locator('#card-status')).to_contain_text('ALLIANCE OFFER PENDING')
+                expect(page.locator('#card-status')).to_contain_text('Atlantic Accord')
                 capture(page,1000)
                 agent_state=cli('state')
                 offer=next(q for q in agent_state['proposals'] if q['name']=='Atlantic Accord')
                 cli('accept',offer['id'])
-                expect(page.locator('#coalition-info')).to_contain_text('Atlantic Accord',timeout=15000)
-                report['assertions'].append('Browser proposed coalition; CLI accepted; public notice elapsed; both shared the coalition and payout projection.')
+                # Alliance activation plays a dedicated seal animation, queued behind any other banner.
+                expect(page.locator('#alliance-seal')).to_be_visible(timeout=30000)
+                expect(page.locator('#alliance-name')).to_have_text('Atlantic Accord')
+                expect(page.locator('#alliance-standards figcaption')).to_have_count(2)
+                expect(page.locator('#alliance-standards')).to_contain_text('United States')
+                # Capture once the ribbon has stamped (its entrance animation is finished).
+                page.wait_for_function("()=>!document.querySelector('.alliance-ribbon').getAnimations().some(a=>a.playState==='running')",timeout=5000)
+                page.screenshot(path=str(artifacts/'alliance-seal.png'))
+                open_thread(page,'world');expect(page.locator('#comms .cx-rows [data-kind="alliance"]').first).to_contain_text('Atlantic Accord');close_comms(page)
+                report['assertions'].append('Alliance activation showed the standards-and-ribbon seal with country names and a matching World-thread marker.')
+                expect(page.locator('#commander-side')).to_contain_text('Atlantic Accord',timeout=15000)
+                # Relations without a drawer: the leaderboard marks allies and enemies from the public lists.
+                expect(page.locator('#lb-rows .lb-row[data-id="britain"]')).to_have_attribute('data-relation','ally')
+                wars=http(f'/api/games/{room}')['wars']
+                enemies=sorted({b if a=='usa' else a for a,b in (w.split(':') for w in wars) if 'usa' in (a,b)})
+                page.locator('[data-lb-mode="players"]').click()
+                for cid in enemies:expect(page.locator(f'#lb-rows .lb-row[data-id="{cid}"]')).to_have_attribute('data-relation','enemy',timeout=5000)
+                page.locator('[data-lb-mode="teams"]').click()
+                report['assertions'].append(f'Relations: the HUD names the alliance (Atlantic Accord); the leaderboard marks Britain as ally and {enemies or "nobody"} as enemies, matching the public war list.')
+                report['assertions'].append('Browser proposed an alliance; CLI accepted; after the public notice both shared the alliance.')
                 capture(page,1000)
                 # Cancellation must not file an accidental irreversible departure.
-                page.locator('#leave-alliance').click()
+                page.locator('#hud-standard').click();page.locator('#card-actions button',has_text='Leave alliance').click()
                 expect(page.locator('#confirm-dialog')).to_be_visible()
                 page.keyboard.press('Escape')
                 expect(page.locator('#confirm-dialog')).not_to_be_visible()
                 assert not http(f'/api/games/{room}')['departures']
                 report['assertions'].append('Leaving an alliance requires explicit confirmation; Escape leaves membership untouched.')
-                page.locator('[data-tab="dispatches"]').click()
-                page.locator('#channel').select_option('dm')
-                page.locator('#recipient').select_option('britain')
-                page.locator('#chat-text').fill('Hold the Atlantic. This dispatch is private.')
-                page.locator('#chat-form button').click()
-                expect(page.locator('#messages')).to_contain_text('This dispatch is private.')
-                assert any(e.get('text')=='Hold the Atlantic. This dispatch is private.' for e in cli('state')['events'])
+                # v0.9: the country card's Message opens that conversation in Messages with the composer focused.
+                page.keyboard.press('Escape')
+                country_card(page,'britain')
+                page.locator('#card-actions button',has_text='Message').click()
+                expect(page.locator('#comms')).to_have_attribute('data-view','thread');expect(page.locator('#comms .cx-title')).to_have_text('British Empire')
+                expect(page.locator('#cx-text')).to_be_focused()
+                expect(page.locator('#comms .cx-send')).to_be_enabled(timeout=10000)
+                page.locator('#cx-text').fill('Hold the Atlantic. This dispatch is private.')
+                page.locator('#comms .cx-send').click()
+                expect(page.locator('#comms .cx-msg[data-mine="true"]').last).to_contain_text('This dispatch is private.')
+                close_comms(page);page.keyboard.press('Escape')
+                # Drain the agent's cursor: the added banner waits let more events accumulate than one page.
+                agent_events,agent_cursor=[],0
+                while True:
+                    agent_state=cli('state',str(agent_cursor));agent_events+=agent_state['events'];agent_cursor=agent_state['cursor']
+                    if not agent_state['hasMore']:break
+                assert any(e.get('text')=='Hold the Atlantic. This dispatch is private.' for e in agent_events)
                 cli('chat','dm','usa','<img src=x onerror="window.INJECTED=true"> Agreed. I will hold.')
-                expect(page.locator('#messages')).to_contain_text('Agreed. I will hold.')
-                assert page.locator('#messages img').count()==0
-                expect(page.locator('#unread')).to_have_text('')
-                page.locator('#chat-text').fill('Unsent draft survives live updates.')
+                page.wait_for_timeout(2000/12+200)  # one message per 2 game seconds (anti-spam) on the 12x test clock
+                cli('chat','world','<img src=x onerror="window.INJECTED=true"> The envoy speaks to all.')
+                open_thread(page,'world')
+                expect(page.locator('#comms .cx-msg').last).to_contain_text('The envoy speaks to all.',timeout=10000)
+                assert page.locator('#comms img').count()==0 and not page.evaluate('window.INJECTED')
+                expect(page.locator('#comms .cx-rows')).not_to_contain_text('Agreed. I will hold.')  # the World thread holds no DMs
+                report['assertions'].append('Agent world speech reached the browser World thread as inert text; the World thread holds no private messages.')
+                open_thread(page,'dm:britain')
+                dm=page.locator('#comms .cx-msg[data-mine="false"]').last
+                expect(dm).to_contain_text('Agreed. I will hold.');expect(dm).to_be_visible()
+                assert page.locator('#comms img').count()==0
+                expect(dm).not_to_have_class(re.compile('cx-is-unread'),timeout=5000)  # read once shown in its thread
+                expect(page.locator('#comms .cx-switch [data-conv="dm:britain"] .cx-dot')).to_have_count(0,timeout=5000)  # (bots' war news may still be unread elsewhere)
+                page.locator('#cx-text').fill('Unsent draft survives live updates.')
                 page.wait_for_timeout(900)
-                expect(page.locator('#chat-text')).to_have_value('Unsent draft survives live updates.')
+                expect(page.locator('#cx-text')).to_have_value('Unsent draft survives live updates.')
                 capture(page,1200)
-                report['assertions'].append('Reading the wire clears the unread badge; an unsent draft survives live polling.')
+                report['assertions'].append('A DM shown in its open thread clears the Messages unread count; an unsent draft survives live polling.')
                 assert not page.evaluate('Boolean(window.INJECTED)')
                 public_state=http(f'/api/games/{room}')
                 assert not any(e['type']=='message' and e.get('channel')=='dm' for e in public_state['events'])
                 report['assertions'].append('Private diplomacy delivered both ways; spectator API excluded DMs; HTML in agent speech rendered as text, not executable markup.')
                 spectator=context.new_page();load_page(spectator)
-                expect(spectator.locator('.room-group').first).to_contain_text('Games in progress')
+                expect(spectator.locator('.room-group').first).to_contain_text('In progress')
                 spectator.locator(f'[data-room="{room}"][data-spectate="true"]').click()
-                expect(spectator.locator('#phase')).to_have_text('SPECTATING')
-                expect(spectator.locator('#spectator-note')).to_be_visible()
-                expect(spectator.locator('#move-form')).to_be_hidden()
-                expect(spectator.locator('#command-footer')).to_be_hidden()
+                expect(spectator.locator('#phase')).to_have_text('Watching')
+                expect(spectator.locator('body')).to_have_class(re.compile('spectating'))
+                expect(spectator.locator('#card')).to_be_hidden();expect(spectator.locator('#hud-standard')).to_be_disabled()
                 assert spectator.evaluate('document.documentElement.scrollHeight<=innerHeight+1')
-                spectator.locator('[data-tab="dispatches"]').click()
-                assert 'This dispatch is private.' not in spectator.locator('#messages').inner_text()
-                expect(spectator.locator('#scoreboard .country-card')).to_have_count(8)
+                open_thread(spectator,'world')
+                assert 'This dispatch is private.' not in spectator.locator('#comms').inner_text()
+                expect(spectator.locator('#comms [data-conv^="dm:"]')).to_have_count(0)
+                expect(spectator.locator('#comms-button .cx-count')).to_have_count(0)
+                expect(spectator.locator('#lb-powers [data-power]')).to_have_count(8)  # every power, one tap into its (read-only) card
                 spectator.screenshot(path=str(artifacts/'spectator-desktop.png'),full_page=True)
-                spectator.locator('#spectator-fullscreen').click()
-                expect(spectator.locator('body')).to_have_class(re.compile('spectator-map-fullscreen'))
-                assert spectator.locator('.war-room').bounding_box()['height'] >= 1049
-                page.locator('#channel').select_option('world')
-                expect(page.locator('#chat-form button')).to_be_enabled(timeout=10000)
-                page.locator('#chat-text').fill('<img src=x onerror="window.INJECTED=true"> Public call to the council.')
-                page.locator('#chat-form button').click()
-                expect(spectator.locator('#spectator-bubbles')).to_contain_text('Public call to the council.',timeout=10000)
-                assert spectator.locator('#spectator-bubbles img').count()==0
+                # v0.7: spectating is already full screen: the map is the viewport and the history stays beside it.
+                assert spectator.locator('#map').bounding_box()=={'x':0,'y':0,'width':1600,'height':1050}
+                expect(spectator.locator('#comms .cx-rows')).to_be_visible()
+                page.locator('#cx-text').fill('');open_thread(page,'world')
+                # Reply in the World thread: the shared chat action on channel world.
+                expect(page.locator('#comms .cx-send')).to_be_enabled(timeout=10000)
+                page.locator('#cx-text').fill('<img src=x onerror="window.INJECTED=true"> Public call to the council.')
+                page.locator('#comms .cx-send').click()
+                expect(page.locator('#cx-text')).to_have_value('')
+                expect(spectator.locator('#comms .cx-rows')).to_contain_text('Public call to the council.',timeout=10000)
+                assert spectator.locator('#comms img').count()==0
+                expect(spectator.locator('#comms .cx-composer')).to_be_hidden()
+                expect(spectator.locator('#comms .cx-rows [data-kind="war"]').first).to_be_attached()
+                assert any(e.get('channel')=='world' and e.get('text','').endswith('Public call to the council.') for e in http(f'/api/games/{room}/feed')['items'])
                 spectator.screenshot(path=str(artifacts/'spectator-fullscreen.png'),full_page=True)
-                assert 'This dispatch is private.' not in spectator.locator('#spectator-bubbles').inner_text()
+                assert 'This dispatch is private.' not in spectator.locator('#comms').inner_text()
+                close_comms(page)
                 spectator.keyboard.press('Escape')
-                expect(spectator.locator('body')).not_to_have_class(re.compile('spectator-map-fullscreen'))
+                expect(spectator.locator('#card')).to_be_hidden()
                 spectator.set_viewport_size({'width':390,'height':844})
-                spectator.locator('#spectator-fullscreen').click()
-                assert spectator.locator('.war-room').bounding_box()['height'] >= 843
+                assert spectator.locator('#map').bounding_box()=={'x':0,'y':0,'width':390,'height':844}
                 assert spectator.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1')
                 spectator.screenshot(path=str(artifacts/'spectator-mobile.png'),full_page=True)
                 spectator.close()
-                report['assertions'].append('Lobby spectator opened a full-viewport map on desktop and mobile; new world chat appeared as escaped bubbles, while private dispatches stayed hidden.')
+                report['assertions'].append('Lobby spectator watched on a full-viewport map with the World history beside it on desktop and mobile; the feed reply posted world chat that the read-only spectator feed showed as escaped text, while private dispatches stayed hidden.')
                 # External process now controls the existing agent seat over the real API.
                 bot=subprocess.Popen(['node','agents/bot.js'],cwd=ROOT,env={**os.environ,'COUNCIL_URL':url,'COUNCIL_SESSION':str(Path(tmp)/'agent.session.json'),'COUNCIL_TOKEN':'','COUNCIL_MATCH':room},stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
-                page.locator('[data-tab="orders"]').click()
                 deadline=time.monotonic()+15
                 while time.monotonic()<deadline:
                     state=http(f'/api/games/{room}')
@@ -193,21 +293,31 @@ def main():
                 assert any(e['type']=='battle' and e.get('province')=='mexico' for e in state['events'])
                 page.screenshot(path=str(artifacts/'02-campaign.png'),full_page=True)
                 capture(page,800)
-                page.locator('#europe-view').click();capture(page,900);page.screenshot(path=str(artifacts/'03-europe.png'),full_page=True)
-                page.locator('#world-view').click()
+                camera(page,'europe');capture(page,900);page.screenshot(path=str(artifacts/'03-europe.png'),full_page=True)
+                camera(page,'world')
                 report['assertions'].append('Browser-issued attack fought for Mexico after travel and multiple combat rounds; world and Europe zoom rendered.')
                 # Reconnect a second page with the same browser identity, not another join.
                 if args.bridge:saved=page.evaluate('window.__testStorage')
                 else:saved=None
+                caught_up=http(f'/api/games/{room}/feed')['cursor']
                 reconnect=context.new_page();load_page(reconnect,room,saved)
                 expect(reconnect.locator('#commander-title')).to_have_text('United States')
-                expect(reconnect.locator('#phase')).to_have_text('IN SESSION')
+                expect(reconnect.locator('#phase')).to_have_text('In session')
+                open_thread(reconnect,'world');expect(reconnect.locator('#comms .cx-rows [data-kind="alliance"]').first).to_be_attached()
+                # Old headlines are history only: no banner for anything that predates the reconnect.
+                shown=set()
+                for _ in range(25):
+                    shown.update(int(x) for x in reconnect.locator('#declaration:not([hidden]),#alliance-seal:not([hidden]),#fallen-seal:not([hidden])').evaluate_all('(n)=>n.map(e=>e.dataset.seq).filter(Boolean)'))
+                    reconnect.wait_for_timeout(100)
+                assert all(seq>caught_up for seq in shown),(shown,caught_up)
+                report['assertions'].append('Reconnect rebuilt the World thread from history without replaying old banners.')
                 report['assertions'].append('Same-seat reconnect restored country and private inbox without duplicate orders.')
                 reconnect.close()
                 # Mobile width: no document-level horizontal overflow, controls remain reachable.
                 page.set_viewport_size({'width':390,'height':844})
-                page.locator('[data-tab="council"]').click()
+                page.locator('#hud-standard').click()
                 page.screenshot(path=str(artifacts/'04-mobile.png'),full_page=True)
+                page.keyboard.press('Escape')
                 assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1'), 'Mobile horizontal overflow'
                 page.set_viewport_size({'width':1600,'height':1050})
                 report['assertions'].append('390-pixel mobile layout displayed controls without horizontal page overflow.')
@@ -227,8 +337,8 @@ def main():
                     batch=http(f'/api/games/{room}?after={event_cursor}'); public_events.extend(batch['events']); event_cursor=batch['cursor']
                     if not batch['hasMore']: break
                 report['events']={kind:sum(e['type']==kind for e in public_events) for kind in ['battle','army_departed','alliance_activated']}
-                expect(page.locator('#result')).to_contain_text('Experimental result recorded')
-                expect(page.locator('#aar-player-scores tbody tr')).to_have_count(8)
+                expect(page.locator('#result')).not_to_contain_text('Experimental')
+                expect(page.locator('#aar-standings tr[data-result-country]')).to_have_count(8)
                 after_action=cli('review')
                 assert after_action['historyAvailable']
                 assert after_action['outcome']==result['outcome']
@@ -244,6 +354,7 @@ def main():
                 page.wait_for_timeout(350)
                 page.locator('#replay-play').click()
                 assert int(page.locator('#replay-slider').input_value())>0
+                page.locator('#replay-exit').click()
                 for report_tab in ['military','economy','diplomacy','overview']:
                     page.locator(f'#aar-tab-{report_tab}').click()
                     expect(page.locator(f'#aar-{report_tab}')).to_be_visible()
@@ -251,107 +362,119 @@ def main():
                 stdout,stderr=bot.communicate(timeout=20);assert bot.returncode==0,stderr
                 assert json.loads(stdout)['scores']==result['outcome']['scores']
                 report['assertions'].append('Wall-clock match reached a final result; browser and external agent observed identical final scores.')
-                page.locator('[data-home]').click()
-                expect(page.locator('#standings')).to_contain_text('Browser Commander')
-                report['assertions'].append('Persistent experimental standings included the browser player after returning to the lobby.')
+                page.locator('#aar-back').click()
+                page.locator('#tab-standings').click()
+                me=next(p for p in http('/api/standings')['standings'] if p['name']=='Browser Commander')
+                expect(page.locator('#standings .standing-row',has_text='Browser Commander')).to_contain_text(f"{me['wins']}–{me['draws']}–{me['losses']}")
+                assert me['matches']==1 and me['wins']==(next(s for s in result['outcome']['scores'] if s['country']=='usa')['result']=='win'),me
+                page.locator('#tab-rooms').click()
+                report['assertions'].append('The win–draw–loss record includes the browser player after returning to the rooms.')
                 # Local UI interactions: distinct source selection, keyboard tabs and a real next room.
                 page.locator('#room-name').fill('Second Council')
-                page.locator('#create-form button').click()
+                page.locator('#create-form button[type=submit]').click()
                 expect(page.locator('#lobby')).to_be_visible()
-                page.locator('#country-choice').select_option('usa')
+                page.locator('[data-country-seat="usa"]').click()
                 page.locator('#join-form button').click()
-                room2=http('/api/games')['games'][0]['id']
-                cli('join',room2,'germany','External CLI Envoy')
+                page.locator('#fill-bots').click()
                 page.locator('#start-match').click()
-                expect(page.locator('#phase')).to_have_text('OPENING COUNCIL')
-                page.locator('#leader-name').fill('President Meridian')
-                page.locator('#opening-message').fill('A second council meets under the republic’s watch.')
-                page.locator('#opening-form button').click()
-                cli('opening','Envoy Ash','Germany attends this second council.')
-                expect(page.locator('#phase')).to_have_text('IN SESSION')
-                page.locator('#marker-west-us').click()
-                expect(page.locator('#source')).to_have_value('west-us')
-                page.locator('[data-fraction="1"]').click()
-                expected_amount=int(page.locator('#amount').get_attribute('max'))
-                expect(page.locator('#amount')).to_have_value(str(expected_amount))
-                page.locator('#marker-mexico').click()
-                expect(page.locator('#destination')).to_have_value('mexico')
-                page.locator('#marker-central-us').click(modifiers=['Shift'])
-                expect(page.locator('#source')).to_have_value('central-us')
-                expect(page.locator('#destination')).to_have_value('')
-                page.locator('#orders-label').focus()
-                page.keyboard.press('ArrowRight')
-                expect(page.locator('#council-label')).to_be_focused()
-                expect(page.locator('#council-label')).to_have_attribute('aria-selected','true')
-                report['assertions'].append('A second room starts with the same browser identity; map targeting, Max, Shift-source selection and keyboard tabs work.')
-                page.locator('[data-tab="orders"]').click()
-                page.locator('#source').select_option('west-us')
-                page.locator('#destination').select_option('mexico')
-                page.locator('[data-order-mode=coordinate]').click()
-                page.locator('#group-percent').select_option('50')
-                page.locator('[data-attack-source="central-us"]').check()
-                page.locator('#coordinate-preview').click()
-                expect(page.locator('#attack-plan')).to_contain_text('Shared arrival')
+                expect(page.locator('#phase')).to_have_text('In session')
+                expect(page.locator('#card')).to_be_hidden()
+                if page.locator('#coach').is_visible():page.locator('#coach-skip').click()
+                names={p['id']:p['name'] for p in http('/map.json')['provinces']}
+                # Tap-tap on the map: your province, then a neighbour; Shift-click adds another source.
+                province(page,'west-us');expect(page.locator('#card-title')).to_have_text(names['west-us'])
+                expect(page.locator('#card')).to_have_attribute('data-size','peek')  # a map selection opens a peeking card
+                if not page.locator('#marker-mexico').is_visible():page.locator('#zoom-out').click()
+                page.mouse.click(*centre(page.locator('#marker-mexico .counter-body')))
+                expect(page.locator('#card-title')).to_have_text(names['mexico']);expect(page.locator('#card-sub')).to_contain_text(names['west-us'])
+                page.locator('[data-fraction="1"]').click();expect(page.locator('#amount-out')).to_contain_text('100%')
+                page.keyboard.down('Shift');page.mouse.click(*centre(page.locator('#marker-central-us .counter-body')));page.keyboard.up('Shift')
+                # Shift-click adds a second source to the same order (multi-select); both arrive together.
+                expect(page.locator('#card-title')).to_have_text(names['mexico']);expect(page.locator('#card-sub')).to_contain_text('from 2 provinces')
+                expect(page.locator('#sources .source-chip')).to_have_count(2)
+                page.keyboard.press('Escape');expect(page.locator('#card')).to_be_hidden()
+                page.locator('#hud-standard').focus();page.keyboard.press('Enter')
+                expect(page.locator('#card')).to_have_attribute('data-kind','alliance');expect(page.locator('#card-title')).to_be_focused()
+                page.keyboard.press('Escape');expect(page.locator('#card')).to_be_hidden();expect(page.locator('#hud-standard')).to_be_focused()
+                report['assertions'].append('A second room starts with the same browser identity; map taps open a peeking order card (province, then neighbour); 100% and Shift-click adding a second source work; the standard opens and closes the alliance card by keyboard with focus returned.')
+                # Attack together: with the target chosen, tapping another of your provinces beside it adds a source.
+                order(page,'west-us','mexico');page.locator('[data-fraction="0.5"]').click()
+                page.locator('#card-size').click()  # back to peek so the map is free
+                page.mouse.click(*centre(page.locator('#marker-central-us .counter-body')))
+                expect(page.locator('#sources .source-chip')).to_have_count(2)
+                page.locator('#card-size').click();expect(page.locator('#order-details')).to_contain_text('arrive together')
                 page.screenshot(path=str(artifacts/'06-coordinated-plan.png'),full_page=True)
                 capture(page,1300)
-                page.locator('#coordinate-commit').click()
-                expect(page.locator('#toast')).to_contain_text('Group march committed')
+                page.locator('#primary').click()
+                confirmed(page,'Sent')
+                room2=http('/api/games')['games'][0]['id']
                 page.wait_for_timeout(1400)
                 # Group recall is a browser control, never direct mutation of the game.
+                province(page,'west-us');page.locator('#card-size').click()
                 recall_group=page.locator('[data-recall]').filter(has_text='Recall group')
                 expect(recall_group).to_be_visible(timeout=10000)
                 recall_group.click()
-                expect(page.locator('#toast')).to_contain_text('Recall queued')
+                confirmed(page,'Recall queued')
                 expect(page.locator('.march-row.returning').first).to_be_visible(timeout=5000)
                 page.screenshot(path=str(artifacts/'07-recalling.png'),full_page=True)
                 capture(page,1300)
-                report['assertions'].append('Browser previewed and committed a two-source synchronized attack, then recalled the group with real return time.')
-                page.locator('#source').select_option('west-us')
-                page.locator('#destination').select_option('east-us')
-                expect(page.locator('#group-percent')).to_have_value('100')
-                page.locator('[data-attack-source="central-us"]').check()
-                expect(page.locator('#attack-summary')).to_contain_text('2 sources')
-                page.locator('#coordinate-preview').click()
-                expect(page.locator('#attack-plan')).to_contain_text('Shared arrival')
-                expect(page.locator('#coordinate-commit')).to_be_enabled(timeout=15000)
-                page.locator('#coordinate-commit').click()
-                expect(page.locator('#toast')).to_contain_text('Group march committed')
-                report['assertions'].append('Browser selected two owned source provinces, defaulted to 100% available troops, and committed one long-distance group transfer to East US.')
+                report['assertions'].append('Browser committed a two-source attack (a second province added by tapping it beside the target) as one order, then recalled the group with real return time.')
                 # Alaska starts undeveloped; let natural recruitment fund construction.
-                page.locator('[data-order-mode=develop]').click()
-                page.locator('#source').select_option('alaska')
-                expect(page.locator('#development-panel')).to_be_visible()
-                expect(page.locator('#develop-province')).to_be_enabled(timeout=30000)
-                expect(page.locator('#development-payback')).to_contain_text('payback')
-                page.locator('#develop-province').click()
-                expect(page.locator('#confirm-dialog')).to_contain_text('Spend 20 troops')
+                province(page,'alaska')
+                develop=page.locator('#develop-province')
+                expect(develop).to_be_enabled(timeout=40000)
+                page.locator('#card-size').click();expect(page.locator('#development-payback')).to_contain_text('payback')
+                develop.click()
+                expect(page.locator('#confirm-dialog')).to_contain_text('Spend 24 troops')
                 page.locator('#confirm-dialog [value="confirm"]').click()
-                expect(page.locator('#toast')).to_contain_text('Investment committed')
-                expect(page.locator('#development-status')).to_contain_text('completes in',timeout=6000)
+                confirmed(page,'Investment committed')
+                expect(develop).to_contain_text(re.compile('Construction queued|Building level'),timeout=6000)
                 page.screenshot(path=str(artifacts/'08-development.png'),full_page=True)
                 capture(page,1300)
-                expect(page.locator('#industry-level')).to_contain_text('Ⅱ',timeout=18000)
-                report['assertions'].append('Browser funded, confirmed and completed province development using naturally recruited manpower.')
+                # Construction takes 120 game seconds; Alaska borders Canada, so the build either completes or the province
+                # falls first (and the unfinished work is lost). Both are the real rule; the card must show whichever happened.
+                deadline=time.monotonic()+25
+                while time.monotonic()<deadline:
+                    alaska=next(p for p in http(f'/api/games/{room2}')['provinces'] if p['id']=='alaska')
+                    if alaska['owner']!='usa' or alaska['development']>=2:break
+                    page.wait_for_timeout(300)
+                if alaska['owner']=='usa':
+                    assert alaska['development']==2,alaska
+                    province(page,'alaska');expect(page.locator('#card-sub')).to_contain_text('industry Ⅱ',timeout=5000)
+                    report['assertions'].append('Browser funded, confirmed and completed province development using naturally recruited manpower.')
+                else:
+                    assert alaska['developing'] is None and alaska['development']==1,alaska
+                    report['assertions'].append('Browser funded and confirmed province development with naturally recruited manpower; a bot captured Alaska before the 120-second build finished, and the unfinished work was lost (the capture rule).')
+                # A long march: through your own land to a province beyond the neighbours (one controlled route).
+                order(page,'west-us','east-us')
+                expect(page.locator('#primary')).to_contain_text('Reinforce')
+                expect(page.locator('#order-details')).to_contain_text('Via',timeout=5000)
+                expect(page.locator('#primary')).to_be_enabled(timeout=10000)
+                page.screenshot(path=str(artifacts/'10-long-march.png'))
+                page.locator('#primary').click();confirmed(page,'Sent')
+                deadline=time.monotonic()+8
+                while time.monotonic()<deadline and not any(a.get('path') and a['path'][-1]=='east-us' for a in http(f'/api/games/{room2}')['armies']):page.wait_for_timeout(250)
+                assert any(a.get('path') and a['path'][-1]=='east-us' for a in http(f'/api/games/{room2}')['armies']),lane(page).inner_text()
+                report['assertions'].append('Browser sent a long march from West US to East US through its own land: the card showed the route and the server moved one column along it.')
                 page.set_viewport_size({'width':390,'height':844})
                 assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1')
                 page.screenshot(path=str(artifacts/'09-mobile-orders.png'),full_page=True)
                 page.set_viewport_size({'width':1600,'height':1050})
-
-                page.locator('#back').click()
-                page.locator('#room-name').fill('Practice Council')
-                page.locator('#create-form button').click()
+                # A host who filled every seat with bots before choosing a country takes one of them over.
+                page.goto(url+'/');expect(page.locator('#room-name')).to_be_visible()
+                page.locator('#room-name').fill('Practice council')
+                page.locator('#create-form button[type=submit]').click()
                 expect(page.locator('#lobby')).to_be_visible()
-                page.locator('#country-choice').select_option('usa')
+                page.locator('[data-country-seat="japan"]').click()
+                expect(page.locator('#fill-bots')).to_contain_text('Take this seat')
                 page.locator('#fill-bots').click()
-                expect(page.locator('#lobby-note')).to_contain_text('You command United States')
                 expect(page.locator('#room-label')).to_contain_text('8/8')
+                expect(page.locator('#lobby-note')).to_contain_text('You command Empire of Japan')
                 practice=http('/api/games')['games'][0]['id']
-                practice_state=http(f'/api/games/{practice}')
-                assert practice_state['players'][0]['id']=='usa'
-                assert sum(p['kind']=='bot' for p in practice_state['players'])==7
-                page.locator('#start-match').click()
-                expect(page.locator('#phase')).to_have_text('OPENING COUNCIL')
-                report['assertions'].append('Host filled a new room before manually joining, took the selected country, and started a seven-bot practice match.')
+                players=http(f'/api/games/{practice}')['players']
+                assert next(p for p in players if p['id']=='japan')['kind']=='human' and sum(p['kind']=='bot' for p in players)==7
+                page.locator('#start-match').click();expect(page.locator('#phase')).to_have_text('In session')
+                report['assertions'].append('A host who had not chosen a country took Japan and filled the other seven seats with bots in one step, then started the match.')
 
                 assert not report['pageErrors'],report['pageErrors']
                 if args.gif:
@@ -388,5 +511,9 @@ def main():
     if args.executable:ui_command.extend(['--executable',args.executable])
     if args.ui_gif:ui_command.extend(['--gif',args.ui_gif])
     subprocess.run(ui_command,cwd=ROOT,check=True)
+    # Voice input: fake microphone through MediaRecorder, the /stt proxy and a fake sidecar.
+    voice_command=[sys.executable,str(ROOT/'tests/voice-browser.py'),'--artifacts',str(artifacts/'voice')]
+    if args.executable:voice_command.extend(['--executable',args.executable])
+    if not args.bridge:subprocess.run(voice_command,cwd=ROOT,check=True)
 
 if __name__=='__main__':main()
