@@ -158,10 +158,10 @@ test('rally clear, bulk sources and idempotent retries', () => {
   assert.throws(() => send(g, 'usa', { ...action, to: 'east-us' }, 'rally-1'), /different action/);
   assert.throws(() => send(g, 'usa', { type: 'rally', from: ['mexico', 'mexico'], to: 'west-us' }), /once/);
   assert.throws(() => send(g, 'usa', { type: 'rally', from: ['east-us', 'atlantis'], to: 'west-us' }), /Unknown province/);
-  tick(g); assert.deepEqual(g.rallies.map(x => x.from), ['central-us', 'mexico', 'canada']);
+  tick(g); assert.deepEqual(g.rallies.map(x => x.from), ['canada', 'central-us', 'mexico']);
   send(g, 'usa', { type: 'rally', from: ['mexico', 'central-us'], to: null });
   send(g, 'usa', { type: 'rally', from: 'east-us', to: 'west-us' });
-  tick(g); assert.deepEqual(g.rallies.map(x => x.from), ['east-us', 'canada']);
+  tick(g); assert.deepEqual(g.rallies.map(x => x.from), ['canada', 'east-us']);
   assert.ok(g.events.some(e => e.type === 'rally_cleared' && e.reason === 'order'));
 });
 
