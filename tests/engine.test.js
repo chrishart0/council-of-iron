@@ -12,7 +12,7 @@ function game(ids=map.countries.map(c=>c.id)){
 let serial=0;const command=(g,id,action,opId=`rules-${++serial}`)=>act(g,map,id,action,opId);
 const advance=(g,n)=>{for(let i=0;i<n;i++)tick(g);};
 test('industrial map is connected and country starts do not overlap',()=>{
-  assert.equal(map.id,'imperial-1910-v4');assert.equal(map.provinces.length,80); // v3 (79) + Hawaii
+  assert.equal(map.id,'imperial-1910-v5');assert.equal(map.provinces.length,80);
   const starts=map.countries.flatMap(c=>c.start);
   assert.equal(starts.length,new Set(starts).size);
   const byId=new Map(map.provinces.map(p=>[p.id,p]));let seen=new Set([map.provinces[0].id]);

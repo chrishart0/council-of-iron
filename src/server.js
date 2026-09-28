@@ -14,14 +14,14 @@ import { choose } from '../agents/policy.js';
 import { makeStt } from './stt.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-import { MAP, mapFor } from './maps.js';
+import { MAP } from './maps.js';
 export { MAP };
 const PRESETS = { standard: 1, quick: 6 };
 /** A stored room is loaded only when it was created on the current map and rules (every current rule
  * key is present, and none that has been removed); a finished one also needs its public record.
  * Rooms from earlier versions of the game are skipped at startup (logged), never migrated. */
-export function loadable(g) {
-  if (!g || typeof g !== 'object' || g.scenario !== MAP.id || !g.rules) return false;
+export function loadable(g, map = MAP) {
+  if (!g || typeof g !== 'object' || g.scenario !== map.id || !g.rules) return false;
   if (!same(Object.keys(RULES), Object.keys(g.rules).filter(key => key !== 'revealAllianceChatAfterMatch'))) return false;
   return g.status !== 'finished' || Boolean(g.afterAction && g.outcome);
 }
@@ -80,12 +80,14 @@ function json(res, status, data) { res.writeHead(status, { 'Content-Type': 'appl
 /** `clockScale` accelerates ALL game timing in local tests; no HTTP endpoint can advance time. */
 export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScale = 1,
   publicOrigin = process.env.PUBLIC_ORIGIN || '', automatic = true,
-  sttUrl = process.env.STT_URL || '', tls = null, gameIdFactory = () => randomUUID().slice(0,8) } = {}) {
+  sttUrl = process.env.STT_URL || '', tls = null, gameIdFactory = () => randomUUID().slice(0,8), map = MAP } = {}) {
+  // `map` is the board new rooms are created on; tests replaying a recorded match pass the board it was played on.
+  const mapFor = g => g?.scenario === map.id ? map : null;
   // PUBLIC_ORIGIN may list several comma-separated origins (e.g. LAN http plus an HTTPS name for phones).
   const publicOrigins = publicOrigin.split(',').map(o=>o.trim()).filter(Boolean);
   const stt = makeStt({ url: sttUrl });
-  const store = new Store(dbPath), stored = store.load(), games = new Map(stored.filter(loadable).map(g=>[g.id,g]));
-  if (stored.length > games.size) console.log(`Skipped ${stored.length-games.size} stored room(s) from an earlier version of the game: ${stored.filter(g=>!loadable(g)).map(g=>g?.id).join(', ')}`);
+  const store = new Store(dbPath), stored = store.load(), games = new Map(stored.filter(g=>loadable(g,map)).map(g=>[g.id,g]));
+  if (stored.length > games.size) console.log(`Skipped ${stored.length-games.size} stored room(s) from an earlier version of the game: ${stored.filter(g=>!loadable(g,map)).map(g=>g?.id).join(', ')}`);
   const fractions = new Map(), ipBudgets = new Map();
   let previous = performance.now();
   const replayReaders = new Map(); // At most four decoded public records in memory.
@@ -169,7 +171,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         const gameId=gameIdFactory();
         requireRule(typeof gameId==='string' && /^[a-zA-Z0-9-]{1,32}$/.test(gameId) && !games.has(gameId),'Invalid or duplicate room ID.');
         const g=createGame({id:gameId,name:data.name || 'Council chamber',hostId:me.id,
-          speed:PRESETS[data.preset || 'standard']},MAP);
+          speed:PRESETS[data.preset || 'standard']},map);
         // New rooms only (never inside createGame): alliance chat is published in the finished replay.
         g.rules.revealAllianceChatAfterMatch=true;
         games.set(g.id,g);save(g);return json(res,201,{id:g.id});

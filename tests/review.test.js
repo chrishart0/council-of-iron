@@ -145,7 +145,7 @@ test('admission forecasts show the combined industry against the victory line; i
 });
 test('HTTP review is read-only, private-state safe, bounded and durable across restart',async t=>{
   const dir=mkdtempSync(pathJoin(tmpdir(),'review-test-')),dbPath=pathJoin(dir,'review.db');let app;
-  async function launch(){app=makeServer({dbPath,automatic:false});await new Promise(r=>app.server.listen(0,'127.0.0.1',r));}
+  async function launch(){app=makeServer({dbPath,automatic:false,map});await new Promise(r=>app.server.listen(0,'127.0.0.1',r));}
   await launch();t.after(async()=>{await app.close();rmSync(dir,{recursive:true,force:true});});
   async function call(path,token){const r=await fetch(`http://127.0.0.1:${app.server.address().port}${path}`,{headers:token?{Authorization:`Bearer ${token}`}:{}});return {status:r.status,data:await r.json()};}
   const g=structuredClone(recorded);g.id='recorded';

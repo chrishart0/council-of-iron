@@ -149,8 +149,8 @@ def main():
                 cli('war','france')
                 # Engine headline -> the same World feed row for every viewer, with a live banner.
                 open_thread(page,'world')
-                expect(page.locator('#comms .cx-rows [data-kind="war"]').first).to_contain_text('French Republic',timeout=10000)
-                expect(page.locator('#comms .cx-rows [data-kind="war"]').first).to_contain_text('British Empire')
+                # Practice bots may declare their own wars first; find this one by its parties.
+                expect(page.locator('#comms .cx-rows [data-kind="war"]').filter(has_text='French Republic').filter(has_text='British Empire').first).to_be_visible(timeout=10000)
                 close_comms(page)
                 report['assertions'].append('A CLI war declaration appeared as a war marker in the browser’s World thread (the history).')
                 cli('march','north-france','6','england')

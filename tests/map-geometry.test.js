@@ -7,7 +7,7 @@ const load = name => JSON.parse(readFileSync(new URL(`../public/${name}`, import
 // Known gameplay links whose polygons do not share a border line. Reported, not silently changed:
 // adjacency is a rule, geometry is presentation.
 const KNOWN_LAND_LINKS_WITHOUT_BORDER = {
-  'imperial-map.json': ['poland|west-russia'], // polygons meet only at a corner point
+  'imperial-map.json': [],
 };
 
 for (const name of ['imperial-map.json']) {

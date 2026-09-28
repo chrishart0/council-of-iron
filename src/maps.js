@@ -7,5 +7,3 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 /** The one published map (served at /map.json). */
 export const MAP = JSON.parse(readFileSync(resolve(root, 'public/imperial-map.json'), 'utf8'));
-/** The map of a room, or null when the room was created on another (removed) map. */
-export const mapFor = g => g?.scenario === MAP.id ? MAP : null;

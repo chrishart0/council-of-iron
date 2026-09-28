@@ -20,7 +20,8 @@ import { resolve } from 'node:path';
 import { createGame, join, start, act, tick, sides, RuleError } from '../src/engine.js';
 
 export const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../tests/fixtures/handplay-20260927.json.gz', import.meta.url))));
-export const map = JSON.parse(readFileSync(new URL('../public/imperial-map.json', import.meta.url)));
+// The board the recording was played on; the published map's borders have since been redrawn.
+export const map = JSON.parse(readFileSync(new URL('../tests/fixtures/handplay-map.json', import.meta.url)));
 export const projection = g => ({ tick:g.tick, status:g.status, provinces:g.provinces, armies:g.armies, sides:sides(g), outcome:g.outcome });
 export const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const troopTotal = g => g.provinces.reduce((n,p)=>n+p.troops,0)+g.armies.reduce((n,a)=>n+a.amount,0);
@@ -101,7 +102,7 @@ export function replay({ onTick } = {}) {
 }
 export async function replayHttp() {
   const {makeServer}=await import('../src/server.js');
-  const app=makeServer({dbPath:':memory:',automatic:false,gameIdFactory:()=>'handplay'});
+  const app=makeServer({dbPath:':memory:',automatic:false,gameIdFactory:()=>'handplay',map});
   await new Promise(r=>app.server.listen(0,'127.0.0.1',r));
   const origin=`http://127.0.0.1:${app.server.address().port}`,profiles={},tokens={};
   async function request(path,method='GET',data,token) {

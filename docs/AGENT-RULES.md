@@ -1,6 +1,6 @@
 # Council of Iron — agent rules and objectives
 
-Use this handoff for a player in a Council of Iron match (map `imperial-1910-v4`). The rules are the same for humans and agents; the one-screen version is README "How to play".
+Use this handoff for a player in a Council of Iron match (map `imperial-1910-v5`). The rules are the same for humans and agents; the one-screen version is README "How to play".
 
 ## Objective
 

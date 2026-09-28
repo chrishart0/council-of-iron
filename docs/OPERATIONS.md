@@ -2,7 +2,7 @@
 
 ## Current scenario and saved records
 
-There is one map, `imperial-1910-v4` (`public/imperial-map.json`, the source of truth), and one ruleset (`RULES` in `src/engine.js`). The game keeps no backward compatibility: at startup the server loads a stored room only if it was created on this map with exactly the current rule fields (`loadable()` in `src/server.js`); a finished one also needs its materialized public review. Anything else is skipped with one log line (`Skipped N stored room(s) from an earlier version of the game: …`); unreadable snapshots are skipped too. Nothing is migrated: the rows stay in SQLite. The results table of earlier versions (Prestige) is dropped at start; standings count wins, draws and losses from then on. Back up SQLite normally before updating.
+There is one map, `imperial-1910-v5` (`public/imperial-map.json`, the source of truth), and one ruleset (`RULES` in `src/engine.js`). The game keeps no backward compatibility: at startup the server loads a stored room only if it was created on this map with exactly the current rule fields (`loadable()` in `src/server.js`); a finished one also needs its materialized public review. Anything else is skipped with one log line (`Skipped N stored room(s) from an earlier version of the game: …`); unreadable snapshots are skipped too. Nothing is migrated: the rows stay in SQLite. The results table of earlier versions (Prestige) is dropped at start; standings count wins, draws and losses from then on. Back up SQLite normally before updating.
 
 ## Supported deployment
 
