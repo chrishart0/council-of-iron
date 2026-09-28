@@ -220,6 +220,12 @@ try {
   while (Date.now() < deadline && record.turns < (taskMode === 'fixed' ? 1 : maxTurns)) {
     const state = await client.observe(0);
     if (state.status === 'finished') { record.outcome = state.outcome; break; }
+    const eliminatedAt = taskMode === 'match' ? state.players.find(player => player.id === country)?.eliminatedAt : null;
+    if (eliminatedAt != null) {
+      if (record.eliminatedAt == null) { record.eliminatedAt = eliminatedAt; save(); }
+      await sleep(3000);
+      continue;
+    }
     record.turns++;
     const before = state.tick;
     const started = Date.now();

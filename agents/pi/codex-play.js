@@ -168,6 +168,12 @@ try {
     while (Date.now() < deadline && record.turnAttempts < maxTurns) {
       const before = await client.observe(0);
       if (before.status === 'finished') { record.outcome = before.outcome; break; }
+      const eliminatedAt = taskMode === 'match' ? before.players.find(player => player.id === country)?.eliminatedAt : null;
+      if (eliminatedAt != null) {
+        if (record.eliminatedAt == null) { record.eliminatedAt = eliminatedAt; save(); }
+        await sleep(3000);
+        continue;
+      }
       if (taskMode === 'fixed' && evaluateFixedTask(app.games.get(created.id).actionLog).success) break;
       record.turnAttempts++;
       const prompt = taskMode === 'fixed' ? FIXED_TASK_PROMPT
