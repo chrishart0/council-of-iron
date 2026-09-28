@@ -15,6 +15,7 @@
     "cli": "node agents/cli.js",
     "mcp": "node agents/mcp.js",
     "bot": "node agents/bot.js",
+    "pi:play": "npm --prefix agents/pi run play --",
     "check": "node scripts/check.js",
     "test:balance": "node scripts/tournament.js",
     "test:review": "python tests/review-browser.py",

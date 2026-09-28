@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createGame, join, start, act, tick, observe, turnAroundPlan, RULES, RULESETS } from '../src/engine.js';
+import { createGame, join, start, act, tick, observe, turnAroundPlan, RULES } from '../src/engine.js';
 import { travelTicks, distanceKm } from '../public/movement.js';
 const map = JSON.parse(readFileSync(new URL('../public/imperial-map.json', import.meta.url)));
 const cases = JSON.parse(readFileSync(new URL('./balance-cases.json', import.meta.url)));
 let next = 0;
 /** USA, Britain and Japan; `setup` edits ownership before the start so recruitment timers run. */
-function game({ ruleset, setup } = {}) {
-  const g = createGame({ id: `logistics-${++next}`, name: 'Logistics', hostId: 'usa', ...(ruleset ? { ruleset } : {}) }, map);
+function game({ setup } = {}) {
+  const g = createGame({ id: `logistics-${++next}`, name: 'Logistics', hostId: 'usa' }, map);
   for (const id of ['usa', 'britain', 'japan']) join(g, map, { profileId: id, name: id, country: id });
   setup?.(g); start(g); return g;
 }
@@ -21,36 +21,26 @@ const rallyArmies = g => g.armies.filter(a => a.rally);
 const ally = (g, ...ids) => { for (const id of ids) g.players.find(p => p.id === id).side = 'coalition-test'; };
 const mexicoToPacific = g => own(g, 'mexico', 'usa', 10);
 
-test('classic rooms keep the exact old rules and travel table; logistics-1 is opt-in by name', () => {
+test('one ruleset: every link ×1.2 faster than the distance table, internal links a further ×2, integer ceilings', () => {
   const g = game();
   assert.deepEqual(g.rules, { ...RULES, economyShare: .6 });
-  assert.equal(g.internalTravelTimes, undefined);
-  const byId = new Map(map.provinces.map(p => [p.id, p]));
-  for (const p of map.provinces) for (const id of p.neighbors)
-    assert.equal(g.travelTimes[p.id][id], RULES.marchSetup + Math.ceil(distanceKm(p, byId.get(id)) / RULES.kmPerTick));
-  assert.equal(observe(g, 'usa').internalTravelTimes, undefined);
-  assert.throws(() => createGame({ id: 'x', name: 'x', hostId: 'x', ruleset: 'nope' }, map), /Unknown ruleset/);
-});
-
-test('logistics-1: every link ×1.2, internal links a further ×2, integer ceilings', () => {
-  const g = game({ ruleset: 'logistics-1' }), classic = game();
-  assert.equal(g.rules.ruleset, 'logistics-1');
   assert.deepEqual(g.rules.developmentCosts, [0, 24, 48]); assert.deepEqual(g.rules.developmentTicks, [0, 120, 180]);
+  const byId = new Map(map.provinces.map(p => [p.id, p]));
   for (const p of map.provinces) for (const id of p.neighbors) {
-    const base = classic.travelTimes[p.id][id];
+    const base = RULES.marchSetup + Math.ceil(distanceKm(p, byId.get(id)) / RULES.kmPerTick);
     assert.equal(g.travelTimes[p.id][id], Math.ceil(base * 5 / 6));
     assert.equal(g.internalTravelTimes[p.id][id], Math.ceil(base * 5 / 12));
+    assert.equal(travelTicks(p, byId.get(id), RULES), g.travelTimes[p.id][id]);
   }
-  assert.equal(travelTicks(map.provinces[0], map.provinces[1], RULES), travelTicks(map.provinces[0], map.provinces[1], RULES, true));
+  assert.deepEqual(observe(g, 'usa').internalTravelTimes, g.internalTravelTimes);
 });
 
-test('the balance fixture and the server ruleset are the same numbers', () => {
-  const { ruleset, ...fixture } = RULESETS['logistics-1'];
-  assert.deepEqual(cases['logistics-1'].rules, { ...fixture });
+test('the logistics-1 balance fixture is the current rules', () => {
+  for (const [key, value] of Object.entries(cases['logistics-1'].rules)) assert.deepEqual(RULES[key], value, key);
 });
 
-test('logistics-1 charges internal speed only when both ends are friendly at departure', () => {
-  const g = game({ ruleset: 'logistics-1', setup: g => own(g, 'west-us', 'usa', 60) });
+test('internal speed is charged speed only when both ends are friendly at departure', () => {
+  const g = game({ setup: g => own(g, 'west-us', 'usa', 60) });
   const inside = send(g, 'usa', { type: 'move', from: 'west-us', to: 'central-us', amount: 10 });
   const outside = send(g, 'usa', { type: 'move', from: 'west-us', to: 'mexico', amount: 10 });
   assert.equal(inside.arrivesAt, g.tick + 1 + g.internalTravelTimes['west-us']['central-us']);
@@ -67,15 +57,15 @@ test('logistics-1 charges internal speed only when both ends are friendly at dep
   assert.ok(g.internalTravelTimes['west-us']['central-us'] < g.travelTimes['west-us']['central-us']);
 });
 
-test('logistics-1 battles resolve four rounds per five ticks with unchanged dice per round; classic every tick', () => {
-  for (const [ruleset, expected] of [[undefined, 10], ['logistics-1', 8]]) {
-    const g = game({ ruleset, setup: g => { own(g, 'mexico', 'britain', 400); own(g, 'west-us', 'usa', 400); } });
+test('battles resolve four rounds per five ticks with unchanged dice per round', () => {
+  for (const [ruleset, expected] of [['current', 8]]) {
+    const g = game({ setup: g => { own(g, 'mexico', 'britain', 400); own(g, 'west-us', 'usa', 400); } });
     send(g, 'usa', { type: 'declare_war', country: 'britain' });
     send(g, 'usa', { type: 'move', from: 'west-us', to: 'mexico', amount: 300 });
     until(g, () => g.battles.length === 1);
     const rounds = new Set();
     for (let i = 0; i < 10; i++) { tick(g); if (g.battles[0]?.lastRound) rounds.add(g.battles[0].lastRound.tick); }
-    assert.equal(rounds.size, expected, ruleset || 'classic');
+    assert.equal(rounds.size, expected, ruleset);
     const r = g.battles[0].lastRound; assert.ok(r.attackDice.length === 3 && r.defendDice.length === 2);
   }
 });
@@ -109,7 +99,7 @@ test('rally keep N forwards everything above N at each recruitment', () => {
 });
 
 test('rally takes the fastest path through allied land without gifting troops', () => {
-  const g = game({ ruleset: 'logistics-1', setup: g => { own(g, 'mexico', 'usa', 30); own(g, 'central-us', 'britain', 10); own(g, 'west-us', 'japan', 10); } });
+  const g = game({ setup: g => { own(g, 'mexico', 'usa', 30); own(g, 'central-us', 'britain', 10); own(g, 'west-us', 'japan', 10); } });
   ally(g, 'usa', 'britain');
   const plan = send(g, 'usa', { type: 'rally', from: 'mexico', to: 'east-us', keep: 10 });
   assert.deepEqual(plan.sources[0].path, ['central-us', 'east-us']);
@@ -202,7 +192,7 @@ test('rally clear, bulk sources, idempotent retries and the command budget', () 
 
 test('rally matches are deterministic and survive a snapshot round trip', () => {
   const play = () => {
-    const g = game({ ruleset: 'logistics-1', setup: g => { own(g, 'mexico', 'usa', 30); own(g, 'central-us', 'britain', 10); } });
+    const g = game({ setup: g => { own(g, 'mexico', 'usa', 30); own(g, 'central-us', 'britain', 10); } });
     ally(g, 'usa', 'britain');
     send(g, 'usa', { type: 'rally', from: ['mexico', 'west-us'], to: 'east-us', keep: 4 }, 'a');
     advance(g, 50); return g;

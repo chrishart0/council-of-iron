@@ -1,10 +1,8 @@
 /** Public diplomatic relations from an observation. Pure: no DOM, no I/O.
  * Shared by the atlas, browser panels and agent tools so they agree with the engine:
- * allies share a side; with formal war rules, enemies are pairs listed in `wars`;
- * in legacy rooms (no formal war) every non-ally is hostile, as in the engine's atWar.
+ * allies share a side; enemies are pairs listed in `wars` (war is always declared).
  */
 export const warKey = (a, b) => [a, b].sort().join(':');
-const formalWar = observation => observation?.rules ? Boolean(observation.rules.warRequired) : Array.isArray(observation?.wars);
 export function allied(observation, a, b) {
   const players = observation?.players || [];
   const pa = players.find(p => p.id === a), pb = players.find(p => p.id === b);
@@ -14,10 +12,9 @@ export function atWar(observation, a, b) {
   if (!a || !b || a === b || allied(observation, a, b)) return false;
   const players = observation?.players || [];
   if (!players.some(p => p.id === a) || !players.some(p => p.id === b)) return false;
-  return !formalWar(observation) || (observation.wars || []).includes(warKey(a, b));
+  return (observation.wars || []).includes(warKey(a, b));
 }
-/** An army that can actually attack `you`: marching (not returning) on your land, from a country at war with you.
- * Under formal-war rules a neutral's army turns back on arrival, so it is not a threat. */
+/** An army that can actually attack `you`: marching (not returning) on your land, from a country at war with you. A neutral's army turns back on arrival, so it is not a threat. */
 export function threatening(observation, army, you) {
   if (!army || army.returning || !you) return false;
   const target = (observation?.provinces || []).find(p => p.id === army.to);

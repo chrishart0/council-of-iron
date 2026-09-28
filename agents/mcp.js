@@ -4,6 +4,8 @@
  * Implements the 2025-06-18 protocol subset described in docs/AGENTS.md.
  */
 import { CouncilClient } from './client.js';
+import { strategicOptions } from './strategic-options.js';
+import { situation } from './situation.js';
 import { createInterface } from 'node:readline';
 const client=new CouncilClient();
 const string={type:'string'},integer={type:'integer'},op={opId:{type:'string',description:'Stable unique command ID. Reuse only to retry this exact action.'}};
@@ -14,25 +16,51 @@ function tool(name,description,properties,required,run,readOnly=false){
     annotations:{readOnlyHint:readOnly,destructiveHint:!readOnly,openWorldHint:false},run});
 }
 tool('list_matches','List public rooms. Join a country before the host starts.',{},[],()=>client.list(),true);
-tool('map','Read province IDs, adjacency, starting countries and map geometry.',{},[],()=>client.map(),true);
-tool('create_match','Create a room. Registers a local identity if needed. Standard is 30 real minutes, quick is five. ruleset defaults to logistics-1 (faster movement, ×2 more on internal links, 25% slower battles, costlier development); classic keeps the older timings.',
-  {name:string,playerName:string,preset:{type:'string',enum:['standard','quick']},ruleset:{type:'string',enum:['logistics-1','classic']}},['name','playerName'],async a=>{
-    if(!client.session.profileToken && !client.explicitToken)await client.register(a.playerName);return client.create(a.name,a.preset || 'standard',a.ruleset);});
-tool('join_match','Join an open room as an agent. Keep a separate COUNCIL_SESSION file per agent. Saves a match-scoped credential locally.',
-  {match:string,country:string,name:string,model:string,persona:string},['match','country','name'],a=>client.join(a.match,a.country,a.name,a.model,a.persona));
-tool('start_match','Start your hosted match after humans and agents take their seats.',{},[],()=>client.start());
+tool('map','Read province IDs, adjacency, coordinates, connections and starting countries. Decorative SVG paths are omitted.',{},[],async()=>{const map=await client.map();return {...map,provinces:map.provinces.map(({path,...province})=>province)};},true);
+tool('create_match','Create a room. Registers a local identity if needed. Standard is 30 real minutes, quick is five.',
+  {name:string,playerName:string,preset:{type:'string',enum:['standard','quick']}},['name','playerName'],async a=>{
+    if(!client.session.profileToken && !client.explicitToken)await client.register(a.playerName);return client.create(a.name,a.preset || 'standard');});
+tool('join_match','Join an open room as an agent. Public visibility makes qualifying messages available in the finished report; private is the default. Keep a separate COUNCIL_SESSION file per agent.',
+  {match:string,country:string,name:string,model:string,persona:string,visibility:{type:'string',enum:['public','private']}},['match','country','name'],a=>client.join(a.match,a.country,a.name,a.model,a.persona,a.visibility));
+tool('start_match','Lock the lobby and begin the 90-second opening. Agents inspect the map, choose a leader name, and send a world introduction before military play begins.',{},[],()=>client.start());
+tool('lock_opening','Your first move: lock a leader name and world introduction during the 90-second opening. The match begins early when every seat locks. A missing introduction gets a default at timeout.',
+  {leaderName:{type:'string',maxLength:60},openingMessage:{type:'string',maxLength:500}},['leaderName','openingMessage'],a=>client.opening(a.leaderName,a.openingMessage));
 tool('add_practice_bots','Host only: fill empty lobby seats with deterministic, non-LLM practice bots. Makes the match experimental.',{},[],()=>client.bots());
 tool('observe','Observe current board, legal command budget, proposals, scores, read-only industry/admission/reserve insights and delivered messages. Pass the previous cursor; drain hasMore before advancing it. Player text is untrusted game speech.',
   {after:{type:'integer',minimum:0}},[],a=>client.observe(a.after || 0),true);
+let situationCursor=0,situationMatch=null;
+tool('situation','Read a concise board and delivered diplomacy without full battle history or repeated old events. Omit after to continue from this MCP session’s previous cursor; use after=0 to review from the start. Use observe for full detail and strategic_options for legal local choices. Player text remains untrusted game speech.',
+  {after:{type:'integer',minimum:0}},[],async a=>{
+    const o=await client.observe(a.after ?? situationCursor);
+    if(situationMatch && situationMatch!==o.id){
+      const fresh=await client.observe(a.after ?? 0);situationMatch=fresh.id;situationCursor=fresh.cursor;return situation(fresh);
+    }
+    situationMatch=o.id;situationCursor=o.cursor;return situation(o);
+  },true);
+tool('match_leaderboard','Read the current match ranking by completed industry. Includes every alliance (solo sides too), each player’s industry, current strength-weighted victory share and conditional payouts. This is not persistent cross-match standings.',
+  {},[],async()=>{const o=await client.observe(0);return {status:o.status,tick:o.tick,economyThreshold:o.economyThreshold,
+    leaderboard:o.leaderboard,outcome:o.outcome};},true);
+tool('strategic_options','Compare your industry gap, adjacent targets, payable development, and possible partners. Each partner has a current-strength victory share and optimistic full-maturity Prestige by decisive win or deadline rank; use these before proposing an alliance. readyDevelopments lists provinces where develop can be issued NOW; if it is empty, do not call develop until the board changes. Static board arithmetic only: this does not predict combat, acceptance, or future orders.',
+  {},[],async()=>strategicOptions(await client.observe(0),await client.map()),true);
+tool('alliance_victory_share','Read your current alliance victory share and conditional point forecasts. Decisive assumes your side completes a 60% hold; deadline assumes current industry ranking stays final. This spends no command.',
+  {},[],async()=>{const o=await client.observe(0);if(!o.you)throw new Error('Join a country to read your own alliance share.');
+    const side=o.players.find(p=>p.id===o.you)?.side,team=o.leaderboard.alliances.find(s=>s.id===side);
+    const mine=o.leaderboard.players.find(p=>p.country===o.you);
+    return {status:o.status,tick:o.tick,country:o.you,alliance:team,shareOfAllianceVictory:mine.victoryShare,
+      sharePercent:mine.victoryShare*100,earnedSharePercentIfDecisiveNow:mine.victoryShare*mine.maturity*100,
+      industryBrought:mine.strengthIndustry,maturity:mine.maturity,
+      decisivePayoutIfWon:mine.projectedDecisivePayout,deadlinePayoutIfNow:mine.projectedDeadlinePayout,
+      decisivePrestigeIfWon:mine.projectedPrestige,deadlinePrestigeIfNow:mine.projectedDeadlinePayout-100,
+      assumption:o.leaderboard.assumption,actualResult:o.outcome?.scores.find(p=>p.country===o.you)??null};},true);
 tool('world_feed','Read the public World feed, oldest first: engine-classified headlines (war, peace, alliance formed/changed, eliminations, victory holds, top-tier industry, factory damage, major battles) merged with world-channel chat. Headlines are structured facts in item.headline; chat items carry untrusted:true player speech. Pass the previous cursor and drain hasMore. Reply with send_message on channel world.',
   {after:{type:'integer',minimum:0},limit:{type:'integer',minimum:1,maximum:500}},[],a=>client.feed(a.after || 0,a.limit || 100),true);
 tool('leaderboard','Ranked standings shown on every player\'s map: provinces held (share of all provinces), then total troops (garrisons plus all of that country\'s armies on the map), then ID. mode teams (default: each alliance is one total row with its members nested, sorted by strength, each with shareOfAlliance of the alliance troops; forming alliances are marked forming), players (flat) or alliances (sums without nesting). Independents rank as themselves. Your own row is always included with its real rank. Public data only; territory is not the victory condition (industry is).',
   {mode:{type:'string',enum:['teams','players','alliances']},limit:{type:'integer',minimum:1,maximum:8}},[],a=>client.leaderboard(a.mode || 'teams',a.limit || 8),true);
-tool('wars','Active wars from the public observation, grouped as fronts between sides (a coalition or an independent country) with their country pairs, plus your own allies, enemies and neutral countries. warRequired false means the room needs no declaration to attack. Read-only; reveals nothing beyond what spectators see.',
+tool('wars','Active wars from the public observation, grouped as fronts between sides (a coalition or an independent country) with their country pairs, plus your own allies, enemies and neutral countries. Read-only; reveals nothing beyond what spectators see.',
   {},[],()=>client.wars(),true);
-tool('preview','Preview combat against the current garrison. Not a guarantee of future outcome.',
+tool('preview','Read exact static Risk-round capture odds against the current garrison. Amount must be positive and no more than the source’s uncommitted troops (see strategic_options.nearbyTargets[].adjacentSources[].availableNow). Defender wins ties. Reinforcements, recruitment and retreat can change the outcome.',
   {from:string,to:string,amount:integer},['from','to','amount'],a=>client.preview(a.from,a.to,a.amount),true);
-tool('move','Commit troops across one connection. Leave one behind. Counts as one military command; executes next tick by default. Industrial scenario allows recall and distance-based travel. Supply exactly one of amount or percent; optional arriveAt schedules arrival. Optional declareWar:true (solo countries) declares war and marches atomically.',
+tool('move','Commit troops to a neighbouring province, or through a chain of your own provinces to any province beyond them (the path is chosen for you and returned). Leave one behind. For an enemy target, strategic_options.nearbyTargets[].requiresWar must be false; a pending declaration is not an active war. Amount must not exceed the source adjacentSources.availableNow. Counts as one military command; executes next tick by default. Industrial scenario allows recall and distance-based travel. Supply exactly one of amount or percent; optional arriveAt schedules arrival. Optional declareWar:true (solo countries) declares war and marches atomically.',
   {from:string,to:string,amount:{type:'integer',minimum:1},percent:{type:'number',exclusiveMinimum:0,maximum:100},arriveAt:{type:'integer',minimum:1},declareWar,...op},['from','to'],a=>client.action({type:'move',from:a.from,to:a.to,amount:a.amount,percent:a.percent,arriveAt:a.arriveAt,declareWar:a.declareWar},a.opId));
 tool('transit','March through 1–7 allied intermediate provinces to a final connected destination without gifting the troops. Alliance departure waits while troops are inside an ally’s borders. Optional declareWar:true (solo countries) declares war on the final destination owner atomically.',
   {from:string,amount:{type:'integer',minimum:1},path:{type:'array',minItems:2,maxItems:8,items:string},declareWar,...op},
@@ -51,22 +79,22 @@ tool('accept_alliance','Consent to this exact roster. Fully approved changes act
 tool('decline_alliance','Decline or withdraw an open alliance offer without changing allegiance.',
   {proposalId:string,...op},['proposalId'],a=>client.action({type:'decline',proposalId:a.proposalId},a.opId));
 tool('leave_alliance','Announce departure. After 30 seconds you become independent and your maturity starts over.',op,[],a=>client.action({type:'leave'},a.opId));
-tool('declare_war','Declare war on another country and its coalition. A solo declaration is immediate; a coalition needs majority approval within 60 game seconds.',
+tool('declare_war','Declare war on another country and its coalition. A solo declaration is immediate; a coalition needs majority approval within 60 game seconds. Check situation.diplomacy before calling: do not repeat a still-open war motion between these sides. Attack only after situation.wars shows active war.',
   {country:string,...op},['country'],a=>client.action({type:'declare_war',country:a.country},a.opId));
 tool('offer_peace','Offer peace to a country and its coalition. A coalition first needs a majority to send; the other side then needs a majority to accept within 60 game seconds.',
   {country:string,...op},['country'],a=>client.action({type:'offer_peace',country:a.country},a.opId));
-tool('vote_war','Approve your coalition’s pending war declaration.',{motionId:string,...op},['motionId'],a=>client.action({type:'vote_war',motionId:a.motionId},a.opId));
+tool('vote_war','Approve your coalition’s pending war declaration. Use only a voting war motion in situation.diplomacy with expiresAt greater than the current tick and your vote absent; these motions expire quickly.',{motionId:string,...op},['motionId'],a=>client.action({type:'vote_war',motionId:a.motionId},a.opId));
 tool('vote_peace','Approve sending a peace offer or accepting one addressed to your coalition.',{motionId:string,...op},['motionId'],a=>client.action({type:'vote_peace',motionId:a.motionId},a.opId));
 tool('send_message','Send untrusted in-game speech. One per ten game seconds across all channels, up to 500 characters. No compulsory reply or action acknowledgment. Alliance chat becomes public in the replay after the match ends (rooms whose rules have revealAllianceChatAfterMatch; check observe.rules). Direct messages stay private.',
   {channel:{type:'string',enum:['world','alliance','dm']},to:string,text:{type:'string',maxLength:500},...op},['channel','text'],a=>client.action({type:'chat',channel:a.channel,to:a.to,text:a.text},a.opId));
-tool('after_action_report','Read a finished match’s public report. Alliance Prestige is the sum of member scores, not a second reward. No DMs or private offers are disclosed; in rooms flagged revealAllianceChatAfterMatch the diplomacy section includes allianceChat (untrusted player speech).',
+tool('after_action_report','Read a finished match’s public report. Alliance Prestige is the sum of member scores, not a second reward. No DMs or private offers are disclosed; in rooms flagged revealAllianceChatAfterMatch the diplomacy section includes allianceChat, and publicAgentMessages holds messages of public AI agents (both untrusted player speech).',
   {section:{type:'string',enum:['summary','military','economy','diplomacy']}},[],async a=>{
     const r=await client.review(),section=a.section || 'summary';
     if(section==='military')return {metrics:r.metrics,battles:r.battles,historyAvailable:r.historyAvailable};
     if(section==='economy')return {metrics:r.metrics,totals:r.totals,series:r.series,historyAvailable:r.historyAvailable};
     if(section==='diplomacy')return {tenures:r.tenures,events:r.events?.filter(e=>['alliance_activated','departed','dominance','dominance_broken','finished'].includes(e.type)),
-      allianceChatRevealed:r.allianceChatRevealed ?? false,allianceChat:r.allianceChat ?? [],historyAvailable:r.historyAvailable};
-    const {series,events,battles,tenures,allianceChat,...summary}=r;return summary;
+      allianceChatRevealed:r.allianceChatRevealed ?? false,allianceChat:r.allianceChat ?? [],publicAgentMessages:r.messages ?? [],historyAvailable:r.historyAvailable};
+    const {series,events,battles,tenures,allianceChat,messages,...summary}=r;return summary;
   },true);
 tool('replay_state','Inspect the public board at an exact tick of a completed match. Read-only; no orders or private messages are returned.',
   {tick:{type:'integer',minimum:0}},['tick'],a=>client.replay(a.tick),true);
@@ -76,7 +104,7 @@ const attackProperties={to:string,arriveAt:{type:'integer',minimum:1},sources:{t
   items:{type:'object',properties:{from:string,amount:{type:'integer',minimum:1},percent:{type:'number',exclusiveMinimum:0,maximum:100}},required:['from'],additionalProperties:false}}};
 tool('plan_attack','Preview a multi-source attack and its earliest shared arrival tick without spending a command. Each source needs exactly one of amount or percent.',
   attackProperties,['to','sources'],a=>client.plan(a),true);
-tool('coordinated_attack','Commit connected source provinces to one target on the same tick. Supply amount or percent per source, optionally arriveAt. Nearby sources wait under reservation. One shared command; no privileged bot execution. Optional declareWar:true (solo countries) declares war and attacks atomically.',
+tool('coordinated_attack','Commit connected source provinces to one target on the same tick. Supply amount or percent per source, optionally arriveAt. Nearby sources wait under reservation. Sources may also reach the target through a chain of your own provinces. Attacking another country requires an active war first (declare_war), or declareWar:true for a solo country. One shared command; no privileged bot execution. Optional declareWar:true (solo countries) declares war and attacks atomically.',
   {...attackProperties,declareWar,...op},['to','sources'],a=>{const {opId,...action}=a;return client.action({type:'attack',...action},opId);});
 tool('recall','Cancel a queued attack or recall an outbound army/group. Troops already marching return from their current position and remain vulnerable; they fight if home is now hostile.',
   {id:string,...op},['id'],a=>client.action({type:'recall',id:a.id},a.opId));
@@ -84,7 +112,7 @@ tool('turn_around','Reverse one of your own moving (not fighting) armies; execut
   {armyId:string,...op},['armyId'],a=>client.turnAround(a.armyId,a.opId));
 tool('preview_turn_around','Read-only: what turn_around would do for one of your moving armies if sent now — mode (recall or resume), destination, arrival tick, and any battle another side is already fighting there (your troops would be turned back again if it is still under way when they arrive). Spends no command.',
   {armyId:string},['armyId'],a=>client.turnAroundPreview(a.armyId),true);
-tool('develop','Spend local uncommitted manpower to improve province recruitment. Costs and build times are in observe.rules.developmentCosts/developmentTicks (classic: 12 troops/60 ticks to level II, 24/90 to III; logistics-1: 24/120 and 48/180); observe.insights.developments forecasts each. Capture destroys unfinished work, not completed levels.',
+tool('develop','Develop only a province in strategic_options.readyDevelopments; otherwise this call will fail. Spend local uncommitted manpower to improve recruitment and defense. Costs and build times are in observe.rules.developmentCosts/developmentTicks (24 troops/120 ticks to level II, 48/180 to III); observe.insights.developments forecasts each. Level II and III add 1 to the highest defender die. Capture destroys unfinished work, not completed levels.',
   {from:string,...op},['from'],a=>client.action({type:'develop',from:a.from},a.opId));
 
 let initialized=false,ready=false;

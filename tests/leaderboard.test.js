@@ -63,10 +63,6 @@ test('rows carry public relations from relations.js; wars group into side-vs-sid
     britain: ['you', ['germany']], japan: ['neutral', []] });
   assert.deepEqual(leaderboard(sided, { mode: 'alliances', you: 'france' }).rows.find(r => r.id === 'coalition-1').atWarWith, ['germany']);
   assert.equal(leaderboard(sided).rows[0].relation, undefined, 'no viewer, no relation');
-  // Legacy rooms (no formal war): every non-ally is hostile, exactly as the engine lets them attack; no fronts are listed.
-  const legacy = { ...sided, rules: { warRequired: false }, wars: [] };
-  assert.equal(leaderboard(legacy, { you: 'britain' }).rows.find(r => r.id === 'france').relation, 'enemy');
-  assert.deepEqual(warsOf(legacy), []);
 });
 test('teams: one total row per alliance with nested members; totals include every army; shares sum to 100%', async () => {
   const sided = { ...view, rules: { warRequired: true }, wars: ['britain:germany'], proposals: [],

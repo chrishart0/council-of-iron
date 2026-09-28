@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Council of Iron · Agent trials</title>
+  <style>
+    :root { color-scheme: dark; --ink:#dbe8ed; --muted:#96abb8; --ground:#0d202b; --panel:#17303e; --line:#375464; --pi:#6fd8dc; --codex:#eec877; --bad:#e89189; --good:#9fdcae; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--ground); color:var(--ink); font:16px/1.45 "Trebuchet MS", Arial, sans-serif; }
+    body::before { content:""; position:fixed; inset:0; pointer-events:none; background:repeating-linear-gradient(90deg,transparent 0,transparent 95px,#ffffff08 96px); }
+    main { position:relative; max-width:1320px; margin:auto; padding:32px clamp(20px,4vw,56px) 70px; }
+    header { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:24px; align-items:end; border-bottom:2px solid var(--pi); padding:10px 0 28px; }
+    .eyebrow, th, .note-label, label, .stat-label { text-transform:uppercase; letter-spacing:.14em; font:700 11px/1.3 Verdana, sans-serif; }
+    .eyebrow { color:var(--pi); }
+    h1 { font:normal clamp(46px,7vw,86px)/.92 Georgia,serif; letter-spacing:-.055em; margin:12px 0 10px; }
+    h1 em { color:var(--pi); font-style:normal; }
+    header p { max-width:62ch; color:var(--muted); margin:0; }
+    .seal { border:2px solid var(--pi); border-radius:50%; width:94px; height:94px; display:grid; place-content:center; text-align:center; color:var(--pi); font:bold 12px/1.1 Verdana,sans-serif; letter-spacing:.13em; transform:rotate(-8deg); }
+    .controls { display:flex; gap:16px; flex-wrap:wrap; align-items:end; padding:24px 0; }
+    label { color:var(--muted); display:grid; gap:8px; }
+    select { min-width:170px; border:1px solid var(--line); background:var(--panel); color:var(--ink); padding:10px 32px 10px 12px; border-radius:4px; font:15px/1.2 inherit; }
+    select:focus-visible, button:focus-visible { outline:3px solid var(--pi); outline-offset:3px; }
+    .stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); }
+    .stat { min-height:116px; background:var(--panel); padding:18px 20px; }
+    .stat-label { color:var(--muted); }
+    .stat strong { display:block; font:normal 36px/1 Georgia,serif; margin:16px 0 5px; }
+    .stat small { color:var(--muted); }
+    .surface { margin-top:24px; border:1px solid var(--line); background:var(--panel); }
+    .surface-heading { display:flex; justify-content:space-between; gap:14px; align-items:baseline; padding:20px 22px 10px; }
+    h2 { font:normal 28px/1.1 Georgia,serif; margin:0; }
+    .surface-heading p { color:var(--muted); margin:0; font-size:13px; }
+    #plot { display:block; width:100%; height:340px; }
+    .legend { display:flex; gap:20px; padding:0 24px 20px; color:var(--muted); font-size:13px; }
+    .legend span::before { content:""; display:inline-block; width:12px; height:3px; background:var(--pi); vertical-align:middle; margin-right:7px; }
+    .legend .codex::before { background:var(--codex); }
+    .table-wrap { overflow-x:auto; }
+    table { border-collapse:collapse; width:100%; min-width:850px; font-variant-numeric:tabular-nums; }
+    th,td { padding:11px 14px; text-align:left; border-top:1px solid var(--line); white-space:nowrap; }
+    th { color:var(--muted); background:#102733; }
+    tbody tr:hover { background:#244150; }
+    td:nth-child(n+8) { text-align:right; }
+    .client { font-weight:700; }
+    .client.pi { color:var(--pi); }
+    .client.codex { color:var(--codex); }
+    .negative { color:var(--bad); }
+    .positive { color:var(--good); }
+    .notes { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:22px; margin-top:26px; color:var(--muted); font-size:14px; }
+    .notes p { border-left:2px solid var(--line); padding-left:15px; margin:0; }
+    .note-label { color:var(--ink); display:block; margin-bottom:7px; }
+    #error, #task-error { color:var(--bad); padding:20px; }
+    @media(max-width:700px) { header { grid-template-columns:1fr; } .seal { display:none; } .stats { grid-template-columns:repeat(2,minmax(0,1fr)); } .notes { grid-template-columns:1fr; } .surface-heading { display:block; } #plot { height:280px; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div><div class="eyebrow">Council of Iron / integration trial ledger</div><h1>Agent <em>trials</em></h1><p>One agent seat against seven practice bots. These runs expose tool failures and latency; a few quick rooms do not establish playing strength. A shared seed fixes combat rolls for the same state, but agents create different states.</p></div>
+    <div class="seal" aria-hidden="true">IRON<br>COUNCIL<br>LAB</div>
+  </header>
+  <section class="controls" aria-label="Filter benchmark results">
+    <label>Model <select id="model"><option value="all">All models</option><option value="qwen">Qwen</option><option value="luna">Luna</option><option value="external">External profile</option></select></label>
+    <label>Country <select id="country"><option value="all">All countries</option></select></label>
+    <label>Clock <select id="preset"><option value="all">Both speeds</option><option value="standard">Normal</option><option value="quick">Quick</option></select></label>
+    <label>Combat seed <select id="seed"><option value="all">All rooms</option></select></label>
+    <label>Measure <select id="measure"><option value="prestige">Final Prestige</option><option value="failedToolCalls">Failed tool calls</option><option value="rejectedActions">Rejected game orders</option><option value="failureRatePct">Failure rate</option><option value="totalTokens">Total tokens</option><option value="uncachedTokens">Uncached tokens</option><option value="tokensPerAction">Tokens per accepted action</option><option value="meanTurnSeconds">Seconds per turn</option><option value="firstActionSeconds">Seconds to first action</option></select></label>
+  </section>
+  <div id="error" role="alert" hidden></div>
+  <section class="stats" aria-label="Selected run summary">
+    <div class="stat"><div class="stat-label">Completed runs</div><strong id="count">—</strong><small>in this view</small></div>
+    <div class="stat"><div class="stat-label">Pi mean Prestige</div><strong id="pi-score">—</strong><small>completed Pi rooms</small></div>
+    <div class="stat"><div class="stat-label">Codex mean Prestige</div><strong id="codex-score">—</strong><small>completed Codex rooms</small></div>
+    <div class="stat"><div class="stat-label">Tool failures</div><strong id="failures">—</strong><small>all selected calls</small></div>
+  </section>
+  <section class="surface" aria-labelledby="plot-title">
+    <div class="surface-heading"><h2 id="plot-title">Runs over time</h2><p id="plot-detail">Select a measure to compare the clients.</p></div>
+    <svg id="plot" role="img" aria-label="Benchmark values over time"></svg>
+    <div class="legend"><span>Pi</span><span class="codex">Codex</span></div>
+  </section>
+  <section class="surface" aria-labelledby="table-title">
+    <div class="surface-heading"><h2 id="table-title">Match ledger</h2><p>— means the original runner did not record that metric.</p></div>
+    <div class="table-wrap"><table><thead><tr><th>Started</th><th>Model</th><th>Country</th><th>Client</th><th>Clock</th><th>Seed</th><th>Strategy</th><th>Prestige</th><th>Accepted</th><th>Rejected orders</th><th>Failed / calls</th><th>Tokens</th><th>First action (s)</th><th>Seconds / turn</th></tr></thead><tbody id="rows"></tbody></table></div>
+  </section>
+  <section class="surface" aria-labelledby="pair-title">
+    <div class="surface-heading"><h2 id="pair-title">Same-seed run deltas</h2><p>Pi minus Codex. Positive Prestige and negative failure, rejection or token deltas favor Pi; these are separate games.</p></div>
+    <div class="table-wrap"><table><thead><tr><th>Model</th><th>Country</th><th>Clock</th><th>Seed</th><th>Prestige Δ</th><th>Failed calls Δ</th><th>Rejected orders Δ</th><th>Tokens Δ</th><th>Pi path</th><th>Codex path</th></tr></thead><tbody id="pairs"></tbody></table></div>
+  </section>
+  <section class="surface" aria-labelledby="task-title">
+    <div class="surface-heading"><h2 id="task-title">Fixed-board tool task</h2><p>The same paused British board and three required orders. Success, rejections and time to the third accepted order measure client execution without a moving clock.</p></div>
+    <div id="task-error" role="alert" hidden></div>
+    <div class="table-wrap"><table><thead><tr><th>Started</th><th>Model</th><th>Client</th><th>Success</th><th>Correct steps</th><th>Accepted</th><th>Rejected</th><th>Failed / calls</th><th>First action (s)</th><th>Complete (s)</th><th>Total tokens</th><th>Uncached</th></tr></thead><tbody id="task-rows"></tbody></table></div>
+  </section>
+  <div class="notes"><p><span class="note-label">Reading the score</span>Prestige includes the game's alliance share and maturity rules. A winning ally may finish below zero. Deadline and domination games have different reward pools. Surviving passively can also earn a deadline prize.</p><p><span class="note-label">Benchmark boundary</span>Quick rooms run the whole clock 6× faster, including diplomatic offers. Qwen Codex used shell commands while Pi used Council MCP, and provider token counters may differ. Compare first-action time and rejected game orders separately from final score. Historical token fields are blank where usage was not recorded.</p></div>
+</main>
+<script type="module">
+const $ = id => document.getElementById(id);
+const svg = $('plot');
+const NS = 'http://www.w3.org/2000/svg';
+const fmt = value => value == null ? '—' : new Intl.NumberFormat('en-US',{maximumFractionDigits:2}).format(value);
+const mean = values => values.length ? values.reduce((sum,value)=>sum+value,0)/values.length : null;
+const el = (name, attrs={}) => { const node=document.createElementNS(NS,name); for(const [key,value] of Object.entries(attrs)) node.setAttribute(key,String(value)); return node; };
+let runs=[], taskRuns=[];
+function draw() {
+  const selected = runs.filter(run => ($('model').value==='all'||run.modelGroup===$('model').value) && ($('country').value==='all'||run.country===$('country').value) && ($('preset').value==='all'||run.preset===$('preset').value) && ($('seed').value==='all'||run.combatSeed===$('seed').value));
+  const metric=$('measure').value, measurable=selected.filter(run=>Number.isFinite(run[metric]));
+  $('count').textContent=selected.length;
+  $('pi-score').textContent=fmt(mean(selected.filter(run=>run.client==='Pi').map(run=>run.prestige)));
+  $('codex-score').textContent=fmt(mean(selected.filter(run=>run.client==='Codex').map(run=>run.prestige)));
+  $('failures').textContent=fmt(selected.reduce((sum,run)=>sum+run.failedToolCalls,0));
+  $('plot-detail').textContent=measurable.length ? `${measurable.length} runs with recorded ${$('measure').selectedOptions[0].text.toLowerCase()}. ${$('model').value==='all'?'Choose one model to connect its runs.':''}` : 'No runs recorded this measure yet.';
+  svg.replaceChildren(); svg.setAttribute('viewBox','0 0 960 340');
+  const x0=74,x1=916,y0=38,y1=282;
+  const values=measurable.map(run=>run[metric]);
+  let min=Math.min(0,...values),max=Math.max(1,...values);
+  if(min===max) max=min+1;
+  const y=value=>y1-(value-min)/(max-min)*(y1-y0);
+  const x=index=>measurable.length===1?(x0+x1)/2:x0+index*(x1-x0)/(measurable.length-1);
+  for(let i=0;i<=4;i++) { const value=min+(max-min)*i/4, yy=y(value); svg.append(el('line',{x1:x0,y1:yy,x2:x1,y2:yy,stroke:'#375464','stroke-dasharray':i===0?'':'3 5'})); const t=el('text',{x:x0-12,y:yy+4,'text-anchor':'end',fill:'#96abb8','font-size':12});t.textContent=fmt(value);svg.append(t); }
+  for(const client of ['Pi','Codex']) {
+    const points=measurable.map((run,index)=>({run,index})).filter(item=>item.run.client===client);
+    const color=client==='Pi'?'#6fd8dc':'#eec877';
+    if(points.length>1 && $('model').value!=='all') svg.append(el('polyline',{points:points.map(({run,index})=>`${x(index)},${y(run[metric])}`).join(' '),fill:'none',stroke:color,'stroke-width':2.5,'stroke-dasharray':client==='Codex'?'7 5':''}));
+    for(const {run,index} of points) { const dot=el('circle',{cx:x(index),cy:y(run[metric]),r:6,fill:color,stroke:'#0d202b','stroke-width':2});const title=el('title');title.textContent=`${run.modelGroup.toUpperCase()} · ${run.client} ${run.access} · ${run.preset} · ${fmt(run[metric])}`;dot.append(title);svg.append(dot); }
+  }
+  if(measurable.length) { for(const index of [0,measurable.length-1]) { const run=measurable[index],t=el('text',{x:x(index),y:315,'text-anchor':index===0?'start':'end',fill:'#96abb8','font-size':12});t.textContent=new Date(run.startedAt).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});svg.append(t); } }
+  const tbody=$('rows');tbody.replaceChildren();
+  for(const run of [...selected].reverse()) {
+    const tr=document.createElement('tr');
+    const cells=[new Date(run.startedAt).toLocaleString(),run.modelGroup.toUpperCase(),run.country||'britain',`${run.client} ${run.access}`,run.preset,run.combatSeed||'—',`${run.strategy||'full observation'}${run.sessionMode?` · ${run.sessionMode}`:''}`,fmt(run.prestige),fmt(run.acceptedActions),fmt(run.rejectedActions),`${run.failedToolCalls} / ${run.toolCalls}`,fmt(run.totalTokens),fmt(run.firstActionSeconds),fmt(run.meanTurnSeconds)];
+    for(let i=0;i<cells.length;i++){const td=document.createElement('td');td.textContent=cells[i];if(i===3)td.className=`client ${run.client.toLowerCase()}`;if(i===7)td.className=run.prestige<0?'negative':'positive';tr.append(td);}tbody.append(tr);
+  }
+  const pairRows=$('pairs');pairRows.replaceChildren();
+  const bySeed=new Map();
+  for(const run of selected.filter(run=>run.combatSeed)) {const key=`${run.modelGroup}|${run.country||'britain'}|${run.preset}|${run.combatSeed}`;const pair=bySeed.get(key)||{};pair[run.client]=run;bySeed.set(key,pair);}
+  for(const [key,pair] of bySeed) {if(!pair.Pi||!pair.Codex)continue;const [model,country,preset,seed]=key.split('|');const diff=(field)=>Number.isFinite(pair.Pi[field])&&Number.isFinite(pair.Codex[field])?fmt(pair.Pi[field]-pair.Codex[field]):'—';const cells=[model.toUpperCase(),country,preset,seed,diff('prestige'),diff('failedToolCalls'),diff('rejectedActions'),diff('totalTokens'),`${pair.Pi.strategy} · ${pair.Pi.sessionMode}`,`${pair.Codex.access}`];const tr=document.createElement('tr');for(const value of cells){const td=document.createElement('td');td.textContent=value;tr.append(td);}pairRows.append(tr);}
+  if(!pairRows.children.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=10;td.textContent='No completed Pi/Codex pair for this selection yet.';tr.append(td);pairRows.append(tr);}
+  drawTask();
+}
+function drawTask() {
+  const selected=taskRuns.filter(run=>$('model').value==='all'||run.modelGroup===$('model').value);
+  const rows=$('task-rows');rows.replaceChildren();
+  for(const run of [...selected].reverse()) {
+    const tr=document.createElement('tr');
+    const cells=[new Date(run.startedAt).toLocaleString(),run.modelGroup.toUpperCase(),`${run.client} ${run.access}`,run.success?'Yes':'No',`${fmt(run.correctSteps)} / ${fmt(run.requiredSteps)}`,fmt(run.acceptedOrders),fmt(run.rejectedOrders),`${run.failedToolCalls} / ${run.toolCalls}`,fmt(run.firstActionSeconds),fmt(run.completionSeconds),fmt(run.totalTokens),fmt(run.uncachedTokens)];
+    for(const [i,value] of cells.entries()){const td=document.createElement('td');td.textContent=value;if(i===3)td.className=run.success?'positive':'negative';tr.append(td);}rows.append(tr);
+  }
+  if(!selected.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=12;td.textContent='No completed fixed-board task for this model yet.';tr.append(td);rows.append(tr);}
+}
+for(const id of ['model','country','preset','seed','measure']) $(id).addEventListener('change',draw);
+try { const response=await fetch('./benchmarks.json',{cache:'no-store'});if(!response.ok)throw new Error(`HTTP ${response.status}`);const data=await response.json();if(data.schemaVersion!==1||!Array.isArray(data.runs))throw new Error('Unsupported benchmark file');runs=data.runs;for(const country of [...new Set(runs.map(run=>run.country||'britain'))].sort()){const option=document.createElement('option');option.value=country;option.textContent=country;$('country').append(option);}for(const seed of [...new Set(runs.map(run=>run.combatSeed).filter(Boolean))].sort()){const option=document.createElement('option');option.value=seed;option.textContent=seed;$('seed').append(option);}draw(); }
+catch(error){$('error').hidden=false;$('error').textContent=`Could not load benchmarks.json (${error.message}). Serve this folder with: python -m http.server 8000`;}
+try { const response=await fetch('./task-benchmarks.json',{cache:'no-store'});if(!response.ok)throw new Error(`HTTP ${response.status}`);const data=await response.json();if(data.schemaVersion!==1||!Array.isArray(data.runs))throw new Error('Unsupported fixed-board benchmark file');taskRuns=data.runs;drawTask(); }
+catch(error){$('task-error').hidden=false;$('task-error').textContent=`Could not load task-benchmarks.json (${error.message}).`;}
+</script>
+</body>
+</html>

@@ -13,7 +13,7 @@ export function chooseIndustrial(state, map, country, options = {}) {
   const rng = style.rng || (() => .5), board = new Map(state.provinces.map(p => [p.id, p]));
   const places = new Map(map.provinces.map(p => [p.id, p])), sides = new Map(state.players.map(p => [p.id, p.side]));
   const friend = p => p.owner && sides.get(p.owner) === me.side;
-  const canEnter=p=>!p.owner || friend(p) || !state.rules.warRequired ||
+  const canEnter=p=>!p.owner || friend(p) ||
     (state.wars || []).includes([country,p.owner].sort().join(':'));
   const own = state.provinces.filter(p => p.owner === country);
   const reservations = new Map();
@@ -63,7 +63,7 @@ export function chooseIndustrial(state, map, country, options = {}) {
     }
   }
   attacks.sort((a,b)=>b.value-a.value);
-  if(!attacks.length && state.rules.warRequired) {
+  if(!attacks.length) {
     const enemy=state.provinces.find(p=>p.owner && !friend(p) && !canEnter(p) &&
       own.some(q=>places.get(q.id).neighbors.includes(p.id) && safeSpare(q)>p.troops+2));
     if(enemy && !(state.diplomacy || []).some(m=>m.kind==='war' && [m.fromSide,m.toSide].includes(me.side) &&

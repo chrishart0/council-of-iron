@@ -171,7 +171,7 @@ export class LeaderboardPanel {
     const key = JSON.stringify([state.you, fronts.map(f => f.sides.map(s => [s.side, s.name, s.countries]))]);
     if (this.fronts.dataset.key === key) return;
     this.fronts.dataset.key = key;
-    if (!fronts.length) { const empty = node('li', 'lb-front-empty'); empty.textContent = state.rules?.warRequired === false ? 'Open war: any non-ally may attack in this room.' : 'No wars: every country is at peace.'; this.fronts.replaceChildren(empty); return; }
+    if (!fronts.length) { const empty = node('li', 'lb-front-empty'); empty.textContent = 'No wars: every country is at peace.'; this.fronts.replaceChildren(empty); return; }
     this.fronts.replaceChildren(...fronts.map(f => {
       const li = node('li', `lb-front${state.you && f.sides.some(x => x.countries.includes(state.you)) ? ' involved' : ''}`);
       const [a, b] = f.sides.map(s => s.name || s.countries.map(this.names.country).join(' + '));

@@ -20,6 +20,26 @@ export function travelTicks(a, b, rules, internal = false) {
 export function legTicks(state, from, to, internal) {
   return (internal && state.internalTravelTimes?.[from]?.[to]) || state.travelTimes?.[from]?.[to];
 }
+/** Least-time route through owned intermediate provinces. Excludes the source. */
+export function ownedPath(map, provinces, travelTimes, country, from, to, allowTarget = false) {
+  if (from === to) return null;
+  const owned = new Set(provinces.filter(p => p.owner === country).map(p => p.id));
+  if (!owned.has(from) || (!owned.has(to) && !allowTarget)) return null;
+  if (allowTarget) owned.add(to);
+  const byId = new Map(map.provinces.map(p => [p.id, p]));
+  const best = new Map([[from, { time: 0, path: [] }]]), settled = new Set();
+  while (true) {
+    const current = [...best.keys()].filter(id => !settled.has(id))
+      .sort((a, b) => best.get(a).time - best.get(b).time || a.localeCompare(b))[0];
+    if (!current) return null;
+    if (current === to) return best.get(to).path;
+    settled.add(current);
+    for (const next of byId.get(current).neighbors.filter(id => owned.has(id)).sort()) {
+      const time = best.get(current).time + travelTimes[current][next];
+      if (!best.has(next) || time < best.get(next).time) best.set(next, { time, path: [...best.get(current).path, next] });
+    }
+  }
+}
 export function journeyPoint(army, positions, tick) {
   const a = army.startPoint || positions[army.from], b = positions[army.to];
   let dx = b.x - a.x;

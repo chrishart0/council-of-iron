@@ -36,7 +36,7 @@ test('declare-and-march: one action declares the solo war and reserves the move 
 test('declare-and-march: an invalid march leaves no war, no events and no receipt',()=>{
   const g=game();
   const snapshot=JSON.stringify(g);
-  for(const bad of [{...strike,amount:500},{...strike,from:'east-us'},{...strike,percent:50},{...strike,declareWar:'yes'},
+  for(const bad of [{...strike,amount:500},{...strike,from:'england'},{...strike,percent:50},{...strike,declareWar:'yes'},
     {type:'attack',to:'mexico',sources:[{from:'west-us',amount:999}],declareWar:true}])
     assert.throws(()=>send(g,'usa',bad));
   assert.equal(JSON.stringify(g),snapshot,'no half state: wars, events, serials, orders and receipts are untouched');
@@ -66,17 +66,13 @@ test('declare-and-march: coalition members are told to call a war vote first',()
   assert.deepEqual(g.wars,[]);assert.equal(g.events.length,events);assert.equal(g.orders.length,0);
 });
 
-test('declare-and-march: harmless when already at war, neutral, allied or in a legacy room',()=>{
+test('declare-and-march: harmless when already at war, neutral or allied',()=>{
   const g=game();
   send(g,'usa',{type:'declare_war',country:'britain'});
   const warEvents=()=>g.events.filter(e=>e.type==='war_declared').length;
   const atWar=send(g,'usa',strike);assert.equal(atWar.warDeclared,false);assert.equal(warEvents(),1);
   const mexico=g.provinces.find(p=>p.id==='mexico');mexico.owner=null;
   assert.equal(send(g,'usa',{...strike,amount:2}).warDeclared,false);
-  const legacy=game();legacy.rules.warRequired=false;
-  const result=send(legacy,'usa',strike);
-  assert.equal(result.warDeclared,false);assert.deepEqual(legacy.wars,[]);
-  assert.equal(legacy.events.some(e=>e.type==='war_declared'),false);assert.equal(legacy.orders.length,1);
   // Allied destination: an ordinary reinforcement, even for a coalition member.
   const allies=game();const {proposalId}=send(allies,'usa',{type:'propose',country:'britain',name:'Pact'});
   send(allies,'britain',{type:'accept',proposalId});advance(allies,30);

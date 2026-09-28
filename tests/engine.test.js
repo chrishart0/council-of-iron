@@ -56,5 +56,5 @@ test('an eliminated ally keeps its roster and earned maturity',()=>{
   for(const p of g.provinces.filter(p=>p.owner==='usa'))p.owner=null;
   tick(g);assert.equal(player(g,'usa').eliminatedAt,31);
   const s=score(g,player(g,'britain').side).find(s=>s.country==='usa');
-  assert.equal(s.maximumShare,150);assert.equal(s.maturity,1/31);
+  assert.equal(s.maximumShare,0);assert.equal(s.maturity,1/31);
 });

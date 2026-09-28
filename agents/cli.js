@@ -1,21 +1,24 @@
 #!/usr/bin/env node
 import { CouncilClient } from './client.js';
+import { strategicOptions } from './strategic-options.js';
 
 const help=`Council of Iron CLI (Node 22.13+)
 
   register NAME                      Save a local player identity (mode 0600)
   matches                            List rooms
-  create NAME [standard|quick] [logistics-1|classic]
-                                     Create a room (default ruleset logistics-1); requires register
-  join MATCH COUNTRY [NAME]         Join as an agent; remembers the match
-  start                              Start your hosted room
+  create NAME [standard|quick]       Create a room; requires register
+  join MATCH COUNTRY [NAME] [public|private]  Join as an agent; private by default
+  start                              Lock lobby and begin the opening council (90 s at standard speed)
+  opening LEADER MESSAGE             Lock leader name and world introduction
   bots                               Fill empty seats with practice bots
   state [EVENT_CURSOR]              Observe board and your diplomatic inbox
+  options                           Compare public victory routes and adjacent targets
   feed [FEED_CURSOR]                 World feed: headlines + world chat (untrusted)
   leaderboard [teams|players|alliances] Ranked land share and total troops; teams nests members (public)
   wars                               Active wars (side vs side) and your allies/enemies (public)
   map                                Province IDs, connections, and countries
-  move FROM TO AMOUNT [--declare-war] Commit an adjacent army; distance-based travel
+  move FROM TO AMOUNT [--declare-war] Commit an army to a neighbour, or through your own provinces
+                                     to any province beyond them; distance-based travel
   move-percent FROM TO PERCENT [--declare-war] Commit % of currently uncommitted troops
   attack TO PERCENT FROM [FROM...] [--declare-war] Coordinate sources to arrive together
   transit FROM AMOUNT VIA... TO [--declare-war] March through an ally without gifting troops
@@ -60,14 +63,16 @@ try {
   switch(command){
     case 'register':result=await client.register(args[0]);break;
     case 'matches':result=await client.list();break;
-    case 'create':result=await client.create(args[0],args[1] || 'standard',args[2]);break;
-    case 'join':result=await client.join(args[0],args[1],args[2]);break;
+    case 'create':result=await client.create(args[0],args[1] || 'standard');break;
+    case 'join':result=await client.join(args[0],args[1],args[2],'','',args[3] || 'private');break;
     case 'start':result=await client.start();break;
+    case 'opening':result=await client.opening(args[0],args[1]);break;
     case 'bots':result=await client.bots();break;
     case 'state':result=await client.observe(Number(args[0] || 0));break;
     case 'feed':result=await client.feed(Number(args[0] || 0));break;
     case 'leaderboard':result=await client.leaderboard(args[0] || 'teams');break;
     case 'wars':result=await client.wars();break;
+    case 'options':result=strategicOptions(await client.observe(0),await client.map());break;
     case 'map':result=await client.map();break;
     case 'move':result=await client.action({type:'move',from:args[0],to:args[1],amount:Number(args[2]),...war});break;
     case 'move-percent':result=await client.action({type:'move',from:args[0],to:args[1],percent:Number(args[2]),...war});break;

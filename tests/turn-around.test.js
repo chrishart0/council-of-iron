@@ -136,18 +136,13 @@ test('recalling a resumed army measures its way home by its distance, not the ti
   assert.equal(a.arrivesAt-g.tick,fromHome+7);
 });
 
-test('turn-around is deterministic and survives save/load; old snapshots without the new fields still load',()=>{
+test('turn-around is deterministic and survives save/load',()=>{
   const run=()=>{const g=game();g.id='same';const a=march(g);advance(g,25);send(g,'usa',{type:'recall',id:a.id},'r');tick(g);advance(g,5);
     send(g,'usa',{type:'turn_around',armyId:a.id},'t');return g;};
   const g=run(),h=run();
   const loaded=JSON.parse(JSON.stringify(g));advance(g,30);advance(loaded,30);advance(h,30);
   assert.equal(JSON.stringify(g),JSON.stringify(loaded));assert.equal(JSON.stringify(g.armies),JSON.stringify(h.armies));
-  // A pre-v0.8.x snapshot: no maxTurnArounds rule and no turnArounds on its returning army.
-  const old=run();delete old.rules.maxTurnArounds;old.orders=old.orders.filter(o=>o.type!=='turn_around');
-  const back=JSON.parse(JSON.stringify(old)),a=back.armies.find(x=>x.returning);delete a.turnArounds;
-  assert.equal(turnAroundPlan(back,'usa',a.id).mode,'resume');
-  send(back,'usa',{type:'turn_around',armyId:a.id},'after-restart');tick(back);assert.equal(a.turnArounds,1);
-  assert.equal(observe(back,'usa').turnAroundLimit,RULES.maxTurnArounds);
+  assert.equal(observe(g,'usa').turnAroundLimit,RULES.maxTurnArounds);
 });
 
 test('your own automatic turn-back is a personal history row with the cause in game voice; recalls you ordered are not',async()=>{

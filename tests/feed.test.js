@@ -27,10 +27,7 @@ test('major battle rule: max(20, ceil(3% of all troops on the map)); minor battl
   assert.deepEqual(major, { kind: 'major_battle', province: 'mexico', casualties: 30, worldTroops: 1000, threshold: 30,
     captured: true, owner: 'usa', previousOwner: 'britain' });
   assert.equal(classifyHeadline(battle(500), {}), null, 'no troop context, no guess');
-  // Legacy one-shot battles lack a casualty field: everyone above the survivors died.
-  const legacy = battle(undefined, { before: 30, arrivals: [{ country: 'usa', amount: 25 }], troops: 5 });
-  delete legacy.casualties; assert.equal(battleCasualties(legacy), 50);
-  assert.equal(classifyHeadline(legacy, { worldTroops: 600 }).casualties, 50);
+  assert.equal(battleCasualties(battle(42)), 42);
 });
 
 test('only public diplomatic, elimination, victory and top-tier industry events are headlines', () => {

@@ -6,10 +6,10 @@ import { relationsOf, atWar, allianceColors, coalitions, formingAlliances, ALLIA
 
 const map = JSON.parse(readFileSync(new URL('../public/imperial-map.json', import.meta.url)));
 let n = 0;
-function game(legacy = false) {
+function game() {
   const g = createGame({ id: `rel-${++n}`, name: 'Relations', hostId: 'usa' }, map);
   for (const c of map.countries) join(g, map, { profileId: c.id, name: c.id, country: c.id });
-  start(g); if (legacy) g.rules.warRequired = false;
+  start(g);
   return g;
 }
 const send = (g, id, action) => act(g, map, id, action, `rel-${++n}`);
@@ -41,12 +41,6 @@ test('relationsOf matches the engine: wars, coalitions and neutrality', () => {
   assert.deepEqual(relationsOf(view, 'france').enemies, ['germany']);
   assert.deepEqual(relationsOf(view, 'usa').allies, ['britain']);
   assert.ok(relationsOf(view, 'usa').neutral.includes('japan'));
-});
-
-test('legacy rooms without formal war treat every non-ally as hostile, like the engine', () => {
-  const g = game(true);
-  agreesWithEngine(g);
-  assert.equal(relationsOf(observe(g, null), 'japan').enemies.length, map.countries.length - 1);
 });
 
 test('alliance colours are stable, distinct and cover exactly the active coalitions', () => {
@@ -122,6 +116,4 @@ test('only armies at war with the viewer threaten its provinces', async () => {
   assert.equal(threatening(base, army, 'britain'), false);
   assert.equal(threatening({ ...base, wars: ['britain:france'] }, army, 'britain'), true);
   assert.equal(threatening({ ...base, wars: ['britain:france'] }, { ...army, returning: true }, 'britain'), false);
-  // Legacy rooms without formal war: every non-ally is hostile.
-  assert.equal(threatening({ ...base, rules: {} }, army, 'britain'), true);
 });

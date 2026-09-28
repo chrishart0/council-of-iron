@@ -48,7 +48,7 @@ const atWar = (a,b) => Boolean(a && b && a!==b && (state?.wars || []).includes([
 const sameSide = (a,b) => Boolean(a && b && playerOf(a)?.side===playerOf(b)?.side);
 /** Ticks the engine charges for your march on one link: internal (both ends yours/allied) links are faster in logistics rooms. */
 const travelOf = (from,to) => legTicks(state,from,to,sameSide(prov(from)?.owner,state.you) && sameSide(prov(to)?.owner,state.you));
-const mayEnter = (a,b) => !b || sameSide(a,b) || !state.rules.warRequired || atWar(a,b);
+const mayEnter = (a,b) => !b || sameSide(a,b) || atWar(a,b);
 const seated = () => Boolean(state?.you) && !spectating;
 const active = () => seated() && state.status==='running' && myPlayer()?.eliminatedAt===null;
 const neighbours = id => place(id)?.neighbors || [];
@@ -334,7 +334,7 @@ function orderPlan(){
   const tp=prov(target),owner=tp?.owner || null,name=place(target).name,who=owner?faction(owner).short:null;
   const parts=sources.map(from=>({from,free:freeTroops(from),amount:amountFor(from),travel:travelOf(from,target) ?? 0}));
   const total=parts.reduce((n,s)=>n+s.amount,0),travel=Math.max(0,...parts.map(s=>s.travel)),war=warPlan(owner);
-  const relation=!owner?'unclaimed':owner===state.you?'own':sameSide(state.you,owner)?'ally':war?'neutral':state.rules.warRequired?'enemy':'open';
+  const relation=!owner?'unclaimed':owner===state.you?'own':sameSide(state.you,owner)?'ally':war?'neutral':'enemy';
   const words={unclaimed:['UNCLAIMED','No declaration needed.'],own:['YOUR PROVINCE','Move troops within your land.'],ally:['ALLIED',`Troops you send become ${who}’s.`],
     enemy:['AT WAR','You can attack.'],open:['HOSTILE','This room needs no declaration: you can attack.'],
     neutral:['NOT AT WAR',war?.mode==='declare'?`Sending troops declares war on ${who}${war.enemies.length>1?' and its allies':''}.`:war?.mode==='voting'?`War vote open: ${war.motion.fromYes.length}/${war.need} approvals, ${Math.max(0,war.motion.expiresAt-state.tick)}s left.`:'Your alliance must vote for war before anyone attacks.']}[relation];
@@ -430,7 +430,7 @@ function relationOf(id){
   if(id===state.you)return 'you';
   const p=playerOf(id);if(!p)return 'unclaimed';if(p.eliminatedAt!=null)return 'fallen';
   if(sameSide(state.you,id))return 'ally';
-  if(relationsOf(state,state.you).enemies.includes(id))return state.rules.warRequired?'war':'open';
+  if(relationsOf(state,state.you).enemies.includes(id))return 'war';
   const both=q=>q.roster.includes(state.you) && q.roster.includes(id);
   if((state.proposals || []).some(q=>q.status==='pending' && both(q)))return 'forming';
   return (state.proposals || []).some(q=>q.status==='open' && both(q))?'offer':'neutral';

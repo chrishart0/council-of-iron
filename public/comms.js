@@ -272,7 +272,7 @@ export class Comms {
   relationTag(country) {
     if (!this.state.you) return '';
     const r = relationsOf(this.state, this.state.you);
-    return r.allies.includes(country) ? 'Ally' : r.enemies.includes(country) ? (this.state.rules?.warRequired === false ? 'Hostile' : 'At war') : 'Neutral';
+    return r.allies.includes(country) ? 'Ally' : r.enemies.includes(country) ? 'At war' : 'Neutral';
   }
   renderList() {
     const list = this.$('.cx-list'), box = this.box; if (!box) return;

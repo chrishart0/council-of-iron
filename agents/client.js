@@ -34,16 +34,15 @@ export class CouncilClient {
     this.session={url:this.url,name,profileToken:profile.token};this.match='';this.persist();
     return {name:profile.name,sessionFile:this.sessionPath};
   }
-  /** ruleset: omit for the server default (logistics-1), or 'classic'. */
-  async create(name,preset='standard',ruleset) {
-    const result=await this.request('/api/games','POST',{name,preset,...(ruleset?{ruleset}:{})},this.explicitToken || this.session.profileToken);
+  async create(name,preset='standard') {
+    const result=await this.request('/api/games','POST',{name,preset},this.explicitToken || this.session.profileToken);
     this.match=result.id;this.session.match=result.id;
     delete this.session.seatToken;delete this.session.country;
     this.persist();return result;
   }
-  async join(match,country,name='Agent',model='',persona='') {
+  async join(match,country,name='Agent',model='',persona='',visibility='private') {
     if(!this.session.profileToken && !this.explicitToken)await this.register(name);
-    const result=await this.request(`/api/games/${match}/join`,'POST',{country,kind:'agent',model,persona},this.explicitToken || this.session.profileToken);
+    const result=await this.request(`/api/games/${match}/join`,'POST',{country,kind:'agent',model,persona,visibility},this.explicitToken || this.session.profileToken);
     this.match=match;this.session.match=match;this.session.country=country;this.session.seatToken=result.token;this.persist();
     // Room notices (e.g. alliance chat published in the post-match replay); never contain credentials.
     return {match,country,sessionFile:this.sessionPath,notices:result.notices || []};
@@ -60,7 +59,7 @@ export class CouncilClient {
   /** Active wars as side-vs-side fronts plus your own allies/enemies — the browser's Wars view, from public data. */
   async wars() {
     const view=await this.observe(Number.MAX_SAFE_INTEGER);
-    return {tick:view.tick,status:view.status,you:view.you,warRequired:view.rules?.warRequired ?? true,wars:warsOf(view),
+    return {tick:view.tick,status:view.status,you:view.you,wars:warsOf(view),
       relations:view.you?relationsOf(view,view.you):null,rule:'Public data only: the war list and coalition sides every spectator receives.'};
   }
   review() {return this.request(this.gamePath('/review'));}
@@ -82,6 +81,7 @@ export class CouncilClient {
   map() {return this.request(this.match ? this.gamePath('/map') : '/map.json','GET',undefined,'');}
   plan(action) {return this.request(this.gamePath('/plan'),'POST',action);}
   start() {return this.request(this.gamePath('/start'),'POST',{});}
+  opening(leaderName,openingMessage) {return this.request(this.gamePath('/opening'),'POST',{leaderName,openingMessage});}
   bots() {return this.request(this.gamePath('/bots'),'POST',{});}
   standings() {return this.request('/api/standings','GET',undefined,'');}
 }

@@ -33,7 +33,13 @@ export class Store {
     return this.db.prepare(`SELECT p.id,p.name,c.game_id AS gameId FROM credentials c
       JOIN profiles p ON p.id=c.profile_id WHERE c.hash=?`).get(hash(token)) || null;
   }
-  load() { return this.db.prepare('SELECT snapshot FROM games').all().map(row => JSON.parse(row.snapshot)); }
+  /** Every stored room; an unreadable snapshot is skipped (logged), never fatal. */
+  load() {
+    return this.db.prepare('SELECT id, snapshot FROM games').all().flatMap(row => {
+      try { return [JSON.parse(row.snapshot)]; }
+      catch { console.log(`Skipped unreadable stored room ${row.id}.`); return []; }
+    });
+  }
   save(g) {
     this.db.exec('BEGIN IMMEDIATE');
     try {
@@ -46,7 +52,7 @@ export class Store {
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
-  standings(eligible = false, scenarios = ['imperial-1910-v3']) {
+  standings(eligible = false, scenarios = ['imperial-1910-v4']) {
     const list = [scenarios].flat();
     return this.db.prepare(`WITH recent AS (
       SELECT *, ROW_NUMBER() OVER (PARTITION BY profile_id ORDER BY finished_at DESC,game_id) AS n

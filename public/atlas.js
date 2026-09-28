@@ -747,8 +747,8 @@ export class Atlas {
       if (kind !== b.kind) { b.kind = kind; ({ province: this.provinceBorders, allied: this.alliedBorders, country: this.countryBorders })[kind].append(b.el); }
     }
     // War fronts: every land border between owners at war; sea links only where no land contact.
-    const formal = Boolean(state.rules?.warRequired), want = new Map(), contact = new Set();
-    if (formal) for (const b of this.borders) {
+    const want = new Map(), contact = new Set();
+    for (const b of this.borders) {
       const oa = owner(b.a), ob = owner(b.b);
       if (oa && ob && oa !== ob && atWar(state, oa, ob)) { want.set(`${b.a}|${b.b}`, b); contact.add(warKey(oa, ob)); }
     }
@@ -759,7 +759,7 @@ export class Atlas {
       this.fronts.append(el); this.frontEls.set(key, el);
     }
     this.seaFronts.replaceChildren();
-    if (formal) for (const e of this.map.edges) {
+    for (const e of this.map.edges) {
       const oa = owner(e.from), ob = owner(e.to);
       if (e.sea && oa && ob && oa !== ob && atWar(state, oa, ob) && !contact.has(warKey(oa, ob)))
         this.seaFronts.append(node('path', { d: this.path(e.from, e.to), class: 'sea-front', 'data-sea-front': `${e.from}|${e.to}` }));
@@ -834,7 +834,7 @@ export class Atlas {
       if ((this.blocInfo || []).length || (this.formingInfo || []).length) heading('Alliances');
       for (const bloc of this.blocInfo || []) item(bloc.color, cap(bloc.name), 'bloc');
       for (const f of this.formingInfo || []) item(f.color, `${cap(f.name)} · forming`, 'forming');
-      const wars = this.state?.rules?.warRequired ? (this.state.wars || []) : [];
+      const wars = this.state?.wars || [];
       if (wars.length) heading('At war');
       for (const pair of wars.slice(0, 4)) item('#d8342a', pair.split(':').map(id => faction(id).short).join(' – '), 'war');
       if (wars.length > 4) heading(`+${wars.length - 4} more wars`);

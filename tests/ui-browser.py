@@ -234,7 +234,7 @@ RELATIONS_AUDIT='''async room => {
   const {allianceColors,coalitions,warKey}=await import('/relations.js');
   const state=await (await fetch(`/api/games/${room}`)).json(),map=await (await fetch('/map.json')).json();
   const svg=document.querySelector('#map'),owner=new Map(state.provinces.map(p=>[p.id,p.owner||null]));
-  const wars=new Set(state.rules.warRequired?state.wars:[]),side=new Map(state.players.map(p=>[p.id,p.side]));
+  const wars=new Set(state.wars),side=new Map(state.players.map(p=>[p.id,p.side]));
   const hostile=(a,b)=>a&&b&&a!==b&&side.get(a)!==side.get(b)&&wars.has(warKey(a,b));
   const expectedFronts=[...svg.querySelectorAll('[data-border]')].map(e=>e.dataset.border).filter(k=>{const [a,b]=k.split('|');return hostile(owner.get(a),owner.get(b));}).sort();
   const contact=new Set(expectedFronts.map(k=>{const [a,b]=k.split('|');return warKey(owner.get(a),owner.get(b));}));
