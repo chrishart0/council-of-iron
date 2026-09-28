@@ -18,7 +18,10 @@ MAP_AUDIT='''async room => {
     if(!shown(e))continue;
     const body=e.querySelector('.counter-body,.battle-body').getBoundingClientRect();
     const members=e.dataset.cluster?e.dataset.cluster.split(','):[e.dataset.province];
-    units.push({members,total:e.dataset.cluster?Number(e.dataset.total):e.classList.contains('battle-counter')?Number(e.dataset.defend):Number(e.querySelector('.counter-value').textContent),
+    // Industry is readable at every zoom: owned singles show one pip per level, owned merges show the summed level.
+    const pips=e.querySelector('.industry-pips'),owned=members.every(id=>troops.get(id).owner);
+    const industry=!owned||e.classList.contains('battle-counter')?null:e.dataset.cluster?(shown(pips)?Number(e.dataset.industry):-1):(shown(pips)?pips.querySelectorAll('rect').length:-1);
+    units.push({industry,members,total:e.dataset.cluster?Number(e.dataset.total):e.classList.contains('battle-counter')?Number(e.dataset.defend):Number(e.querySelector('.counter-value').textContent),
       owners:[...new Set(members.map(id=>troops.get(id).owner||null))],battle:e.classList.contains('battle-counter'),
       rect:{x:body.x,y:body.y,w:body.width,h:body.height},onScreen:body.right>box.left&&body.left<box.right&&body.bottom>box.top&&body.top<box.bottom});
   }
@@ -30,6 +33,7 @@ MAP_AUDIT='''async room => {
   return {lod:svg.dataset.lod,clusters:units.filter(u=>u.members.length>1).length,
     badSums:units.filter(u=>u.total!==u.members.reduce((n,id)=>n+troops.get(id).troops,0)).map(u=>u.members.join()),
     mixedOwners:units.filter(u=>u.owners.length>1).map(u=>u.members.join()),
+    badIndustry:units.filter(u=>u.industry!==null&&u.industry!==u.members.reduce((n,id)=>n+(troops.get(id).development||0),0)).map(u=>u.members.join()),
     missing:state.provinces.filter(p=>count.get(p.id)!==1).map(p=>p.id),overlaps,
     battles:state.battles.map(b=>b.province),
     battleMarks:units.filter(u=>u.battle).map(u=>({id:u.members[0],attack:Number(svg.querySelector(`.battle-counter[data-province="${u.members[0]}"]`).dataset.attack),expected:engaged(u.members[0])})),
@@ -115,6 +119,7 @@ def audit_zooms(page,room,label,views):
         where=f'{label} {name}+{steps} ({result["lod"]})'
         audit.append({'view':where,'mergedCounters':result['clusters'],'battleMarkers':len(result['battleMarks'])})
         assert not result['badSums'],(where,result['badSums'])
+        assert not result['badIndustry'],(where,result['badIndustry'])
         assert not result['mixedOwners'],(where,result['mixedOwners'])
         assert not result['missing'],(where,result['missing'])
         assert not result['overlaps'],(where,result['overlaps'])

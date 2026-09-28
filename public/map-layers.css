@@ -76,7 +76,7 @@
 .moving-army.engaged{display:none}
 /* Country view: small foreign columns keep their arrow; their numbers return when zoomed in. */
 .atlas-v6[data-lod=far] .moving-army.minor :is(text,.army-pill){display:none}
-.industry-pips{pointer-events:none}.industry-pips rect{fill:#e9d29c;stroke:#132b34;stroke-width:1}.industry-rising{fill:#a9e0a0;stroke:#132b34;stroke-width:.8}
+.industry-pips{pointer-events:none}.industry-pips .cluster-industry-body{fill:#132b34;stroke:#e9d29c;stroke-width:.7}.cluster-industry-icon{fill:#e9d29c;stroke:none}.cluster-industry-value{font:700 8.5px/1 system-ui,sans-serif;fill:#f3e3b8;stroke:none;text-anchor:start;dominant-baseline:middle}.industry-pips rect{fill:#e9d29c;stroke:#132b34;stroke-width:1}.industry-rising{fill:#a9e0a0;stroke:#132b34;stroke-width:.8}
 /* Battle in progress: attacker | crossed swords | defender. */
 .battle-counter{cursor:pointer}
 .battle-counter:focus{outline:none}.battle-counter:focus .battle-body{stroke:#ffe1a0}

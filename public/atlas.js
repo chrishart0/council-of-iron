@@ -471,8 +471,8 @@ export class Atlas {
     const hits = r => placed.some(q => r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.y + q.h && q.y < r.y + r.h);
     for (const u of units) {
       const battle = u.members.length === 1 && this.battleInfo.get(u.members[0]);
-      // Zoomed in, the footprint also reserves the industry pips below the counter.
-      const badge = u.members.length > 1 ? 4 : 0, pips = level === 'near' && !battle && u.members.length === 1 ? 8 : 0;
+      // The footprint reserves the industry row below every counter (pips, or a merged total), at every zoom.
+      const badge = u.members.length > 1 ? 4 : 0, pips = !battle && u.owner ? (u.members.length > 1 ? 12 : 8) : 0;
       const titled = battle && level !== 'far';
       u.w = battle ? Math.max(battle.width + 6, titled ? this.places.get(u.members[0]).name.length * 5.8 + 4 : 0) : counterWidth(u.troops) + badge * 1.5;
       u.h = (battle ? 32 : COUNTER_H) + badge + pips + (titled ? 14 : 0);
@@ -498,7 +498,6 @@ export class Atlas {
         if (this.battleInfo.has(id)) { const mark = this.battleMarks.get(id); mark?.group.setAttribute('transform', at); mark?.group.classList.toggle('named', level !== 'far'); continue; }
         const marker = this.markers.get(id); shownMarkers.add(id);
         marker.group.setAttribute('transform', at);
-        marker.industry.style.display = level === 'near' ? '' : 'none';
         // Names: reserved space when zoomed in, only where uncrowded at mid, never at country level.
         // Try above the counter, then below it; otherwise the name waits for more zoom.
         const width = this.places.get(id).name.length * 5.8 + 4;
@@ -531,8 +530,16 @@ export class Atlas {
       const disc = node('rect', { y: -10, height: COUNTER_H, rx: 1, class: 'counter-body' }), stripe = node('rect', { y: -10, width: 4, height: COUNTER_H, class: 'counter-stripe' });
       const text = node('text', { x: 2, y: .5, class: 'counter-value' }), badge = node('g', { class: 'cluster-badge' }), bloc = node('rect', { y: -10, width: 2.5, height: COUNTER_H, class: 'counter-bloc' });
       const badgeBody = node('rect', { y: -16, height: 12, rx: 6 }), badgeText = node('text', { y: -9.6 });
-      badge.append(badgeBody, badgeText); group.append(bloc, disc, stripe, text, badge); this.clusterLayer.append(group);
-      this.clusters.set(key, { group, disc, stripe, bloc, text, badgeBody, badgeText });
+      badge.append(badgeBody, badgeText);
+      // Merged industry: one pip and the members' combined development, where single counters show pips.
+      const industry = node('g', { class: 'industry-pips cluster-industry', 'aria-hidden': 'true' });
+      const industryBody = node('rect', { y: 12, height: 10, rx: 2, class: 'cluster-industry-body' });
+      const industryText = node('text', { y: 17.4, class: 'cluster-industry-value' });
+      // A drawn factory (saw-tooth roof and stack): no font glyph dependency.
+      const factory = node('path', { class: 'cluster-industry-icon', d: 'M0,21V16l2,-1.5V16l2,-1.5V16l2,-1.5V13h1.2V21Z' });
+      industry.append(industryBody, factory, industryText);
+      group.append(bloc, disc, stripe, text, badge, industry); this.clusterLayer.append(group);
+      this.clusters.set(key, { group, disc, stripe, bloc, text, badgeBody, badgeText, industry, industryText, industryBody, factory });
     }
     return this.clusters.get(key);
   }
@@ -545,9 +552,14 @@ export class Atlas {
     cluster.text.textContent = u.troops; cluster.badgeText.textContent = count;
     const bw = 6 + count.length * 6; cluster.badgeBody.setAttribute('width', bw); cluster.badgeBody.setAttribute('x', width / 2 - bw + 4);
     cluster.badgeText.setAttribute('x', width / 2 - bw / 2 + 4);
-    cluster.group.dataset.total = u.troops; cluster.group.dataset.owner = u.owner || '';
+    const industry = u.owner ? u.members.reduce((n, id) => n + (this.state.provinces.find(p => p.id === id)?.development || 0), 0) : 0;
+    cluster.industry.style.display = industry ? '' : 'none'; cluster.industryText.textContent = industry;
+    const tagW = 12 + String(industry).length * 5.4, left = -tagW / 2;
+    cluster.industryBody.setAttribute('x', left); cluster.industryBody.setAttribute('width', tagW);
+    cluster.factory.setAttribute('transform', `translate(${left + 2} 0)`); cluster.industryText.setAttribute('x', left + 10.5);
+    cluster.group.dataset.total = u.troops; cluster.group.dataset.owner = u.owner || ''; cluster.group.dataset.industry = industry;
     cluster.group.classList.toggle('owned', Boolean(u.owner && u.owner === this.state.you));
-    cluster.group.setAttribute('aria-label', `${this.countries.get(u.owner)?.name || 'Uncontrolled'}: ${u.members.length} provinces, ${u.troops} troops combined. Activate to zoom in.`);
+    cluster.group.setAttribute('aria-label', `${this.countries.get(u.owner)?.name || 'Uncontrolled'}: ${u.members.length} provinces, ${u.troops} troops${industry ? `, industry ${industry}` : ''} combined. Activate to zoom in.`);
   }
   /** Screen rectangles swept by each visible army over the next interpolation window. */
   armyObstacles(px) {
