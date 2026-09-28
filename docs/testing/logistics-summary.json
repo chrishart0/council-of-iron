@@ -1,5 +1,6 @@
 {
- "diplomacy:v01": {
+ "note": "Heuristic self-play summaries (tests/simulation.js controllers), not human or LLM results. Seeds: v3 diplomacy 930000-930255, v3 solo 940000-940255, v4 diplomacy 950000-950255, v4 solo 960000-960255.",
+ "imperial-1910-v3:diplomacy:v01": {
   "rounds": 256,
   "mode": "diplomacy",
   "variant": "v01",
@@ -160,7 +161,7 @@
   "invariantFailures": 0,
   "elapsedSeconds": 44.435554589
  },
- "diplomacy:logistics-1": {
+ "imperial-1910-v3:diplomacy:logistics-1": {
   "rounds": 256,
   "mode": "diplomacy",
   "variant": "logistics-1",
@@ -321,7 +322,7 @@
   "invariantFailures": 0,
   "elapsedSeconds": 40.835174902
  },
- "diplomacy:logistics-1-movement-only": {
+ "imperial-1910-v3:diplomacy:logistics-1-movement-only": {
   "rounds": 256,
   "mode": "diplomacy",
   "variant": "logistics-1-movement-only",
@@ -482,7 +483,7 @@
   "invariantFailures": 0,
   "elapsedSeconds": 42.57090739
  },
- "solo:v01": {
+ "imperial-1910-v3:solo:v01": {
   "rounds": 256,
   "mode": "solo",
   "variant": "v01",
@@ -643,7 +644,7 @@
   "invariantFailures": 0,
   "elapsedSeconds": 60.364298252
  },
- "solo:logistics-1": {
+ "imperial-1910-v3:solo:logistics-1": {
   "rounds": 256,
   "mode": "solo",
   "variant": "logistics-1",
@@ -804,7 +805,7 @@
   "invariantFailures": 0,
   "elapsedSeconds": 56.697455702
  },
- "solo:logistics-1-movement-only": {
+ "imperial-1910-v3:solo:logistics-1-movement-only": {
   "rounds": 256,
   "mode": "solo",
   "variant": "logistics-1-movement-only",
@@ -964,5 +965,971 @@
   },
   "invariantFailures": 0,
   "elapsedSeconds": 56.879979293999995
+ },
+ "imperial-1910-v4:diplomacy:v01": {
+  "rounds": 256,
+  "mode": "diplomacy",
+  "variant": "v01",
+  "policy": "mixed",
+  "seedStart": 950000,
+  "seedEnd": 950255,
+  "mapSha256": "93102388a97996ff30ddcf2355cfb7998aaedefb29371b8e667e433c4b4cf414",
+  "engineSha256": "20410dd9f044e9426d98279923bed2bed84f4c450b2cba164d08e5edaac3e0b0",
+  "draws": 0,
+  "meanDuration": 1273.984375,
+  "meanFirstBattle": 26.265625,
+  "meanMoves": 510.71875,
+  "meanDevelopments": 28.453125,
+  "meanRecalls": 52.96875,
+  "meanSynchronized": 122.60546875,
+  "meanBattles": 319.484375,
+  "meanFirstElimination": 703.9502262443439,
+  "meanPrestige": {
+   "britain": 8.24479166666667,
+   "france": -6.293402777777773,
+   "germany": -25.027777777777768,
+   "russia": -15.68836805555555,
+   "ottoman": -73.62065972222223,
+   "qing": -72.84548611111113,
+   "japan": -52.57378472222223,
+   "usa": -6.828993055555557
+  },
+  "eliminatedByMinute5": {
+   "britain": 0,
+   "france": 0,
+   "germany": 0,
+   "russia": 0,
+   "ottoman": 0,
+   "qing": 0,
+   "japan": 0,
+   "usa": 0
+  },
+  "countryWins": {
+   "britain": 152,
+   "france": 129,
+   "germany": 101,
+   "russia": 118,
+   "ottoman": 40,
+   "qing": 43,
+   "japan": 81,
+   "usa": 137
+  },
+  "averageLand": {
+   "britain": 17.71484375,
+   "france": 12.671875,
+   "germany": 10.6171875,
+   "russia": 11.5703125,
+   "ottoman": 2.80078125,
+   "qing": 1.8671875,
+   "japan": 5.27734375,
+   "usa": 17.40625
+  },
+  "logistics": {
+   "decisive": 204,
+   "deadlineStalemates": 0,
+   "deadlineWins": 52,
+   "medianDuration": 1303,
+   "battleDuration": {
+    "mean": 9.432520663177971,
+    "median": 7,
+    "p90": 19,
+    "longOver120": 0.0003056683131999804,
+    "unresolvedAtEnd": 2.23046875
+   },
+   "idleShare": 0.2177131884672081,
+   "interiorIdleShare": 0.0758604951168689,
+   "legTicksByKind": {
+    "internal": {
+     "mean": 51.3,
+     "median": 51,
+     "count": 284284
+    },
+    "foreign": {
+     "mean": 48.1,
+     "median": 43,
+     "count": 109732
+    },
+    "sea": {
+     "mean": 93.2,
+     "median": 83,
+     "count": 98297
+    }
+   },
+   "legTicksByRegion": {
+    "americas": {
+     "mean": 88.1,
+     "median": 80,
+     "count": 119958
+    },
+    "europe": {
+     "mean": 33.3,
+     "median": 30,
+     "count": 190751
+    },
+    "africa-mideast": {
+     "mean": 59.2,
+     "median": 56,
+     "count": 62749
+    },
+    "asia-pacific": {
+     "mean": 70.5,
+     "median": 60,
+     "count": 118855
+    }
+   },
+   "legTicksByCountry": {
+    "britain": {
+     "mean": 66.7,
+     "median": 59,
+     "count": 84976
+    },
+    "france": {
+     "mean": 38.4,
+     "median": 30,
+     "count": 78513
+    },
+    "germany": {
+     "mean": 34.8,
+     "median": 29,
+     "count": 56252
+    },
+    "russia": {
+     "mean": 48.5,
+     "median": 43,
+     "count": 66528
+    },
+    "ottoman": {
+     "mean": 43.9,
+     "median": 40,
+     "count": 25211
+    },
+    "qing": {
+     "mean": 62.4,
+     "median": 58,
+     "count": 16433
+    },
+    "japan": {
+     "mean": 59.6,
+     "median": 51,
+     "count": 38369
+    },
+    "usa": {
+     "mean": 85.1,
+     "median": 73,
+     "count": 126031
+    }
+   },
+   "firstLevel2": 262.46484375,
+   "firstLevel3": 416.5443548387097,
+   "matchesWithLevel3": 248,
+   "finalDevelopment": 1.7456104292183967
+  },
+  "invariantFailures": 0,
+  "elapsedSeconds": 49.303541349999996
+ },
+ "imperial-1910-v4:diplomacy:logistics-1": {
+  "rounds": 256,
+  "mode": "diplomacy",
+  "variant": "logistics-1",
+  "policy": "mixed",
+  "seedStart": 950000,
+  "seedEnd": 950255,
+  "mapSha256": "93102388a97996ff30ddcf2355cfb7998aaedefb29371b8e667e433c4b4cf414",
+  "engineSha256": "20410dd9f044e9426d98279923bed2bed84f4c450b2cba164d08e5edaac3e0b0",
+  "draws": 0,
+  "meanDuration": 1227.74609375,
+  "meanFirstBattle": 24.1953125,
+  "meanMoves": 513.21484375,
+  "meanDevelopments": 8.10546875,
+  "meanRecalls": 33.1171875,
+  "meanSynchronized": 125.75390625,
+  "meanBattles": 324.41796875,
+  "meanFirstElimination": 587.7649572649573,
+  "meanPrestige": {
+   "britain": 4.081597222222229,
+   "france": -3.7065972222222214,
+   "germany": -25.126736111111104,
+   "russia": -26.56336805555555,
+   "ottoman": -69.69097222222223,
+   "qing": -75.25347222222221,
+   "japan": -68.02430555555557,
+   "usa": -7.579861111111106
+  },
+  "eliminatedByMinute5": {
+   "britain": 0,
+   "france": 0,
+   "germany": 0,
+   "russia": 0,
+   "ottoman": 2,
+   "qing": 0,
+   "japan": 0,
+   "usa": 0
+  },
+  "countryWins": {
+   "britain": 148,
+   "france": 139,
+   "germany": 104,
+   "russia": 104,
+   "ottoman": 45,
+   "qing": 36,
+   "japan": 53,
+   "usa": 144
+  },
+  "averageLand": {
+   "britain": 17.4921875,
+   "france": 13.83203125,
+   "germany": 10.55078125,
+   "russia": 11.328125,
+   "ottoman": 2.75,
+   "qing": 1.31640625,
+   "japan": 4.3515625,
+   "usa": 18.32421875
+  },
+  "logistics": {
+   "decisive": 209,
+   "deadlineStalemates": 0,
+   "deadlineWins": 47,
+   "medianDuration": 1200,
+   "battleDuration": {
+    "mean": 11.702676668553059,
+    "median": 9,
+    "p90": 23,
+    "longOver120": 0.000674284475804024,
+    "unresolvedAtEnd": 2.75
+   },
+   "idleShare": 0.21187850732410887,
+   "interiorIdleShare": 0.07657847506220265,
+   "legTicksByKind": {
+    "internal": {
+     "mean": 22,
+     "median": 23,
+     "count": 282028
+    },
+    "foreign": {
+     "mean": 40.8,
+     "median": 36,
+     "count": 113352
+    },
+    "sea": {
+     "mean": 51.5,
+     "median": 48,
+     "count": 102133
+    }
+   },
+   "legTicksByRegion": {
+    "americas": {
+     "mean": 42.7,
+     "median": 35,
+     "count": 120688
+    },
+    "europe": {
+     "mean": 21,
+     "median": 16,
+     "count": 190762
+    },
+    "africa-mideast": {
+     "mean": 36.7,
+     "median": 27,
+     "count": 65859
+    },
+    "asia-pacific": {
+     "mean": 37.6,
+     "median": 29,
+     "count": 120204
+    }
+   },
+   "legTicksByCountry": {
+    "britain": {
+     "mean": 36.3,
+     "median": 29,
+     "count": 90259
+    },
+    "france": {
+     "mean": 23.3,
+     "median": 16,
+     "count": 84441
+    },
+    "germany": {
+     "mean": 23.4,
+     "median": 19,
+     "count": 52614
+    },
+    "russia": {
+     "mean": 28.4,
+     "median": 25,
+     "count": 66297
+    },
+    "ottoman": {
+     "mean": 27.2,
+     "median": 22,
+     "count": 26013
+    },
+    "qing": {
+     "mean": 37.4,
+     "median": 27,
+     "count": 14508
+    },
+    "japan": {
+     "mean": 32.5,
+     "median": 24,
+     "count": 32749
+    },
+    "usa": {
+     "mean": 41.7,
+     "median": 34,
+     "count": 130632
+    }
+   },
+   "firstLevel2": 540.4206008583691,
+   "firstLevel3": 599.2432432432432,
+   "matchesWithLevel3": 37,
+   "finalDevelopment": 1.5270404799578061
+  },
+  "invariantFailures": 0,
+  "elapsedSeconds": 45.482470121000006
+ },
+ "imperial-1910-v4:diplomacy:logistics-1-movement-only": {
+  "rounds": 256,
+  "mode": "diplomacy",
+  "variant": "logistics-1-movement-only",
+  "policy": "mixed",
+  "seedStart": 950000,
+  "seedEnd": 950255,
+  "mapSha256": "93102388a97996ff30ddcf2355cfb7998aaedefb29371b8e667e433c4b4cf414",
+  "engineSha256": "20410dd9f044e9426d98279923bed2bed84f4c450b2cba164d08e5edaac3e0b0",
+  "draws": 1,
+  "meanDuration": 1246.27734375,
+  "meanFirstBattle": 24.1953125,
+  "meanMoves": 513.29296875,
+  "meanDevelopments": 30.29296875,
+  "meanRecalls": 31.52734375,
+  "meanSynchronized": 126.5390625,
+  "meanBattles": 327.27734375,
+  "meanFirstElimination": 620.1515151515151,
+  "meanPrestige": {
+   "britain": 11.229166666666666,
+   "france": -6.4930555555555545,
+   "germany": -39.79340277777778,
+   "russia": -28.507812499999993,
+   "ottoman": -69.59722222222223,
+   "qing": -69.15972222222223,
+   "japan": -63.68750000000001,
+   "usa": 4.1744791666666705
+  },
+  "eliminatedByMinute5": {
+   "britain": 0,
+   "france": 0,
+   "germany": 0,
+   "russia": 0,
+   "ottoman": 1,
+   "qing": 2,
+   "japan": 0,
+   "usa": 0
+  },
+  "countryWins": {
+   "britain": 151,
+   "france": 134,
+   "germany": 98,
+   "russia": 106,
+   "ottoman": 53,
+   "qing": 44,
+   "japan": 56,
+   "usa": 139
+  },
+  "averageLand": {
+   "britain": 18.08203125,
+   "france": 13.5703125,
+   "germany": 9.3984375,
+   "russia": 11.8359375,
+   "ottoman": 2.9921875,
+   "qing": 1.515625,
+   "japan": 3.93359375,
+   "usa": 18.64453125
+  },
+  "logistics": {
+   "decisive": 201,
+   "deadlineStalemates": 1,
+   "deadlineWins": 54,
+   "medianDuration": 1248,
+   "battleDuration": {
+    "mean": 12.034386450711958,
+    "median": 9,
+    "p90": 23,
+    "longOver120": 0.001121945979494647,
+    "unresolvedAtEnd": 2.99609375
+   },
+   "idleShare": 0.2260010994936717,
+   "interiorIdleShare": 0.08677868373820417,
+   "legTicksByKind": {
+    "internal": {
+     "mean": 22.1,
+     "median": 23,
+     "count": 272674
+    },
+    "foreign": {
+     "mean": 40.8,
+     "median": 36,
+     "count": 114560
+    },
+    "sea": {
+     "mean": 52.1,
+     "median": 48,
+     "count": 98572
+    }
+   },
+   "legTicksByRegion": {
+    "americas": {
+     "mean": 42.8,
+     "median": 35,
+     "count": 119307
+    },
+    "europe": {
+     "mean": 21.1,
+     "median": 17,
+     "count": 186376
+    },
+    "africa-mideast": {
+     "mean": 37.3,
+     "median": 28,
+     "count": 62694
+    },
+    "asia-pacific": {
+     "mean": 38,
+     "median": 29,
+     "count": 117429
+    }
+   },
+   "legTicksByCountry": {
+    "britain": {
+     "mean": 36.5,
+     "median": 29,
+     "count": 88318
+    },
+    "france": {
+     "mean": 23.5,
+     "median": 16,
+     "count": 80791
+    },
+    "germany": {
+     "mean": 23.4,
+     "median": 19,
+     "count": 48343
+    },
+    "russia": {
+     "mean": 28.4,
+     "median": 25,
+     "count": 66020
+    },
+    "ottoman": {
+     "mean": 27.4,
+     "median": 23,
+     "count": 24488
+    },
+    "qing": {
+     "mean": 38.6,
+     "median": 29,
+     "count": 14157
+    },
+    "japan": {
+     "mean": 32.2,
+     "median": 24,
+     "count": 33831
+    },
+    "usa": {
+     "mean": 41.7,
+     "median": 34,
+     "count": 129858
+    }
+   },
+   "firstLevel2": 242.875,
+   "firstLevel3": 427.07287449392715,
+   "matchesWithLevel3": 247,
+   "finalDevelopment": 1.7567193427205052
+  },
+  "invariantFailures": 0,
+  "elapsedSeconds": 46.134522185
+ },
+ "imperial-1910-v4:solo:v01": {
+  "rounds": 256,
+  "mode": "solo",
+  "variant": "v01",
+  "policy": "mixed",
+  "seedStart": 960000,
+  "seedEnd": 960255,
+  "mapSha256": "93102388a97996ff30ddcf2355cfb7998aaedefb29371b8e667e433c4b4cf414",
+  "engineSha256": "20410dd9f044e9426d98279923bed2bed84f4c450b2cba164d08e5edaac3e0b0",
+  "draws": 8,
+  "meanDuration": 1781.48046875,
+  "meanFirstBattle": 26.1796875,
+  "meanMoves": 660.1484375,
+  "meanDevelopments": 22.6875,
+  "meanRecalls": 58.109375,
+  "meanSynchronized": 177.671875,
+  "meanBattles": 464.90234375,
+  "meanFirstElimination": 696.87890625,
+  "meanPrestige": {
+   "britain": -3.125,
+   "france": 115.625,
+   "germany": 6.25,
+   "russia": 18.75,
+   "ottoman": -87.5,
+   "qing": -96.875,
+   "japan": -96.875,
+   "usa": 143.75
+  },
+  "eliminatedByMinute5": {
+   "britain": 0,
+   "france": 0,
+   "germany": 0,
+   "russia": 0,
+   "ottoman": 0,
+   "qing": 0,
+   "japan": 0,
+   "usa": 0
+  },
+  "countryWins": {
+   "britain": 30,
+   "france": 68,
+   "germany": 33,
+   "russia": 37,
+   "ottoman": 3,
+   "qing": 0,
+   "japan": 0,
+   "usa": 77
+  },
+  "averageLand": {
+   "britain": 18.47265625,
+   "france": 14.58203125,
+   "germany": 8.83984375,
+   "russia": 10.671875,
+   "ottoman": 1.7890625,
+   "qing": 0.125,
+   "japan": 1.2109375,
+   "usa": 24.296875
+  },
+  "logistics": {
+   "decisive": 15,
+   "deadlineStalemates": 8,
+   "deadlineWins": 233,
+   "medianDuration": 1800,
+   "battleDuration": {
+    "mean": 9.74407427635172,
+    "median": 8,
+    "p90": 18,
+    "longOver120": 0.0004789312271562408,
+    "unresolvedAtEnd": 3.421875
+   },
+   "idleShare": 0.253099856821395,
+   "interiorIdleShare": 0.08254915915406799,
+   "legTicksByKind": {
+    "internal": {
+     "mean": 52.6,
+     "median": 54,
+     "count": 371295
+    },
+    "foreign": {
+     "mean": 47.7,
+     "median": 43,
+     "count": 155586
+    },
+    "sea": {
+     "mean": 97.2,
+     "median": 106,
+     "count": 135900
+    }
+   },
+   "legTicksByRegion": {
+    "americas": {
+     "mean": 89.1,
+     "median": 83,
+     "count": 180595
+    },
+    "europe": {
+     "mean": 33.1,
+     "median": 30,
+     "count": 245768
+    },
+    "africa-mideast": {
+     "mean": 57.5,
+     "median": 54,
+     "count": 86486
+    },
+    "asia-pacific": {
+     "mean": 73.1,
+     "median": 64,
+     "count": 149932
+    }
+   },
+   "legTicksByCountry": {
+    "britain": {
+     "mean": 68.6,
+     "median": 62,
+     "count": 134620
+    },
+    "france": {
+     "mean": 36.6,
+     "median": 30,
+     "count": 112264
+    },
+    "germany": {
+     "mean": 35.2,
+     "median": 30,
+     "count": 65587
+    },
+    "russia": {
+     "mean": 46.5,
+     "median": 42,
+     "count": 79636
+    },
+    "ottoman": {
+     "mean": 43,
+     "median": 40,
+     "count": 23024
+    },
+    "qing": {
+     "mean": 63.9,
+     "median": 58,
+     "count": 8917
+    },
+    "japan": {
+     "mean": 56.2,
+     "median": 51,
+     "count": 31251
+    },
+    "usa": {
+     "mean": 84.3,
+     "median": 80,
+     "count": 207482
+    }
+   },
+   "firstLevel2": 278.65625,
+   "firstLevel3": 538.7952755905512,
+   "matchesWithLevel3": 254,
+   "finalDevelopment": 1.6248082374837722
+  },
+  "invariantFailures": 0,
+  "elapsedSeconds": 65.753869303
+ },
+ "imperial-1910-v4:solo:logistics-1": {
+  "rounds": 256,
+  "mode": "solo",
+  "variant": "logistics-1",
+  "policy": "mixed",
+  "seedStart": 960000,
+  "seedEnd": 960255,
+  "mapSha256": "93102388a97996ff30ddcf2355cfb7998aaedefb29371b8e667e433c4b4cf414",
+  "engineSha256": "20410dd9f044e9426d98279923bed2bed84f4c450b2cba164d08e5edaac3e0b0",
+  "draws": 2,
+  "meanDuration": 1743.34765625,
+  "meanFirstBattle": 24.23828125,
+  "meanMoves": 674.7265625,
+  "meanDevelopments": 5.23828125,
+  "meanRecalls": 41.578125,
+  "meanSynchronized": 188.19921875,
+  "meanBattles": 474.9140625,
+  "meanFirstElimination": 604.67578125,
+  "meanPrestige": {
+   "britain": -30.46875,
+   "france": 153.90625,
+   "germany": 13.28125,
+   "russia": 25.78125,
+   "ottoman": -86.71875,
+   "qing": -99.21875,
+   "japan": -92.96875,
+   "usa": 116.40625
+  },
+  "eliminatedByMinute5": {
+   "britain": 0,
+   "france": 0,
+   "germany": 0,
+   "russia": 0,
+   "ottoman": 3,
+   "qing": 0,
+   "japan": 0,
+   "usa": 0
+  },
+  "countryWins": {
+   "britain": 22,
+   "france": 81,
+   "germany": 36,
+   "russia": 40,
+   "ottoman": 4,
+   "qing": 0,
+   "japan": 2,
+   "usa": 69
+  },
+  "averageLand": {
+   "britain": 16.51953125,
+   "france": 15.78125,
+   "germany": 8.18359375,
+   "russia": 10.81640625,
+   "ottoman": 2.24609375,
+   "qing": 0.26953125,
+   "japan": 1.0234375,
+   "usa": 25.15625
+  },
+  "logistics": {
+   "decisive": 49,
+   "deadlineStalemates": 2,
+   "deadlineWins": 205,
+   "medianDuration": 1800,
+   "battleDuration": {
+    "mean": 12.07932356182862,
+    "median": 9,
+    "p90": 23,
+    "longOver120": 0.0010692724012568062,
+    "unresolvedAtEnd": 3.65234375
+   },
+   "idleShare": 0.24354586695036587,
+   "interiorIdleShare": 0.0807471485860472,
+   "legTicksByKind": {
+    "internal": {
+     "mean": 22.2,
+     "median": 22,
+     "count": 383485
+    },
+    "foreign": {
+     "mean": 40.7,
+     "median": 37,
+     "count": 163491
+    },
+    "sea": {
+     "mean": 53.3,
+     "median": 48,
+     "count": 143597
+    }
+   },
+   "legTicksByRegion": {
+    "americas": {
+     "mean": 43,
+     "median": 35,
+     "count": 181018
+    },
+    "europe": {
+     "mean": 21.2,
+     "median": 17,
+     "count": 263287
+    },
+    "africa-mideast": {
+     "mean": 36.5,
+     "median": 26,
+     "count": 89585
+    },
+    "asia-pacific": {
+     "mean": 39.4,
+     "median": 29,
+     "count": 156683
+    }
+   },
+   "legTicksByCountry": {
+    "britain": {
+     "mean": 37,
+     "median": 29,
+     "count": 139285
+    },
+    "france": {
+     "mean": 22.6,
+     "median": 14,
+     "count": 118096
+    },
+    "germany": {
+     "mean": 23.5,
+     "median": 19,
+     "count": 64941
+    },
+    "russia": {
+     "mean": 27.1,
+     "median": 22,
+     "count": 89522
+    },
+    "ottoman": {
+     "mean": 29.4,
+     "median": 26,
+     "count": 26395
+    },
+    "qing": {
+     "mean": 44.3,
+     "median": 41,
+     "count": 9630
+    },
+    "japan": {
+     "mean": 33.4,
+     "median": 24,
+     "count": 30550
+    },
+    "usa": {
+     "mean": 41.6,
+     "median": 35,
+     "count": 212154
+    }
+   },
+   "firstLevel2": 652.6862745098039,
+   "firstLevel3": 646,
+   "matchesWithLevel3": 8,
+   "finalDevelopment": 1.4461555577531648
+  },
+  "invariantFailures": 0,
+  "elapsedSeconds": 61.486870861
+ },
+ "imperial-1910-v4:solo:logistics-1-movement-only": {
+  "rounds": 256,
+  "mode": "solo",
+  "variant": "logistics-1-movement-only",
+  "policy": "mixed",
+  "seedStart": 960000,
+  "seedEnd": 960255,
+  "mapSha256": "93102388a97996ff30ddcf2355cfb7998aaedefb29371b8e667e433c4b4cf414",
+  "engineSha256": "20410dd9f044e9426d98279923bed2bed84f4c450b2cba164d08e5edaac3e0b0",
+  "draws": 5,
+  "meanDuration": 1762.02734375,
+  "meanFirstBattle": 24.23828125,
+  "meanMoves": 680.55078125,
+  "meanDevelopments": 24.71875,
+  "meanRecalls": 39.65234375,
+  "meanSynchronized": 187.48046875,
+  "meanBattles": 476.4609375,
+  "meanFirstElimination": 634.28125,
+  "meanPrestige": {
+   "britain": -19.921875,
+   "france": 92.578125,
+   "germany": 8.203125,
+   "russia": 70.703125,
+   "ottoman": -73.046875,
+   "qing": -98.046875,
+   "japan": -98.046875,
+   "usa": 117.578125
+  },
+  "eliminatedByMinute5": {
+   "britain": 0,
+   "france": 0,
+   "germany": 0,
+   "russia": 0,
+   "ottoman": 2,
+   "qing": 0,
+   "japan": 0,
+   "usa": 0
+  },
+  "countryWins": {
+   "britain": 25,
+   "france": 61,
+   "germany": 34,
+   "russia": 54,
+   "ottoman": 8,
+   "qing": 0,
+   "japan": 0,
+   "usa": 69
+  },
+  "averageLand": {
+   "britain": 16.9453125,
+   "france": 13.609375,
+   "germany": 8.7265625,
+   "russia": 11.890625,
+   "ottoman": 2.03515625,
+   "qing": 0.078125,
+   "japan": 0.859375,
+   "usa": 25.8515625
+  },
+  "logistics": {
+   "decisive": 40,
+   "deadlineStalemates": 5,
+   "deadlineWins": 211,
+   "medianDuration": 1800,
+   "battleDuration": {
+    "mean": 12.420023939528097,
+    "median": 9,
+    "p90": 23,
+    "longOver120": 0.0014429304605899618,
+    "unresolvedAtEnd": 3.94140625
+   },
+   "idleShare": 0.25426625307039225,
+   "interiorIdleShare": 0.09122017484791904,
+   "legTicksByKind": {
+    "internal": {
+     "mean": 22.2,
+     "median": 23,
+     "count": 374919
+    },
+    "foreign": {
+     "mean": 40.8,
+     "median": 37,
+     "count": 163811
+    },
+    "sea": {
+     "mean": 53.5,
+     "median": 48,
+     "count": 140831
+    }
+   },
+   "legTicksByRegion": {
+    "americas": {
+     "mean": 42.9,
+     "median": 35,
+     "count": 179213
+    },
+    "europe": {
+     "mean": 21.2,
+     "median": 17,
+     "count": 257914
+    },
+    "africa-mideast": {
+     "mean": 37.1,
+     "median": 26,
+     "count": 87966
+    },
+    "asia-pacific": {
+     "mean": 39.6,
+     "median": 29,
+     "count": 154468
+    }
+   },
+   "legTicksByCountry": {
+    "britain": {
+     "mean": 37.1,
+     "median": 29,
+     "count": 136573
+    },
+    "france": {
+     "mean": 22.6,
+     "median": 14,
+     "count": 113795
+    },
+    "germany": {
+     "mean": 23.6,
+     "median": 19,
+     "count": 65499
+    },
+    "russia": {
+     "mean": 27.4,
+     "median": 23,
+     "count": 88192
+    },
+    "ottoman": {
+     "mean": 29.6,
+     "median": 26,
+     "count": 25041
+    },
+    "qing": {
+     "mean": 46.5,
+     "median": 49,
+     "count": 8363
+    },
+    "japan": {
+     "mean": 33.9,
+     "median": 24,
+     "count": 29130
+    },
+    "usa": {
+     "mean": 41.5,
+     "median": 34,
+     "count": 212968
+    }
+   },
+   "firstLevel2": 238.98828125,
+   "firstLevel3": 512.7125984251968,
+   "matchesWithLevel3": 254,
+   "finalDevelopment": 1.6440145371835448
+  },
+  "invariantFailures": 0,
+  "elapsedSeconds": 62.209620724
  }
 }

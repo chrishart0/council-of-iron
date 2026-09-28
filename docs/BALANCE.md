@@ -1,3 +1,47 @@
+# Logistics-1 (2026-09)
+
+**What changed:** the `logistics-1` ruleset (movement ×1.2 everywhere, internal links ×2 more, battle rounds 25% slower, development ×2 cost and time) and rally points. See the [design](design-logistics.md). The user chose these three movement/battle numbers directly ("increase ALL movement by 20%, slow down ALL battles by 25%, and apply a 2× speed boost internally") and asked for development "a lot harder and a lot slower". These runs check guardrails; they did not tune those numbers. **Heuristic self-play (tests/simulation.js) does not prove balance or fun.** The bots attack only with a clear superiority, have no attention limit, and don't use rally points. So these runs can't measure the micromanagement problem rally points address.
+
+Final evidence is on the merged **imperial-1910-v4** map (with neutral Hawaii), fresh seeds 950000–950255 (diplomacy) and 960000–960255 (solo), 256 matches per row. `logistics-1-movement-only` is an ablation with classic development costs. Zero invariant failures (troop conservation, nonnegative garrisons, valid armies, deadline, prize pool) in every run listed here, including 3×256×2 on v3 (seeds 930000/940000) and the required 32-match runs.
+
+| Diplomacy mode, v4 | classic (v01) | logistics-1 | movement-only |
+|---|---:|---:|---:|
+| Mean / median match length (ticks) | 1274 / 1303 | 1228 / 1200 | 1246 / 1248 |
+| Decisive (domination) victories | 204/256 | 209/256 | 201/256 |
+| Deadline draws (stalemate) | 0 | 0 | 1 |
+| Battles per match | 319 | 324 | 327 |
+| Battle duration median / mean / p90 (ticks) | 7 / 9.4 / 19 | 9 / 11.7 / 23 | 9 / 12.0 / 23 |
+| Battles longer than 120 ticks · still open at the end | 0.0% · 2.2 | 0.1% · 2.8 | 0.1% · 3.0 |
+| Idle share (garrison surplus not moved for >120 ticks) · interior only | 21.8% · 7.6% | 21.2% · 7.7% | 22.6% · 8.7% |
+| Mean leg ticks: internal / foreign / sea | 51 / 48 / 93 | 22 / 41 / 52 | 22 / 41 / 52 |
+| Mean leg ticks: Americas / Europe / Africa–Mid-East / Asia–Pacific | 88 / 33 / 59 / 70 | 43 / 21 / 37 / 38 | 43 / 21 / 37 / 38 |
+| First level II / III (mean tick where reached; matches with a III) | 262 / 417 (248) | 540 / 599 (37) | 243 / 427 (247) |
+| Mean final industry per owned province · develop orders per match | 1.75 · 28.5 | 1.53 · 8.1 | 1.76 · 30.3 |
+| Winning-roster appearances USA / Japan / Britain | 137 / 81 / 152 | 144 / 53 / 148 | 139 / 56 / 151 |
+| … France / Germany / Russia / Ottoman / Qing | 129 / 101 / 118 / 40 / 43 | 139 / 104 / 104 / 45 / 36 | 134 / 98 / 106 / 53 / 44 |
+
+| Solo mode, v4 | classic (v01) | logistics-1 | movement-only |
+|---|---:|---:|---:|
+| Mean match length · decisive victories · deadline draws | 1781 · 15 · 8 | 1743 · 49 · 2 | 1762 · 40 · 5 |
+| Battle duration median / p90 | 8 / 18 | 9 / 23 | 9 / 23 |
+| Wins USA / Japan / Britain | 77 / 0 / 30 | 69 / 2 / 22 | 69 / 0 / 25 |
+| Wins France / Germany / Russia / Ottoman / Qing | 68 / 33 / 37 / 3 / 0 | 81 / 36 / 40 / 4 / 0 | 61 / 34 / 54 / 8 / 0 |
+| Matches reaching industry III · develop orders | 254 · 22.7 | 8 · 5.2 | 254 · 24.7 |
+
+Readings (not claims):
+
+- **Resolution:** matches still end. Diplomacy decisive rate is unchanged (80% → 82%). Solo domination becomes three times as common (6% → 19%) with fewer deadline draws. Quick rooms run the same tick schedule 6× faster, so these tick results apply to the 5-minute preset as well as the 30-minute one.
+- **Battles:** about 25–30% longer (median 7 → 9 ticks), as intended, but still short. Battles over 120 ticks stay at 0.1%, and there is no stalemate signal. These controllers attack only with clear superiority, so no "trench" fronts form in self-play. Whether humans get sustained fronts is a playtest question. **No defender bonus is added**: nothing here shows it is needed, and it would lengthen battles further untested.
+- **US space vs Europe:** per-country mean leg time falls USA 85 → 42 ticks (−51%), Britain 67 → 36 (−46%), Japan 60 → 33 (−45%), versus France 38 → 23 (−39%) and Germany 35 → 23 (−33%). The spread-out empires gain the most time. That did **not** translate into more wins for them in these controllers. USA solo wins 77 → 69, Britain 30 → 22, **Japan's diplomacy roster appearances 81 → 53** (the largest shift, also in the movement-only ablation, so it comes from movement rather than development). France gains in solo (68 → 81). On v3 the same Britain drop appeared in solo (50 → 24) and Japan did not drop. Treat Britain and Japan as the watch items for the first human playtests.
+- **Development ×2:** it is now clearly harder. Bots build a third as often, level III appears in 14% of diplomacy matches instead of 97%, and the first level II comes at ~9 minutes instead of ~4½. The policy's payback check reads the rules and correctly rejects most late upgrades; it has no hard-coded costs, so it was not changed. Industry victory now rests more on captured provinces than on building.
+- **Idle troops:** bots already move surplus, so their idle share barely changes (the metric is here for future human/agent logs). Rally points target human attention, not bot efficiency.
+
+Recommendation: ship `logistics-1` as the new-room default (already so on this branch; `ruleset: "classic"` remains available). There are no invariant failures and no resolution problems. The country shifts are moderate (Britain's solo share and Japan's coalition share fall), not extreme. Playtest next with the USA and Britain/Japan seated by humans. Watch battle length at real fronts, Pacific crossing times and whether rally points reduce idle troops.
+
+Reproduce: `node scripts/tournament.js --rounds 256 --seed 950000 --mode diplomacy --variant logistics-1` (and `--variant v01`, `--variant logistics-1-movement-only`; `--seed 960000 --mode solo`). Summaries: [testing/logistics-summary.json](testing/logistics-summary.json). The tournament report now includes `logistics` metrics: leg times by link class, theatre and country, idle share, battle durations, industry timing and stalemates.
+
+---
+
 # Balance refinement — v0.3
 
 ## Target and result

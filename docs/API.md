@@ -133,7 +133,8 @@ The transcript returns only to the caller. It is **not** chat: the browser inser
 | `recall` | `id` (order, army or group) | Next tick: cancel waiting components; physically return outbound components |
 | `turn_around` | `armyId` (one of your moving, non-engaged armies) | Next tick. Outbound: exactly a `recall` (receipt `mode:"recall"`). Returning: resume toward the province it had been heading for (receipt `mode:"resume"`, `to`, projected `arrivesAt`). See [Turning around](#turning-around) |
 | `develop` | `from` | Reserve local manpower, execute next tick, build over time |
-| `route` | `from`, `to` (friendly adjacent ID or null) | Forward future recruitment batches; null clears |
+| `route` | `from`, `to` (friendly adjacent ID or null) | Forward future recruitment batches; null clears. Setting a route clears a rally point on that source |
+| `rally` | `from` (one owned province ID, or an array of 1–16 unique ones), `to` (one of **your own** provinces, or `null` to clear), optional `keep` (integer 1–9999) | Standing rally point, next tick, one military command for all sources. See [Rally points](#rally-points) |
 | `propose` | independent candidate `country`, optional `name` | Exact-roster offer; no immediate military benefits |
 | `accept` | `proposalId` | Consent; all required voters plus 30 ticks' notice before activation |
 | `decline` | `proposalId` | Decline or withdraw an open offer |
@@ -162,7 +163,7 @@ Combat begins when hostile troops arrive and then resolves one dice round per ti
 
 Earliest common arrival is `current tick + 1 + longest source travel`. Optional arrival must be no earlier, at most 300 ticks later, and no later than match deadline. Distance travel is `15 + ceil(km/35)` in this scenario. The map supplies geometry; observe supplies exact times.
 
-One single-target attack, including a multi-source group, consumes one of the shared three commands per rolling ten ticks. Development, route changes and recall each consume one as well. No client receives a private fast batch path. Invalid action validation consumes no troops or command allowance; accepted components may still fail at departure if ownership or troops changed.
+One single-target attack, including a multi-source group, consumes one of the shared three commands per rolling ten ticks. Development, route changes, rally set/clear and recall each consume one as well; automatic rally marches consume none. No client receives a private fast batch path. Invalid action validation consumes no troops or command allowance; accepted components may still fail at departure if ownership or troops changed.
 
 Recall executes before due departure/arrival. Waiting reservations release; marching armies return to original sources from their current position, taking their elapsed outbound travel time (at least one). A hostile home triggers combat. Already-arrived or returning troops are not recallable. Group cancellation is not a development cancellation.
 
@@ -177,6 +178,32 @@ Recall executes before due departure/arrival. Waiting reservations release; marc
 - Public event `army_turned_around {country, armyId, from, to, amount, arrivesAt}`.
 - Read-only preview: `GET /api/games/:id/turn-around?army=ARMY_ID` (your seat) returns `{mode, to, arrivesAt, …}`; for a resume also `owner`, `turnArounds`, `limit` and `battleInProgress {attackerSide, joins}` when another side is already fighting there (if that battle has not ended when you arrive, your troops are turned back again).
 
+### Rally points
+
+`rally {from, to, keep?}` sets (or with `to: null` clears) a standing order on each source province. It costs one military command when accepted (for up to 16 sources) and executes next tick; automatic marches cost nothing. The receipt adds `to`, `keep` and `sources: [{from, path, travel, arrivesAt}]` (the current fastest path and the arrival of a column leaving next tick). `POST /api/games/:id/plan` with the same `{type:"rally", …}` body returns that plan read-only (your seat, no command spent; 409 when no friendly path exists).
+
+- **When:** at each recruitment of the source (every `rules.recruit` ticks), after recruiting.
+- **How many:** `keep` absent/null forwards that recruitment only (`min(recruited, uncommitted − 1)`); `keep: N` forwards every uncommitted troop above N. Reserved troops (queued moves/transits/development) are never taken.
+- **Where:** the fastest path by the room's travel times through provinces owned by you or a current ally, never through a province with a battle, and only through your own provinces while your side has a departure pending. The destination must be yours. Ties break by province ID.
+- **What moves:** an ordinary public army with `transit:true`, `rally:true`, `path`, `origin`. It keeps your nationality through allied land, is recallable (`recall`, or `turn_around` while outbound), and blocks an alliance departure while inside an ally's borders like any transit. A returning rally column cannot resume.
+- **Never an attack:** if its destination is no longer yours or an ally's on arrival it turns back (`army_recalled` reason `rally_blocked`, `owner`); intermediate provinces follow the transit rule (`transit_blocked`).
+- **Paused, not deleted:** the rally stays set but sends nothing while `under_attack` (battle at the source), `destination_lost` (the rally province is not yours) or `no_path`. Captured sources lose their rally (`rally_cleared`, reason `source_lost`).
+- **Private:** `observe.rallies` lists only your own `{country, from, to, keep, status: "active"|"paused", reason?, since}`; spectators and other seats get `[]`. Private events: `rally_set`, `rally_cleared {reason: "order"|"source_lost"}`, `rally_paused {from, to, reason}`, `rally_resumed`, `rally_dispatched {armyId, from, to, amount, path, arrivesAt}`.
+- Rooms without formal war rules (legacy) refuse `rally`.
+
+### Rulesets and travel times
+
+`POST /api/games` accepts optional `ruleset`: `"logistics-1"` (the default for new rooms) or `"classic"`. The room list shows each room's `ruleset`; `observe.rules.ruleset` is absent in classic and in every room created before rulesets existed, whose stored rules and travel tables never change.
+
+| Rule field (logistics-1) | Value | Meaning |
+|---|---|---|
+| `moveSpeedPercent` | 120 | Every link: `ceil(classic ticks × 100 / 120)` |
+| `internalSpeedPercent` | 200 | Internal link, a further ×2: `ceil(classic ticks × 10000 / 24000)` |
+| `battleSlowdownPercent` | 125 | Battle rounds at elapsed tick `e` only when `floor(e×100/125)` increases: 4 rounds per 5 ticks, the first on the 2nd tick of a battle. Dice per round unchanged |
+| `developmentCosts` / `developmentTicks` | `[0,24,48]` / `[0,120,180]` | Development twice as costly and twice as slow |
+
+An **internal** link is one whose two ends are both owned by you or a current ally when that leg departs (sea lanes included). Anything else, including neutral land, is charged `travelTimes`. `observe` returns `travelTimes` (non-internal) and, in logistics rooms, `internalTravelTimes`. Multi-leg transit and rally columns re-evaluate each leg as it departs. A coordinated attack keeps the arrival computed when it was accepted. An army moving on an internal leg carries `leg` (that leg's ticks) so turn-around/recall previews stay exact; `/preview`, `/plan` and turn-around previews use the same numbers.
+
 ### Why an army turned back
 
 `army_recalled` events with a `reason` were automatic; a recall you ordered has no `reason`. Since v0.8.1 they also carry `province` (where the army had been heading) and detail:
@@ -188,10 +215,11 @@ Recall executes before due departure/arrival. Waiting reservations release; marc
 | `rival_arrival` | Another side arrived on the same tick with a larger force and took first claim | `rivalSide`, `owner` |
 | `transit_blocked` | The next allied province on a transit route was no longer allied, or a battle was in progress there | `owner`, `battleAttackerSide` when a battle blocked it |
 | `peace` | A peace treaty with the target's owner | `owner` |
+| `rally_blocked` | A rally column's destination is no longer yours or an ally's; rally columns never attack | `owner` |
 
 Older events (before v0.8.1) have only `reason`; their `no_war` could also mean `battle_in_progress`.
 
-Industry I→II costs12/takes60 ticks; II→III costs24/takes90. A build spends on execution, not submission; it is reserved beforehand. Capture destroys unfinished work without refund but retains completed industry. Arrival resolves before construction completion on the same tick.
+Industry I→II costs12/takes60 ticks; II→III costs24/takes90 (classic rooms; logistics-1 doubles both: 24/120 and 48/180 — read `rules.developmentCosts`/`developmentTicks`). A build spends on execution, not submission; it is reserved beforehand. Capture destroys unfinished work without refund but retains completed industry. Arrival resolves before construction completion on the same tick.
 
 ## Victory and storage
 
