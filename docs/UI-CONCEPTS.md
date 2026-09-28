@@ -63,7 +63,16 @@ User priority: *"see things coming in without clutter, know how to access what i
 
 **Benchmark walkthrough** (`python scripts/concept-walk.py OUT A B C`, 1536×864 and 390×844): Japan sends a DM, then offers the *Island Accord* while two war declarations and two world messages arrive; the player reads the offer thread, accepts inline, replies by voice, goes back to World, scrolls to the opening war declaration, marks the rest read and closes. The arrivals are Britain's recorded observations (`public/concepts/fixture/comms-*.json`) delivered through a test-only page hook; the voice step plays a scripted transcript (the game uses `public/voice.js`). Taps are counted by the script; scrolling is counted separately.
 
-<!-- WALK-RESULTS -->
+Result (all three pass with no overlapping regions and no page errors):
+
+| Concept | 1536×864 | 390×844 | Scrolls |
+|---|---|---|---|
+| A · War Room | 8 taps | 8 taps | 1 |
+| B · Field Telegraph | 8 taps | 8 taps | 1 |
+| C · Modern | 8 taps | 8 taps | 1 |
+
+The eight taps: Read (toast) · Accept (inline) · mic · Send · back · World · Mark all read · close. Voice text needs no typing. Accepting straight from the toast is one tap if the player does not want to read first. Step screenshots: `OUT/<concept>/walk/<size>/NN-step.png`.
+
 
 ## Layout rules shared by all three (why nothing overlaps)
 
@@ -95,4 +104,39 @@ User priority: *"see things coming in without clutter, know how to access what i
 
 Licences: `public/concepts/fonts/OFL-*.txt`. Subset with `pyftsubset` (Basic Latin, Latin-1, typographic punctuation, arrows). Total 224 KB for all three; a chosen direction ships only its own (A 90 KB, B 88 KB, C 31 KB). All icons are original inline SVG.
 
-<!-- DIRECTIONS -->
+## The three directions
+
+Each is one design system (tokens, frame and panel primitives, buttons, tabs, slider, toggle, list rows, icons, dialog/letter, toast, chat, motion) applied to every screen; `?s=tile` shows its components side by side. All three keep the map's rendering, zoom, counters and borders, add only a frame or vignette, and pass the region check on all 13 screens at 1920×1080, 1536×864 and 390×844.
+
+### A · War Room (`/concepts/A.html`)
+
+Blued-iron plates with brass rims, corner studs and engraved brass title strips; oxblood for war and danger, verdigris for alliances. Alegreya SC for titles, Barlow Condensed for all UI text and numbers. Desktop: full-width top bar (standard, troops, provinces, an industry-to-win gauge, clock plaque with the victory line, Messages badge, menu); left column = the one context card with its primary pinned at the bottom; right column = the outliner (Powers with nested alliance totals and war fronts above the docked Messages inbox); toast lane at the top of the map area; camera bottom-right of the map; an iron bezel around the map. Phone: top bar, a strip of the other powers' standards, the map, one bottom slot (dock or card sheet). Offers inside threads are small parchment letters with an oxblood seal; the report is a ceremonial standings board with the land-share chart and turning points.
+
+- Effort: 7–9 days to port (ornament is CSS: gradients, clip-path chamfers, no images).
+- Mobile fit: good; the top bar is the tightest spot (provinces dropped on phone).
+- Readability: high; condensed sans keeps numbers large in a narrow column; the dark palette matches the map, so map and shell read as one object.
+- Overlap: grid regions; Powers is capped so the inbox always keeps its share; a thread takes the full column and Powers folds to one line.
+
+### B · Field Telegraph (`/concepts/B.html`)
+
+The shell is paperwork on a commander's desk around the live map: a telegraph-tape top strip, the province/country card as a manila dossier, the Order of battle as a typed index card, messages as telegram slips, wax-seal Accept buttons, rubber-stamp primaries, a leather frame around the map, a paper-tape replay timeline with punched event holes, and the report as a signed "Protocol of the Conference" with alliance seals. IM FELL English SC for headings (18 px and up), Courier Prime for everything else.
+
+- Effort: 8–10 days (the widest type and the most bespoke components; right-column height budget between 1280 and 1440 wide needs care).
+- Mobile fit: fair; the dossier takes more than half the phone height and Courier truncates names ("Brit…", "United").
+- Readability: good for messages (they look like messages), weaker for dense tables; the most distinctive and diegetic of the three.
+- Overlap: same grid discipline; the dossier lies inside the leather frame and the camera excludes it.
+
+### C · Modern (`/concepts/C.html`)
+
+Game "stickers": light cards and dark chips with a 2 px ink outline and a hard offset shadow that collapses on press, one gold primary per surface, Rubik only, 43 original filled icons. Desktop: player chip with resource pills and an industry ring top-left, clock pill top-centre, menu top-right, the card bottom-left, Powers or Messages in the right column (one at a time), round buttons bottom-right (Powers, Messages badge, Home, zoom). Phone: top row, bottom sheets that replace the bottom row. Replay: history left, standings at the tick right, a pill scrubber with event dots. Report: podium, alliance totals, country table, chart, key moments (tabs on phone).
+
+- Effort: 5–7 days (no textures, one font, simplest components).
+- Mobile fit: best; big targets, sheets, the least chrome.
+- Readability: highest contrast; the serif map labels and neon alliance washes clash a little with the clean shell.
+- Overlap: corner anchors plus a right column that holds one panel at a time.
+
+### Recommendation
+
+**A · War Room**, borrowing C's interaction discipline (one loud primary per surface, pressable feedback, the round camera cluster). Reasons: it answers the verdict most directly (an anchored, framed strategy-game HUD in the grand-strategy tradition, not floating cards); its palette and period typography continue the map the user likes, so shell and map become one object, while C's modern shell sits on a period map; its condensed numerals give the right column the room that 8 seats, 4 alliances and a wars list need (the bug that started this); and it is readable at phone size. Choose **C** if speed of delivery and phone play matter most; **B** if a strong diegetic identity matters more than density.
+
+

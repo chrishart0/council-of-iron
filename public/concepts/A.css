@@ -664,3 +664,7 @@ code{font:600 14px var(--ui);color:var(--brass-hi)}
 .spec-row .slider{flex:1;min-width:160px}
 @media (max-width:699px){.r-table .grp th{font-size:17px}}
 @media (max-width:699px){.sheet-slot>.rightcol{flex:1 1 0;min-height:0}.sheet-slot .ol-powers{flex:1 1 0;max-height:none}.sheet-slot .ol-powers>.ol-body{flex:1 1 0}}
+/* Comms: "Write to" row (countries without messages yet). */
+.cx-start{padding:8px 10px 10px;border-top:1px solid var(--brass-lo)}.cx-start-label{font:600 13px var(--ui);color:var(--muted)}
+.cx-start-btn{min-height:32px;padding:3px 8px 3px 4px;cursor:pointer;background:linear-gradient(180deg,var(--iron-hi),var(--iron));border:1px solid var(--brass-lo);color:var(--ivory);font:500 14px var(--ui);clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px)}
+.cx-start-btn:hover{border-color:var(--brass);color:var(--brass-hi)}

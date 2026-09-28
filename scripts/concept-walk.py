@@ -21,8 +21,9 @@ def run(page, d, size, out, phone):
     def tap(selector, name):
         nonlocal taps
         loc = page.locator(selector).first
-        loc.scroll_into_view_if_needed()
-        (loc.tap if phone else loc.click)(timeout=4000); taps += 1; shot(name)
+        try: loc.scroll_into_view_if_needed(timeout=4000); (loc.tap if phone else loc.click)(timeout=4000)
+        except Exception as e: raise RuntimeError(f'step {name} ({selector}): {str(e).splitlines()[0]}')
+        taps += 1; shot(name)
     shot('idle')
     page.evaluate('()=>__walk.arrive()'); shot('dm-arrives')
     page.evaluate('()=>__walk.arrive()'); shot('offer-and-world-arrive')

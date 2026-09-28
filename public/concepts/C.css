@@ -492,7 +492,6 @@ blockquote p{margin:0;font-size:15px;line-height:1.4;font-style:italic}
 .cx-title{font-size:20px;font-weight:800;letter-spacing:-.01em;padding-left:4px}
 .cx-readall{border:0;background:var(--card-2);border-radius:999px;padding:6px 12px;font:700 13px var(--font);color:var(--ink);cursor:pointer;white-space:nowrap}
 .cx-readall:hover{background:#dbe2ec}
-.cx-panel[data-view=thread] .cx-readall{display:none}
 .cx-list{padding:6px 8px}
 .cx-list li{margin:0 0 4px}
 .cx-conv{padding:8px 10px;border-radius:14px;border:2px solid transparent;background:#fff;cursor:pointer;font:500 15px var(--font);color:var(--ink)}
@@ -563,3 +562,7 @@ blockquote p{margin:0;font-size:15px;line-height:1.4;font-style:italic}
   .cx-title{font-size:18px}
   .cx-send span{display:none}.cx-send{width:46px;justify-content:center;padding:0}
 }
+/* Comms: "Write to" row (countries without messages yet). */
+.cx-start{padding:10px 4px}.cx-start-label{font:600 13px var(--font);color:var(--muted)}
+.cx-start-btn{min-height:34px;padding:3px 10px 3px 5px;cursor:pointer;background:#fff;border:2px solid var(--ink);border-radius:999px;box-shadow:0 2px 0 var(--ink);color:var(--ink);font:600 14px var(--font)}
+.cx-start-btn:active{transform:translateY(2px);box-shadow:none}

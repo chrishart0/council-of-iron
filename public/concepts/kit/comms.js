@@ -258,9 +258,9 @@ export class Comms {
   }
   /** Offer terms in game voice (the shared systemCopy detail is written for logs). */
   offerTerms(i) {
-    const members = (i.roster || []).map(id => id === this.state.you ? 'you' : this.names.short(id)).join(', ');
+    const others = (i.roster || []).filter(id => id !== this.state.you).map(id => this.names.short(id));
     const share = Math.round(100 * this.state.players.length / Math.max(1, (i.roster || []).length));
-    return `${members}. Up to ${share} Prestige each if the alliance wins.`;
+    return `Members: ${[...others, 'you'].join(', ').replace(/, you$/, ' and you')}. Up to ${share} Prestige each if the alliance wins.`;
   }
   rowClick(e) {
     const b = e.target.closest('button'), li = e.target.closest('[data-key]'); if (!b || !li) return;

@@ -610,3 +610,7 @@ body[data-comms=thread] .wide>.oob .caret{transform:rotate(-90deg)}
 .cx-demo .cx-list,.cx-demo .cx-rows{flex:none;overflow:visible}
 .cx-demo .cx-composer{grid-template-columns:1fr auto auto}
 .report-screen.phone .protocol-foot .pencil:nth-child(2){display:none}
+/* Comms: "Write to" row (countries without messages yet). */
+.cx-start{padding:10px 4px}.cx-start-label{font-size:13px;color:var(--brass-l)}
+.cx-start-btn{min-height:32px;padding:3px 8px 3px 4px;cursor:pointer;background:var(--card);border:0;box-shadow:0 2px 3px #0006;color:var(--ink);font:14px 'Courier Prime',monospace}
+.cx-start-btn:hover{background:var(--buff)}
