@@ -21,7 +21,7 @@ tool('map','Read province IDs, adjacency, coordinates, connections and starting 
 tool('create_match','Create a room. Registers a local identity if needed. Standard is 30 real minutes, quick is five.',
   {name:string,playerName:string,preset:{type:'string',enum:['standard','quick']}},['name','playerName'],async a=>{
     if(!client.session.profileToken && !client.explicitToken)await client.register(a.playerName);return client.create(a.name,a.preset || 'standard');});
-tool('join_match','Join an open room as an agent. Public visibility makes qualifying messages available in the finished report; private is the default. Keep a separate COUNCIL_SESSION file per agent.',
+tool('join_match','Join an open room as an agent. If the country is taken, choose another unoccupied country from list_matches and retry; changing your player name does not free a country. Public visibility makes qualifying messages available in the finished report; private is the default. Keep a separate COUNCIL_SESSION file per agent.',
   {match:string,country:string,name:string,model:string,persona:string,visibility:{type:'string',enum:['public','private']}},['match','country','name'],a=>client.join(a.match,a.country,a.name,a.model,a.persona,a.visibility));
 tool('start_match','Lock the lobby and begin the 90-second opening. Agents inspect the map, choose a leader name, and send a world introduction before military play begins.',{},[],()=>client.start());
 tool('lock_opening','Your first move: lock a leader name and world introduction during the 90-second opening. The match begins early when every seat locks. A missing introduction gets a default at timeout.',

@@ -40,6 +40,10 @@ test('HTTP lobby: human and agent identities, occupied countries, host controls,
   const f=await fixture(t),{a,b,id,sa,sb}=await f.boot();
   assert.equal((await f.call('/api/games','POST',{name:'Obsolete',scenario:'classic-64'},a.token)).status,400);
   assert.equal((await f.call(`/api/games/${id}`)).data.players.length,2);
+  const third=await f.register('Third player');
+  const taken=await f.call(`/api/games/${id}/join`,'POST',{country:'usa'},third.token);
+  assert.equal(taken.status,409);
+  assert.match(taken.data.error,/Choose a different unoccupied country/);
   assert.equal((await f.call(`/api/games/${id}/join`,'POST',{country:'usa'},b.token)).status,409);
   assert.equal((await f.call(`/api/games/${id}/start`,'POST',{},sb.token)).status,403);
   assert.equal((await f.call(`/api/games/${id}/start`,'POST',{},sa.token)).status,200);
@@ -270,6 +274,18 @@ test('stdio MCP negotiates, validates schemas, joins an agent, calls real HTTP, 
   assert.equal(JSON.parse(view[0].text).you,'britain');
   assert.equal(view[1].mimeType,'image/png');
   assert.equal(Buffer.from(view[1].data,'base64').subarray(0,8).toString('hex'),'89504e470d0a1a0a');
+
+  const other=await f.register('Other envoy');
+  const conflictInput=[
+    {jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-06-18'}},
+    {jsonrpc:'2.0',method:'notifications/initialized'},
+    {jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'join_match',arguments:{match:id,country:'britain',name:'Other envoy'}}},
+  ].map(x=>JSON.stringify(x)).join('\n')+'\n';
+  const conflict=await subprocess('agents/mcp.js',[],{COUNCIL_URL:f.url,COUNCIL_SESSION:pathJoin(f.dir,'other.session.json'),COUNCIL_TOKEN:other.token,COUNCIL_MATCH:''},conflictInput);
+  assert.equal(conflict.code,0,conflict.stderr);
+  const response=JSON.parse(conflict.stdout.trim().split('\n').at(-1));
+  assert.equal(response.result.isError,true);
+  assert.match(JSON.parse(response.result.content[0].text).error,/Choose a different unoccupied country/);
 });
 
 test('industrial HTTP plans are private, atomic, synchronized, recallable and persistent',async t=>{
