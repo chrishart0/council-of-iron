@@ -6,13 +6,20 @@ The harness starts a private loopback server with a separate SQLite file, regist
 
 ```bash
 npm ci --prefix agents/pi
-QWEN_BASE_URL=http://127.0.0.1:18082/v1 npm --prefix agents/pi run play -- --country britain --preset quick --max-minutes 12
+npm --prefix agents/pi run play -- --model qwen --country britain --preset quick --max-minutes 12
 npm --prefix agents/pi run play -- --model luna --country britain --preset standard --max-minutes 35
+npm --prefix agents/pi run play -- --model sample --country britain --preset quick --max-minutes 8
 node agents/pi/codex-play.js --preset quick --max-minutes 12
+node agents/pi/codex-play.js --access cli --preset quick --max-minutes 12
+node agents/pi/codex-play.js --model luna --preset standard --max-minutes 35
 ```
 
-Set `QWEN_MODEL` if the service advertises a different ID. The default is `qwen3.8-27b-unsloth-q4`. `--model luna` selects `gpt-6-luna` at x-high through Pi's Codex provider and reads the existing Codex OAuth session in memory; no token is copied into this repo. `--preset standard` uses the normal 30-minute clock; `quick` scales all game timings together. `--max-turns` defaults to 80. The final console line names the ignored JSON result file. A nonzero exit code means the match did not reach an authoritative finish or Pi failed.
+The model alias is resolved from the ignored root `.env` (or process environment). `PI_DEFAULT_MODEL` selects the default alias. For each alias, set `PI_MODEL_<ALIAS>_PROVIDER` (`openai-completions` or `openai-codex`), `ID`, `PLAYER_NAME` (at most 40 characters), and `CONTEXT_WINDOW`. Local OpenAI-compatible profiles also need `BASE_URL` and `TRANSPORT=chat_completions`. Optional fields are `NAME`, `LEADER_NAME`, `MAX_TOKENS`, `THINKING_LEVEL`, `REASONING`, `THINKING_FORMAT`, and `API_KEY`. See [the example config](.env.example); copy its values into the root `.env` and use any lowercase alias. No model names, endpoints, or API keys need to be added to the client source. The root `.env` is ignored by git and must not be committed. OAuth profiles read the existing Codex login in memory; no token is copied into this repo.
+
+`--preset standard` uses the normal 30-minute clock; `quick` scales all game timings together. `--max-turns` defaults to 80. The final console line names the ignored JSON result file. A nonzero exit code means the match did not reach an authoritative finish or Pi failed.
+
+The Pi record names the selected model, endpoint, context and every accepted or failed tool call. It does not record API keys.
 
 The current Qwen artifact is `unsloth/Qwen3.8-27B-GGUF` file `Qwen3.8-27B-UD-Q4_K_M.gguf`. Start `serve-unsloth-q4.sh` with `QWEN_GGUF_PATH` and `LLAMA_SERVER_BIN` set to its GGUF and a recent llama.cpp server. It configures the native 262,144-token context, q8 key/q5 value cache, one slot, and full GPU layers. Adjust `QWEN_GPU_LAYERS` if other GPU services change. The model is self-hosted separately; this package does not download weights or change the GPU service. Council's main package remains free of runtime dependencies. The seat's `model` label is self-declared, and a single bot test checks integration and behavior only. It cannot establish strategic balance or human enjoyment. A quick-room result is especially sensitive to model decision latency; use standard speed when comparing to the recorded Codex Luna matches.
 
-The Codex comparison runner uses the same local Qwen endpoint through Codex CLI and the standard Council MCP. Its own ignored SQLite room and session file keep the test separate from Pi and LAN games. Codex uses the Responses wire API for a custom provider; the llama.cpp service exposes `/v1/responses`.
+The Codex comparison runner uses the same local Qwen endpoint through Codex CLI. It starts with the standard Council MCP; `--access cli` is an explicitly different fallback that uses the game's public CLI when the local model cannot call MCP tools in Codex. Both paths use the same server validation, but their tool interfaces differ and their results must be labeled separately. `--model luna` selects Codex Luna x-high and copies the current Codex login into its ignored, private test home. Its own ignored SQLite room and session file keep the test separate from Pi and LAN games. The game database is hidden from Codex by Bubblewrap. Qwen uses the Responses wire API for a custom provider; the llama.cpp service exposes `/v1/responses`.
