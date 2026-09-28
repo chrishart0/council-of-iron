@@ -224,6 +224,13 @@ test('real CLI subprocess joins, observes, sends orders, reconnects from a priva
   await f.launch(id,sa.token);
   const moved=await run('move','england','north-france','5');assert.equal(moved.code,0,moved.stderr);
   const state=JSON.parse((await run('state')).stdout);assert.equal(state.you,'britain');assert.equal(state.commandBudget.reserved.length,1);
+  const compact=JSON.parse((await run('board')).stdout);
+  assert.equal(compact.you,'britain');
+  assert.equal(compact.provinces.length,state.provinces.length);
+  assert.ok(compact.own.find(p=>p.id==='england').neighbors.some(p=>p.id==='low-countries'));
+  const agentMap=JSON.parse((await run('map')).stdout);
+  assert.equal(agentMap.provinces.length,state.provinces.length);
+  assert.ok(agentMap.provinces.every(p=>!Object.hasOwn(p,'path')));
   const invalid=await run('move','west-us','mexico','5');assert.equal(invalid.code,1);assert.match(invalid.stderr,/not own/);
   const chat=await run('chat','dm','usa','Private diplomacy');assert.equal(chat.code,0,chat.stderr);
   assert.equal((await f.call(`/api/games/${id}`,'GET',undefined,sa.token)).data.events.filter(e=>e.type==='message').at(-1).text,'Private diplomacy');
