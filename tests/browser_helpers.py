@@ -57,21 +57,25 @@ def lane(page):
 
 def open_thread(page, key):
     """Open one Messages conversation ('world', 'alliance' or 'dm:<country>'), from the docked list on desktop
-    or through the Messages button on compact screens."""
+    or through the Messages button on compact screens. (Spectators rest on the World thread.)"""
     from playwright.sync_api import expect
     comms = page.locator('#comms')
     if not comms.is_visible():
         page.locator('#comms-button').click(); expect(comms).to_be_visible()
     if comms.get_attribute('data-view') == 'thread':
-        page.locator('#comms .cx-back').click(); expect(comms).to_have_attribute('data-view', 'list')
+        if page.locator('#comms .cx-back').is_visible(): page.locator('#comms .cx-back').click(); expect(comms).to_have_attribute('data-view', 'list')
+        else: assert key == 'world', key; return page.locator('#comms .cx-rows')
     page.locator(f'#comms [data-conv="{key}"]').first.click()
     expect(comms).to_have_attribute('data-view', 'thread')
     return page.locator('#comms .cx-rows')
 
 def close_comms(page):
-    """Back to the resting state: the docked list on desktop, closed on compact screens."""
+    """Back to the resting state: the docked list (a spectator's docked World thread) on desktop, closed on phones."""
     docked = page.evaluate('innerWidth>=1024 && innerHeight>=500')
     for _ in range(3):
         view = page.evaluate('document.body.dataset.comms')
         if view == 'closed' or (docked and view == 'list'): return
-        page.locator('#comms .cx-back' if view == 'thread' else '#comms .cx-close').click()
+        back, close = page.locator('#comms .cx-back'), page.locator('#comms .cx-close')
+        if view == 'thread' and back.is_visible(): back.click()
+        elif close.is_visible(): close.click()
+        else: return  # docked resting thread (spectators)
