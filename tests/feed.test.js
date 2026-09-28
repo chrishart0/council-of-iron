@@ -110,15 +110,11 @@ test('large phased battles are headlines at the end of their tick; small ones ar
   if (h.captured) assert.equal(h.owner, 'usa');
 });
 
-test('headlines are deterministic, legacy saves simply lack them, and a stopped hold follows its tick', () => {
+test('headlines are deterministic and a stopped hold follows its tick', () => {
   const run = () => { const g = game(['usa', 'britain']); send(g, 'usa', { type: 'declare_war', country: 'britain' }); advance(g, 5); return g; };
   assert.deepEqual(run().headlines, run().headlines);
-  const legacy = run(); delete legacy.headlines;
-  assert.equal(observe(legacy, null).events.some(e => 'headline' in e), false);
-  assert.deepEqual(worldFeed(legacy).items, []);
   const events = [{ id: 4, tick: 7, type: 'battle', headline: { kind: 'major_battle' } }, { id: 5, tick: 8, type: 'message', channel: 'world', text: 'x' }];
-  const breaks = [{ tick: 7, side: 'coalition-2', seq: 4, headline: { kind: 'dominance_broken', side: 'coalition-2', cause: 'economy' } },
-    { tick: 3, side: 'old', reason: 'legacy entry without seq' }];
+  const breaks = [{ tick: 7, side: 'coalition-2', seq: 4, headline: { kind: 'dominance_broken', side: 'coalition-2', cause: 'economy' } }];
   const items = feedItems(events, breaks);
   assert.deepEqual(items.map(i => [i.seq, i.type]), [[4, 'battle'], [4, 'dominance_broken'], [5, 'message']]);
   const page = feedPage(items, 1, 5);

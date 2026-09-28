@@ -4,7 +4,6 @@ import { readFileSync } from 'node:fs';
 import { createGame, join, start, act, tick, observe, turnAroundPlan, RULES } from '../src/engine.js';
 import { travelTicks, distanceKm } from '../public/movement.js';
 const map = JSON.parse(readFileSync(new URL('../public/imperial-map.json', import.meta.url)));
-const cases = JSON.parse(readFileSync(new URL('./balance-cases.json', import.meta.url)));
 let next = 0;
 /** USA, Britain and Japan; `setup` edits ownership before the start so recruitment timers run. */
 function game({ setup } = {}) {
@@ -33,10 +32,6 @@ test('one ruleset: every link ×1.2 faster than the distance table, internal lin
     assert.equal(travelTicks(p, byId.get(id), RULES), g.travelTimes[p.id][id]);
   }
   assert.deepEqual(observe(g, 'usa').internalTravelTimes, g.internalTravelTimes);
-});
-
-test('the logistics-1 balance fixture is the current rules', () => {
-  for (const [key, value] of Object.entries(cases['logistics-1'].rules)) assert.deepEqual(RULES[key], value, key);
 });
 
 test('internal speed is charged speed only when both ends are friendly at departure', () => {

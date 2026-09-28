@@ -50,7 +50,7 @@ const same = (a, b) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
 const members = (g, side) => g.players.filter(p => p.side === side);
 export const allied = (g, a, b) => Boolean(a && b && player(g, a).side === player(g, b).side);
 const warKey = (a, b) => [a, b].sort().join(':');
-export const atWar = (g, a, b) => Boolean(a && b && !allied(g, a, b) && (g.wars || []).includes(warKey(a, b)));
+export const atWar = (g, a, b) => Boolean(a && b && !allied(g, a, b) && g.wars.includes(warKey(a, b)));
 function mayEnter(g, country, owner) { return !owner || allied(g, country, owner) || atWar(g, country, owner); }
 function sideRoster(g, side) { return members(g, side).map(p => p.id); }
 function majority(g, roster) { const active=roster.filter(id=>player(g,id).eliminatedAt===null).length;return Math.floor(active/2)+1; }
@@ -120,7 +120,7 @@ function alive(g, id) {
   const p = player(g, id); requireRule(p.eliminatedAt === null, 'Eliminated countries cannot do that.'); return p;
 }
 export function createGame({ id, name, hostId, speed = 1, eligible = false }, map) {
-  const rules = { ...structuredClone(RULES), ...map.rules, economyShare: .6 };
+  const rules = { ...structuredClone(RULES), ...map.rules };
   const positions = Object.fromEntries(map.provinces.map(p => [p.id, { x: p.x, y: p.y }]));
   const byId = new Map(map.provinces.map(p => [p.id, p]));
   const table = internal => Object.fromEntries(map.provinces.map(p => [p.id,
@@ -366,7 +366,7 @@ function rallyPath(g, country, from, to) {
     if (nearest === to) break;
     done.add(nearest);
     // Only the source and the destination may host a battle; a column never marches through one.
-    if (nearest !== from && (g.battles || []).some(b => b.province === nearest)) continue;
+    if (nearest !== from && g.battles.some(b => b.province === nearest)) continue;
     for (const id of Object.keys(g.travelTimes[nearest]).sort()) {
       if (done.has(id) || !passable(id)) continue;
       const d = distance.get(nearest) + journeyTicks(g, nearest, id, country);
@@ -480,7 +480,7 @@ function executeRecall(g, order) {
 /** Reverse a marching army from its actual position. `reason` is 'manual' for a player's recall;
  * automatic reasons add `province` (where it was heading) and cause-specific detail. */
 function turnArmy(g,a,reason,detail={}) {
-  const battle=(g.battles || []).find(b=>b.province===a.to && a.engaged);
+  const battle=g.battles.find(b=>b.province===a.to && a.engaged);
   if(battle)battle.withdrawn+=a.amount;
   const startPoint=journeyPoint(a,g.positions,g.tick);
   // An army that already turned around measures its way back by its distance from home,
@@ -523,7 +523,7 @@ export function turnAroundPlan(g, country, armyId, at = g.tick + 1) {
   requireRule(mayEnter(g, country, target.owner), 'Declare war before attacking another country.', 409);
   const arrivesAt = turnAroundArrival(army, g.travelTimes, at);
   requireRule(arrivesAt !== null, 'This army cannot turn around.', 409);
-  const battle = (g.battles || []).find(b => b.province === target.id);
+  const battle = g.battles.find(b => b.province === target.id);
   return { armyId, mode: 'resume', to: target.id, owner: target.owner, amount: army.amount, arrivesAt,
     turnArounds: (army.turnArounds || 0) + 1, limit,
     ...(battle && !allied(g, country, target.owner) ? { battleInProgress: { attackerSide: battle.attackerSide,
@@ -629,7 +629,7 @@ function troopsInsideAlly(g,side) {
     [a.from,a.to].some(id=>{const owner=province(g,id).owner;return owner && owner!==a.country && allied(g,a.country,owner);}));
 }
 function normalizeWars(g) {
-  const pairs=new Set(g.wars || []), teams=[...new Set(g.players.map(p=>p.side))];
+  const pairs=new Set(g.wars), teams=[...new Set(g.players.map(p=>p.side))];
   const expanded=new Set();
   for(let i=0;i<teams.length;i++)for(let j=i+1;j<teams.length;j++) {
     const left=sideRoster(g,teams[i]),right=sideRoster(g,teams[j]);
@@ -643,7 +643,7 @@ function sameMotionRoster(g, motion) {
     same(sideRoster(g,motion.toSide),motion.toRoster);
 }
 function activeMotion(g, kind, fromSide, toSide) {
-  return (g.diplomacy || []).find(m=>m.kind===kind && ['voting','offered'].includes(m.status) &&
+  return g.diplomacy.find(m=>m.kind===kind && ['voting','offered'].includes(m.status) &&
     (m.fromSide===fromSide && m.toSide===toSide || m.fromSide===toSide && m.toSide===fromSide));
 }
 function declareWar(g, motion) {
@@ -694,7 +694,7 @@ function beginDiplomacy(g,p,a,kind) {
   return {motionId:motion.id,status:motion.status,expiresAt:motion.expiresAt};
 }
 function approveDiplomacy(g,p,a,kind) {
-  alive(g,p.id);const motion=(g.diplomacy || []).find(m=>m.id===a.motionId && m.kind===kind);
+  alive(g,p.id);const motion=g.diplomacy.find(m=>m.id===a.motionId && m.kind===kind);
   requireRule(motion && ['voting','offered'].includes(motion.status) && g.tick<motion.expiresAt,'Vote or offer is no longer open.',409);
   requireRule(sameMotionRoster(g,motion),'Alliance membership changed; start a new vote.',409);
   const source=motion.status==='voting' && p.side===motion.fromSide;
@@ -802,7 +802,7 @@ function applyMembership(g) {
   normalizeWars(g);
 }
 function expireDiplomacy(g) {
-  for(const motion of g.diplomacy || [])if(['voting','offered'].includes(motion.status)) {
+  for(const motion of g.diplomacy)if(['voting','offered'].includes(motion.status)) {
     const reason=!sameMotionRoster(g,motion)?'Alliance membership changed.':
       g.tick>=motion.expiresAt?'The 60-second vote or offer expired.':null;
     if(reason){const recipients=motion.status==='offered'?[...new Set([...motion.fromRoster,...motion.toRoster])]:motion.fromRoster;
@@ -872,7 +872,7 @@ function resolveArrivals(g) {
     const arriving=[];
     for(const army of byTarget.get(target.id)||[]) {
       if(army.transit && !army.returning && army.pathIndex<army.path.length-1) {
-        if((army.controlledMarch ? target.owner===army.country : allied(g,army.country,target.owner)) && !(g.battles||[]).some(b=>b.province===target.id)) {
+        if((army.controlledMarch ? target.owner===army.country : allied(g,army.country,target.owner)) && !g.battles.some(b=>b.province===target.id)) {
           army.from=target.id;army.pathIndex++;army.to=army.path[army.pathIndex];
           army.departedAt=g.tick;army.arrivesAt=g.tick+journeyTicks(g,army.from,army.to,army.country);
           delete army.leg;Object.assign(army,legOf(g,army.from,army.to,army.arrivesAt-g.tick));
@@ -979,7 +979,7 @@ function recruit(g) {
     if (!p.owner || p.nextRecruit > g.tick) continue;
     const born = p.development;
     p.troops += born; p.nextRecruit = g.tick + gameRules(g).recruit;
-    const battle=(g.battles || []).find(b=>b.province===p.id);
+    const battle=g.battles.find(b=>b.province===p.id);
     if(battle)battle.defenderRecruited+=born;
     if (g.economy) g.economy.recruited += born;
     const send = Math.min(born, p.troops - 1);
@@ -997,18 +997,18 @@ export function sides(g) {
       .reduce((n, v) => n + v.development, 0) }));
 }
 export const economyThreshold = g => Math.ceil(g.provinces.filter(p => p.owner)
-  .reduce((n, p) => n + p.development, 0) * (gameRules(g).economyShare ?? .6));
+  .reduce((n, p) => n + p.development, 0) * gameRules(g).economyShare);
 const ownedIndustry = (g, country) => g.provinces.filter(v => v.owner === country)
   .reduce((n, v) => n + v.development, 0);
 function strengthShares(g, side) {
-  const roster = members(g, side), exponent = gameRules(g).strengthExponent ?? .75;
+  const roster = members(g, side), exponent = gameRules(g).strengthExponent;
   const weights = roster.map(p => ownedIndustry(g, p.id) ** exponent);
   const total = weights.reduce((n, value) => n + value, 0);
   return Object.fromEntries(roster.map((p, i) => [p.id, total ? weights[i] / total : 0]));
 }
 function deadlinePrizes(g) {
   const ranked = sides(g).sort((a, b) => b.economy - a.economy);
-  const slots = gameRules(g).deadlinePrizes ?? [.5, .25, .25], result = {};
+  const slots = gameRules(g).deadlinePrizes, result = {};
   if (ranked.length > 1 && ranked[0].economy === ranked[1].economy) return result;
   for (let i = 0; i < ranked.length;) {
     let end = i + 1;
@@ -1117,10 +1117,10 @@ export function observe(g, country = null, after = 0, limit = 200) {
   return { id: g.id, name: g.name, status: g.status, tick: g.tick, speed: g.speed, rules: gameRules(g), scenario: g.scenario, travelTimes: g.travelTimes,
     openingRemaining: g.status==='opening'?Math.ceil((g.openingRemainingMs||0)/1000):null,
     eligible: g.eligible, you: country, players: g.players.map(({ profileId, orderTicks, lastChat, ...p }) => ({...p,displayName:displayName(p)})),
-    provinces: g.provinces, armies: g.armies, battles: g.battles || [], internalTravelTimes: g.internalTravelTimes,
-    rallies: rallies(g).filter(x => x.country === country), sides: sides(g), wars: g.wars || [], economyThreshold: economyThreshold(g), projections: score(g), leaderboard: leaderboard(g),
+    provinces: g.provinces, armies: g.armies, battles: g.battles, internalTravelTimes: g.internalTravelTimes,
+    rallies: rallies(g).filter(x => x.country === country), sides: sides(g), wars: g.wars, economyThreshold: economyThreshold(g), projections: score(g), leaderboard: leaderboard(g),
     dominanceBreaks: g.dominanceBreaks || [], turnAroundLimit: gameRules(g).maxTurnArounds,
-    diplomacy: (g.diplomacy || []).filter(m=>['voting','offered'].includes(m.status) &&
+    diplomacy: g.diplomacy.filter(m=>['voting','offered'].includes(m.status) &&
       (m.fromRoster.includes(country) || m.status==='offered' && m.toRoster.includes(country))),
     proposals: g.proposals.filter(q => q.status === 'pending' || q.status === 'open' && q.roster.includes(country))
       .map(({ signature, ...q }) => q), departures: g.departures, dominance: g.dominance,

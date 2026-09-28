@@ -8,10 +8,9 @@ const load = name => JSON.parse(readFileSync(new URL(`../public/${name}`, import
 // adjacency is a rule, geometry is presentation.
 const KNOWN_LAND_LINKS_WITHOUT_BORDER = {
   'imperial-map.json': ['poland|west-russia'], // polygons meet only at a corner point
-  'map.json': ['central-asia|mesopotamia'], // legacy source map: ~3 units apart across the Caspian
 };
 
-for (const name of ['imperial-map.json', 'map.json']) {
+for (const name of ['imperial-map.json']) {
   const map = load(name);
   const provinces = map.provinces.map(p => ({ ...p, rings: provinceRings(p.path) }));
   const boundaryDistance = (point, other) => Math.min(...other.rings.flatMap(ring => ring.map((a, i) => segmentDistance(point, a, ring[(i + 1) % ring.length]))));
