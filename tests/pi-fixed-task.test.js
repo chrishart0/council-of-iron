@@ -11,9 +11,9 @@ test('fixed board task uses ordinary action validation and exact accepted orders
     country: country.id, kind: country.id === 'britain' ? 'agent' : 'bot' });
   start(game);
   const expected = [
-    { type: 'move', from: 'england', to: 'low-countries', amount: 5 },
+    { type: 'march', from: 'england', to: 'low-countries', amount: 5 },
     { type: 'declare_war', country: 'france' },
-    { type: 'move', from: 'ireland', to: 'north-france', amount: 5 },
+    { type: 'march', from: 'ireland', to: 'north-france', amount: 5 },
   ];
   for (const [index, action] of expected.entries())
     assert.equal(act(game, MAP, 'britain', action, `fixed-${index}`).ok, true);
