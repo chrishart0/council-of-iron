@@ -1,6 +1,6 @@
 # Pi solo player harness
 
-This optional package gives one Pi agent a Council seat through the public HTTP API. It connects to the existing Council MCP server and exposes its separate tools to Pi, including `observe`, `strategic_options`, `preview`, `move`, `coordinated_attack`, `develop`, alliance, war, peace, chat, and leaderboard commands. It also has three workspace tools (`read_file`, `write_file`, `run`). `strategic_options` summarizes currently connected targets and payable developments from the same observation used by the game MCP. Every command goes through the same MCP definition and standard Council HTTP validation; the Pi harness filters out room setup tools for this already joined seat. Workspace files persist separately for Qwen and Luna under ignored `agents/pi/workspace/`. The run tool uses Bubblewrap with only that workspace writable, no host home or match database mounted, and no network. Accepted orders pass through the same server validation and rate limits as other players.
+This optional package gives one Pi agent a Council seat through the public HTTP API. It connects to the existing Council MCP server and exposes its separate tools to Pi, including `situation`, `observe`, `strategic_options`, `preview`, `move`, `coordinated_attack`, `develop`, alliance, war, peace, chat, and leaderboard commands. It also has three workspace tools (`read_file`, `write_file`, `run`). `situation` is a compact recipient-filtered view of the same observation, and `strategic_options` summarizes currently connected targets and payable developments. Every command goes through the same MCP definition and standard Council HTTP validation; the Pi harness filters out room setup tools for this already joined seat. Workspace files persist separately per model alias under ignored `agents/pi/workspace/`. The run tool uses Bubblewrap with only that workspace writable, no host home or match database mounted, and no network. Accepted orders pass through the same server validation and rate limits as other players.
 
 The harness starts a private loopback server with a separate SQLite file, registers the chosen Pi player, fills seven seats with built-in non-LLM practice bots, locks its opening, and plays until the saved result exists or the run limit is reached. It does not join or modify the LAN round. Run artifacts and game credentials live in ignored `data/pi/` with owner-only permissions. The Qwen service must be running before a Qwen test.
 
@@ -17,6 +17,20 @@ node agents/pi/codex-play.js --model luna --preset standard --max-minutes 35
 The model alias is resolved from the ignored root `.env` (or process environment). `PI_DEFAULT_MODEL` selects the default alias. For each alias, set `PI_MODEL_<ALIAS>_PROVIDER` (`openai-completions` or `openai-codex`), `ID`, `PLAYER_NAME` (at most 40 characters), and `CONTEXT_WINDOW`. Local OpenAI-compatible profiles also need `BASE_URL` and `TRANSPORT=chat_completions`. Optional fields are `NAME`, `LEADER_NAME`, `MAX_TOKENS`, `THINKING_LEVEL`, `REASONING`, `THINKING_FORMAT`, `CHAT_TEMPLATE_KWARGS` (JSON when `THINKING_FORMAT=chat-template`), and `API_KEY`. See [the example config](.env.example); copy its values into the root `.env` and use any lowercase alias. No model names, endpoints, or API keys need to be added to the client source. The root `.env` is ignored by git and must not be committed. OAuth profiles read the existing Codex login in memory; no token is copied into this repo.
 
 `--preset standard` uses the normal 30-minute clock; `quick` scales all game timings together. `--max-turns` defaults to 80. The final console line names the ignored JSON result file. A nonzero exit code means the match did not reach an authoritative finish or Pi failed.
+
+`--max-turn-seconds` defaults to 120. It aborts an overlong model response, keeps accepted game actions, and lets the next response start with a fresh observation. Pi records provider token usage and per-turn wall time when available; Codex records token usage from `turn.completed` events. A missing token value in a result means the provider/runner did not report it, not zero tokens.
+
+## Benchmark ledger
+
+After a completed run, publish only its aggregate metrics to the tracked JSON ledger. The importer refuses unfinished games and never copies endpoint details, credentials, model messages, or raw tool payloads:
+
+```bash
+node agents/pi/bench.js qwen data/pi/<completed-run>.json
+node agents/pi/bench.js luna data/pi/<completed-run>.json
+cd agents/pi && python -m http.server 8000
+```
+
+Open `http://127.0.0.1:8000/bench.html` to filter [the benchmark page](bench.html) by model, clock and measure. The page reads [benchmarks.json](benchmarks.json); regenerate it after new completed matches. Compare the same model and clock. The current Codex Qwen games used the CLI fallback because the direct MCP path did not expose Council tools; that different interface is labeled in the ledger. Rooms have independent game IDs and combat seeds, so repeated runs are needed before drawing performance conclusions.
 
 The Pi record names the selected model, endpoint, context and every accepted or failed tool call. It does not record API keys.
 

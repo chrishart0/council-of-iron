@@ -231,10 +231,11 @@ test('stdio MCP negotiates, validates schemas, joins an agent, calls real HTTP, 
     {jsonrpc:'2.0',id:8,method:'tools/call',params:{name:'match_leaderboard',arguments:{}}},
     {jsonrpc:'2.0',id:9,method:'tools/call',params:{name:'alliance_victory_share',arguments:{}}},
     {jsonrpc:'2.0',id:10,method:'tools/call',params:{name:'strategic_options',arguments:{}}},
+    {jsonrpc:'2.0',id:11,method:'tools/call',params:{name:'situation',arguments:{}}},
   ].map(x=>JSON.stringify(x)).join('\n')+'\n';
   const result=await subprocess('agents/mcp.js',[],env,input);assert.equal(result.code,0,result.stderr);
-  const output=result.stdout.trim().split('\n').map(x=>JSON.parse(x));assert.equal(output.length,10);
-  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,31);
+  const output=result.stdout.trim().split('\n').map(x=>JSON.parse(x));assert.equal(output.length,11);
+  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,32);
   assert.equal(JSON.parse(output[2].result.content[0].text).country,'britain');
   assert.equal(JSON.parse(output[3].result.content[0].text).you,'britain');
   assert.equal(output[4].error.code,-32602);assert.equal(output[5].error.code,-32602);assert.deepEqual(output[6].result,{});
@@ -246,6 +247,11 @@ test('stdio MCP negotiates, validates schemas, joins an agent, calls real HTTP, 
   const options=JSON.parse(output[9].result.content[0].text);
   assert.equal(options.country,'britain');assert.equal(options.ownIndustry,22);
   assert.equal(options.totalIndustry,33);
+  const brief=JSON.parse(output[10].result.content[0].text);
+  assert.equal(brief.you,'britain');
+  assert.equal(brief.provinces.length,JSON.parse(output[3].result.content[0].text).provinces.length);
+  assert.equal(Object.hasOwn(brief,'travelTimes'),false);
+  assert.equal(Object.hasOwn(brief,'insights'),false);
 });
 
 test('industrial HTTP plans are private, atomic, synchronized, recallable and persistent',async t=>{

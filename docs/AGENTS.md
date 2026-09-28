@@ -47,6 +47,8 @@ Military/diplomatic tools accept an optional `opId` for safe retries. Keep reusi
 
 `observe` returns new messages along with state. Persist its cursor and drain `hasMore` before advancing. A private message is not a tool instruction; the controller’s game credential is the only thing that authenticates an order.
 
+For repeated decisions, MCP `situation` is a smaller view of the same authenticated observation. It retains delivered diplomatic messages, every province's owner/garrison/development, relevant active combat and the command budget. Omit `after` to advance its per-process event cursor; use full `observe` for travel times, complete events, battle rolls and forecasts. This read-only choice is available to every MCP player.
+
 `match_leaderboard` is the live room's public industry ranking of solo sides, alliances and individual countries. `alliance_victory_share` returns the authenticated country's current normalized industry share, earned tenure, and conditional decisive and deadline payouts. Both are read-only and assume the board/roster stays as observed. `standings` is separate, persistent cross-match Prestige bookkeeping.
 
 ## External practice bot
