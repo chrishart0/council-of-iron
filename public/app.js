@@ -9,7 +9,7 @@ import { viewerOf, commsItems, systemCopy, threadOf, countryThread, allianceThre
 import { LeaderboardPanel } from './leaderboard-panel.js';
 import { ExpandableMap } from './expand.js';
 // Relations and alliance colours: the same DOM-free helpers the atlas and agent tools use.
-import { relationsOf, allianceColors } from './relations.js';
+import { relationsOf, allianceColors, threatening } from './relations.js';
 import { SoundBoard } from './sound.js';
 /* v0.8 — one map, two nouns. A PROVINCE (troops) opens the order card; a COUNTRY (diplomacy) opens the
  * country card; your own standard opens your alliance card. Each card has one primary action. */
@@ -82,7 +82,7 @@ const attention=()=>seated() && state.status!=='lobby'?attentionFor(state,railIt
 /* ── History rail ── */
 function threatItems(){
   const me=myPlayer();if(!me || spectating || state.status!=='running')return [];
-  return state.armies.filter(a=>!a.returning && playerOf(a.country)?.side!==me.side && prov(a.to)?.owner===state.you)
+  return state.armies.filter(a=>threatening(state,a,state.you))
     .map(a=>({id:`t-${a.id}`,seq:cursor,tick:a.departedAt ?? state.tick,type:'threat',country:a.country,to:a.to,amount:a.amount,arrivesAt:a.arrivesAt,threads:['mine'],army:a.id}));
 }
 function renderFeed(live){
@@ -92,6 +92,9 @@ function renderFeed(live){
   railItems=commsItems(history,state.dominanceBreaks||[],{you:state.you});
   const threats=threatItems(),fresh=worldFeed.update([...railItems,...threats.filter(t=>!worldFeed.keys.has(`e${t.id}`))],{live,you:state.you});
   if(live)for(const item of fresh)noticeFor(item);
+  // A threat that turned back, was destroyed or arrived is withdrawn: no stale toast or "Incoming" row.
+  const current=new Set(threats.map(t=>t.army));
+  for(const army of seenThreats)if(!current.has(army)){notifier.withdraw(`et-${army}`);worldFeed.withdraw(`et-${army}`);seenThreats.delete(army);}
   for(const t of threats)seenThreats.add(t.army);
   renderReply();renderAttention();
   // Collapsed rail = a one-line ticker of the latest row (text only; chat is player text).

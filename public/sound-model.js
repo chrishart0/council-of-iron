@@ -4,6 +4,7 @@
  * and the viewer's own committed orders (toast). A sound never carries information alone.
  */
 import { isWorldMessage, affectsViewer } from './feed-model.js';
+import { threatening } from './relations.js';
 
 /** Base priority. UI = 1; ordinary world news = 2; decisive diplomacy = 3; own defeat = 5.
  * A cue that names the viewer's own country gets +2 (see `mine`). */
@@ -74,9 +75,7 @@ export function breakCues(breaks = [], after = 0, viewer = {}) {
 export function threatIds(state) {
   const me = state?.players?.find(p => p.id === state.you);
   if (!me || state.status !== 'running') return new Set();
-  const side = id => state.players.find(p => p.id === id)?.side;
-  const land = new Set(state.provinces.filter(p => p.owner === state.you).map(p => p.id));
-  return new Set(state.armies.filter(a => side(a.country) !== me.side && land.has(a.to)).map(a => a.id));
+  return new Set(state.armies.filter(a => threatening(state, a, state.you)).map(a => a.id));
 }
 
 /** Tension layer: the viewer is at war, or any victory countdown is running. */

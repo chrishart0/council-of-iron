@@ -16,6 +16,13 @@ export function atWar(observation, a, b) {
   if (!players.some(p => p.id === a) || !players.some(p => p.id === b)) return false;
   return !formalWar(observation) || (observation.wars || []).includes(warKey(a, b));
 }
+/** An army that can actually attack `you`: marching (not returning) on your land, from a country at war with you.
+ * Under formal-war rules a neutral's army turns back on arrival, so it is not a threat. */
+export function threatening(observation, army, you) {
+  if (!army || army.returning || !you) return false;
+  const target = (observation?.provinces || []).find(p => p.id === army.to);
+  return target?.owner === you && atWar(observation, army.country, you);
+}
 /** { allies, enemies, neutral } country IDs relative to `country` (sorted; never includes it). */
 export function relationsOf(observation, country) {
   const result = { allies: [], enemies: [], neutral: [] };

@@ -1,6 +1,6 @@
 import { journeyPoint } from './movement.js';
 import { borderNetwork, insideRings, provinceRings } from './map-geometry.js';
-import { allianceColors, atWar, battleColors, coalitions, formingAlliances, relationsOf, teamColor, warKey } from './relations.js';
+import { allianceColors, atWar, battleColors, coalitions, formingAlliances, relationsOf, teamColor, threatening, warKey } from './relations.js';
 import { faction } from './presentation.js';
 /** Presentation only: the server decides every movement, battle and ownership change.
  * Every SVG fragment below is an authored constant; player text never enters map markup.
@@ -634,8 +634,8 @@ export class Atlas {
     this.byId = new Map(state.provinces.map(p => [p.id, p]));
     const me = state.players.find(p => p.id === state.you), sides = new Map(state.players.map(p => [p.id, p.side]));
     const neighbors = this.places.get(source)?.neighbors || [];
-    // Provinces of the viewer that a hostile army is marching on get a red ring (v0.8: no alert stack).
-    const threatened = new Set(me ? state.armies.filter(a => !a.returning && sides.get(a.country) !== me.side).map(a => a.to).filter(id => state.provinces.some(p => p.id === id && p.owner === state.you)) : []);
+    // Provinces of the viewer that an army at war with it is marching on get a red ring (v0.8: no alert stack).
+    const threatened = new Set(me ? state.armies.filter(a => threatening(state, a, state.you)).map(a => a.to) : []);
     for (const p of state.provinces) {
       const shape = this.shapes.get(p.id), marker = this.markers.get(p.id);
       if (!shape) continue;
@@ -685,7 +685,7 @@ export class Atlas {
         body.append(halo, disc); group.append(body, pill, label, node('circle', { class: 'army-hit', r: 6.5 })); this.marches.append(group);
         this.armies.set(army.id, { group, body, disc, pill, label });
       }
-      const entry = this.armies.get(army.id), hostile = me && sides.get(army.country) !== me.side && state.provinces.some(p => p.id === army.to && p.owner === state.you);
+      const entry = this.armies.get(army.id), hostile = Boolean(me) && threatening(state, army, state.you);
       const origin = army.startPoint || this.places.get(army.from), target = this.places.get(army.to), dx = wrapDelta(target.x - origin.x);
       entry.body.setAttribute('transform', `rotate(${Math.atan2(target.y - origin.y, dx) * 180 / Math.PI})`);
       const color = this.countries.get(army.country)?.color || NEUTRAL;
