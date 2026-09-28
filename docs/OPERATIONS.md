@@ -84,6 +84,8 @@ Replay generation is synchronous, once per match, and sparse archives increase t
 
 Players can dictate chat with a mic button beside every composer; see `docs/UI-DESIGN.md` → Voice input. The game needs nothing extra: without a speech sidecar, `GET /api/stt` reports `{available:false}`, the browser falls back to its own Web Speech API when it has one (labelled "may use a cloud service"), and otherwise hides the mic.
 
+**OpenAI transcription** (the live server's current setup; no GPU needed): put `OPENAI_API_KEY=…` in an owner-only env file outside the repo (the live unit reads `~/.config/council-of-iron/openai.env` via `EnvironmentFile=`) and leave `STT_URL` unset. `STT_MODEL` picks the model (default `whisper-1`; `gpt-4o-mini-transcribe` also works). Each clip goes to OpenAI with a short prompt of the map's country names; measured ~3 s round trip for a 5 s clip. The key takes precedence over `STT_URL`.
+
 **Local GPU sidecar** (`tools/stt/`, Python, dev/self-host only; not a runtime dependency of the Node server):
 
 ```sh

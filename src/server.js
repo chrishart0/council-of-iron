@@ -112,7 +112,8 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
   const mapFor = g => g?.scenario === map.id ? map : null;
   // PUBLIC_ORIGIN may list several comma-separated origins (e.g. LAN http plus an HTTPS name for phones).
   const publicOrigins = publicOrigin.split(',').map(o=>o.trim()).filter(Boolean);
-  const stt = makeStt({ url: sttUrl });
+  // Game vocabulary helps transcription of names; it is public map data, never player text.
+  const stt = makeStt({ url: sttUrl, prompt: `Council of Iron. ${map.countries.map(c => c.name).join(', ')}. Alliance, declare war, peace, march, rally.` });
   const store = new Store(dbPath), activity = store.activity(), plan = startupPlan(store.load(), activity, map);
   if (plan.skip.length) console.log(`Skipped ${plan.skip.length} stored room(s) from an earlier version of the game: ${plan.skip.map(g=>g?.id).join(', ')}`);
   if (plan.block.length) {
@@ -200,7 +201,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
       }
       if(path==='/api/health' && req.method==='GET') return json(res,200,{ok:true,version:'0.5.0'});
       // Optional human voice input (docs/API.md): capability flag only; no game state.
-      if(path==='/api/stt' && req.method==='GET') return json(res,200,{available:await stt.available()});
+      if(path==='/api/stt' && req.method==='GET') return json(res,200,{available:await stt.available(),provider:stt.provider});
       if(path==='/api/players' && req.method==='POST') {
         const data=await body(req); return json(res,201,store.register(text(data.name,'Player name',40)));
       }
@@ -368,6 +369,7 @@ if(process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url))
     console.error(error.message);process.exit(78);
   }
   (tls?app.tlsServer:app.server).listen(port,host,()=>console.log(`Council of Iron: ${publicOrigin} (SQLite; single process)`));
-  if(process.env.STT_URL) console.log('Voice input: proxying to the configured STT sidecar.');
+  if(process.env.OPENAI_API_KEY) console.log(`Voice input: OpenAI transcription (${process.env.STT_MODEL || 'whisper-1'}).`);
+  else if(process.env.STT_URL) console.log('Voice input: proxying to the configured STT sidecar.');
   for(const signal of ['SIGTERM','SIGINT']) process.once(signal,()=>app.close().then(()=>process.exit(0)));
 }

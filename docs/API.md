@@ -141,10 +141,10 @@ A side whose completed industry is at least `economyThreshold` (`ceil(0.6 × all
 
 Not part of the rules; agents keep typing.
 
-- `GET /api/stt` → `{ available }`: whether a speech-to-text sidecar (`STT_URL`) is reachable.
+- `GET /api/stt` → `{ available, provider }`: whether voice input works, and which backend transcribes (`openai` when `OPENAI_API_KEY` is set, `local` for the `STT_URL` sidecar, `null` when neither).
 - `POST /api/games/ROOM/stt` with raw audio (`audio/webm`, `audio/ogg` or `audio/mp4`, ≤ 2 MB), seated players only, until the match finishes → `{ text }`. 415 wrong type, 413 too large, 422 unintelligible, 429 busy or over 12 per minute, 503 unavailable.
 
-The transcript returns only to the caller; sending it is the ordinary `chat` action. The server never stores or logs audio or transcripts.
+The transcript returns only to the caller; sending it is the ordinary `chat` action. The server never stores or logs audio or transcripts. With the `openai` provider the recording is sent to OpenAI's transcription API, and the mic is labelled "transcribed by OpenAI".
 
 ## After-action review (finished matches only)
 
