@@ -18,17 +18,17 @@ const peace = (g, from, to) => { const offer = send(g, from, { type: 'offer_peac
 const refusal = fn => { try { fn(); } catch (e) { assert.ok(e instanceof RuleError); return e; } assert.fail('expected a refusal'); };
 
 test('peace starts a truce: neither side may declare war until it ends, and the error names the end', () => {
-  assert.equal(RULES.truce, 120); assert.equal(RULES.peaceRetry, 30);
+  assert.equal(RULES.truce, 60); assert.equal(RULES.peaceRetry, 30);
   const g = game();
   advance(g, 10);
   send(g, 'usa', { type: 'declare_war', country: 'britain' });
   const made = peace(g, 'usa', 'britain');
-  assert.equal(made.truceUntil, g.tick + 120);
+  assert.equal(made.truceUntil, g.tick + 60);
   assert.ok(g.events.some(e => e.type === 'peace_accepted' && e.truceUntil === made.truceUntil && !e.recipients));
   for (const [a, b] of [['usa', 'britain'], ['britain', 'usa']]) {
     const e = refusal(() => send(g, a, { type: 'declare_war', country: b }));
     assert.equal(e.status, 409); assert.equal(e.details.truceUntil, made.truceUntil);
-    assert.match(e.message, new RegExp(`Truce with ${b} until 02:10 \\(tick ${made.truceUntil}\\)`));
+    assert.match(e.message, new RegExp(`Truce with ${b} until 01:10 \\(tick ${made.truceUntil}\\)`));
   }
   // Declare-and-march is refused whole; a plain march names the truce; the preview carries it.
   Object.assign(g.provinces.find(p => p.id === 'mexico'), { owner: 'britain', troops: 2 });
@@ -38,7 +38,7 @@ test('peace starts a truce: neither side may declare war until it ends, and the 
   assert.equal(g.orders.length, orders); assert.equal(g.players[0].orderTicks.length, budget); assert.deepEqual(g.wars, []);
   assert.equal(preview(g, map, 'usa', { to: 'mexico', from: 'west-us', amount: 3 }).truceUntil, made.truceUntil);
   // Public: every viewer sees the truce; the board shows it from your side.
-  assert.deepEqual(observe(g, null).truces, [{ countries: ['britain', 'usa'], since: made.truceUntil - 120, until: made.truceUntil }]);
+  assert.deepEqual(observe(g, null).truces, [{ countries: ['britain', 'usa'], since: made.truceUntil - 60, until: made.truceUntil }]);
   const board = boardView(observe(g, 'usa'), map);
   assert.deepEqual(board.truces, [{ with: 'britain', until: made.truceUntil }]);
   assert.equal(board.own.find(p => p.id === 'west-us').neighbors.find(n => n.id === 'mexico').truceUntil, made.truceUntil);
@@ -53,6 +53,8 @@ test('peace starts a truce: neither side may declare war until it ends, and the 
 
 test('a truce binds both whole alliances as they were at peace, pair by pair, even after they change', () => {
   const g = game();
+  // Leaving and forming a new alliance takes two notice periods (60 ticks); a longer room truce keeps it holding meanwhile.
+  g.rules = { ...g.rules, truce: 120 };
   const offer = send(g, 'usa', { type: 'propose', country: 'france', name: 'Accord' });
   send(g, 'france', { type: 'accept', proposalId: offer.proposalId }); advance(g, 30);
   send(g, 'france', { type: 'declare_war', country: 'britain' });
@@ -114,7 +116,7 @@ test('bots respect truces and do not loop war and peace against a peace-spamming
   assert.ok(peaces <= 12, `peace treaties: ${peaces}`);
   // No declaration ever broke a truce.
   for (const e of g.events.filter(e => e.type === 'war_declared')) {
-    const earlier = g.events.filter(p => p.type === 'peace_accepted' && p.id < e.id && p.tick + 120 > e.tick);
+    const earlier = g.events.filter(p => p.type === 'peace_accepted' && p.id < e.id && p.tick + RULES.truce > e.tick);
     assert.ok(!earlier.some(p => [...p.fromRoster, ...p.toRoster].includes(e.country) && [...p.fromRoster, ...p.toRoster].some(c => e.toRoster.includes(c))));
   }
 });

@@ -47,7 +47,7 @@ const stepWar=to=>stepRoom(w,to);
 for(const room of [w,...Object.values(taskRooms)]){stepRoom(room,55);app.games.set(room.id,room);app.store.save(room);}
 // The phone map suite needs the column that has just left Scotland (it departs at tick 57; internal links are fast, so it is still on the counter only then).
 const mobileRoom=warRoom('ui-mobile','The Rhine front · phone');stepRoom(mobileRoom,57);app.games.set(mobileRoom.id,mobileRoom);app.store.save(mobileRoom);
-// 'ui-truce': Britain and France made peace at tick 0, so a truce holds (until tick 120); for the truce and develop-label checks.
+// 'ui-truce': Britain and France made peace at tick 0, so a truce holds (until tick 60); for the truce and develop-label checks.
 const truceRoom=warRoom('ui-truce','The Channel truce');
 act(truceRoom,map,'britain',{type:'declare_war',country:'france'},'ui-truce-war');
 const truceOffer=act(truceRoom,map,'france',{type:'offer_peace',country:'britain'},'ui-truce-offer');

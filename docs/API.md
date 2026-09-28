@@ -110,7 +110,7 @@ Casualties are one shared total; nobody is credited with kills in a shared battl
 | `battleSlowdownPercent` | 125 | Four dice rounds per five seconds |
 | `developmentCosts` / `developmentTicks` | `[0,24,48]` / `[0,120,180]` | Industry II and III |
 | `notice` / `proposalLife` / `peaceLife` | 30 / 120 / 60 | Alliance start and leave notice; offer lifetimes |
-| `truce` / `peaceRetry` | 120 / 30 | After peace, no war between the two sides (as they were) for 120 s; an unanswered peace offer is not repeated to the same side for 30 s |
+| `truce` / `peaceRetry` | 60 / 30 | After peace, no war between the two sides (as they were) for 60 s; an unanswered peace offer is not repeated to the same side for 30 s |
 | `maxSources` / `maxTurnArounds` / `maxDevelopment` | 16 / 2 / 3 | |
 | `orderLimit` / `orderWindow` / `chatWindow` | 10 / 10 / 2 | Anti-spam limits |
 

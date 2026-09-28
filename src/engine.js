@@ -11,7 +11,7 @@ export const RULES = Object.freeze({ duration: 1800, recruit: 20,
   // Truce: once peace takes effect, neither side (both whole alliances at that moment) may declare war
   // on the other for `truce` ticks. A peace offer that expires unanswered cannot be repeated to the same
   // side for `peaceRetry` ticks. Evidence: docs/PLAYTEST.md (war/peace ping-pong).
-  truce: 120, peaceRetry: 30,
+  truce: 60, peaceRetry: 30,
   // Invisible anti-spam limits, not rules players plan around: 10 orders per 10 s, one message per 2 s.
   orderLimit: 10, orderWindow: 10, chatWindow: 2,
   // Movement: every link ×1.2 faster than the base table; internal links (both ends yours or an

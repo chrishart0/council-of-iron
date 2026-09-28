@@ -3,6 +3,7 @@
  * - Appends every tools/call (tool, arguments, ok/error, acceptedTick) to $COUNCIL_PLAYTEST_DIR/mcp.jsonl,
  *   so metrics are identical for every CLI client.
  * - Hides room-setup tools (a seated agent must not create or join another room with its session).
+ * - Everything else passes through unchanged: the `inbox` tool, `attention` lines on order results, error details.
  * - The first news/decision_view call without `after` starts from the harness's cursor (cursor.json),
  *   so a fresh per-turn process does not replay the whole match.
  * Game rules, validation and credentials stay in agents/mcp.js and the server. */
@@ -60,7 +61,7 @@ createInterface({ input: server.stdout, crlfDelay: Infinity }).on('line', line =
     const { text: _text, ...args } = call.args;
     log({ tool: call.tool, args: call.tool === 'send_message' ? { ...args, chars: String(call.args.text || '').length } : call.args,
       ok, ms: Date.now() - call.started,
-      ...(ok ? { acceptedTick: body?.acceptedTick, tick: body?.tick } : { error: message.error?.message || body?.error || 'error', hint: body?.hint ? true : undefined }) });
+      ...(ok ? { acceptedTick: body?.acceptedTick, tick: body?.tick, ...(body?.attention ? { attention: body.attention } : {}) } : { error: message.error?.message || body?.error || 'error', hint: body?.hint ? true : undefined }) });
   }
   process.stdout.write(`${line}\n`);
 });

@@ -170,7 +170,7 @@ test('HTTP, CLI and MCP share the inbox, the attention line and the read cursor'
   const po = await act(britain, 'w2', { type: 'offer_peace', country: 'germany' });
   await act(germany, 'w3', { type: 'accept_peace', offerId: po.offerId });
   const refused = await call(`/api/games/${id}/actions`, 'POST', { opId: 'w4', action: { type: 'declare_war', country: 'germany' } }, britain);
-  assert.equal(refused.status, 409); assert.equal(refused.data.truceUntil, g.tick + 120); assert.match(refused.data.error, /Truce with germany/);
+  assert.equal(refused.status, 409); assert.equal(refused.data.truceUntil, g.tick + 60); assert.match(refused.data.error, /Truce with germany/);
   const cliWar = await subprocess('agents/cli.js', env, '', ['war', 'germany']);
-  assert.equal(JSON.parse(cliWar.stderr).truceUntil, g.tick + 120);
+  assert.equal(JSON.parse(cliWar.stderr).truceUntil, g.tick + 60);
 });

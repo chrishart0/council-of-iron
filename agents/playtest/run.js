@@ -11,7 +11,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import tls from 'node:tls';
 import { CouncilClient } from '../client.js';
 import { decisionView } from '../decision-view.js';
-import { backoffMs, buildPrompt, extractMemory, formatTable, grokConfig, hermesEnabledServers, hermesProfile, inboxItems,
+import { backoffMs, buildPrompt, decisionKey, extractMemory, formatTable, grokConfig, hermesEnabledServers, hermesProfile, inboxDelivery, inboxItems, inboxUrgent,
   nextTurn, parseClientOutput, parseSeat, seatReport, setupCommands, shellQuote, stopReason, summarizeCalls,
   tomlServerNames, turnCommand, turnRules, validateSeats } from './lib.js';
 
@@ -163,7 +163,7 @@ async function runCommand() {
       log(`${s.slot}: joined ${match} as ${s.country}`);
     } else if (s.client_.session.country !== s.country) throw new Error(`Seat ${s.slot}'s session plays ${s.client_.session.country}, not ${s.country}.`);
     chmodSync(s.mcp.env.COUNCIL_SESSION, 0o600);
-    Object.assign(s, { cursor: 0, memory: '', turns: 0, failures: 0, inbox: [], sinceTurn: [], lastStartTick: 0, lastEndAt: 0 },
+    Object.assign(s, { cursor: 0, memory: '', turns: 0, failures: 0, inbox: [], presented: [], sinceTurn: [], lastStartTick: 0, lastEndAt: 0 },
       readJson(resolve(s.dir, 'state.json'), {}));
     s.turns = readJsonl(resolve(s.dir, 'turns.jsonl')).length;
   }
@@ -175,20 +175,24 @@ async function runCommand() {
   let interrupted = false, startTick = readJson(resolve(runDir, 'status.json'))?.startTick ?? null, gameStatus = 'lobby', tick = 0, outcome = null, reason = null;
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => { if (interrupted) process.exit(130); interrupted = true; log(`${signal}: stopping all seats`); });
   const deadline = maxMinutes ? Date.now() + maxMinutes * 60_000 : Infinity;
-  const saveSeat = s => writePrivate(resolve(s.dir, 'state.json'), JSON.stringify({ cursor: s.cursor, memory: s.memory, failures: s.failures, lastStartTick: s.lastStartTick }));
+  const saveSeat = s => writePrivate(resolve(s.dir, 'state.json'), JSON.stringify({ cursor: s.cursor, memory: s.memory, failures: s.failures, lastStartTick: s.lastStartTick, presented: s.presented }));
   const writeStatus = () => writePrivate(resolve(runDir, 'status.json'), JSON.stringify({ match, url: opts.url, status: gameStatus, tick, startTick,
     outcome, stopReason: reason, updatedAt: new Date().toISOString(),
     seats: seatState.map(s => ({ slot: s.slot, country: s.country, client: s.client, model: s.model, effort: s.effort, name: s.name,
-      running: Boolean(s.child), turns: s.turns, inbox: s.inbox.length, eliminated: Boolean(s.eliminated), memoryChars: s.memory.length })) }, null, 2));
+      running: Boolean(s.child), turns: s.turns, inbox: s.inbox.length + (s.latest?.inbox?.unread ?? 0) + (s.latest?.inbox?.needsDecision?.length ?? 0), eliminated: Boolean(s.eliminated), memoryChars: s.memory.length })) }, null, 2));
 
   async function poll(s) {
     let o, events = [];
     for (let page = 0; page < 25; page++) {
-      o = await s.client_.observe(s.cursor);
+      // inbox: the server's seat inbox (unread messages, offers awaiting an answer); reading it marks nothing.
+      o = await s.client_.observe(s.cursor, { inbox: true });
       events.push(...o.events); s.cursor = o.cursor;
       if (!o.hasMore) break;
     }
     s.latest = o;
+    const urgent = inboxUrgent(o.inbox, s.presented);
+    if (urgent && !s.urgent) log(`${s.slot}: server inbox: ${o.inbox.unread} unread, ${o.inbox.needsDecision.length} awaiting an answer`);
+    s.urgent = urgent;
     s.sinceTurn = [...s.sinceTurn, ...events].slice(-400);
     const items = inboxItems(events, s.country, o.players);
     if (s.child) for (const item of items) item.duringTurn = true;
@@ -203,15 +207,30 @@ async function runCommand() {
     return o;
   }
 
-  function startTurn(s, trigger) {
-    const o = s.latest, number = ++s.turns;
-    let view = decisionView({ ...o, events: s.sinceTurn, cursor: o.cursor, hasMore: false }, map);
-    let prompt = buildPrompt({ country: s.country, match, interval, memory: s.memory, inbox: s.inbox,
-      open: { proposals: o.proposals, peaceOffers: o.peaceOffers }, view, turn: number });
+  /** Deliver the server inbox for a prompt: read it page by page (each page marks what it returns read). */
+  async function deliverInbox(s) {
+    const pages = [];
+    try {
+      for (let i = 0; i < 3; i++) { const page = await s.client_.readInbox(); pages.push(page); if (!page.more) break; }
+    } catch (error) {
+      log(`${s.slot}: inbox read failed (${error.status ?? error.cause?.code ?? ''}): ${error.message}`);
+      // Fall back to the unmarked snapshot of the last poll: newest messages, still unread on the server.
+      if (!pages.length && s.latest?.inbox) pages.push({ ...s.latest.inbox, more: s.latest.inbox.older ?? 0 });
+    }
+    return inboxDelivery(pages, s.country, s.latest?.players);
+  }
+
+  async function startTurn(s, trigger) {
+    const number = ++s.turns;
+    const delivery = await deliverInbox(s), o = s.latest;
+    let view = decisionView({ ...o, inbox: undefined, events: s.sinceTurn, cursor: o.cursor, hasMore: false }, map);
+    const notices = s.inbox;
+    let prompt = buildPrompt({ country: s.country, match, interval, memory: s.memory, delivery, notices, view, turn: number });
     if (prompt.length > 100_000) { view = { ...view, provinces: undefined, note: 'provinces omitted for size; call decision_view' };
-      prompt = buildPrompt({ country: s.country, match, interval, memory: s.memory, inbox: s.inbox, open: {}, view, turn: number }); }
-    const inboxSize = s.inbox.length;
-    s.inbox = []; s.sinceTurn = []; s.lastStartTick = o.tick;
+      prompt = buildPrompt({ country: s.country, match, interval, memory: s.memory, delivery, notices, view, turn: number }); }
+    const inboxSize = delivery.messages.length + delivery.needsDecision.length + notices.length;
+    s.presented = delivery.needsDecision.map(decisionKey);
+    s.urgent = false; s.inbox = []; s.sinceTurn = []; s.lastStartTick = o.tick;
     writePrivate(resolve(s.dir, 'cursor.json'), JSON.stringify({ after: o.cursor }));
     const mcpFile = resolve(s.dir, 'mcp.jsonl'), mcpOffset = existsSync(mcpFile) ? statSync(mcpFile).size : 0;
     const usageFile = resolve(s.dir, `turns/${number}.usage.json`);
@@ -276,8 +295,8 @@ async function runCommand() {
     reason = stopReason({ status: gameStatus, httpStatus, interrupted, unreachable: pollFailures >= 60, deadlinePassed: Date.now() > deadline, allSeatsDone: seatState.every(s => (s.eliminated || maxTurns && s.turns >= maxTurns) && !s.child) });
     if (reason) break;
     for (const s of seatState.filter(s => !maxTurns || s.turns < maxTurns)) {
-      const trigger = nextTurn(s, { now: Date.now(), tick, status: gameStatus, interval, minGapMs });
-      if (trigger) startTurn(s, trigger);
+      const trigger = nextTurn({ ...s, running: Boolean(s.child) }, { now: Date.now(), tick, status: gameStatus, interval, minGapMs });
+      if (trigger) await startTurn(s, trigger);
     }
     writeStatus();
     await sleep(pollMs);
