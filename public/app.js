@@ -230,7 +230,7 @@ async function rooms(){
 }
 function clearSelection(){sources=[];target=null;armyId=null;proposing=false;rallyFrom=null;}
 const rallyOf=id=>(state?.rallies || []).find(r=>r.from===id);
-const RALLY_PAUSE={under_attack:'paused while under attack',destination_lost:'paused: the rally province is not yours',no_path:'paused: no path through your or allied land'};
+const RALLY_PAUSE={destination_lost:'paused: the rally province is not yours',no_path:'paused: no path through your or allied land'};
 function rallyText(r){return `Rally → ${place(r.to).name}${r.keep===null?' (new recruits)':` (keeps ${r.keep})`}${r.status==='paused'?` · ${RALLY_PAUSE[r.reason] || 'paused'}`:''}`;}
 async function openRoom(id,watch=false){
   generation++;pollController?.abort();review?.destroy();review=null;document.body.classList.remove('reviewing');

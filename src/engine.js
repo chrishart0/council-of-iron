@@ -386,8 +386,8 @@ function rallyStatus(g, x, status, detail = {}) {
   event(g, status === 'active' ? 'rally_resumed' : 'rally_paused', { country: x.country, from: x.from, to: x.to, ...detail }, [x.country]);
 }
 /** At a source's recruitment: dispatch a column along the current fastest friendly path. */
+// Pauses only when territory is lost: the rally province, or every friendly path to it. A battle at the source does not pause it.
 function dispatchRally(g, source, x, born, battle) {
-  if (battle) return rallyStatus(g, x, 'paused', { reason: 'under_attack' });
   if (province(g, x.to).owner !== x.country) return rallyStatus(g, x, 'paused', { reason: 'destination_lost' });
   const free = source.troops - reservedTroops(g, x.country, source.id);
   const send = x.keep === null ? Math.min(born, free - 1) : free - x.keep;
@@ -395,7 +395,7 @@ function dispatchRally(g, source, x, born, battle) {
   const route = rallyPath(g, x.country, source.id, x.to);
   if (!route) return rallyStatus(g, x, 'paused', { reason: 'no_path' });
   rallyStatus(g, x, 'active');
-  source.troops -= send;
+  source.troops -= send; if (battle) battle.defenderRouted += send;
   const to = route.path[0], arrivesAt = g.tick + journeyTicks(g, source.id, to, x.country);
   const army = { id: identifier(g, 'army-'), country: x.country, from: source.id, to, amount: send, departedAt: g.tick,
     arrivesAt, ...legOf(g, source.id, to, arrivesAt - g.tick), transit: true, rally: true, path: route.path, pathIndex: 0,

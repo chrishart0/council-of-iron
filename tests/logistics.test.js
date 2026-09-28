@@ -153,7 +153,7 @@ test('a rally column never attacks: a lost destination turns it back', () => {
   assert.throws(() => send(g, 'usa', { type: 'rally', from: 'mexico', to: 'west-us' }), /own provinces/);
 });
 
-test('a rally column is an ordinary army: recallable, and the source under attack pauses it', () => {
+test('a rally column is an ordinary army: recallable; only lost territory pauses or clears a rally', () => {
   const g = game({ setup: g => { own(g, 'mexico', 'usa', 30); } });
   send(g, 'usa', { type: 'rally', from: 'mexico', to: 'west-us', keep: 5 });
   until(g, () => rallyArmies(g).length === 1);
@@ -166,6 +166,14 @@ test('a rally column is an ordinary army: recallable, and the source under attac
   const b = rallyArmies(g).find(x => !x.returning);
   assert.equal(send(g, 'usa', { type: 'turn_around', armyId: b.id }).mode, 'recall'); tick(g);
   assert.equal(b.returning, true);
+  // A battle at the source does not pause the rally (user decision); dispatched recruits count as routed defenders.
+  const siege = { id: 'battle-test', province: 'mexico', startedAt: g.tick + 1e6, attackerSide: 'solo:japan', previousOwner: 'usa',
+    before: 0, arrivals: [], defenderRecruited: 0, defenderRouted: 0, withdrawn: 0, engaged: 0, casualties: 0, lastRound: null };
+  g.battles.push(siege); const columns = rallyArmies(g).length;
+  until(g, () => rallyArmies(g).length > columns);
+  assert.equal(g.rallies[0].status, 'active'); assert.ok(siege.defenderRouted > 0);
+  assert.ok(!g.events.some(e => e.type === 'rally_paused' && e.reason === 'under_attack'));
+  g.battles = g.battles.filter(b => b !== siege);
   // Source captured: the rally point is cleared and its owner told why.
   own(g, 'mexico', 'japan', 5); tick(g);
   assert.equal(g.rallies.length, 0);
