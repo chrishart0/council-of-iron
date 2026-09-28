@@ -208,8 +208,8 @@ def wrap_checks(page,report,capture):
         if(p.x<box.left+4||p.x>box.right-4||p.y<box.top+4||p.y>box.bottom-4)continue;
         const e=document.elementFromPoint(p.x,p.y);if(e&&e.matches('use.world-copy'))return {x:p.x,y:p.y};}
       return null;}''')
-    assert spot,'no clickable repeated-copy point over Australia'
-    page.mouse.click(spot['x'],spot['y']);expect(page.locator('#card-title')).to_have_text('Australia')
+    assert spot,'no clickable repeated-copy point over Australasia'
+    page.mouse.click(spot['x'],spot['y']);expect(page.locator('#card-title')).to_have_text('Australasia')
     page.keyboard.press('Escape')  # close the card so later drags start on the map
     capture('14-dateline.png',700)
     result=page.evaluate(MAP_AUDIT,'ui-war')
