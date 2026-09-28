@@ -96,3 +96,14 @@ test('an ally leaving mid-route: the column finds another way or turns back; wai
   assert.equal(new Set(both.orders.map(o => o.arrivesAt)).size, 1);
   assert.ok(both.orders.find(o => o.from === 'west-us').path.length > 1);
 });
+
+test('impassable terrain: a shared border without a link, and the no-route error names the barrier and the way around', () => {
+  const g = game(g => { own(g, 'india', 'usa', 20); });
+  assert.ok(map.barriers.some(b => [b.a, b.b].sort().join() === 'india,tibet' && b.name === 'Himalayas'));
+  assert.ok(!map.provinces.find(p => p.id === 'india').neighbors.includes('tibet'));
+  assert.throws(() => send(g, 'usa', { type: 'march', from: 'india', to: 'tibet', amount: 5 }),
+    /India and Tibet share a border across the Himalayas \(mountains\), which cannot be crossed\. India is reached through Afghanistan/);
+  // Going around works: Afghanistan borders both.
+  own(g, 'afghanistan', 'usa', 5);
+  assert.deepEqual(preview(g, map, 'usa', { from: 'india', to: 'tibet', amount: 5 }).sources[0].path, ['afghanistan', 'tibet']);
+});

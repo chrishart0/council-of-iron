@@ -173,6 +173,17 @@ function useBudget(g, p) {
   p.orderTicks.push(g.tick);
 }
 const friendlyPath = (g, country, from, to) => sharedPath(g, country, from, to);
+/** Why a border you can see is not a way through: the map's impassable terrain between the target and the source
+ * (or any of your or your allies' provinces). Map data only; it adds words to an error, never a rule. */
+function barrierNote(g, map, country, from, to) {
+  const place = id => mapProvince(map, id)?.name ?? id;
+  const blocking = (map.barriers || []).filter(b => [b.a, b.b].includes(to)).find(b => {
+    const other = b.a === to ? b.b : b.a;
+    return other === from || allied(g, country, province(g, other).owner);
+  });
+  if (!blocking) return '';
+  return ` ${place(blocking.a)} and ${place(blocking.b)} share a border across the ${blocking.name} (${blocking.terrain}), which cannot be crossed. ${blocking.around}`;
+}
 const marchSources = action => action.sources ?? [{ from: action.from,
   ...(action.amount !== undefined ? { amount: action.amount } : {}), ...(action.percent !== undefined ? { percent: action.percent } : {}) }];
 /** Validate a march (one or more sources, one target) without mutating state or consuming budget.
@@ -198,7 +209,7 @@ export function marchPlan(g, map, country, action, { assumeWar = false } = {}) {
     const route = mapProvince(map, source.id).neighbors.includes(target.id)
       ? { path: [target.id], travel: journeyTicks(g, source.id, target.id, country) }
       : friendlyPath(g, country, source.id, target.id);
-    requireRule(route, `No route from ${source.id} to ${target.id}: a march passes only through your own or allied provinces (not through battles) and may end one step beyond them. March to a nearer province, or ally with or conquer the land between.`);
+    requireRule(route, `No route from ${source.id} to ${target.id}: a march passes only through your own or allied provinces (not through battles) and may end one step beyond them. March to a nearer province, or ally with or conquer the land between.${barrierNote(g, map, country, source.id, target.id)}`);
     const available = Math.max(0, source.troops - reservedTroops(g, country, source.id) - 1);
     requireRule((input.amount !== undefined) !== (input.percent !== undefined), 'Supply exactly one of amount or percent per source.');
     if (input.percent !== undefined) requireRule(Number.isFinite(input.percent) && input.percent > 0 && input.percent <= 100,

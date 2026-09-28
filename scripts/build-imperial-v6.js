@@ -100,6 +100,19 @@ const PROVINCES = [
   ['hawaii', 'Hawaii', 'oceania', ['hawaii']],
 ];
 
+/** Impassable terrain: two provinces that share a drawn border but are NOT neighbours. No new rule: the border
+ * simply carries no link, and the map draws the terrain that explains why. [a, b, terrain, name, how to go around].
+ * Each one creates a chokepoint (docs/MAP-V6.md, "Impassable terrain"). */
+const BARRIERS = [
+  ['india', 'tibet', 'mountains', 'Himalayas', 'India is reached through Afghanistan or Indochina, or by sea.'],
+  ['west-russia', 'siberia', 'mountains', 'Urals', 'European Russia and Siberia meet only through Central Asia.'],
+  ['italy', 'south-france', 'mountains', 'Alps', 'Italy is reached through the Danube lands, or by sea from the Maghreb or the Balkans.'],
+  ['danube', 'south-france', 'mountains', 'Alps', 'France and the Danube lands meet only through Bavaria and the Rhineland.'],
+  ['maghreb', 'sahara', 'desert', 'Sahara', 'The Maghreb is reached by sea; the Sahara from West Africa, the Congo or up the Nile from Egypt.'],
+  ['maghreb', 'west-africa', 'desert', 'Sahara', 'The Maghreb is reached by sea; West Africa by the Sahel or by sea.'],
+  ['egypt', 'sahara', 'desert', 'Libyan Desert', 'Egypt reaches Africa up the Nile, through the Congo and East Africa.'],
+];
+
 /** Every connection that is not a shared land border. [a, b, why]. Travel time follows map distance. */
 const SEA_LINKS = [
   ['canada', 'ireland', 'North Atlantic lane'],
@@ -417,7 +430,14 @@ for (const arc of arcs) if (arc.shared) {
 }
 const short = [...borderLength].filter(([, l]) => l < MIN_BORDER);
 if (short.length) throw new Error(`Borders too short to read: ${short.map(([k, l]) => `${k} ${l.toFixed(2)}`)}`);
-for (const k of [...borderLength.keys()].sort()) { const [from, to] = k.split('|'); edges.set(k, { from, to, sea: false }); }
+const barriers = BARRIERS.map(([a, b, terrain, name, around]) => {
+  const k = pair(a, b);
+  if (!borderLength.has(k)) throw new Error(`barrier ${a}–${b} (${name}): the provinces share no border`);
+  if (!['mountains', 'desert'].includes(terrain)) throw new Error(`barrier ${k}: unknown terrain ${terrain}`);
+  const [from, to] = k.split('|'); return { a: from, b: to, terrain, name, around };
+});
+const blocked = new Set(barriers.map(x => pair(x.a, x.b)));
+for (const k of [...borderLength.keys()].sort()) if (!blocked.has(k)) { const [from, to] = k.split('|'); edges.set(k, { from, to, sea: false }); }
 for (const [a, b, why] of SEA_LINKS) {
   if (!byId.has(a) || !byId.has(b)) throw new Error(`sea link ${a}–${b}: unknown province`);
   const k = pair(a, b);
@@ -447,7 +467,7 @@ const map = {
   source: 'Natural Earth public-domain boundaries (via the v5 province geometry); Council of Iron authored provinces, generalised borders and connections.',
   regions, countries,
   provinces: provinces.map(({ id, name, region, x, y, path, neighbors }) => ({ id, name, region, x, y, path, neighbors })),
-  edges: [...edges.values()], id: 'imperial-1910-v6', rulesVersion: 3,
+  edges: [...edges.values()], barriers, id: 'imperial-1910-v6', rulesVersion: 3,
 };
 const text = JSON.stringify(map) + '\n';
 if (process.argv.includes('--check')) {

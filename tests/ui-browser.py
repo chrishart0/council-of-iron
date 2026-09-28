@@ -1159,7 +1159,7 @@ def main():
             # (it is Britain's battle) and exactly one audible cue. (Step to 700 first: the Egypt, Levant and India battles
             # in between are not what this checks.)
             server.stdin.write('700\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==700
-            if threat.is_visible():threat.locator('[data-do="dismiss"]').click()
+            if threat.is_visible():threat.locator('[data-do="dismiss"]').dispatch_event('click')  # a banner may sit over it
             page.wait_for_timeout(20500);before=len(spy(page,'cues'))  # past the 20 s stinger budget window those battles used, as in real time
             server.stdin.write('712\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==712
             expect(personal).to_contain_text('Line held · Great Britain',timeout=8000)

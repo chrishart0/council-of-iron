@@ -23,6 +23,11 @@ export function boardView(observation, map) {
     return {
       id: p.id, troops: p.troops, industry: p.development,
       available: available.get(p.id),
+      ...(() => { // borders you can see but not cross (the map's impassable terrain)
+        const blocked = (map.barriers || []).filter(b => b.a === p.id || b.b === p.id)
+          .map(b => ({ id: b.a === p.id ? b.b : b.a, terrain: b.terrain, name: b.name, around: b.around }));
+        return blocked.length ? { impassable: blocked } : {};
+      })(),
       neighbors: place.neighbors.map(id => {
         const target = provinces.get(id);
         return { id, owner: target.owner, troops: target.troops, industry: target.development,
@@ -49,6 +54,6 @@ export function boardView(observation, map) {
       .map(a => ({ id: a.id, country: a.country, to: a.path?.at(-1) ?? a.to, amount: a.amount, arrivesAt: a.arrivesAt,
         ...(a.returning ? { returning: true } : {}) })),
     outcome: o.outcome,
-    note: 'Province rows are [id, owner, troops, industry]. Your side wins by holding victoryRule.targetIndustry (60% of all owned industry) for victoryRule.holdTicks; at the deadline the side with the most industry wins. A side with winsAt wins then if its hold lasts. attackReady means a war is active (or march with declareWar:true). March to any neighbor, or through your own/allied land to anything beyond it. Available troops already leave one at home. Develop only from readyDevelopments. Use preview for battle odds and news for messages.',
+    note: 'Province rows are [id, owner, troops, industry]. Your side wins by holding victoryRule.targetIndustry (60% of all owned industry) for victoryRule.holdTicks; at the deadline the side with the most industry wins. A side with winsAt wins then if its hold lasts. attackReady means a war is active (or march with declareWar:true). March to any neighbor, or through your own/allied land to anything beyond it. own[].impassable lists borders you cannot cross (mountains, deserts) and the way around. Available troops already leave one at home. Develop only from readyDevelopments. Use preview for battle odds and news for messages.',
   };
 }

@@ -49,14 +49,22 @@ for (const name of ['imperial-map.json']) {
     }
   });
 
-  test(`${name}: land adjacency is exactly the shared borders; every other link is a declared sea link`, () => {
+  test(`${name}: a shared border is a land link or a declared barrier; every other link is a declared sea link`, () => {
     const { shared, borders, coast } = borderNetwork(map);
     const key = e => [e.from, e.to].sort().join('|');
-    const land = map.edges.filter(e => !e.sea).map(key), sea = map.edges.filter(e => e.sea);
+    const land = map.edges.filter(e => !e.sea).map(key), sea = map.edges.filter(e => e.sea), any = new Set(map.edges.map(key));
     assert.equal(new Set(map.edges.map(key)).size, map.edges.length, 'one edge per pair');
-    // No exceptions list: a land link needs a readable shared border, a shared border is a land link.
+    // No exceptions list: a land link needs a readable shared border; a shared border is a land link, or it is
+    // a declared barrier (impassable terrain, drawn on the map), never both.
+    const barriers = (map.barriers || []).map(b => [b.a, b.b].sort().join('|'));
+    assert.equal(new Set(barriers).size, barriers.length, 'one barrier per pair');
     assert.deepEqual(land.filter(k => !(shared.get(k) >= 1)).sort(), []);
-    assert.deepEqual([...shared].filter(([k, length]) => length > .05 && !land.includes(k)).map(([k]) => k).sort(), []);
+    assert.deepEqual(barriers.filter(k => !(shared.get(k) >= 1) || any.has(k)), [], 'a barrier is a shared border without a link');
+    assert.deepEqual([...shared].filter(([k, length]) => length > .05 && !land.includes(k) && !barriers.includes(k)).map(([k]) => k).sort(), []);
+    for (const b of map.barriers || []) {
+      assert.ok(['mountains', 'desert'].includes(b.terrain), b.name);
+      assert.ok(b.name.length > 2 && b.around.length > 10, `${b.name} says how to go around`);
+    }
     // A sea link joins provinces that do not touch, and says which strait or lane it is.
     for (const e of sea) {
       assert.ok(!(shared.get(key(e)) > 0), `${key(e)} touches but is declared a sea link`);
@@ -69,6 +77,17 @@ for (const name of ['imperial-map.json']) {
     // Border network is drawable: every shared pair has a path and every province has an outline.
     assert.equal(borders.length, [...shared.keys()].length);
     for (const p of provinces) assert.ok(coast.has(p.id) || borders.some(b => b.a === p.id || b.b === p.id), p.id);
+  });
+
+  test(`${name}: every province is reachable and every power can still reach neutral land`, () => {
+    const next = new Map(map.provinces.map(p => [p.id, p.neighbors]));
+    const reach = from => { const seen = new Set(from); for (const id of seen) for (const n of next.get(id)) seen.add(n); return seen; };
+    assert.equal(reach([map.provinces[0].id]).size, map.provinces.length);
+    const held = new Set(map.countries.flatMap(c => c.start));
+    for (const c of map.countries) {
+      const frontier = new Set(c.start.flatMap(id => next.get(id)).filter(id => !c.start.includes(id)));
+      assert.ok([...frontier].some(id => !held.has(id)), `${c.id} borders no neutral province`);
+    }
   });
 
   test(`${name}: regions partition the provinces and no province is a sliver`, () => {
