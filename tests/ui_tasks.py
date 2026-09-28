@@ -9,7 +9,7 @@ are written to <artifacts>/tasks/<viewport>/ for manual review.
 import json
 from playwright.sync_api import expect
 
-BOUNDS = {'attack': 3, 'declare': 4, 'propose': 3, 'respond': 2, 'reply': 3, 'recall': 2, 'turn': 2, 'develop': 3}
+BOUNDS = {'attack': 3, 'declare': 4, 'propose': 3, 'respond': 2, 'reply': 3, 'recall': 2, 'turn': 2, 'develop': 3, 'rally': 3}
 
 class Walk:
     def __init__(self, page, server, room, touch, out, report):
@@ -220,6 +220,24 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     w.tap(page.locator('#confirm-dialog [value="confirm"]'), 'invested')
     expect(page.locator('#toast')).to_contain_text('Investment committed')
     s = w.state(); assert any(o['type'] == 'develop' and o['from'] == 'east-canada' for o in s['commandBudget']['reserved']), s['commandBudget']
+    w.end()
+
+    # Rally point: tap a province of yours → "Rally troops to…" → tap the rally province (Scotland → Southern England;
+    # the British seat's analogue of "always send Mexico's new troops to Pacific States").
+    w.begin('rally')
+    w.stdin('war 160')
+    page.keyboard.press('Escape'); w.bring('scotland')
+    w.tap(w.counter('scotland'), 'source')
+    rally = page.locator('#rally-province'); expect(rally).to_have_text('Rally troops to…'); expect(rally).to_be_enabled(timeout=5000)
+    w.tap(rally, 'pick')
+    expect(page.locator('#toast')).to_contain_text('Tap one of your provinces')
+    w.tap(w.counter('england'), 'set')
+    expect(page.locator('#toast')).to_contain_text('Rally set', timeout=5000)
+    s = w.state(); order = next(o for o in s['commandBudget']['reserved'] if o['type'] == 'rally')
+    assert order['sources'] == ['scotland'] and order['to'] == 'england' and order['keep'] is None, order
+    w.stdin('war 162'); page.wait_for_timeout(1500)
+    expect(page.locator('[data-rally="scotland"]').first).to_be_attached(timeout=5000)
+    w.snap('arrow')
     w.end()
     assert not errors, errors
     context.close()
