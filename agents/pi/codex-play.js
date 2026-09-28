@@ -174,7 +174,7 @@ try {
     record.turnAttempts = 0;
     let decisionCursor = 0;
     while (Date.now() < deadline && record.turnAttempts < maxTurns) {
-      const before = await client.observe(taskMode === 'match' ? decisionCursor : 0);
+      const before = await client.observe(taskMode === 'match' ? decisionCursor : 0, { inbox: taskMode === 'match' });
       if (taskMode === 'match') decisionCursor = before.cursor;
       if (before.status === 'finished') { record.outcome = before.outcome; break; }
       const eliminatedAt = taskMode === 'match' ? before.players.find(player => player.id === country)?.eliminatedAt : null;
