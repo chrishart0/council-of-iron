@@ -136,7 +136,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     hit = page.locator(f'[data-army="{army["id"]}"] .army-hit'); x, y = w.at(hit)
     if page.evaluate('([x,y])=>Boolean(document.elementFromPoint(x,y)?.closest("[data-army]"))', [x, y]):
         w.tap(hit, 'army'); w.results['recallPath'] = 'army marker'
-        expect(page.locator('#card')).to_have_attribute('data-kind', 'army'); expect(primary).to_have_text('Recall')
+        expect(page.locator('#card')).to_have_attribute('data-kind', 'army'); expect(primary).to_contain_text('Recall')
         w.tap(primary, 'recalled')
     else:  # the column still sits on a counter (counter taps win): recall from the province it left
         w.tap(w.counter('england'), 'province'); w.results['recallPath'] = 'source province card'

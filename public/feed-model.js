@@ -141,6 +141,8 @@ export function commsItems(events, breaks = [], { you = null } = {}) {
       case 'diplomacy_approved': case 'diplomacy_expired': {
         const m = motions.get(e.motionId); push(e, m?.threads ?? (own() ? [`alliance:${own()}`] : ['dm']), { system: e.type === 'diplomacy_approved' ? 'approved' : 'expired', kind: e.kind ?? m?.kind ?? null }); break;
       }
+      // Your own army turned back automatically (never a recall you ordered yourself: that has no reason).
+      case 'army_recalled': if (you && e.country === you && e.reason) push(e, ['mine'], { system: 'turned_back' }); break;
       default: break;
     }
   }
@@ -149,8 +151,20 @@ export function commsItems(events, breaks = [], { you = null } = {}) {
   return items.sort((a, b) => a.seq - b.seq || (a.id === null) - (b.id === null));
 }
 /** Private items (a DM or alliance message, or a diplomatic row) that count as "for you" when unread. */
-export const isPersonal = (item, you) => Boolean(you) && (item.channel === 'dm' || item.channel === 'alliance' || Boolean(item.system && item.recipients)) && item.from !== you;
+export const isPersonal = (item, you) => Boolean(you) && (item.channel === 'dm' || item.channel === 'alliance' || Boolean(item.system && item.recipients) || item.system === 'turned_back') && item.from !== you;
 
+/** Why one of your armies was turned back, in game voice (from the engine's `reason` and detail). */
+export function turnedBackReason(item, names) {
+  const c = names.country, s = names.side;
+  switch (item.reason) {
+    case 'battle_in_progress': return `${s(item.battleAttackerSide)}’s battle there was already under way`;
+    case 'no_war': return item.allied ? `${c(item.owner)} is now your ally` : item.owner ? `you are not at war with ${c(item.owner)}` : 'they could not attack there';
+    case 'rival_arrival': return `${s(item.rivalSide)} arrived at the same moment with a larger force`;
+    case 'transit_blocked': return item.battleAttackerSide ? 'a battle blocked the allied route' : 'the allied route was blocked';
+    case 'peace': return item.owner ? `peace was signed with ${c(item.owner)}` : 'peace was signed';
+    default: return 'they could not attack there';
+  }
+}
 /** Plain-text copy for a diplomatic system row. `names` as for headlineCopy (+ optional `players` count). */
 export function systemCopy(item, names) {
   const c = names.country, s = names.side, t = names.time, list = ids => (ids || []).map(c).join(' + ');
@@ -165,6 +179,8 @@ export function systemCopy(item, names) {
       detail: `${s(item.from)} → ${s(item.to)} · open until ${t(item.expiresAt)}.` };
     case 'peace_offer': return { tone: 'peace', icon: 'treaty', title: 'Peace offered', detail: `${list(item.fromRoster)} offer peace to ${list(item.toRoster)} · open until ${t(item.expiresAt)}.` };
     case 'approved': return { tone: 'broken', icon: 'council', title: 'Vote cast', detail: `${c(item.country)} approved the ${item.kind ?? ''} motion.`.replace('  ', ' ') };
+    case 'turned_back': return { tone: 'war', icon: 'military', title: 'Troops turned back',
+      detail: `Your ${item.amount} troops turned back${item.province ? ` from ${names.province(item.province)}` : ''}: ${turnedBackReason(item, names)}. They reach ${names.province(item.to)} at ${t(item.arrivesAt)}.` };
     case 'expired': return { tone: 'broken', icon: 'council', title: 'Motion expired', detail: `The ${item.kind ?? ''} motion closed: ${item.reason ?? 'expired'}`.replace('  ', ' ') };
     default: return { tone: 'broken', icon: 'journal', title: 'Council', detail: '' };
   }

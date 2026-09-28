@@ -10,6 +10,7 @@ import { LeaderboardPanel } from './leaderboard-panel.js';
 import { ExpandableMap } from './expand.js';
 // Relations and alliance colours: the same DOM-free helpers the atlas and agent tools use.
 import { relationsOf, allianceColors, threatening } from './relations.js';
+import { turnAroundArrival } from './movement.js';
 import { SoundBoard } from './sound.js';
 /* v0.8 — one map, two nouns. A PROVINCE (troops) opens the order card; a COUNTRY (diplomacy) opens the
  * country card; your own standard opens your alliance card. Each card has one primary action. */
@@ -29,6 +30,7 @@ let sources=[], target=null, armyId=null;
 let card=null, cardSize='peek', cardOpener=null, proposing=false, railItems=[];
 let fraction=.5;try{const f=Number(localStorage.getItem('coi.fraction'));if(f>0 && f<=1)fraction=f;}catch{}
 const seenThreats=new Set();
+const turnedBack=new Map(); // army id → its "turned back" notice key, withdrawn once the troops are home or moving again
 const compact=matchMedia('(max-width:1023px), (max-height:499px)');
 const country = id => map.countries.find(c=>c.id===id);
 const place = id => map.provinces.find(p=>p.id===id);
@@ -44,6 +46,37 @@ const mayEnter = (a,b) => !b || sameSide(a,b) || !state.rules.warRequired || atW
 const seated = () => Boolean(state?.you) && !spectating;
 const active = () => seated() && state.status==='running' && myPlayer()?.eliminatedAt===null;
 const neighbours = id => place(id)?.neighbors || [];
+/** "Turn around" for one of your moving armies: advancing = recall home; returning = resume toward the
+ * province it had been heading for, from where it is now. Mirrors the engine's turnAroundPlan (which
+ * re-checks everything when the order executes next tick). Null when there is nothing to offer. */
+function turnOption(a){
+  if(!a || a.country!==state?.you || a.engaged || !active())return null;
+  const at=state.tick+1,queued=(state.commandBudget?.reserved || []).some(o=>['recall','turn_around'].includes(o.type) && [a.id,a.groupId].includes(o.target));
+  if(!a.returning){
+    const home=a.transit?a.origin:a.from;
+    const back=a.transit?at+Math.max(1,at-a.originDepartedAt):a.turnArounds?turnAroundArrival(a,state.travelTimes,at):at+Math.max(1,Math.min(a.arrivesAt-a.departedAt,at-a.departedAt));
+    return {mode:'recall',act:'recall',to:home,arrivesAt:back,queued,label:`Recall → ${place(home).name}`,
+      preview:`${a.amount} troops turn at their current position and are back in ${place(home).name} at ${time(back)}.`};
+  }
+  if(state.turnAroundLimit===undefined)return null; // a server without the turn-around order
+  const dest=a.from,owner=prov(dest)?.owner,arrivesAt=turnAroundArrival(a,state.travelTimes,at),limit=state.turnAroundLimit;
+  const why=a.transit?'A transit column cannot turn around; it must reach home first.':
+    (a.turnArounds || 0)>=limit?`These troops have already turned back toward ${place(dest).name} ${limit===1?'once':`${limit} times`}.`:
+    !mayEnter(state.you,owner)?`Declare war on ${country(owner).name} before turning back toward ${place(dest).name}.`:
+    arrivesAt===null || arrivesAt>state.rules.duration?'They would arrive after the match ends.':null;
+  const battle=state.battles?.find(b=>b.province===dest),friendly=owner && sameSide(owner,state.you);
+  const preview=battle && !friendly && battle.attackerSide!==myPlayer()?.side?`${feedNames.side(battle.attackerSide)}’s battle is still under way at ${place(dest).name}; if it has not ended when you arrive, your troops turn back again.`
+    :friendly?`${a.amount} troops reinforce ${place(dest).name}.`:`${a.amount} troops attack ${place(dest).name} (${prov(dest).troops} defenders now).`;
+  return {mode:'resume',act:'turn-around',to:dest,arrivesAt,queued,why,label:`Turn around → ${place(dest).name} (arrives ${time(arrivesAt)})`,
+    preview:`${preview} Uses one command; checked again when it executes.`};
+}
+/** Centre the map on one of your armies and open its card. */
+function showArmy(id){
+  const a=state?.armies.find(a=>a.id===id);
+  if(!a){toast('Those troops have already arrived.');return;}
+  const past=(state.tick-a.departedAt)/Math.max(1,a.arrivesAt-a.departedAt);
+  atlas.focus(past<.5?a.from:a.to,view());armyId=id;sources=[];target=null;openCard('army',id);paintMap();
+}
 function toast(message,error=false){$('toast').textContent=message;$('toast').className=error?'error':'';$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,6500);}
 /** DOM helper: player text (alliance names, chat) only ever reaches textContent. */
 function el(tag,className,text){const e=document.createElement(tag);if(className)e.className=className;if(text!==undefined)e.textContent=text;return e;}
@@ -96,6 +129,8 @@ function renderFeed(live){
   const current=new Set(threats.map(t=>t.army));
   for(const army of seenThreats)if(!current.has(army)){notifier.withdraw(`et-${army}`);worldFeed.withdraw(`et-${army}`);seenThreats.delete(army);}
   for(const t of threats)seenThreats.add(t.army);
+  if(live)for(const item of fresh)if(item.system==='turned_back')turnedBack.set(item.armyId,`e${item.id}`);
+  for(const [army,key] of turnedBack)if(!state.armies.some(a=>a.id===army && a.returning)){notifier.withdraw(key);turnedBack.delete(army);}
   renderReply();renderAttention();
   // Collapsed rail = a one-line ticker of the latest row (text only; chat is player text).
   const last=[...$('feed-list').children].reverse().find(li=>!li.classList.contains('feed-empty'));
@@ -134,6 +169,14 @@ function noticeFor(item){
   if(item.type==='message' && item.channel!=='world' && item.from!==state.you){
     notifier.push({key:`e${item.id}`,kind:item.channel,standard:item.from,title:`${country(item.from).name}${item.channel==='alliance'?' · alliance':''}`,detail:String(item.text).split('\n')[0],
       buttons:[item.channel==='dm'?{label:'Reply',data:{openCountry:item.from,compose:'1'},primary:true}:{label:'Open',data:{openAlliance:'1',compose:'1'},primary:true}]});
+    return;
+  }
+  if(item.system==='turned_back'){
+    const option=turnOption(state.armies.find(a=>a.id===item.armyId));
+    const buttons=[...(option?.mode==='resume' && !option.why && !option.queued?[{label:option.label,data:{act:'turn-around',arg:item.armyId},primary:true}]:[]),
+      ...(state.armies.some(a=>a.id===item.armyId)?[{label:'Show army',data:{showArmy:item.armyId}}]:[])];
+    const copy=systemCopy(item,feedNames);
+    notifier.push({key:`e${item.id}`,kind:'decision',sticky:true,standard:state.you,title:copy.title,detail:copy.detail,buttons});
     return;
   }
   if(!item.system || item.from===state.you)return;
@@ -182,7 +225,7 @@ async function rooms(){
 function clearSelection(){sources=[];target=null;armyId=null;proposing=false;}
 async function openRoom(id,watch=false){
   generation++;pollController?.abort();review?.destroy();review=null;document.body.classList.remove('reviewing');
-  closeCard();closeMenu();pastSides.clear();seenThreats.clear();spectating=watch;messageCatchupComplete=false;herald.reset();worldFeed.reset();
+  closeCard();closeMenu();pastSides.clear();seenThreats.clear();turnedBack.clear();spectating=watch;messageCatchupComplete=false;herald.reset();worldFeed.reset();
   resetPresentation();matchId=id;mapReadyFor=null;state=null;cursor=0;history=[];clearSelection();previewKey='';notifier.reset();
   document.body.classList.add('in-game');atlas.world();
   $('home').hidden=true;$('game').hidden=false;$('result').hidden=true;
@@ -507,6 +550,11 @@ function provinceCard(){
     const outgoing=[...(state.commandBudget?.reserved || []).filter(o=>o.type==='move' && o.from===id).map(o=>({id:o.id,amount:o.amount,to:o.to,queued:true})),
       ...state.armies.filter(a=>a.country===state.you && a.from===id && !a.returning && !(state.commandBudget?.reserved || []).some(o=>o.type==='recall' && [a.id,a.groupId].includes(o.target))).map(a=>({id:a.id,amount:a.amount,to:a.to}))];
     for(const o of outgoing.slice(0,2))actions.push({label:`${o.queued?'Cancel':'Recall'} ${o.amount} → ${place(o.to).name}`,act:'recall',arg:o.id,disabled:pendingCommand || !state.commandBudget?.remaining});
+    // Troops on their way home here that could head back out: turn them around from here too.
+    for(const a of state.armies.filter(a=>a.country===state.you && a.returning && a.to===id).slice(0,Math.max(0,2-outgoing.length))){
+      const option=turnOption(a);
+      if(option && !option.queued && !option.why)actions.push({label:`Turn around ${a.amount} → ${place(option.to).name}`,act:'turn-around',arg:a.id,disabled:pendingCommand || !state.commandBudget?.remaining});
+    }
   }
   return {...base,sub:[owner && !mine?ownerButton(owner):el('span','card-meta',mine?'Your province':'Unclaimed'),el('span','card-meta',`${p.troops} troops${owner?` · industry ${'ⅠⅡⅢⅣⅤ'[p.development-1] || p.development}`:''}`)],subKey:[owner,relationOf(owner),p.troops,p.development,mine],
     status,statusKey:[battle && [battle.province,p.troops],mine,freeTroops(id)>0,state.armies.filter(a=>a.engaged && a.to===id).length],relation:mine?'own':'',actions,more:()=>moreProvince(id,false)};
@@ -550,19 +598,30 @@ function moreProvince(id,order){
   if(order)updatePreview();
 }
 function marchesHTML(){
+  const turnButton=a=>{const o=turnOption(a);return o && !o.queued && !o.why?`<button type="button" data-act="turn-around" data-arg="${esc(a.id)}" ${!pendingCommand && state.commandBudget?.remaining?'':'disabled'}>Turn around</button>`:'';};
   const moving=state.armies.filter(a=>a.country===state.you).sort((a,b)=>a.arrivesAt-b.arrivesAt),reserved=state.commandBudget?.reserved || [];
   if(!moving.length && !reserved.length)return '';
   const can=!pendingCommand && state.commandBudget?.remaining;
   const recall=(id,label)=>`<button type="button" data-recall="${esc(id)}" ${can?'':'disabled'}>${label}</button>`;
   const groups=[...new Set([...moving,...reserved].filter(a=>a.groupId && !a.returning).map(a=>a.groupId))].filter(id=>[...moving,...reserved].filter(a=>a.groupId===id && !a.returning).length>1);
-  return `<h3>Your orders <span class="count">${moving.length+reserved.length}</span></h3><div class="march-list">${groups.map(id=>`<div class="march-row"><span>Attack together<small>${esc(id)}</small></span>${recall(id,'Recall group')}</div>`).join('')}${reserved.map(o=>`<div class="march-row"><span>${o.type==='recall'?'Recall queued':o.type==='develop'?'Construction queued':`${o.amount || ''} · ${esc(place(o.from)?.name || '')} → ${esc(place(o.to)?.name || '')}`}<small>${Math.max(0,o.executeAt-state.tick)}s until ${o.type==='move'?'departure':'execution'}</small></span>${o.type==='move'?recall(o.id,'Cancel'):''}</div>`).join('')}${moving.map(a=>`<div class="march-row ${a.returning?'returning':''}"><button class="march-focus" data-feed-province="${esc(a.to)}"><b>${a.amount}</b> ${a.returning?'↶':'→'} ${esc(place(a.to).name)}<small>${a.returning?'Returning · ':''}arrives ${time(a.arrivesAt)} · ${Math.max(0,a.arrivesAt-state.tick)}s</small></button>${a.returning?'':recall(a.id,'Recall')}</div>`).join('')}</div>`;
+  return `<h3>Your orders <span class="count">${moving.length+reserved.length}</span></h3><div class="march-list">${groups.map(id=>`<div class="march-row"><span>Attack together<small>${esc(id)}</small></span>${recall(id,'Recall group')}</div>`).join('')}${reserved.map(o=>`<div class="march-row"><span>${o.type==='recall'?'Recall queued':o.type==='develop'?'Construction queued':`${o.amount || ''} · ${esc(place(o.from)?.name || '')} → ${esc(place(o.to)?.name || '')}`}<small>${Math.max(0,o.executeAt-state.tick)}s until ${o.type==='move'?'departure':'execution'}</small></span>${o.type==='move'?recall(o.id,'Cancel'):''}</div>`).join('')}${moving.map(a=>`<div class="march-row ${a.returning?'returning':''}"><button class="march-focus" data-feed-province="${esc(a.to)}"><b>${a.amount}</b> ${a.returning?'↶':'→'} ${esc(place(a.to).name)}<small>${a.returning?'Returning · ':''}arrives ${time(a.arrivesAt)} · ${Math.max(0,a.arrivesAt-state.tick)}s</small></button>${a.returning?turnButton(a):recall(a.id,'Recall')}</div>`).join('')}</div>`;
 }
 function armyCard(){
   const a=state.armies.find(a=>a.id===card.id),mine=a.country===state.you && active();
   const status=el('div','card-relation');status.append(el('b',`rel ${a.returning?'rel-ally':'rel-war'}`,a.returning?'RETURNING':a.engaged?'IN BATTLE':'MARCHING'),el('span','',`${place(a.from).name} → ${place(a.to).name} · arrives in ${Math.max(0,a.arrivesAt-state.tick)}s (${time(a.arrivesAt)})`));
   const group=a.groupId && state.armies.filter(x=>x.groupId===a.groupId && !x.returning).length>1;
-  return {flag:a.country,title:`${a.amount} ${faction(a.country).short} troops`,sub:[ownerButton(a.country)],subKey:[a.country,relationOf(a.country)],status,statusKey:[a.returning,a.engaged,a.arrivesAt,state.tick],relation:'',
-    actions:mine && !a.returning && !(state.commandBudget?.reserved || []).some(o=>o.type==='recall' && [a.id,a.groupId].includes(o.target))?[{label:'Recall',act:'recall',arg:a.id,primary:true,disabled:pendingCommand || !state.commandBudget?.remaining,id:'primary'},...(group?[{label:'Recall whole attack',act:'recall',arg:a.groupId}]:[])]:[]};
+  const option=mine?turnOption(a):null,budget=!pendingCommand && state.commandBudget?.remaining;
+  const recallQueued=(state.commandBudget?.reserved || []).some(o=>o.type==='recall' && [a.id,a.groupId].includes(o.target));
+  let actions=[];
+  // Fighting troops withdraw with a plain recall; moving ones get the one "turn around" primary action.
+  if(mine && a.engaged && !recallQueued)actions=[{label:'Recall',act:'recall',arg:a.id,primary:true,disabled:!budget,id:'primary'}];
+  else if(option?.queued)status.append(el('span','card-hint','Order queued: it turns at the next game second.'));
+  else if(option){
+    actions=[{label:option.label,act:option.act,arg:a.id,primary:true,disabled:!budget || Boolean(option.why),id:'primary'},...(option.mode==='recall' && group?[{label:'Recall whole attack',act:'recall',arg:a.groupId}]:[])];
+    status.append(el('span','card-hint',option.why || option.preview));
+  }
+  return {flag:a.country,title:`${a.amount} ${faction(a.country).short} troops`,sub:[ownerButton(a.country)],subKey:[a.country,relationOf(a.country)],status,
+    statusKey:[a.returning,a.engaged,a.arrivesAt,state.tick,option?.label,option?.why,option?.queued],relation:'',actions};
 }
 function countryCard(){
   const id=card.id,p=playerOf(id),c=country(id),rel=relationOf(id),me=myPlayer();
@@ -691,7 +750,8 @@ function describe(e){
     case 'army_departed':return`${c(e.country)} commits ${e.amount} troops: ${place(e.from).name} → ${place(e.to).name}.`;
     case 'development_started':return`${c(e.country)} invests ${e.cost} manpower in ${place(e.province).name}; level ${e.level} completes at ${time(e.completesAt)}.`;
     case 'development_completed':return`${place(e.province).name} reaches industrial level ${e.level}.`;
-    case 'army_recalled':return`${c(e.country)} recalls ${e.amount} troops; return to ${place(e.to).name} at ${time(e.arrivesAt)}.`;
+    case 'army_recalled':return`${c(e.country)} ${e.reason?'turns back':'recalls'} ${e.amount} troops${e.province?` from ${place(e.province).name}`:''}; return to ${place(e.to).name} at ${time(e.arrivesAt)}.`;
+    case 'army_turned_around':return`${c(e.country)} turns ${e.amount} troops back toward ${place(e.to).name}; arrival ${time(e.arrivesAt)}.`;
     case 'army_interned':return`${e.amount} troops from ${c(e.country)} cannot return through ${place(e.province).name}.`;
     case 'battle':return`${place(e.province).name}: ${e.owner!==e.previousOwner?`${c(e.owner)} captures it`:'defenders retain ownership'}; ${e.troops} troops remain.`;
     case 'alliance_notice':return`${e.name}: coalition change confirmed; activates at ${time(e.activateAt)}.`;
@@ -798,6 +858,8 @@ async function perform(act,arg,b){
       const r=await command({type:'develop',from:arg});if(r)toast(`Investment committed. Completion at ${time(r.completesAt)}.`);return;
     }
     case 'recall':{const r=await command({type:'recall',id:arg});if(r){toast('Recall queued. The troops turn around at their actual position.');if(card?.kind==='army')closeCard();}return;}
+    case 'turn-around':{const a=state.armies.find(a=>a.id===arg),r=await command({type:'turn_around',armyId:arg});
+      if(r)toast(r.mode==='recall'?'Recall queued. The troops turn around at their actual position.':`Turning around: ${a?.amount ?? ''} troops head back to ${place(r.to).name}, arriving ${time(r.arrivesAt)}.`.replace('  ',' '));return;}
     case 'route':{const r=await command({type:'route',from:sources[0],to:arg || null});if(r)toast(arg?'Recruitment arrow queued.':'Arrow removal queued.');return;}
     case 'route-clear':{const r=await command({type:'route',from:arg,to:null});if(r)toast('Arrow removal queued.');return;}
     case 'draft':{sources=[arg];target=b.dataset.to;fraction=1;openCard('province',target);paintMap();toast('Transfer drafted; review the garrison before sending.');return;}
@@ -913,6 +975,7 @@ document.addEventListener('click',safely(async event=>{
   if(b.dataset.openCountry && state){openCard('country',b.dataset.openCountry,{focus:!b.closest('#card'),compose:b.dataset.compose==='1',size:b.dataset.compose==='1'?'full':undefined});}
   if(b.dataset.openAlliance && state)openCard('alliance',null,{focus:true,compose:b.dataset.compose==='1',size:'full'});
   if(b.dataset.recall)await perform('recall',b.dataset.recall,b);
+  if(b.dataset.showArmy && state)showArmy(b.dataset.showArmy);
   if(b.dataset.act)await perform(b.dataset.act,b.dataset.arg,b);
   if(b.dataset.feedFilter){worldFeed.setFilter(b.dataset.feedFilter);for(const chip of document.querySelectorAll('[data-feed-filter]'))chip.setAttribute('aria-pressed',String(chip===b));}
 }));
@@ -921,6 +984,7 @@ worldFeed=new WorldFeed({list:$('feed-list'),unread:$('feed-unread'),toggle:$('f
 // Private rows link to the card that answers them.
 worldFeed.link=item=>{
   if(!state?.you || spectating)return null;
+  if(item.system==='turned_back')return state.armies.some(a=>a.id===item.armyId)?{key:'showArmy',value:item.armyId,label:'Show army ›',aria:`Show your ${item.amount} returning troops`}:null;
   const thread=threadOf(item);if(!thread)return null;
   if(thread.kind==='country')return {key:'openCountry',value:thread.id,label:'Open ›',aria:`Open ${country(thread.id)?.name || 'country'}`};
   return {key:'openAlliance',value:'1',label:'Open ›',aria:'Open your alliance'};

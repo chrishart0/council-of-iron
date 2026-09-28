@@ -31,7 +31,7 @@ The browser lobby groups games in progress above open rooms. A signed-in seat ha
 - `scenario`, `rules`, `tick`, `speed`, `status`, `you`, `isHost`.
 - Public `players`, `provinces`, `armies`, `battles`, `wars`, `sides` (including each side's `economy`), `economyThreshold`, `projections`, `dominance`, `tiePriority`, `departures`, confirmed proposals. Economy is completed industry on owned provinces; the threshold is `ceil(0.6 × total active industry)`.
 - Industrial provinces add `development` (1–3), `developing` (null or level/completion tick). `travelTimes[from][to]` is authoritative for this match.
-- Armies have IDs, source, destination, amount, departure/arrival ticks. Manual industrial armies carry `orderId`/`groupId`; recalled armies have `returning:true` and `startPoint` for the turn position.
+- Armies have IDs, source, destination, amount, departure/arrival ticks. Manual industrial armies carry `orderId`/`groupId`; recalled armies have `returning:true` and `startPoint` for the turn position. An army that has turned back toward its target carries `turnArounds` (count) and keeps `startPoint`. Top-level `turnAroundLimit` is the per-army resume cap.
 - Your `commandBudget`: remaining commands, recovery tick, chat-ready tick, and private reserved orders (delayed moves, developments and recalls). Other players do not see your unexecuted plans.
 - `diplomacy` contains only war votes and peace offers addressed to your side. A public spectator does not receive pending motions.
 - `events`, `cursor`, `hasMore`, and immutable `outcome` once finished.
@@ -131,6 +131,7 @@ The transcript returns only to the caller. It is **not** chat: the browser inser
 | `attack` | `to`, `sources` (1–16 unique owned adjacent provinces, each `from` plus exactly one of amount/percent), optional `arriveAt`, optional `declareWar` | Atomic coordinated plan; near sources delay departure to meet far sources |
 | `transit` | `from`, `path` (2–8 adjacent destinations, including at least one ally-owned intermediate province), `amount`, optional `declareWar` | March through allied land while retaining troop nationality; final destination must be legal under war rules |
 | `recall` | `id` (order, army or group) | Next tick: cancel waiting components; physically return outbound components |
+| `turn_around` | `armyId` (one of your moving, non-engaged armies) | Next tick. Outbound: exactly a `recall` (receipt `mode:"recall"`). Returning: resume toward the province it had been heading for (receipt `mode:"resume"`, `to`, projected `arrivesAt`). See [Turning around](#turning-around) |
 | `develop` | `from` | Reserve local manpower, execute next tick, build over time |
 | `route` | `from`, `to` (friendly adjacent ID or null) | Forward future recruitment batches; null clears |
 | `propose` | independent candidate `country`, optional `name` | Exact-roster offer; no immediate military benefits |
@@ -164,6 +165,31 @@ Earliest common arrival is `current tick + 1 + longest source travel`. Optional 
 One single-target attack, including a multi-source group, consumes one of the shared three commands per rolling ten ticks. Development, route changes and recall each consume one as well. No client receives a private fast batch path. Invalid action validation consumes no troops or command allowance; accepted components may still fail at departure if ownership or troops changed.
 
 Recall executes before due departure/arrival. Waiting reservations release; marching armies return to original sources from their current position, taking their elapsed outbound travel time (at least one). A hostile home triggers combat. Already-arrived or returning troops are not recallable. Group cancellation is not a development cancellation.
+
+### Turning around
+
+`turn_around {armyId}` reverses one of your moving armies. It costs one military command, executes next tick with the other recalls (before departures and arrivals), and is re-validated then; a failure is a private `order_failed` with the reason. The same `opId` is a safe retry.
+
+- **Outbound army:** identical to `recall` on that army ID.
+- **Returning army** (recalled, or turned back automatically): it heads back toward the province it had been heading for (its current `from`), starting from its actual position (`journeyPoint`). Arrival = the leg's full travel time minus its current distance from home, i.e. the remaining distance at normal speed, no second march setup. The destination must still be a legal move: neutral/unowned, owned by a country you are at war with, or allied (then it reinforces as usual). Otherwise the same `Declare war…` error as a move. It must arrive by the deadline.
+- **Refused:** armies fighting in a battle (use `recall` to withdraw), other countries' armies (403), returning transit columns (they must reach home first), and armies that have already resumed `turnAroundLimit` times (2). An automatic turn-back does not count toward the cap.
+- A recall of an army that already turned around measures its way home by its distance from home, not by the time since it turned.
+- Public event `army_turned_around {country, armyId, from, to, amount, arrivesAt}`.
+- Read-only preview: `GET /api/games/:id/turn-around?army=ARMY_ID` (your seat) returns `{mode, to, arrivesAt, …}`; for a resume also `owner`, `turnArounds`, `limit` and `battleInProgress {attackerSide, joins}` when another side is already fighting there (if that battle has not ended when you arrive, your troops are turned back again).
+
+### Why an army turned back
+
+`army_recalled` events with a `reason` were automatic; a recall you ordered has no `reason`. Since v0.8.1 they also carry `province` (where the army had been heading) and detail:
+
+| `reason` | Meaning | Detail |
+|---|---|---|
+| `no_war` | You are not at war with the province's owner (war never declared, peace, or it became your ally mid-battle) | `owner`, `allied:true` when now an ally |
+| `battle_in_progress` | Another side's battle there was already under way; only that attacking side may join | `battleAttackerSide`, `owner` |
+| `rival_arrival` | Another side arrived on the same tick with a larger force and took first claim | `rivalSide`, `owner` |
+| `transit_blocked` | The next allied province on a transit route was no longer allied, or a battle was in progress there | `owner`, `battleAttackerSide` when a battle blocked it |
+| `peace` | A peace treaty with the target's owner | `owner` |
+
+Older events (before v0.8.1) have only `reason`; their `no_war` could also mean `battle_in_progress`.
 
 Industry I→II costs12/takes60 ticks; II→III costs24/takes90. A build spends on execution, not submission; it is reserved beforehand. Capture destroys unfinished work without refund but retains completed industry. Arrival resolves before construction completion on the same tick.
 
