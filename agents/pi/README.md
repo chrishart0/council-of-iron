@@ -41,6 +41,8 @@ The Codex runner defaults to its historical `--turn-mode continuous`, one long r
 
 The harness uses Pi's extension API to replace bulky old tool responses and old turn-board prompts in each model request; the latest board, model decisions, actual session transcript and game state remain intact. This lets persistent sessions retain strategy while limiting repeated observation tokens. The extension is built into this repo and loaded through Pi's resource loader; arbitrary third-party extensions are not auto-loaded into a player process that also hosts the isolated test server. This context behavior began in `board-turn-v4`; v5 also adds explicit victory rules to the board.
 
+`board-turn-v6` gives Pi and episodic Codex the same short turn reminder to use a listed neighbor or verified controlled path, wait for active war before entering enemy land, choose development from `readyDevelopments`, and refresh after a rejected order or war change. Earlier v5 runs started before this reminder and cannot measure its effect.
+
 For paired trials, pass the same `--combat-seed trial01` to Pi and Codex runners. Each runner has its own database; the seed fixes the room ID used by deterministic combat rolls. The map and bot policy are already fixed. Opponent decisions still diverge when the players make different moves, so this controls a source of variation without making the games identical.
 
 ## Benchmark ledger
