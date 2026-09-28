@@ -5,7 +5,7 @@ import { faction, insignia, icon, battleSignal } from './presentation.js';
 import { Atlas } from './atlas.js';
 import { escapeHTML as esc, syncOptions, setHTML, operationId, confirmAction } from './ui.js';
 import { WorldFeed, Herald, Notifier, presentHeadline } from './feed.js';
-import { viewerOf, commsItems, systemCopy, threadOf, countryThread, allianceThread, decisionsFor, attentionFor } from './feed-model.js';
+import { viewerOf, commsItems, systemCopy, threadOf, countryThread, allianceThread, decisionsFor, attentionFor, turnedBackReason } from './feed-model.js';
 import { LeaderboardPanel } from './leaderboard-panel.js';
 import { ExpandableMap } from './expand.js';
 // Relations and alliance colours: the same DOM-free helpers the atlas and agent tools use.
@@ -173,10 +173,12 @@ function noticeFor(item){
   }
   if(item.system==='turned_back'){
     const option=turnOption(state.armies.find(a=>a.id===item.armyId));
-    const buttons=[...(option?.mode==='resume' && !option.why && !option.queued?[{label:option.label,data:{act:'turn-around',arg:item.armyId},primary:true}]:[]),
+    const buttons=[...(option?.mode==='resume' && !option.why && !option.queued?[{label:`Turn around (arrives ${time(option.arrivesAt)})`,data:{act:'turn-around',arg:item.armyId},primary:true}]:[]),
       ...(state.armies.some(a=>a.id===item.armyId)?[{label:'Show army',data:{showArmy:item.armyId}}]:[])];
-    const copy=systemCopy(item,feedNames);
-    notifier.push({key:`e${item.id}`,kind:'decision',sticky:true,standard:state.you,title:copy.title,detail:copy.detail,buttons});
+    const why=turnedBackReason(item,feedNames);
+    // The notice leads with the cause (the full sentence stays in the history row).
+    notifier.push({key:`e${item.id}`,kind:'decision',sticky:true,standard:state.you,title:`Your ${item.amount} troops turned back${item.province?` from ${place(item.province).name}`:''}`,
+      detail:`${why[0].toUpperCase()}${why.slice(1)}.`,buttons});
     return;
   }
   if(!item.system || item.from===state.you)return;

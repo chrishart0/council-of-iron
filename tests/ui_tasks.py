@@ -9,7 +9,7 @@ are written to <artifacts>/tasks/<viewport>/ for manual review.
 import json
 from playwright.sync_api import expect
 
-BOUNDS = {'attack': 3, 'declare': 4, 'propose': 3, 'respond': 2, 'reply': 3, 'recall': 2, 'develop': 3}
+BOUNDS = {'attack': 3, 'declare': 4, 'propose': 3, 'respond': 2, 'reply': 3, 'recall': 2, 'turn': 2, 'develop': 3}
 
 class Walk:
     def __init__(self, page, server, room, touch, out, report):
@@ -142,6 +142,28 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
         w.tap(w.counter('england'), 'province'); w.results['recallPath'] = 'source province card'
         w.tap(page.locator('#card-actions button', has_text='→ Normandy'), 'recalled')
     expect(page.locator('#toast')).to_contain_text('Recall queued')
+    w.end()
+
+    # Turn around: the recalled column heads back to Normandy from where it is (one order, one tap after opening it).
+    w.begin('turn')
+    s = w.state()
+    for _ in range(12):
+        if not any(o['type'] == 'recall' for o in s['commandBudget']['reserved']) and s['commandBudget']['remaining']: break
+        w.stdin(f'war {s["tick"] + 1}'); page.wait_for_timeout(300); s = w.state()
+    back = next(a for a in s['armies'] if a['id'] == army['id'])
+    assert back.get('returning') and back['from'] == 'normandy', back
+    page.keyboard.press('Escape'); page.wait_for_timeout(900)  # start from a closed card (not counted)
+    hit = page.locator(f'[data-army="{army["id"]}"] .army-hit')
+    if hit.count() and page.evaluate('([x,y])=>Boolean(document.elementFromPoint(x,y)?.closest("[data-army]"))', list(w.at(hit))):
+        w.tap(hit, 'returning-army'); w.results['turnPath'] = 'army marker'
+        expect(page.locator('#card')).to_have_attribute('data-kind', 'army')
+        expect(primary).to_contain_text('Turn around → Normandy (arrives')
+        w.tap(primary, 'turned')
+    else:  # still on England's counter: the province card lists troops heading home there
+        w.tap(w.counter('england'), 'province'); w.results['turnPath'] = 'home province card'
+        w.tap(page.locator('#card-actions button', has_text='Turn around'), 'turned')
+    expect(page.locator('#toast')).to_contain_text('Turning around')
+    s = w.state(); assert any(o['type'] == 'turn_around' and o['target'] == army['id'] for o in s['commandBudget']['reserved']), s['commandBudget']
     w.end()
 
     # (c) Propose an alliance: tap Russia (the powers strip on phones, its leaderboard row on desktop).
