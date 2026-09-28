@@ -63,7 +63,7 @@ function turnOption(a){
   const why=a.transit?'A transit column cannot turn around; it must reach home first.':
     (a.turnArounds || 0)>=limit?`These troops have already turned back toward ${place(dest).name} ${limit===1?'once':`${limit} times`}.`:
     !mayEnter(state.you,owner)?`Declare war on ${country(owner).name} before turning back toward ${place(dest).name}.`:
-    arrivesAt===null || arrivesAt>state.rules.duration?'They would arrive after the match ends.':null;
+    arrivesAt===null?'This army cannot turn around.':null;
   const battle=state.battles?.find(b=>b.province===dest),friendly=owner && sameSide(owner,state.you);
   const preview=battle && !friendly && battle.attackerSide!==myPlayer()?.side?`${feedNames.side(battle.attackerSide)}’s battle is still under way at ${place(dest).name}; if it has not ended when you arrive, your troops turn back again.`
     :friendly?`${a.amount} troops reinforce ${place(dest).name}.`:`${a.amount} troops attack ${place(dest).name} (${prov(dest).troops} defenders now).`;
