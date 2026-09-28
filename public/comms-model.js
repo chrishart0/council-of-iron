@@ -26,7 +26,8 @@ export function inbox(state, { read = new Set(), dismissed = new Set(), items = 
       const q = proposals.get(i.proposalId);
       status = !q ? 'closed' : q.status === 'open' ? (you && q.accepted.includes(you) ? 'accepted' : 'open')
         : ['pending', 'activated'].includes(q.status) ? 'accepted' : q.status === 'cancelled' ? 'closed' : q.status;
-      tier = you && q && decided.has(q.id) && i.candidate === you ? 'action' : you ? 'personal' : 'world';
+      // A decision for me: the offer to join, or (as a member) approving a new member of my coalition.
+      tier = you && q && decided.has(q.id) ? 'action' : you ? 'personal' : 'world';
       if (tier === 'action') decision = decisions.find(d => d.id === q.id);
     } else if (i.system === 'vote' || i.system === 'peace_offer') {
       decision = decisions.find(d => d.id === i.motionId) || null;

@@ -83,6 +83,8 @@ export class Comms {
     const before = this.box, after = inbox(state, { read: this.read, dismissed: this.dismissed, history });
     this.box = after;
     if (first && this.docked() && this.view === 'closed') this.view = 'list';
+    // Watching (no seat): the only conversation is World, so the docked panel shows the history itself.
+    if (first && this.readOnly && this.docked()) { this.render(); this.openThread('world', { focus: false }); return; }
     if (before && live && !first) {
       const got = arrivals(before, after);
       for (const r of got.actions) if (!this.toast.actions.some(a => a.key === r.key) && !(this.view === 'thread' && r.thread === this.conv)) this.toast.actions.push(r);
@@ -110,7 +112,7 @@ export class Comms {
   close() { this.saveScroll(); const wasOpen = this.view !== 'closed'; this.view = this.docked() ? 'list' : 'closed'; this.render(); if (wasOpen) this.onOpen(this.view); if (this.panel.contains(document.activeElement) || wasOpen) this.button.focus({ preventScroll: true }); }
   focusConv(key) { if (!key) return; this.conv = key; this.renderList(); this.panel.querySelector(`[data-conv="${CSS.escape(key)}"]`)?.focus({ preventScroll: true }); }
   /** Open a thread: jump to the first unread row (under an "Unread" divider) or the saved position. */
-  openThread(key, { focusComposer = false } = {}) {
+  openThread(key, { focusComposer = false, focus = true } = {}) {
     if (!this.box) return;
     this.saveScroll(); this.view = 'thread'; this.conv = key; this.below = 0; this.jump(0);
     this.divider = this.box.rows.find(r => r.thread === key && r.unread)?.key ?? null;
@@ -124,7 +126,7 @@ export class Comms {
       rows.scrollTop = mark ? Math.max(0, mark.offsetTop - 8) : saved !== undefined ? saved : rows.scrollHeight;
       this.clampCheck(); this.markVisible();
       if (focusComposer && !this.$('.cx-composer').hidden) this.$('.cx-input').focus({ preventScroll: true });
-      else this.$('.cx-title').focus?.({ preventScroll: true });
+      else if (focus) this.$('.cx-title').focus?.({ preventScroll: true });
     });
   }
   saveScroll() { if (this.view === 'thread' && this.conv) this.scroll.set(this.conv, this.$('.cx-rows').scrollTop); }
@@ -194,6 +196,7 @@ export class Comms {
     document.body.dataset.comms = this.view;
     this.panel.dataset.view = this.view === 'closed' ? 'list' : this.view;
     this.panel.hidden = this.view === 'closed' || !this.state;
+    this.panel.dataset.docked = String(this.docked());
     this.button.hidden = !this.state;
     if (!this.state) { this.toasts.dataset.state = 'empty'; return; }
     this.renderButton(); this.renderToasts(); this.renderList(); this.renderThread();
@@ -224,7 +227,8 @@ export class Comms {
       text = `<b>${esc(n.country(i.army.country))}</b> attacks ${esc(n.province(i.army.to))} in ${Math.max(0, i.army.arrivesAt - this.state.tick)}s`;
       buttons = `<button type="button" class="cx-primary" data-do="view" data-sfx="press">View</button>`;
     } else if (i.system === 'offer') {
-      text = `<b>${esc(n.country(i.from))}</b> offers you the <b>${esc(i.name)}</b>`;
+      text = i.candidate && i.candidate !== this.state.you ? `<b>${esc(n.country(i.from))}</b> proposes <b>${esc(n.country(i.candidate))}</b> for the <b>${esc(i.name)}</b>`
+        : `<b>${esc(n.country(i.from))}</b> offers you the <b>${esc(i.name)}</b>`;
       buttons = `<button type="button" class="cx-primary" data-do="accept" data-sfx="seal">Accept</button><button type="button" class="cx-secondary" data-do="view" data-sfx="press">Read</button>`;
     } else {
       const c = systemCopy(i, { ...n, time: clock });
