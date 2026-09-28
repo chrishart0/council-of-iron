@@ -82,7 +82,7 @@ export class Atlas {
     // Region (continent) names: authored map data above the land, below counters; shown only at world zoom (CSS keys on data-world).
     const regions = node('g', { class: 'region-names', 'pointer-events': 'none', 'aria-hidden': 'true' });
     for (const r of map.regions || []) {
-      const text = node('text', { x: r.x, y: r.y, 'data-region': r.id }); text.textContent = r.name.toUpperCase(); regions.append(text);
+      const text = node('text', { x: r.x, y: r.y, 'data-map-region': r.id }); // not data-region: that names UI panels text.textContent = r.name.toUpperCase(); regions.append(text);
     }
     this.base.append(oceans); this.seas = node('g', { class: 'sea-connections', 'pointer-events': 'none' });
     for (const edge of map.edges.filter(e => e.sea)) this.seas.append(node('path', { d: this.path(edge.from, edge.to), 'data-edge': `${edge.from}|${edge.to}` }));
