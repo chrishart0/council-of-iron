@@ -8,8 +8,17 @@ export function distanceKm(a, b) {
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
   return 6371 * 2 * Math.asin(Math.sqrt(Math.min(1, Math.max(0, h))));
 }
-export function travelTicks(a, b, rules) {
-  return rules.marchSetup + Math.ceil(distanceKm(a, b) / rules.kmPerTick);
+/** Ticks for one map connection. Optional rules (absent in classic rooms, which keep the exact
+ * old table): `moveSpeedPercent` speeds every link; `internalSpeedPercent` additionally speeds an
+ * internal link (both ends friendly to the mover when the leg departs). Integer arithmetic only. */
+export function travelTicks(a, b, rules, internal = false) {
+  const base = rules.marchSetup + Math.ceil(distanceKm(a, b) / rules.kmPerTick);
+  const percent = (rules.moveSpeedPercent ?? 100) * (internal ? rules.internalSpeedPercent ?? 100 : 100);
+  return percent === 10000 ? base : Math.max(1, Math.ceil(base * 10000 / percent));
+}
+/** One leg's ticks as the engine charges it: the internal table when both ends are friendly. */
+export function legTicks(state, from, to, internal) {
+  return (internal && state.internalTravelTimes?.[from]?.[to]) || state.travelTimes?.[from]?.[to];
 }
 export function journeyPoint(army, positions, tick) {
   const a = army.startPoint || positions[army.from], b = positions[army.to];
@@ -24,7 +33,8 @@ export function journeyPoint(army, positions, tick) {
  * Shared by the engine (turn-around/recall timing) and clients (the one-line preview). */
 export function turnAroundArrival(army, travelTimes, tick) {
   // A non-transit army always travels one map connection: `from` and `to` swap on each turn.
-  const leg = travelTimes?.[army.to]?.[army.from];
+  // `leg` is stored only when the leg was charged at a non-default (internal) speed.
+  const leg = army.leg ?? travelTimes?.[army.to]?.[army.from];
   if (!Number.isSafeInteger(leg)) return null;
   // Remaining ticks to the end it is heading for = distance from the end it turns toward.
   const behind = Math.min(leg, Math.max(0, army.arrivesAt - tick));

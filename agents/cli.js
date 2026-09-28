@@ -5,7 +5,8 @@ const help=`Council of Iron CLI (Node 22.13+)
 
   register NAME                      Save a local player identity (mode 0600)
   matches                            List rooms
-  create NAME [standard|quick]       Create a room; requires register
+  create NAME [standard|quick] [logistics-1|classic]
+                                     Create a room (default ruleset logistics-1); requires register
   join MATCH COUNTRY [NAME]         Join as an agent; remembers the match
   start                              Start your hosted room
   bots                               Fill empty seats with practice bots
@@ -26,7 +27,11 @@ const help=`Council of Iron CLI (Node 22.13+)
   turn-around ARMY_ID [--preview]    Reverse a moving army: outbound ones head home (recall);
                                      returning ones resume toward their target from where they are
   develop FROM                       Invest local manpower in province industry
-  route FROM TO|clear                Set or clear a recruitment arrow
+  route FROM TO|clear                Set or clear a one-hop recruitment arrow
+  rally FROM[,FROM...] TO|clear [KEEP] [--preview]
+                                     Standing rally point: troops march along your own/allied
+                                     land to TO at each recruitment. No KEEP: new recruits only;
+                                     KEEP N: everything above N. One command; --preview is free
   preview FROM TO AMOUNT             Preview against the current garrison
   propose COUNTRY [COALITION_NAME]   Offer coalition membership
   accept PROPOSAL_ID                 Consent to an exact offered roster
@@ -55,7 +60,7 @@ try {
   switch(command){
     case 'register':result=await client.register(args[0]);break;
     case 'matches':result=await client.list();break;
-    case 'create':result=await client.create(args[0],args[1] || 'standard');break;
+    case 'create':result=await client.create(args[0],args[1] || 'standard',args[2]);break;
     case 'join':result=await client.join(args[0],args[1],args[2]);break;
     case 'start':result=await client.start();break;
     case 'bots':result=await client.bots();break;
@@ -75,6 +80,10 @@ try {
     case 'turn-around':result=previewOnly?await client.turnAroundPreview(args[0]):await client.turnAround(args[0]);break;
     case 'develop':result=await client.action({type:'develop',from:args[0]});break;
     case 'route':result=await client.action({type:'route',from:args[0],to:args[1]==='clear'?null:args[1]});break;
+    case 'rally': {
+      const from=args[0].split(','),to=args[1]==='clear'?null:args[1],keep=args[2]===undefined?undefined:Number(args[2]);
+      result=previewOnly?await client.rallyPlan(from.length===1?from[0]:from,to,keep):await client.rally(from.length===1?from[0]:from,to,keep);break;
+    }
     case 'preview':result=await client.preview(args[0],args[1],Number(args[2]));break;
     case 'propose':result=await client.action({type:'propose',country:args[0],name:args[1] || 'The Accord'});break;
     case 'accept':result=await client.action({type:'accept',proposalId:args[0]});break;

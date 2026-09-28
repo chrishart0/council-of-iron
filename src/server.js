@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { Store } from './store.js';
-import { act, attackPlan, turnAroundPlan, createGame, join, observe, preview, start, tick, worldFeed, RuleError, requireRule, text } from './engine.js';
+import { act, attackPlan, rallyPlan, RULESETS, turnAroundPlan, createGame, join, observe, preview, start, tick, worldFeed, RuleError, requireRule, text } from './engine.js';
 import { buildReview, unavailableReview } from './review.js';
 import { replayReader } from '../public/replay-model.js';
 import { operationalInsights } from '../public/insights.js';
@@ -16,6 +16,8 @@ import { makeStt } from './stt.js';
 const root = fileURLToPath(new URL('../', import.meta.url));
 export const MAP = JSON.parse(readFileSync(resolve(root, 'public/imperial-map.json'), 'utf8'));
 const PRESETS = { standard: 1, quick: 6 };
+/** New rooms use logistics-1 unless the host asks for classic. Existing rooms keep stored rules. */
+export const DEFAULT_RULESET = 'logistics-1';
 export const ALLIANCE_CHAT_NOTICE = 'Alliance chat becomes public in the replay after the match ends.';
 const staticFiles = new Map([
   ['/', ['public/index.html', 'text/html; charset=utf-8']],
@@ -152,7 +154,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         const all=[...games.values()],active=all.filter(g=>g.status!=='finished').reverse();
         const listed=[...active,...all.filter(g=>g.status==='finished').reverse().slice(0,50-active.length)];
         return json(res,200,{games:listed.map(g=>({
-          id:g.id,name:g.name,status:g.status,tick:g.tick,speed:g.speed,
+          id:g.id,name:g.name,status:g.status,tick:g.tick,speed:g.speed,ruleset:g.rules?.ruleset || 'classic',
           you:identity && (!identity.gameId || identity.gameId===g.id) ? g.players.find(p=>p.profileId===identity.id)?.id || null : null,
           players:g.players.map(p=>({id:p.id,name:p.name,kind:p.kind})),eligible:g.eligible}))});
       }
@@ -161,8 +163,9 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         requireRule(Object.hasOwn(PRESETS,data.preset || 'standard'),'Unknown time preset.');
         requireRule([...games.values()].filter(g=>g.status!=='finished').length<32,'This prototype supports 32 active rooms.',429);
         requireRule(data.scenario===undefined || data.scenario===MAP.id,'Unknown scenario.');
+        requireRule(data.ruleset===undefined || typeof data.ruleset==='string' && Object.hasOwn(RULESETS,data.ruleset),'Unknown ruleset.');
         const g=createGame({id:randomUUID().slice(0,8),name:data.name || 'Council chamber',hostId:me.id,
-          speed:PRESETS[data.preset || 'standard'],eligible:league},MAP);
+          speed:PRESETS[data.preset || 'standard'],eligible:league,ruleset:data.ruleset || DEFAULT_RULESET},MAP);
         // New rooms only (never inside createGame): alliance chat is published in the finished replay.
         g.rules.revealAllianceChatAfterMatch=true;
         games.set(g.id,g);save(g);return json(res,201,{id:g.id});
@@ -207,7 +210,8 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         }
         if(endpoint==='plan' && req.method==='POST') {
           const p=seat(), data=await body(req);
-          return json(res,200,attackPlan(g,gameMap,p.id,data));
+          // Read-only: a rally plan (fastest friendly path + ETA) or a one-target attack plan.
+          return json(res,200,data.type==='rally'?rallyPlan(g,p.id,data):attackPlan(g,gameMap,p.id,data));
         }
         if(endpoint==='turn-around' && req.method==='GET') {
           // Read-only: what "Turn around" would do for one of your moving armies if sent now.

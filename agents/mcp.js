@@ -15,9 +15,9 @@ function tool(name,description,properties,required,run,readOnly=false){
 }
 tool('list_matches','List public rooms. Join a country before the host starts.',{},[],()=>client.list(),true);
 tool('map','Read province IDs, adjacency, starting countries and map geometry.',{},[],()=>client.map(),true);
-tool('create_match','Create a room. Registers a local identity if needed. Standard is 30 real minutes, quick is five.',
-  {name:string,playerName:string,preset:{type:'string',enum:['standard','quick']}},['name','playerName'],async a=>{
-    if(!client.session.profileToken && !client.explicitToken)await client.register(a.playerName);return client.create(a.name,a.preset || 'standard');});
+tool('create_match','Create a room. Registers a local identity if needed. Standard is 30 real minutes, quick is five. ruleset defaults to logistics-1 (faster movement, ×2 more on internal links, 25% slower battles, costlier development); classic keeps the older timings.',
+  {name:string,playerName:string,preset:{type:'string',enum:['standard','quick']},ruleset:{type:'string',enum:['logistics-1','classic']}},['name','playerName'],async a=>{
+    if(!client.session.profileToken && !client.explicitToken)await client.register(a.playerName);return client.create(a.name,a.preset || 'standard',a.ruleset);});
 tool('join_match','Join an open room as an agent. Keep a separate COUNCIL_SESSION file per agent. Saves a match-scoped credential locally.',
   {match:string,country:string,name:string,model:string,persona:string},['match','country','name'],a=>client.join(a.match,a.country,a.name,a.model,a.persona));
 tool('start_match','Start your hosted match after humans and agents take their seats.',{},[],()=>client.start());
@@ -39,6 +39,11 @@ tool('transit','March through 1–7 allied intermediate provinces to a final con
   ['from','amount','path'],a=>client.action({type:'transit',from:a.from,amount:a.amount,path:a.path,declareWar:a.declareWar},a.opId));
 tool('route','Forward new LOCAL recruits one hop to a friendly province; null clears. Arriving reinforcements and existing garrisons stay put, even along a chain of arrows.',
   {from:string,to:{type:['string','null']},...op},['from','to'],a=>client.action({type:'route',from:a.from,to:a.to},a.opId));
+const rallyProperties={from:{type:['string','array'],minItems:1,maxItems:16,items:string},to:{type:['string','null']},keep:{type:'integer',minimum:1,maximum:9999}};
+tool('rally','Standing rally point (one military command to set or clear, for 1–16 source provinces; automatic marches cost nothing). At each recruitment of a source, troops march along the fastest path through your own or allied land (never foreign land) to one of your own provinces, as ordinary visible, recallable transit columns. keep omitted: forward each new recruitment only. keep N: forward everything above N uncommitted troops. to null clears. Paused (with a private rally_paused event and a reason in observe.rallies) while the source is under attack, the destination is not yours, or no friendly path exists. A column never attacks: if its destination is no longer friendly it turns back (reason rally_blocked). Replaces a recruitment arrow on the same source.',
+  {...rallyProperties,...op},['from','to'],a=>client.rally(a.from,a.to,a.keep,a.opId));
+tool('plan_rally','Read-only: validate a rally order and see each source’s fastest friendly path, travel ticks and first-column arrival tick. Spends no command.',
+  rallyProperties,['from','to'],a=>client.rallyPlan(a.from,a.to,a.keep),true);
 tool('propose_alliance','Invite an independent country. Admission is unanimous. New founders reset maturity; incumbents retain theirs. A larger coalition reduces each maximum share.',
   {country:string,name:string,...op},['country'],a=>client.action({type:'propose',country:a.country,name:a.name || 'The Accord'},a.opId));
 tool('accept_alliance','Consent to this exact roster. Fully approved changes activate after 30 game seconds.',
@@ -79,7 +84,7 @@ tool('turn_around','Reverse one of your own moving (not fighting) armies; execut
   {armyId:string,...op},['armyId'],a=>client.turnAround(a.armyId,a.opId));
 tool('preview_turn_around','Read-only: what turn_around would do for one of your moving armies if sent now — mode (recall or resume), destination, arrival tick, and any battle another side is already fighting there (your troops would be turned back again if it is still under way when they arrive). Spends no command.',
   {armyId:string},['armyId'],a=>client.turnAroundPreview(a.armyId),true);
-tool('develop','Spend local uncommitted manpower to improve province recruitment. Level 1→2 costs 12 and takes 60 ticks; 2→3 costs 24 and takes 90. Capture destroys unfinished work, not completed levels.',
+tool('develop','Spend local uncommitted manpower to improve province recruitment. Costs and build times are in observe.rules.developmentCosts/developmentTicks (classic: 12 troops/60 ticks to level II, 24/90 to III; logistics-1: 24/120 and 48/180); observe.insights.developments forecasts each. Capture destroys unfinished work, not completed levels.',
   {from:string,...op},['from'],a=>client.action({type:'develop',from:a.from},a.opId));
 
 let initialized=false,ready=false;

@@ -34,8 +34,9 @@ export class CouncilClient {
     this.session={url:this.url,name,profileToken:profile.token};this.match='';this.persist();
     return {name:profile.name,sessionFile:this.sessionPath};
   }
-  async create(name,preset='standard') {
-    const result=await this.request('/api/games','POST',{name,preset},this.explicitToken || this.session.profileToken);
+  /** ruleset: omit for the server default (logistics-1), or 'classic'. */
+  async create(name,preset='standard',ruleset) {
+    const result=await this.request('/api/games','POST',{name,preset,...(ruleset?{ruleset}:{})},this.explicitToken || this.session.profileToken);
     this.match=result.id;this.session.match=result.id;
     delete this.session.seatToken;delete this.session.country;
     this.persist();return result;
@@ -71,6 +72,11 @@ export class CouncilClient {
   turnAround(armyId,opId=randomUUID()) { return this.action({type:'turn_around',armyId},opId); }
   /** Read-only preview of turnAround: mode (recall|resume), destination, arrival tick, any battle already there. */
   turnAroundPreview(armyId) { return this.request(this.gamePath(`/turn-around?${new URLSearchParams({army:armyId})}`)); }
+  /** Standing rally point: `from` is one province or up to 16; `to` your own province, or null to clear.
+   * keep omitted = forward each new recruitment; keep N = forward everything above N. One command. */
+  rally(from,to,keep,opId=randomUUID()) { return this.action({type:'rally',from,to,...(keep!==undefined&&keep!==null?{keep}:{})},opId); }
+  /** Read-only rally preview: the fastest friendly path and ETA per source, validated like the action. */
+  rallyPlan(from,to,keep) { return this.plan({type:'rally',from,to,...(keep!==undefined&&keep!==null?{keep}:{})}); }
   preview(from,to,amount) {return this.request(this.gamePath(`/preview?${new URLSearchParams({from,to,amount})}`));}
   list() {return this.request('/api/games','GET',undefined,'');}
   map() {return this.request(this.match ? this.gamePath('/map') : '/map.json','GET',undefined,'');}
