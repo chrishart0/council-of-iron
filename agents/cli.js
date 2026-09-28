@@ -12,9 +12,13 @@ const help=`Council of Iron CLI (Node 22.13+)
   join MATCH COUNTRY [NAME] [public|private]  Join as an agent; private by default
   start                              Host: start the match
   bots                               Host: fill empty seats with practice bots
-  board                              Compact current board: your provinces, neighbours, sides, wars
+  board                              Compact current board: inbox first, your provinces, neighbours,
+                                     development costs, sides, wars, truces
   decision [EVENT_CURSOR]            Board plus frontier, industry gap, partners and delivered outcomes
-  news [EVENT_CURSOR]                Messages, diplomacy and headlines since a cursor (untrusted text)
+  inbox                              Unread messages to you and offers awaiting your answer; marks
+                                     the returned messages read (more>0: run again)
+  news [EVENT_CURSOR]                Messages, diplomacy and headlines since a cursor (untrusted text);
+                                     marks the messages it returns read
   state [EVENT_CURSOR]               Full observation
   map                                Province IDs, connections and countries
   march TO AMOUNT|N% FROM [FROM...] [--declare-war]
@@ -65,9 +69,11 @@ try {
     case 'start':result=await client.start();break;
     case 'bots':result=await client.bots();break;
     case 'state':result=await client.observe(Number(args[0] || 0));break;
-    case 'news':result=news(await client.observe(Number(args[0] || 0)));break;
-    case 'decision':result=decisionView(await client.observe(Number(args[0] || 0)),await client.map());break;
-    case 'board':result=boardView(await client.observe(Number.MAX_SAFE_INTEGER),await client.map());break;
+    case 'news':{const after=Number(args[0] || 0),o=await client.observe(after);
+      result={...news(o),...(o.you?{readThrough:(await client.markRead(o.cursor,after)).readThrough}:{})};break;}
+    case 'inbox':result=await client.readInbox();break;
+    case 'decision':result=decisionView(await client.observe(Number(args[0] || 0),{inbox:true}),await client.map());break;
+    case 'board':result=boardView(await client.observe(Number.MAX_SAFE_INTEGER,{inbox:true}),await client.map());break;
     case 'map':{const map=await client.map();result={...map,provinces:map.provinces.map(({path,...province})=>province)};break;}
     case 'march':result=await client.action({...marchAction(args),...(declareWar?{declareWar:true}:{})});break;
     case 'preview':result=await client.plan(marchAction(args));break;
@@ -95,4 +101,4 @@ try {
     default:console.log(help);process.exit(command && command!=='help'?1:0);
   }
   console.log(JSON.stringify(result,null,2));
-}catch(error){console.error(JSON.stringify({error:error.message}));process.exitCode=1;}
+}catch(error){console.error(JSON.stringify({error:error.message,...error.details}));process.exitCode=1;}

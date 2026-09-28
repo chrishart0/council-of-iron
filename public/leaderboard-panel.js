@@ -4,10 +4,10 @@
  * Teams view (default): one total row per alliance (colour swatch + name) with its members nested
  * underneath, each with a bar for its share of the alliance's troops; groups collapse to their total.
  */
-import { leaderboard, warsOf } from './leaderboard.js';
+import { leaderboard, warsOf, truceFronts } from './leaderboard.js';
 import { allianceColors } from './relations.js';
 import { insignia, icon } from './presentation.js';
-import { seatType } from './ui.js';
+import { seatType, clock } from './ui.js';
 
 const ARROW_MS = 4000;
 const node = (tag, className) => { const e = document.createElement(tag); e.className = className; return e; };
@@ -166,12 +166,23 @@ export class LeaderboardPanel {
   /** Teams view: the war pairs between blocs (names are player text → textContent). */
   renderFronts(state) {
     if (!this.fronts) return;
-    const fronts = warsOf(state); // every active war, side vs side
+    const fronts = warsOf(state), truces = truceFronts(state); // every active war and truce, side vs side
     if (this.frontCount) setText(this.frontCount, fronts.length ? String(fronts.length) : '');
-    const key = JSON.stringify([state.you, fronts.map(f => f.sides.map(s => [s.side, s.name, s.countries]))]);
+    const key = JSON.stringify([state.you, [fronts, truces].map(list => list.map(f => [f.until, f.sides.map(s => [s.side, s.name, s.countries])]))]);
     if (this.fronts.dataset.key === key) return;
     this.fronts.dataset.key = key;
-    if (!fronts.length) { const empty = node('li', 'lb-front-empty'); empty.textContent = 'No wars: every country is at peace.'; this.fronts.replaceChildren(empty); return; }
+    // After peace: "A · truce until 12:40 · B" (names are player text → textContent).
+    const truceRows = truces.map(f => {
+      const li = node('li', `lb-front lb-truce${state.you && f.sides.some(x => x.countries.includes(state.you)) ? ' involved' : ''}`);
+      const button = node('button', 'lb-front-button'); button.type = 'button'; button.title = 'Show these sides on the map';
+      button.dataset.front = JSON.stringify(f.sides.map(s => s.countries));
+      const [left, right, mark] = [node('span', ''), node('span', ''), node('b', '')];
+      [left.textContent, right.textContent] = f.sides.map(s => s.name || s.countries.map(this.names.country).join(' + '));
+      mark.innerHTML = icon('laurel'); mark.setAttribute('aria-label', 'truce with'); // authored SVG only
+      const until = node('small', 'lb-truce-until'); until.textContent = `Truce until ${clock(f.until)}`;
+      button.append(left, mark, right, until); li.append(button); return li;
+    });
+    if (!fronts.length) { const empty = node('li', 'lb-front-empty'); empty.textContent = 'No wars: every country is at peace.'; this.fronts.replaceChildren(empty, ...truceRows); return; }
     this.fronts.replaceChildren(...fronts.map(f => {
       const li = node('li', `lb-front${state.you && f.sides.some(x => x.countries.includes(state.you)) ? ' involved' : ''}`);
       const [a, b] = f.sides.map(s => s.name || s.countries.map(this.names.country).join(' + '));
@@ -181,5 +192,6 @@ export class LeaderboardPanel {
       left.textContent = a; right.textContent = b; button.append(left, swords, right); li.append(button);
       return li;
     }));
+    this.fronts.append(...truceRows);
   }
 }
