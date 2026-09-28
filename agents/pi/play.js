@@ -18,7 +18,7 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 if (existsSync(resolve(root, '.env'))) process.loadEnvFile(resolve(root, '.env'));
 const outputDir = resolve(root, 'data/pi');
 const arg = (name, fallback) => { const i = process.argv.indexOf(name); return i < 0 ? fallback : process.argv[i + 1]; };
-const playerModel = arg('--model', process.env.PI_DEFAULT_MODEL || 'qwen');
+const playerModel = arg('--model', process.env.PI_DEFAULT_MODEL);
 const country = arg('--country', 'britain');
 const preset = arg('--preset', 'quick');
 const maxMinutes = Number(arg('--max-minutes', '12'));
@@ -174,7 +174,10 @@ try {
     tool.execute = async (...args) => {
       const call = { turn: record.turns, name: tool.name };
       record.toolCalls.push(call); save();
-      try { const response = await execute(...args); const payload = JSON.parse(response.content?.[0]?.text || '{}'); call.ok = response.details?.isError !== true && payload.ok !== false && !payload.error; save(); return response; }
+      try { const response = await execute(...args); const payload = JSON.parse(response.content?.[0]?.text || '{}');
+        call.ok = response.details?.isError !== true && payload.ok !== false && !payload.error;
+        if (!call.ok) call.error = payload.error || 'Tool returned an error.';
+        save(); return response; }
       catch (error) { call.ok = false; call.error = error.message; save(); throw error; }
     };
   }
@@ -195,6 +198,7 @@ try {
   record.tools = activeTools;
   console.log(`Pi ${modelId} test: ${created.id} (${country} vs 7 practice bots), ${preset}`);
   const deadline = Date.now() + maxMinutes * 60_000;
+  let consecutiveModelErrors = 0;
   while (Date.now() < deadline && record.turns < maxTurns) {
     const state = await client.observe(0);
     if (state.status === 'finished') { record.outcome = state.outcome; break; }
@@ -209,12 +213,17 @@ try {
       record.lastStopReason = last?.stopReason;
       record.lastModelError = last?.errorMessage;
       record.lastContentTypes = last?.content?.map(part => part.type);
+      consecutiveModelErrors = last?.stopReason === 'error' ? consecutiveModelErrors + 1 : 0;
+      if (consecutiveModelErrors >= 3) {
+        record.error = `Model failed three consecutive turns: ${last?.errorMessage || 'unknown error'}`;
+        break;
+      }
     } catch (error) { record.error = `Pi turn ${record.turns}: ${error.message}`; break; }
     const after = (await client.observe(0)).tick;
     record.turnLog.push({ turn: record.turns, startTick: before, endTick: after, wallMs: Date.now() - started, actionCount: record.actions.length - actionsBefore });
     console.log(`turn ${record.turns}: tick ${before} → ${after}, actions ${record.actions.length}`);
     save();
-    await sleep(500);
+    await sleep(record.actions.length === actionsBefore ? 5000 : 500);
   }
   const final = await client.observe(0);
   record.finishedAt = new Date().toISOString();

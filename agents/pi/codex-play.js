@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Qwen through Codex CLI, playing an isolated standard Council MCP seat. */
+/** Model through Codex CLI, playing an isolated Council seat. */
 import { mkdirSync, writeFileSync, copyFileSync, chmodSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -54,8 +54,10 @@ try {
   record.match = created.id;
   record.url = url;
   save();
-  const serverConfig = `{command="/opt/node/bin/node",args=["/game/agents/mcp.js"],env={COUNCIL_URL="${url}",COUNCIL_SESSION="/workspace/${runId}-seat.session.json",COUNCIL_MATCH="",COUNCIL_TOKEN=""}}`;
-  const args = ['exec', '--json', '--ignore-user-config', '--skip-git-repo-check', '--ephemeral', '--sandbox', access === 'cli' ? 'danger-full-access' : 'workspace-write', '-C', '/workspace', '-m', modelId,
+  const serverConfig = `{command="/opt/node/bin/node",args=["/game/agents/mcp.js"],env={COUNCIL_URL="${url}",COUNCIL_SESSION="/workspace/${runId}-seat.session.json",COUNCIL_MATCH="",COUNCIL_TOKEN=""},default_tools_approval_mode="auto"}`;
+  const args = ['exec', '--json', '--ignore-user-config', '--skip-git-repo-check', '--ephemeral',
+    ...(access === 'mcp' ? ['--dangerously-bypass-approvals-and-sandbox'] : ['--sandbox', 'danger-full-access']),
+    '-C', '/workspace', '-m', modelId,
     '-c', `model_reasoning_effort=${playerModel === 'luna' ? 'xhigh' : 'none'}`,
     ...(playerModel === 'qwen' ? ['-c', 'model_provider=council_local', '-c', 'model_context_window=262144', '-c', 'model_auto_compact_token_limit=200000',
       '-c', 'model_providers.council_local={name="Local Qwen",base_url="http://127.0.0.1:18082/v1",wire_api="responses"}'] : []),
@@ -91,7 +93,7 @@ try {
             exitCode: item.exit_code, output: item.output || item.aggregated_output, result: item.result,
             error: item.error || item.text || item.message, message: event.message };
           record.events.push(short);
-          if (item.type?.includes('mcp') && item.name && ['move','coordinated_attack','transit','route','recall','develop','propose_alliance','accept_alliance','decline_alliance','leave_alliance','declare_war','offer_peace','vote_war','vote_peace','send_message'].some(name => item.name.endsWith(name))) {
+          if (item.type?.includes('mcp') && short.name && ['move','coordinated_attack','transit','route','recall','develop','propose_alliance','accept_alliance','decline_alliance','leave_alliance','declare_war','offer_peace','vote_war','vote_peace','send_message'].some(name => short.name.endsWith(name))) {
             if (event.type === 'item.completed') record.actions.push(short);
           }
           save();
