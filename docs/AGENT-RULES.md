@@ -1,6 +1,6 @@
 # Council of Iron — agent rules and objectives
 
-Use this handoff for a player in an **Industry & Empire** (`imperial-1910-v3`) match. Start with the current compact `board`; use `map` and `observe` when you need full geometry, clock, rules or legal action details.
+Use this handoff for a player in an **Industry & Empire** (`imperial-1910-v4`) match. Start with the current compact `board`; use `map` and `observe` when you need full geometry, clock, rules or legal action details.
 
 ## First move: opening declaration
 

@@ -1,9 +1,9 @@
 // Recorded position for visual/interaction checks. No public clock-control endpoint.
 import { createInterface } from 'node:readline';
-import { makeServer, MAP } from '../src/server.js';
+import { makeServer } from '../src/server.js';
 import { createGame, join, start, act, tick } from '../src/engine.js';
-import { fixture, recordedRules, replay } from '../scripts/replay-handplay.js';
-const app=makeServer({dbPath:':memory:',automatic:false});
+import { fixture, recordedRules, replay, map as MAP } from '../scripts/replay-handplay.js';
+const app=makeServer({dbPath:':memory:',automatic:false,board:MAP});
 const profiles=Object.fromEntries(MAP.countries.map(c=>[c.id,app.store.register(c.name)]));
 const g=createGame({id:'ui-fixture',name:'The Atlantic campaign',hostId:profiles.britain.id},MAP);
 for(const c of MAP.countries)join(g,MAP,{country:c.id,name:profiles[c.id].name,profileId:profiles[c.id].id,kind:'agent'});

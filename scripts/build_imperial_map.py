@@ -79,7 +79,7 @@ COUNTRY = {code: provinces.split() for codes, provinces in COUNTRY.items() for c
 # Overseas departments, exclaves and 1910 partitions that should not join their modern capital's province.
 ADMIN1 = {'FRA:Guyane française':'caribbean','FRA:Guadeloupe':'caribbean','FRA:Martinique':'caribbean',
           'FRA:La Réunion':'madagascar','FRA:Mayotte':'madagascar','CAN:Nunavut':'east-canada','USA:Hawaii':'west-us',
-          'DZA:Adrar':'sahara','RUS:Kaliningrad':'prussia',
+          'DZA:Adrar':'sahara','RUS:Kaliningrad':'prussia','RUS:Smolensk':'west-russia','RUS:Bryansk':'west-russia',
           'POL:Pomeranian':'prussia','POL:Warmian-Masurian':'prussia','POL:Kuyavian-Pomeranian':'prussia',
           'POL:West Pomeranian':'brandenburg','POL:Lubusz':'brandenburg','POL:Greater Poland':'brandenburg',
           'POL:Lower Silesian':'saxony','POL:Opole':'saxony','POL:Silesian':'saxony',
@@ -117,16 +117,18 @@ def path(g):
             result.append('M' + 'L'.join('%.1f,%.1f' % project(x, y) for x, y in ring.coords[:-1]) + 'Z')
     return ''.join(result)
 
+# Counters moved because their province's shape changed enough to crowd a neighbour.
+COUNTERS = {'saxony': (16.3, 50.9)}
 regions = []
 for id, geom in zip(ids, shapes):
     assert not geom.is_empty, id
     kept = [p for p in polygons(geom) if p.area >= .08]
     main = unary_union(kept)
     # Keep the published counter position when it is still on the province's land.
-    old = previous.get(id)
+    old = previous.get(id) if id not in COUNTERS else None
     point = Point(*unproject(old['x'], old['y'])) if old else None
     if not point or not main.buffer(-.15).contains(point):
-        point = Point(seeds[id])
+        point = Point(COUNTERS.get(id, seeds[id]))
         if not main.buffer(-.15).contains(point):
             point = min(kept, key=lambda p: p.distance(Point(seeds[id]))).representative_point()
     x, y = project(point.x, point.y)

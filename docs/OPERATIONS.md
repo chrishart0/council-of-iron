@@ -2,7 +2,7 @@
 
 ## Current scenario and saved records
 
-The only playable scenario is `imperial-1910-v3`. New rooms freeze their rules, coordinates and travel times into snapshots. Earlier snapshots remain in SQLite. Pre-change rooms are not playable; finished industrial rooms with a materialized public review remain readable. Earlier result rows remain in personal history, while standings count matches played under the current economic victory rule. Back up SQLite normally before updating; no database reset is needed.
+The only playable scenario is `imperial-1910-v4`: the v3 holdings on provinces redrawn along real state/province boundaries, with Greenland moved from Eastern Canada to Scandinavia and Western Canada added as a thin British colony (industry 1, 7 troops). Unfinished v3 rooms are not reloaded after the update; finished rooms whose public review was already materialized stay readable, and v3 results keep their own standings window. New rooms freeze their rules, coordinates and travel times into snapshots. Earlier snapshots remain in SQLite. Pre-change rooms are not playable; finished industrial rooms with a materialized public review remain readable. Earlier result rows remain in personal history, while standings count matches played under the current economic victory rule. Back up SQLite normally before updating; no database reset is needed.
 
 `public/imperial-map.json` is the runtime map. `public/map.json` remains as source geometry for the optional map-authoring script, not as a game mode. Runtime needs no Python or Shapely installation.
 
