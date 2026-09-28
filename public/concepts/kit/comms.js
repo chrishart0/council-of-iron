@@ -249,9 +249,15 @@ export class Comms {
     const line = this.systemLine(r), pending = r.pending && !this.resolved.has(r.key);
     if (i.system === 'offer' && pending) {
       const c = systemCopy(i, this.names);
-      return `<li class="cx-sys${unread}" data-key="${esc(r.key)}" data-tier="action" data-state="open"><header>${cxIcon('alliance')}<b>${esc(c.title)} · ${esc(i.name)}</b>${time}</header><p>${esc(c.detail)}</p><p class="cx-expiry">Open until ${clock(this.state.proposals.find(q => q.id === i.proposalId)?.expiresAt ?? r.tick)}</p><div class="cx-actions"><button type="button" class="cx-primary" data-do="accept" data-sfx="seal">Accept</button><button type="button" class="cx-secondary" data-do="decline" data-sfx="press">Decline</button></div></li>`;
+      return `<li class="cx-sys${unread}" data-key="${esc(r.key)}" data-tier="action" data-state="open"><header>${cxIcon('alliance')}<b>${esc(c.title)} · ${esc(i.name)}</b>${time}</header><p>${esc(this.offerTerms(i))}</p><p class="cx-expiry">Open until ${clock(this.state.proposals.find(q => q.id === i.proposalId)?.expiresAt ?? r.tick)}</p><div class="cx-actions"><button type="button" class="cx-primary" data-do="accept" data-sfx="seal">Accept</button><button type="button" class="cx-secondary" data-do="decline" data-sfx="press">Decline</button></div></li>`;
     }
     return `<li class="cx-sys${unread}" data-key="${esc(r.key)}" data-tier="${r.tier}" data-state="${line.state}">${cxIcon(line.state === 'resolved' ? 'check' : 'alliance')}<p>${esc(line.text)}</p>${time}</li>`;
+  }
+  /** Offer terms in game voice (the shared systemCopy detail is written for logs). */
+  offerTerms(i) {
+    const members = (i.roster || []).map(id => id === this.state.you ? 'you' : this.names.short(id)).join(', ');
+    const share = Math.round(100 * this.state.players.length / Math.max(1, (i.roster || []).length));
+    return `${members}. Up to ${share} Prestige each if the alliance wins.`;
   }
   rowClick(e) {
     const b = e.target.closest('button'), li = e.target.closest('[data-key]'); if (!b || !li) return;
