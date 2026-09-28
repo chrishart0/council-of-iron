@@ -174,7 +174,6 @@ function useBudget(g, p) {
 }
 const friendlyPath = (g, country, from, to) => sharedPath(g, country, from, to);
 const adjacent = (g, a, b) => g.travelTimes[a]?.[b] !== undefined;
-const listed = ids => ids.length > 1 ? `${ids.slice(0, -1).join(', ')} and ${ids.at(-1)}` : ids[0];
 /** `fromAllBordering: true`: every one of your provinces bordering the target that has free troops, each
  * sending its own `amount` (at most what it has free) or `percent` of its free troops; deterministic order. */
 function borderingSources(g, country, action, target) {
@@ -193,17 +192,23 @@ function borderingSources(g, country, action, target) {
 }
 const marchSources = action => action.sources ?? [{ from: action.from,
   ...(action.amount !== undefined ? { amount: action.amount } : {}), ...(action.percent !== undefined ? { percent: action.percent } : {}) }];
-/** Where an attack on `target` could come from: your own and allied provinces bordering it. */
-function stagingHint(g, country, target) {
-  const near = g.provinces.filter(p => p.id !== target.id && adjacent(g, p.id, target.id) && allied(g, country, p.owner));
-  const own = near.filter(p => p.owner === country).map(p => p.id), ally = near.filter(p => p.owner !== country).map(p => p.id);
-  if (!own.length && !ally.length) return `You hold no province bordering ${target.id}: take or reach one next to it first, then attack.`;
-  return `March troops to a province bordering ${target.id} first (${[own.length ? `yours: ${own.join(', ')}` : '', ally.length ? `allied: ${ally.join(', ')}` : ''].filter(Boolean).join('; ')}), then attack.`;
+/** An attack needs a border: `country` itself (not merely an ally) owns a province next to the target. */
+export const ownsBorder = (g, country, target) => g.provinces.some(p => p.owner === country && adjacent(g, p.id, target));
+/** Why `country` may not attack `target`, with the nearest provinces it holds (fewest links) and any allied border. */
+function noBorder(g, country, target) {
+  const hops = new Map([[target, 0]]), queue = [target];
+  while (queue.length) { const id = queue.shift(); for (const n of Object.keys(g.travelTimes[id]).sort()) if (!hops.has(n)) { hops.set(n, hops.get(id) + 1); queue.push(n); } }
+  const nearest = g.provinces.filter(p => p.owner === country && hops.has(p.id))
+    .sort((a, b) => hops.get(a.id) - hops.get(b.id) || a.id.localeCompare(b.id)).slice(0, 3).map(p => p.id);
+  const allies = g.provinces.filter(p => p.owner && p.owner !== country && allied(g, country, p.owner) && adjacent(g, p.id, target)).map(p => p.id);
+  return `You have no province bordering ${target}. Take or hold a province next to it first.` +
+    (nearest.length ? ` Your nearest: ${nearest.join(', ')}.` : '') +
+    (allies.length ? ` Your ally's ${allies.join(', ')} borders it, but an attack needs a border of your own.` : '');
 }
 /** Validate a march (one or more sources, one target) without mutating state or consuming budget.
- * A march to your own or an ally's province takes the quickest route through friendly land. Any other
- * target is an attack: every source must border it (a land border or a sea link), and goes straight there.
- * All columns arrive on the same tick. `assumeWar` (read-only plans) forecasts a target that still needs a declaration. */
+ * Every column takes the quickest route through your own and allied land (a neighbour goes straight there);
+ * all of them arrive on the same tick. A target that is not yours or an ally's is an attack: you must own a
+ * province bordering it (a land border or a sea link); the sources may be anywhere in your empire. `assumeWar` (read-only plans) forecasts a target that still needs a declaration. */
 export function marchPlan(g, map, country, action, { assumeWar = false } = {}) {
   alive(g, country); const r = gameRules(g);
   requireRule(typeof action.to === 'string', 'Choose a destination province.');
@@ -213,6 +218,8 @@ export function marchPlan(g, map, country, action, { assumeWar = false } = {}) {
   requireRule(action.fromAllBordering === undefined || action.fromAllBordering === true, 'fromAllBordering must be true when given.');
   const warRequired = !mayEnter(g, country, target.owner), hostile = !allied(g, country, target.owner);
   requireRule(assumeWar || !warRequired, 'Declare war before attacking another country.', 409);
+  const border = () => { if (hostile) requireRule(ownsBorder(g, country, target.id), noBorder(g, country, target.id), 409); };
+  if (action.fromAllBordering) border();
   const inputs = action.fromAllBordering ? borderingSources(g, country, action, target) : marchSources(action);
   requireRule(Array.isArray(inputs) && inputs.length > 0 && inputs.length <= r.maxSources,
     `Choose 1–${r.maxSources} source provinces.`);
@@ -224,16 +231,13 @@ export function marchPlan(g, map, country, action, { assumeWar = false } = {}) {
     requireRule(source.id !== target.id, 'Choose a different destination.');
     requireRule(!unique.has(source.id), 'Each source may appear only once.'); unique.add(source.id);
   }
-  if (hostile) {
-    const far = inputs.map(s => s.from).filter(id => !adjacent(g, id, target.id));
-    requireRule(!far.length, `${listed(far)} ${far.length > 1 ? 'do' : 'does'} not border ${target.id}: an attack goes only from provinces next to the target (a land border or a sea link). ${stagingHint(g, country, target)}`);
-  }
+  border();
   const sources = inputs.map(input => {
     const source = province(g, input.from);
     const route = adjacent(g, source.id, target.id)
       ? { path: [target.id], travel: journeyTicks(g, source.id, target.id, country) }
       : friendlyPath(g, country, source.id, target.id);
-    requireRule(route, `No route from ${source.id} to ${target.id}: a move to your own or an ally's province passes only through your own or allied provinces (not through battles). March to a nearer province, or ally with or conquer the land between.`);
+    requireRule(route, `No route from ${source.id} to ${target.id}: a march passes only through your own or allied provinces (not through battles) and may end one step beyond them. March to a nearer province, or ally with or conquer the land between.`);
     const available = Math.max(0, source.troops - reservedTroops(g, country, source.id) - 1);
     requireRule((input.amount !== undefined) !== (input.percent !== undefined), 'Supply exactly one of amount or percent per source.');
     if (input.percent !== undefined) requireRule(Number.isFinite(input.percent) && input.percent > 0 && input.percent <= 100,
@@ -421,8 +425,7 @@ export function turnAroundPlan(g, country, armyId, at = g.tick + 1) {
   if (target !== to) requireRule(allied(g, country, province(g, to).owner), `${to} is no longer friendly land to pass through.`, 409);
   const owner = province(g, target).owner;
   requireRule(mayEnter(g, country, owner), 'Declare war before attacking another country.', 409);
-  // An attack goes only from a province bordering the target: the resumed army must be on its last leg.
-  requireRule(target === to || allied(g, country, owner), `${target} is no longer friendly: an attack goes only from a province bordering it.`, 409);
+  if (!allied(g, country, owner)) requireRule(ownsBorder(g, country, target), noBorder(g, country, target), 409);
   const first = army.resume.remaining + (at - army.resume.turnedAt);
   const arrivesAt = at + first + (onward?.travel ?? 0);
   const battle = g.battles.find(b => b.province === target);
@@ -718,8 +721,8 @@ function executeOrders(g) {
     let error = source.owner !== o.country ? 'Source is no longer yours.' : o.amount >= source.troops ? 'Not enough troops remain.' : null;
     if (!error && o.type === 'march') {
       if (!mayEnter(g, o.country, province(g, o.to).owner)) error = 'War ended before departure.';
-      else if (o.path.length > 1 && !allied(g, o.country, province(g, o.to).owner))
-        error = 'The destination is no longer friendly: an attack goes only from a province bordering it.';
+      else if (!allied(g, o.country, province(g, o.to).owner) && !ownsBorder(g, o.country, o.to))
+        error = `You no longer hold a province bordering ${o.to}.`;
       else if (o.path.slice(0, -1).some(id => !allied(g, o.country, province(g, id).owner))) {
         // The way changed hands while this source waited: take the quickest friendly way now, if any.
         const route = friendlyPath(g, o.country, o.from, o.to);

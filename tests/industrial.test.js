@@ -87,19 +87,16 @@ test('long marches pass through allied land but not through foreign land',()=>{
   assert.throws(()=>action(g,'usa',{type:'march',from:'west-us',to:'east-us',amount:5}),/No route/);
   assert.equal(g.orders.length,0);
 });
-test('distant sources can join a reinforcement through owned land, but an attack only from bordering provinces',()=>{
+test('distant sources can join a single attack through owned intermediate land',()=>{
   const g=game();
-  const plan=marchPlan(g,map,'usa',{to:'west-us',sources:[{from:'east-us',percent:100},{from:'central-us',percent:100}]});
+  const sources=[{from:'east-us',percent:100},{from:'central-us',percent:100}];
+  const plan=marchPlan(g,map,'usa',{to:'mexico',sources});
   assert.ok(plan.sources.find(s=>s.from==='east-us').path.includes('central-us'));
-  assert.equal(plan.reinforcement,true);
-  const before=JSON.stringify(g);
-  assert.throws(()=>action(g,'usa',{type:'march',to:'mexico',sources:[{from:'east-us',percent:100},{from:'central-us',percent:100}]}),
-    /east-us does not border mexico: an attack goes only from provinces next to the target.*yours: west-us, central-us/);
-  assert.equal(JSON.stringify(g),before,'nothing reserved');
-  const receipt=action(g,'usa',{type:'march',to:'mexico',sources:[{from:'west-us',percent:100},{from:'central-us',percent:100}]});
+  const receipt=action(g,'usa',{type:'march',to:'mexico',sources});
   assert.equal(receipt.orders.length,2);
-  assert.ok(receipt.orders.every(o=>o.path.length===1),'an attack goes straight there');
+  assert.ok(receipt.orders.find(o=>o.from==='east-us').path.length>1);
   advance(g,receipt.arrivesAt);
+  assert.ok(g.events.some(e=>e.type==='army_transited' && e.country==='usa'));
   assert.equal(g.armies.filter(a=>a.to==='mexico' && a.engaged).length,2);
 });
 test('multi-source plan validates atomically, reserves exact amounts, dispatches later sources, arrives together',()=>{
