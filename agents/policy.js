@@ -1,13 +1,14 @@
 import { chooseIndustrial } from './industrial-policy.js';
 /** Deliberately modest deterministic practice opponent. This is NOT an LLM.
- * Only reads the same observation provided to external agents and humans.
+ * Only reads the same observation provided to external agents and humans. `memory` (optional, one
+ * Map per bot kept by the caller) only remembers peace it has seen, so it does not re-declare war soon after.
  */
-export function choose(state, map, country) {
+export function choose(state, map, country, memory) {
   if (state.status !== 'running') return null;
   const me = state.players.find(p => p.id === country);
   if (!me || me.eliminatedAt !== null) return null;
   const offer = state.proposals.find(q => q.status === 'open' && q.roster.includes(country)
     && !q.accepted.includes(country) && q.roster.length <= 3);
   if (offer) return { type: 'accept', proposalId: offer.id };
-  return chooseIndustrial(state, map, country);
+  return chooseIndustrial(state, map, country, { memory });
 }

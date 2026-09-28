@@ -46,6 +46,7 @@ test('any member speaks for its alliance: war is instant for both sides; anyone 
   send(g,'britain',{type:'accept_peace',offerId:offer.offerId});
   assert.equal(g.wars.length,0);assert.ok(g.armies.some(a=>a.orderId===move.orderId && a.returning));
   assert.ok(g.events.some(e=>e.type==='peace_accepted' && e.recalled>0 && e.country==='britain'));
+  advance(g,g.rules.truce);
   send(g,'usa',{type:'declare_war',country:'britain'});
   const late=send(g,'usa',{type:'offer_peace',country:'britain'});advance(g,60);
   assert.ok(g.events.some(e=>e.type==='peace_expired' && e.offerId===late.offerId));

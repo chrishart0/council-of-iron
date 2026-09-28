@@ -1,11 +1,22 @@
+import { truceUntil } from '../public/relations.js';
+/** A bot does not re-declare war on a country for this long after making peace with it (ticks, from
+ * the peace). Longer than the rules' truce so a bot never ping-pongs war and peace. Bot-only. */
+export const PEACE_MEMORY = 600;
 /** Public-observation-only practice policy. Intentionally not a language model.
  * The tournament supplies seeded preferences; runtime bots use deterministic defaults.
+ * `options.memory` (a Map the caller keeps per bot) remembers when it last made peace with each
+ * country, read from the public truces; without it the bot still respects every truce.
  */
 export function chooseIndustrial(state, map, country, options = {}) {
   const me = state.players.find(p => p.id === country);
   if (state.status !== 'running' || !me || me.eliminatedAt !== null) return null;
-  const peace=state.peaceOffers.find(o=>o.toRoster.includes(country));
-  if(peace)return {type:'accept_peace',offerId:peace.id};
+  const memory = options.memory || new Map();
+  for (const t of state.truces || []) if (t.countries.includes(country)) {
+    const other = t.countries.find(c => c !== country);
+    memory.set(other, Math.max(memory.get(other) ?? -Infinity, t.since));
+  }
+  const peaceful = owner => truceUntil(state, country, owner) !== null
+    || state.players.some(p => p.side === state.players.find(x => x.id === owner)?.side && state.tick < (memory.get(p.id) ?? -Infinity) + PEACE_MEMORY);
   const style = { neutral: 15, fraction: .8, reserve: 2, develop: true, coordinated: true, recall: true, ...options };
   const rng = style.rng || (() => .5), board = new Map(state.provinces.map(p => [p.id, p]));
   const places = new Map(map.provinces.map(p => [p.id, p])), sides = new Map(state.players.map(p => [p.id, p.side]));
@@ -23,6 +34,14 @@ export function chooseIndustrial(state, map, country, options = {}) {
   const hostileIncoming = p => state.armies.filter(a => a.to === p.id && sides.get(a.country) !== me.side)
     .reduce((n, a) => n + a.amount, 0);
   const safeSpare = p => Math.max(0, available(p) - style.reserve - hostileIncoming(p));
+  // Peace is welcome when their troops are marching on us, or we have no winning attack on them.
+  const peace=state.peaceOffers.find(o=>o.toRoster.includes(country));
+  if(peace) {
+    const theirs=new Set(peace.fromRoster);
+    const threatened=state.armies.some(a=>theirs.has(a.country) && !a.returning && board.get(a.to)?.owner===country);
+    const winning=state.provinces.some(p=>theirs.has(p.owner) && own.some(q=>places.get(q.id).neighbors.includes(p.id) && safeSpare(q)>p.troops+2));
+    if(threatened || !winning)return {type:'accept_peace',offerId:peace.id};
+  }
   const pendingRecall = new Set(state.orders.filter(o=>o.type==='recall').map(o=>o.target));
   // Abort a clearly hopeless commitment, but not one synchronized with enough friendly help.
   if (style.recall) for (const a of state.armies.filter(a=>a.country===country && !a.returning && !pendingRecall.has(a.id))) {
@@ -61,7 +80,7 @@ export function chooseIndustrial(state, map, country, options = {}) {
   }
   attacks.sort((a,b)=>b.value-a.value);
   if(!attacks.length) {
-    const enemy=state.provinces.find(p=>p.owner && !friend(p) && !canEnter(p) &&
+    const enemy=state.provinces.find(p=>p.owner && !friend(p) && !canEnter(p) && !peaceful(p.owner) &&
       own.some(q=>places.get(q.id).neighbors.includes(p.id) && safeSpare(q)>p.troops+2));
     if(enemy)return {type:'declare_war',country:enemy.owner};
   }

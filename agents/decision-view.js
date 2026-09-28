@@ -19,7 +19,7 @@ export function decisionView(observation, map) {
     // Frontier = neutral land or another side's province (allied land is for reinforcement, not listed).
     if (n.owner === board.you || !own.available || n.owner && n.attackReady === undefined) continue;
     const entry = byTarget.get(n.id) || { id: n.id, owner: n.owner, industry: n.industry, defenders: n.troops,
-      requiresWar: n.attackReady === false, sources: [] };
+      requiresWar: n.attackReady === false, ...(n.truceUntil ? { truceUntil: n.truceUntil } : {}), sources: [] };
     entry.sources.push({ id: own.id, available: own.available, travelTicks: observation.travelTimes[own.id][n.id] });
     byTarget.set(n.id, entry);
   }
@@ -47,6 +47,6 @@ export function decisionView(observation, map) {
     possiblePartners: board.sides.filter(s => s.members.length === 1 && s.id !== board.side)
       .map(s => ({ country: s.members[0], industry: s.industry, combinedIndustry: (side?.industry ?? ownIndustry) + s.industry })),
     recentOutcomes, eventCursor: observation.cursor, hasMoreEvents: observation.hasMore,
-    decisionNote: 'Frontier targets are direct neighbours of your provinces with free troops; requiresWar means declare war first (or march with declareWar:true). They are feasible sources, not a combat forecast: use preview for a chosen battle. Longer marches through your and allied land are also possible. Outcomes contain only events delivered to your seat and omit player speech; use news for messages. Drain hasMoreEvents before treating outcomes as recent.',
+    decisionNote: 'Frontier targets are direct neighbours of your provinces with free troops; requiresWar means declare war first (or march with declareWar:true); truceUntil means no declaration before that tick. They are feasible sources, not a combat forecast: use preview for a chosen battle. Longer marches through your and allied land are also possible. Outcomes contain only events delivered to your seat and omit player speech: inbox (first) lists unread messages and offers waiting on you. Drain hasMoreEvents before treating outcomes as recent.',
   };
 }

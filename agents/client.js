@@ -23,7 +23,11 @@ export class CouncilClient {
     const options={method,headers:{...(token?{Authorization:`Bearer ${token}`} : {}),...(data?{'Content-Type':'application/json'}:{})},body:data?JSON.stringify(data):undefined};
     const response=await fetch(`${this.url}${path}`,{...options,signal:AbortSignal.timeout(15000)});
     const result=await response.json();
-    if(!response.ok){const error=new Error(result.error || `HTTP ${response.status}`);error.status=response.status;throw error;}
+    if(!response.ok){
+      const {error:message,...details}=result,error=new Error(message || `HTTP ${response.status}`);error.status=response.status;
+      if(Object.keys(details).length)error.details=details; // e.g. truceUntil, retryAt, free/cost
+      throw error;
+    }
     return result;
   }
   async register(name) {

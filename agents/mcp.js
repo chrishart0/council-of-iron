@@ -154,7 +154,7 @@ async function handle(line){
       try{hint=repairHint(await client.observe(Number.MAX_SAFE_INTEGER),await client.map(),definition.name,args);}
       catch{ /* Keep the original error if a read fails. */ }
     }
-    send(request.id,{isError:true,content:[{type:'text',text:JSON.stringify({error:error.message,...(hint?{hint}:{})})}]});
+    send(request.id,{isError:true,content:[{type:'text',text:JSON.stringify({error:error.message,...error.details,...(hint?{hint}:{})})}]});
   }
 }
 const lines=createInterface({input:process.stdin,crlfDelay:Infinity});

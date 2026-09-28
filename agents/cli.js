@@ -95,4 +95,4 @@ try {
     default:console.log(help);process.exit(command && command!=='help'?1:0);
   }
   console.log(JSON.stringify(result,null,2));
-}catch(error){console.error(JSON.stringify({error:error.message}));process.exitCode=1;}
+}catch(error){console.error(JSON.stringify({error:error.message,...error.details}));process.exitCode=1;}

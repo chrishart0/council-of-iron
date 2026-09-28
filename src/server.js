@@ -90,6 +90,9 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
   if (stored.length > games.size) console.log(`Skipped ${stored.length-games.size} stored room(s) from an earlier version of the game: ${stored.filter(g=>!loadable(g,map)).map(g=>g?.id).join(', ')}`);
   const fractions = new Map(), ipBudgets = new Map();
   let previous = performance.now();
+  // Practice bots remember peace they have seen (public truces) so they do not re-declare war soon after.
+  // In memory only: after a restart a bot still respects every truce, it just forgets older peace.
+  const botMemory = new Map();
   const replayReaders = new Map(); // At most four decoded public records in memory.
   function afterAction(g) {
     requireRule(g.status === 'finished' && g.outcome, 'After-action review is available only when the match is finished.', 409);
@@ -107,7 +110,8 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
   function runBots(g) {
     if (g.tick % 5 !== 0) return;
     for (const p of g.players.filter(p=>p.kind==='bot')) {
-      const action=choose(observe(g,p.id,g.sequence),mapFor(g),p.id);
+      const key=`${g.id}:${p.id}`;if(!botMemory.has(key))botMemory.set(key,new Map());
+      const action=choose(observe(g,p.id,g.sequence),mapFor(g),p.id,botMemory.get(key));
       if (action) try { act(g,mapFor(g),p.id,action,`bot-${g.tick}-${p.id}`); }
       catch (e) { if (!(e instanceof RuleError)) throw e; }
     }
@@ -257,7 +261,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
       throw new RuleError('Not found.',404);
     } catch(error) {
       if(!(error instanceof RuleError)) console.error(error);
-      if(!res.headersSent) json(res,error.status || 500,{error: error instanceof RuleError ? error.message : 'Internal server error.'});
+      if(!res.headersSent) json(res,error.status || 500,error instanceof RuleError ? {error:error.message,...error.details} : {error:'Internal server error.'});
       else res.end();
     }
   };

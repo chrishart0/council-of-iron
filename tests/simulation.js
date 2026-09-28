@@ -15,9 +15,9 @@ export const STYLES = [
   { name: 'opportunist', neutral: 12, fraction: .58, reserve: 1 },
 ];
 export function controller(map, seed, style, overrides = {}) {
-  const rng = random(seed);
+  const rng = random(seed), memory = new Map();
   return state => chooseIndustrial(state, map, state.you, {
-    ...style, rng, develop: style.name !== 'aggressor',
+    ...style, rng, memory, develop: style.name !== 'aggressor',
     coordinated: style.name !== 'opportunist', recall: style.name !== 'aggressor',
     investFirst: style.name === 'cautious', ...overrides
   });

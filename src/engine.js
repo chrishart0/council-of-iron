@@ -1,12 +1,17 @@
 import { travelTicks, journeyPoint, friendlyPath as sharedPath } from '../public/movement.js';
 import { feedItems, feedPage, isWorldMessage } from '../public/feed-model.js';
 import { combatForecast } from '../public/combat.js';
+import { truceUntil } from '../public/relations.js';
 /** Authoritative, deterministic rules. Time is an integer simulation second.
  * No HTTP, random numbers, timers, credentials, or persistence in this module.
  * The player-facing rules are README "How to play"; docs/AGENT-RULES.md for agents.
  */
 export const RULES = Object.freeze({ duration: 1800, recruit: 20,
   notice: 30, hold: 90, economyShare: .6, messageLength: 500, proposalLife: 120, peaceLife: 60,
+  // Truce: once peace takes effect, neither side (both whole alliances at that moment) may declare war
+  // on the other for `truce` ticks. A peace offer that expires unanswered cannot be repeated to the same
+  // side for `peaceRetry` ticks. Evidence: docs/PLAYTEST.md (war/peace ping-pong).
+  truce: 120, peaceRetry: 30,
   // Invisible anti-spam limits, not rules players plan around: 10 orders per 10 s, one message per 2 s.
   orderLimit: 10, orderWindow: 10, chatWindow: 2,
   // Movement: every link ×1.2 faster than the base table; internal links (both ends yours or an
@@ -33,10 +38,11 @@ function arrivalDefense(g,target,arrivesAt){
 }
 
 export class RuleError extends Error {
-  constructor(message, status = 400) { super(message); this.status = status; }
+  /** `details` are extra machine-readable facts returned beside the message (e.g. `truceUntil`). */
+  constructor(message, status = 400, details = null) { super(message); this.status = status; if (details) this.details = details; }
 }
-export function requireRule(condition, message, status = 400) {
-  if (!condition) throw new RuleError(message, status);
+export function requireRule(condition, message, status = 400, details = null) {
+  if (!condition) throw new RuleError(message, status, details);
 }
 export function text(value, label, max = 80) {
   requireRule(typeof value === 'string' && value.trim().length > 0 && value.length <= max,
@@ -126,6 +132,7 @@ export function createGame({ id, name, hostId, speed = 1 }, map) {
     status: 'lobby', tick: 0, sequence: 0, serial: 0, players: [],
     provinces: map.provinces.map(p => ({ id: p.id, owner: null, troops: 2, nextRecruit: null, development: 1, developing: null })),
     armies: [], battles: [], orders: [], proposals: [], departures: [], coalitions: [], wars: [], peaceOffers: [], rallies: [],
+    truces: [], peaceRetries: [], readCursors: {},
     events: [], headlines: {}, dominanceBreaks: [], receipts: {}, dominance: {}, outcome: null, actionLog: [] };
 }
 export function join(g, map, { profileId, name, country, kind = 'human', model = '', persona = '', visibility = 'private' }) {
@@ -184,7 +191,9 @@ export function marchPlan(g, map, country, action, { assumeWar = false } = {}) {
   const target = province(g, action.to);
   requireRule((action.from === undefined) !== (action.sources === undefined), 'Give either one source (from) or a list of sources.');
   const warRequired = !mayEnter(g, country, target.owner);
-  requireRule(assumeWar || !warRequired, 'Declare war before attacking another country.', 409);
+  const truce = warRequired ? truceUntil(g, country, target.owner) : null;
+  requireRule(assumeWar || !warRequired, truce === null ? 'Declare war before attacking another country.' : truceMessage(target.owner, truce), 409,
+    truce === null ? null : { truceUntil: truce });
   const inputs = marchSources(action);
   requireRule(Array.isArray(inputs) && inputs.length > 0 && inputs.length <= r.maxSources,
     `Choose 1–${r.maxSources} source provinces.`);
@@ -212,7 +221,7 @@ export function marchPlan(g, map, country, action, { assumeWar = false } = {}) {
   const arrivesAt = g.tick + 1 + Math.max(...sources.map(s => s.travel));
   const total = sources.reduce((n, s) => n + s.amount, 0);
   const defenseAtArrival = arrivalDefense(g, target, arrivesAt), hostile = !allied(g, country, target.owner);
-  return { to: target.id, owner: target.owner, warRequired, reinforcement: !hostile, arrivesAt, total,
+  return { to: target.id, owner: target.owner, warRequired, ...(truce === null ? {} : { truceUntil: truce }), reinforcement: !hostile, arrivesAt, total,
     ...(hostile ? { combat: combatForecast(total, target.troops, target.development), defenseAtArrival,
       combatAtArrival: combatForecast(total, defenseAtArrival.total, target.development) } : {}),
     sources: sources.map(s => ({ ...s, executeAt: arrivesAt - s.travel })),
@@ -249,7 +258,9 @@ function develop(g, p, action) {
   requireRule(source.development < r.maxDevelopment, 'Province is fully developed.');
   requireRule(!source.developing && !g.orders.some(o => o.type === 'develop' && o.from === source.id), 'Development is already underway.');
   const amount = r.developmentCosts[source.development];
-  requireRule(source.troops - reservedTroops(g, p.id, source.id) > amount, `Development needs ${amount} uncommitted troops plus one garrison.`);
+  const free = Math.max(0, source.troops - reservedTroops(g, p.id, source.id) - 1);
+  requireRule(free >= amount, `Developing ${source.id} to level ${source.development + 1} needs ${amount} free troops (one more stays home); it has ${free}. `
+    + 'Wait for recruitment, rally troops there, or develop a province listed in readyDevelopments.', 400, { province: source.id, cost: amount, free });
   checkBudget(g, p); useBudget(g, p);
   const order = { id: identifier(g, 'order-'), type: 'develop', country: p.id, from: source.id, amount,
     level: source.development + 1, executeAt: g.tick + 1 };
@@ -516,18 +527,26 @@ function declareWar(g, p, a) {
   alive(g, p.id); const target = alive(g, a.country);
   requireRule(!allied(g, p.id, target.id), 'Choose a country outside your alliance.');
   requireRule(!atWar(g, p.id, target.id), 'These sides are already at war.', 409);
+  const truce = truceUntil(g, p.id, target.id);
+  requireRule(truce === null, truceMessage(target.id, truce), 409, { truceUntil: truce });
   const fromRoster = sideRoster(g, p.side), toRoster = sideRoster(g, target.side);
   for (const x of fromRoster) for (const y of toRoster) g.wars.push(warKey(x, y));
   g.wars = [...new Set(g.wars)].sort();
   event(g, 'war_declared', { country: p.id, from: p.side, to: target.side, fromRoster, toRoster });
   return { from: p.side, to: target.side, fromRoster, toRoster };
 }
+const clock = n => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+const truceMessage = (country, until) =>
+  `Truce with ${country} until ${clock(until)} (tick ${until}): no war can be declared between your sides before then.`;
 const openOffer = (g, a, b) => g.peaceOffers.find(o => o.status === 'offered' &&
   (o.fromSide === a && o.toSide === b || o.fromSide === b && o.toSide === a));
 function offerPeace(g, p, a) {
   alive(g, p.id); const target = alive(g, a.country);
   requireRule(atWar(g, p.id, target.id), 'These sides are not at war.', 409);
   requireRule(!openOffer(g, p.side, target.side), 'A peace offer between these sides is already open.', 409);
+  const retry = g.peaceRetries.find(x => x.fromSide === p.side && x.toSide === target.side && x.until > g.tick);
+  requireRule(!retry, `Your side's last peace offer to ${target.id} went unanswered; you can offer again at ${clock(retry?.until)} (tick ${retry?.until}). Message them meanwhile.`,
+    429, retry ? { retryAt: retry.until } : null);
   const offer = { id: identifier(g, 'peace-'), status: 'offered', by: p.id, fromSide: p.side, toSide: target.side,
     fromRoster: sideRoster(g, p.side), toRoster: sideRoster(g, target.side), expiresAt: g.tick + gameRules(g).peaceLife };
   g.peaceOffers.push(offer);
@@ -546,6 +565,13 @@ function acceptPeace(g, p, a) {
   const across = (country, id) => left.has(country) && right.has(province(g, id).owner) || right.has(country) && left.has(province(g, id).owner);
   g.wars = g.wars.filter(pair => { const [x, y] = pair.split(':'); return !(left.has(x) && right.has(y) || left.has(y) && right.has(x)); });
   offer.status = 'accepted';
+  // The truce binds both whole sides as they are now, pair by pair (joining later does not lift it).
+  const until = g.tick + gameRules(g).truce;
+  for (const x of offer.fromRoster) for (const y of offer.toRoster) {
+    const countries = [x, y].sort(), existing = g.truces.find(t => t.countries[0] === countries[0] && t.countries[1] === countries[1]);
+    if (existing) Object.assign(existing, { since: g.tick, until }); else g.truces.push({ countries, since: g.tick, until });
+  }
+  g.truces.sort((a, b) => a.countries.join(':').localeCompare(b.countries.join(':')));
   const cancelled = g.orders.filter(o => o.type === 'march' && across(o.country, o.to));
   g.orders = g.orders.filter(o => !cancelled.includes(o));
   for (const o of cancelled) event(g, 'order_cancelled', { country: o.country, orderId: o.id, reason: 'Peace treaty.' }, [o.country]);
@@ -554,8 +580,8 @@ function acceptPeace(g, p, a) {
     turnArmy(g, army, 'peace', { owner: province(g, army.path?.at(-1) || army.to).owner }); recalled++;
   }
   event(g, 'peace_accepted', { offerId: offer.id, country: p.id, from: offer.fromSide, to: offer.toSide,
-    fromRoster: offer.fromRoster, toRoster: offer.toRoster, cancelled: cancelled.length, recalled });
-  return { offerId: offer.id, status: offer.status };
+    fromRoster: offer.fromRoster, toRoster: offer.toRoster, cancelled: cancelled.length, recalled, truceUntil: until });
+  return { offerId: offer.id, status: offer.status, truceUntil: until };
 }
 function chat(g, p, a) {
   const message = text(a.text, 'Message', gameRules(g).messageLength);
@@ -651,10 +677,13 @@ function expirePeace(g) {
     const reason = !sameRosters(g, offer) ? 'Alliance membership changed.' :
       !atWar(g, offer.fromRoster[0], offer.toRoster[0]) ? 'The sides are no longer at war.' :
       g.tick >= offer.expiresAt ? 'The peace offer expired.' : null;
+    if (reason === 'The peace offer expired.') g.peaceRetries.push({ fromSide: offer.fromSide, toSide: offer.toSide, until: g.tick + gameRules(g).peaceRetry });
     if (reason) { offer.status = 'expired';
       event(g, 'peace_expired', { offerId: offer.id, reason }, [...new Set([...offer.fromRoster, ...offer.toRoster])]); }
   }
   g.peaceOffers = g.peaceOffers.filter(o => o.status === 'offered');
+  g.truces = g.truces.filter(t => t.until > g.tick);
+  g.peaceRetries = g.peaceRetries.filter(x => x.until > g.tick);
 }
 /** Put an army on the road along `path` (the provinces after `from`). A march order's single-leg army
  * keeps its scheduled arrival; a multi-leg column (or a rally) recomputes each leg as it goes. */
@@ -910,7 +939,7 @@ export function observe(g, country = null, after = 0, limit = 200) {
     travelTimes: g.travelTimes, internalTravelTimes: g.internalTravelTimes, maxAlliance: maxAlliance(g),
     you: country, players: g.players.map(({ profileId, orderTicks, lastChat, ...p }) => ({...p,displayName:displayName(p)})),
     provinces: g.provinces, armies: g.armies, battles: g.battles,
-    rallies: g.rallies.filter(x => x.country === country), sides: sides(g), wars: g.wars, economyThreshold: economyThreshold(g),
+    rallies: g.rallies.filter(x => x.country === country), sides: sides(g), wars: g.wars, truces: g.truces, economyThreshold: economyThreshold(g),
     dominanceBreaks: g.dominanceBreaks,
     peaceOffers: g.peaceOffers.filter(o => o.status === 'offered' && (o.fromRoster.includes(country) || o.toRoster.includes(country))),
     proposals: g.proposals.filter(q => q.status === 'pending' || q.status === 'open' && q.roster.includes(country))
