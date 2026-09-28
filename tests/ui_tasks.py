@@ -70,8 +70,10 @@ class Walk:
         """Camera only (not counted): pan the map by dragging empty map so the province is on screen."""
         if escape: self.page.keyboard.press('Escape')
         vw, vh = self.page.viewport_size['width'], self.page.viewport_size['height']
-        for _ in range(8):
+        for _ in range(16):
             x, y = self.at(self.counter(province))
+            if abs(x - vw / 2) > vw * 1.5 or abs(y - vh / 2) > vh * 1.5:  # far away on a zoomed-in map: zoom out a step
+                self.page.keyboard.press('q'); self.page.wait_for_timeout(150); self.camera += 1; continue
             clear = self.counter(province).evaluate('(el,[x,y])=>el.contains(document.elementFromPoint(x,y))', [x, y]) if 0 <= x < vw and 0 <= y < vh else False
             if 40 < x < vw - 40 and vh * .25 < y < vh * .55 and clear: return
             start = self.page.evaluate('''([w,h])=>{for(let y=h*.35;y<h*.6;y+=13)for(let x=w*.3;x<w*.7;x+=13){const e=document.elementFromPoint(x,y);
@@ -110,9 +112,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     w.end()
 
     # (a) Attack a neighbouring enemy province with 50%: Indochina (France, now at war), from India.
-    page.keyboard.press('Escape')
-    for _ in range(5): page.keyboard.press('q')  # camera only (not counted): zoom out, then pan to the Indian front
-    page.wait_for_timeout(200); w.bring('indochina', escape=False)
+    w.bring('indochina')  # camera only (not counted): the Indian front
     w.begin('attack')
     before = {p['id']: p['troops'] for p in s['provinces']}
     if touch:
