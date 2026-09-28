@@ -1155,20 +1155,20 @@ def main():
             check_layout(page,'1600x1000 action toast')
             threat.locator('[data-do="dismiss"]').click()
             capture('11-incoming-attack.png')
-            # Tick 704: Russia's 70 break on Great Britain in a major battle: a PERSONAL notice with the troops left, a banner
-            # (it is Britain's battle) and exactly one audible cue. (Step to 700 first: the Egypt, Levant and India battles
-            # in between are not what this checks.)
-            server.stdin.write('700\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==700
+            # Tick 714: Russia's column breaks on Great Britain in a major battle: a PERSONAL notice with the troops left, a banner
+            # (it is Britain's battle) and exactly one audible cue. (Step to 710 first: the Egypt, Levant, India and Low Countries
+            # battles in between are not what this checks.)
+            server.stdin.write('710\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==710
             if threat.is_visible():threat.locator('[data-do="dismiss"]').dispatch_event('click')  # a banner may sit over it
             page.wait_for_timeout(20500);before=len(spy(page,'cues'))  # past the 20 s stinger budget window those battles used, as in real time
-            server.stdin.write('712\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==712
+            server.stdin.write('722\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==722
             expect(personal).to_contain_text('Line held · Great Britain',timeout=8000)
             expect(personal).to_contain_text(re.compile(r'\d+ troops remain'))
             expect(page.locator('#declaration')).to_contain_text('Major battle at Great Britain',timeout=5000)
             page.wait_for_timeout(1600);fresh_cues=spy(page,'cues')[before:]
             assert len([c for c in fresh_cues if c['audible']])==1,fresh_cues
-            report['sound']={'tick704':fresh_cues}
-            report['assertions'].append(f'The live tick-704 headline (a major battle on your own province) chose exactly one audible cue ({[c["cue"] for c in fresh_cues if c["audible"]][0]}).')
+            report['sound']={'tick714':fresh_cues}
+            report['assertions'].append(f'The live tick-714 headline (a major battle on your own province) chose exactly one audible cue ({[c["cue"] for c in fresh_cues if c["audible"]][0]}).')
             camera(page,'world');capture('12-line-held.png')
             page.screenshot(path=str(out/'13-battle-banner.png'))
             check_layout(page,'1600x1000 banner')
