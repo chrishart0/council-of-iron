@@ -87,16 +87,19 @@ test('long marches pass through allied land but not through foreign land',()=>{
   assert.throws(()=>action(g,'usa',{type:'march',from:'west-us',to:'east-us',amount:5}),/No route/);
   assert.equal(g.orders.length,0);
 });
-test('distant sources can join a single attack through owned intermediate land',()=>{
+test('distant sources can join a reinforcement through owned land, but an attack only from bordering provinces',()=>{
   const g=game();
-  const sources=[{from:'east-us',percent:100},{from:'central-us',percent:100}];
-  const plan=marchPlan(g,map,'usa',{to:'mexico',sources});
+  const plan=marchPlan(g,map,'usa',{to:'west-us',sources:[{from:'east-us',percent:100},{from:'central-us',percent:100}]});
   assert.ok(plan.sources.find(s=>s.from==='east-us').path.includes('central-us'));
-  const receipt=action(g,'usa',{type:'march',to:'mexico',sources});
+  assert.equal(plan.reinforcement,true);
+  const before=JSON.stringify(g);
+  assert.throws(()=>action(g,'usa',{type:'march',to:'mexico',sources:[{from:'east-us',percent:100},{from:'central-us',percent:100}]}),
+    /east-us does not border mexico: an attack goes only from provinces next to the target.*yours: west-us, central-us/);
+  assert.equal(JSON.stringify(g),before,'nothing reserved');
+  const receipt=action(g,'usa',{type:'march',to:'mexico',sources:[{from:'west-us',percent:100},{from:'central-us',percent:100}]});
   assert.equal(receipt.orders.length,2);
-  assert.ok(receipt.orders.find(o=>o.from==='east-us').path.length>1);
+  assert.ok(receipt.orders.every(o=>o.path.length===1),'an attack goes straight there');
   advance(g,receipt.arrivesAt);
-  assert.ok(g.events.some(e=>e.type==='army_transited' && e.country==='usa'));
   assert.equal(g.armies.filter(a=>a.to==='mexico' && a.engaged).length,2);
 });
 test('multi-source plan validates atomically, reserves exact amounts, dispatches later sources, arrives together',()=>{
@@ -169,7 +172,7 @@ test('capture preserves completed factories but destroys an unfinished investmen
   assert.equal(ruhr.development,3);assert.equal(ruhr.owner,'usa');
 });
 test('delayed dispatch revalidates a lost source without creating troops',()=>{
-  const g=game();const r=action(g,'usa',{type:'march',to:'mexico',sources:[{from:'west-us',amount:5},{from:'east-us',amount:5}]});
+  const g=game();const r=action(g,'usa',{type:'march',to:'mexico',sources:[{from:'west-us',amount:5},{from:'central-us',amount:5}]});
   const waiting=r.orders.find(o=>o.executeAt>1);province(g,waiting.from).owner='britain';advance(g,waiting.executeAt);
   assert.equal(g.armies.length,1);assert.ok(g.events.some(e=>e.type==='order_failed'&&e.orderId===waiting.id));
 });

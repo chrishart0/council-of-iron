@@ -31,25 +31,74 @@ test('a march crosses any chain of your own land by the quickest route, at inter
   assert.ok(g.events.some(e => e.type === 'reinforced' && e.province === 'alaska' && e.amount === 20), String(alaska));
 });
 
-test('through an ally without gifting troops, and a final step into land you may attack', () => {
+test('through an ally without gifting troops; an attack goes only from a bordering province', () => {
   const g = game(g => { own(g, 'central-us', 'britain'); });
   ally(g, 'usa', 'britain');
   const through = send(g, 'usa', { type: 'march', from: 'west-us', to: 'east-us', amount: 5 });
   assert.deepEqual(through.orders[0].path, ['central-us', 'east-us']);
   Object.assign(at(g, 'caribbean'), { owner: 'france', troops: 2 });
-  assert.throws(() => send(g, 'usa', { type: 'march', from: 'west-us', to: 'caribbean', amount: 5 }), /Declare war/);
-  const strike = send(g, 'usa', { type: 'march', from: 'west-us', to: 'caribbean', amount: 5, declareWar: true });
-  assert.deepEqual(strike.orders[0].path, ['central-us', 'east-us', 'caribbean']);
+  assert.throws(() => send(g, 'usa', { type: 'march', from: 'east-us', to: 'caribbean', amount: 5 }), /Declare war/);
+  // No long strike through friendly land, even with a declaration: nothing is declared, nothing reserved.
+  const before = JSON.stringify([g.wars, g.orders]);
+  assert.throws(() => send(g, 'usa', { type: 'march', from: 'west-us', to: 'caribbean', amount: 5, declareWar: true }),
+    /west-us does not border caribbean: an attack goes only from provinces next to the target \(a land border or a sea link\)\. March troops to a province bordering caribbean first \(yours: east-us\), then attack\./);
+  assert.equal(JSON.stringify([g.wars, g.orders]), before);
+  const strike = send(g, 'usa', { type: 'march', from: 'east-us', to: 'caribbean', amount: 5, declareWar: true });
+  assert.deepEqual(strike.orders[0].path, ['caribbean']);
   assert.equal(strike.warDeclared, true);
+  assert.deepEqual(strike.sources, [{ from: 'east-us', amount: 5, departsAt: strike.orders[0].executeAt }]);
   advance(g, strike.arrivesAt - g.tick);
-  assert.equal(at(g, 'central-us').owner, 'britain'); assert.equal(at(g, 'central-us').troops >= 10, true);
   assert.ok(g.battles.some(b => b.province === 'caribbean') || at(g, 'caribbean').owner === 'usa');
+});
+
+test('attacks: a neighbour is fine; far sources are named in the error, with the provinces to stage in', () => {
+  const g = game();
+  const plan = preview(g, map, 'usa', { from: 'west-us', to: 'mexico', percent: 50 });
+  assert.deepEqual(plan.sources[0].path, ['mexico']); assert.equal(plan.reinforcement, false);
+  assert.throws(() => preview(g, map, 'usa', { from: 'east-us', to: 'mexico', amount: 3 }),
+    /east-us does not border mexico.*yours: west-us, central-us/);
+  assert.throws(() => send(g, 'usa', { type: 'march', to: 'hawaii', sources: [{ from: 'west-us', amount: 2 }, { from: 'east-us', amount: 2 }, { from: 'central-us', amount: 2 }] }),
+    /^Error: east-us and central-us do not border hawaii.*yours: west-us, philippines/);
+  assert.equal(g.orders.length, 0);
+  // Nothing of yours or an ally's borders it: say so.
+  assert.throws(() => preview(g, map, 'usa', { from: 'west-us', to: 'andes', amount: 3 }), /You hold no province bordering andes/);
+  // Rally points still only go to your own provinces.
+  assert.throws(() => send(g, 'usa', { type: 'rally', from: 'west-us', to: 'mexico' }), /own provinces/);
+});
+
+test('fromAllBordering: every province of yours next to the target with free troops, amount or percent per source', () => {
+  const g = game(g => { own(g, 'central-us', 'usa', 1); own(g, 'mexico', 'usa', 21); });
+  // Bordering central-america: mexico only (caribbean is neutral). Bordering caribbean: east-us only.
+  const all = preview(g, map, 'usa', { to: 'caribbean', fromAllBordering: true, percent: 100 });
+  assert.deepEqual(all.sources.map(s => [s.from, s.amount]), [['east-us', at(g, 'east-us').troops - 1]]);
+  // Bordering hawaii: west-us only. Bordering central-us (own): west-us, mexico, east-us; central-us itself excluded.
+  const home = preview(g, map, 'usa', { to: 'central-us', fromAllBordering: true, percent: 50 });
+  assert.deepEqual(home.sources.map(s => s.from).sort(), ['east-us', 'mexico', 'west-us']);
+  assert.equal(home.sources.find(s => s.from === 'mexico').amount, 10, 'half of each source\'s free troops');
+  const sent = send(g, 'usa', { type: 'march', to: 'central-america', fromAllBordering: true, amount: 50 });
+  assert.deepEqual(sent.sources.map(s => [s.from, s.amount]), [['mexico', 20]], 'amount is at most what each source has free');
+  assert.equal(sent.total, 20);
+  // Mexico now has no free troops, and nothing else borders central-america.
+  assert.throws(() => send(g, 'usa', { type: 'march', to: 'central-america', fromAllBordering: true, percent: 100 }),
+    /None of your provinces bordering central-america has free troops/);
+  assert.throws(() => preview(g, map, 'usa', { to: 'mexico', from: 'west-us', fromAllBordering: true, percent: 5 }), /one source/);
+  assert.throws(() => preview(g, map, 'usa', { to: 'mexico', fromAllBordering: true }), /exactly one of amount or percent/);
+});
+
+test('a friendly march whose destination turns hostile before a far source leaves fails at departure', () => {
+  const g = game(g => { own(g, 'mexico', 'usa', 30); });
+  const sent = send(g, 'usa', { type: 'march', to: 'east-us', sources: [{ from: 'mexico', amount: 5 }, { from: 'central-us', amount: 5 }] });
+  const far = sent.orders.find(o => o.path.length > 1);
+  assert.ok(far, 'mexico goes through central-us');
+  own(g, 'east-us', 'germany', 3); send(g, 'usa', { type: 'declare_war', country: 'germany' });
+  advance(g, far.executeAt - g.tick);
+  assert.ok(g.events.some(e => e.type === 'order_failed' && e.orderId === far.id && /no longer friendly/.test(e.reason)));
 });
 
 test('no route: a clear error naming what a march may pass through', () => {
   const g = game(g => { own(g, 'central-us', 'germany'); own(g, 'west-canada', 'germany'); own(g, 'mexico', 'germany'); });
   assert.throws(() => send(g, 'usa', { type: 'march', from: 'west-us', to: 'east-us', amount: 5 }),
-    /No route from west-us to east-us: a march passes only through your own or allied provinces/);
+    /No route from west-us to east-us: a move to your own or an ally's province passes only through your own or allied provinces/);
   assert.throws(() => preview(g, map, 'usa', { from: 'west-us', to: 'east-us', amount: 5 }), /No route/);
   assert.equal(g.orders.length, 0);
 });
@@ -90,9 +139,9 @@ test('an ally leaving mid-route: the column finds another way or turns back; wai
   const army = g.armies.find(a => a.groupId === sent.groupId);
   assert.ok(!army || army.returning);
   assert.ok(g.events.some(e => e.type === 'army_recalled' && e.reason === 'transit_blocked') || g.events.some(e => e.type === 'reinforced' && e.province === 'east-us'));
-  // Several sources, one of them far: they still arrive together.
+  // Several sources, one of them far, reinforcing: they still arrive together.
   const h = game(g => own(g, 'mexico', 'usa', 30));
-  const both = send(h, 'usa', { type: 'march', to: 'caribbean', sources: [{ from: 'east-us', amount: 3 }, { from: 'mexico', amount: 3 }] });
+  const both = send(h, 'usa', { type: 'march', to: 'east-us', sources: [{ from: 'central-us', amount: 3 }, { from: 'mexico', amount: 3 }] });
   assert.equal(new Set(both.orders.map(o => o.arrivesAt)).size, 1);
   assert.ok(both.orders.find(o => o.from === 'mexico').path.length > 1);
 });
