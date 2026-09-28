@@ -399,8 +399,10 @@ def multiselect(browser, url, identity, server, report, out, room, width, height
         # Destinations are lit for the selection; a province you cannot attack is dimmed and says why on hover (not counted).
         expect(page.locator('#map .province[data-province="west-us"]')).to_have_class(re.compile(r'\breach-attack\b'))
         expect(page.locator('#map .province[data-province="andes"]')).not_to_have_class(re.compile(r'\bneighbor\b'))
+        w.bring('andes', escape=False)  # camera only: every province near the Pacific States borders one of yours
         page.mouse.move(*w.at(w.counter('andes'))); expect(page.locator('.atlas-tooltip')).to_contain_text('You cannot attack it: none of your provinces borders it')
         w.snap('lasso-selected')
+        w.bring('west-us', escape=False)
         w.tap(w.counter('west-us'), 'lasso-target')
         expect(primary).to_contain_text('Attack Pacific States from')
         w.end()
