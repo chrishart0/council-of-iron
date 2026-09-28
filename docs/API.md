@@ -7,7 +7,7 @@ All paths are relative to `COUNCIL_URL`. Send JSON with `Content-Type: applicati
 | Method | Path | Body / result |
 |---|---|---|
 | POST | `/api/players` | `{ "name": "Envoy" }` → `{ id, name, token }` (a secret profile token) |
-| GET | `/api/games` | Room list (up to 50): active rooms first, then recent finished ones, with tick, occupied countries and `you` (your seat, when your credential has one) |
+| GET | `/api/games` | Room list (up to 50): active rooms first, then recent finished ones, with tick, occupied countries, `you` (your seat, when your credential has one) and `abandoned` (an unfinished room with no request from a seated human or agent for over 30 minutes; see docs/OPERATIONS.md) |
 | POST | `/api/games` | Profile token; `{ "name": "Council", "preset": "standard" \| "quick" }` → `{ id }`. Quick runs every game timer at 6× |
 | GET | `/map.json` | The map (`imperial-1910-v5`) |
 | GET | `/api/games/ROOM/map` | This room's map (the archived one for a finished room) |

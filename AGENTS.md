@@ -2,9 +2,17 @@
 
 Keep the game small. This is diplomacy with a readable military system, not a conventional RTS feature backlog.
 
+## Live server
+
+People play on the live server. Do not break a match in progress.
+
+- The live game runs from a dedicated deploy worktree, currently `/home/chris/git/council-gameui` (branch `ui-v0.9-gameui`), served by the systemd user unit `council-of-iron-ui-v08` (https://192.168.1.216:3444). **Never edit, commit, reset or check out in the deploy worktree.** Develop on a branch in your own worktree, test, push, then deploy only with `scripts/deploy.sh` (`--check` first; docs/OPERATIONS.md).
+- **Never restart the live service or deploy while a room with a human seat is running or in its lobby** unless the user explicitly says so for that deploy. `scripts/deploy.sh` refuses; `--force` is for that explicit instruction only.
+- A rules or map change that makes running rooms unloadable (new map `id`, changed `RULES` keys) must not be deployed until those rooms finish. The server refuses to start over such a room (exit 78) unless `COUNCIL_ALLOW_DROP_RUNNING=1`; never set that yourself.
+
 ## No backward compatibility
 
-This is a new game in active development. Do not preserve old rulesets, map versions, save formats, API shapes, replays or golden fixtures for their own sake. When a rule or format changes, change it everywhere (engine, clients, agents, docs, tests), migrate or delete the old data and tests, and keep one current version: one ruleset (`RULES` in `src/engine.js`), one map (`public/imperial-map.json`). Stored rooms from an earlier version are skipped at server start with a log line (`loadable()` in `src/server.js`), never migrated in place and never allowed to crash the server. Golden hashes are re-baselined when the rules change, with the reason in the commit. The contracts below that remain are about correctness, fairness, privacy, determinism, security, tests and UX.
+This is a new game in active development. Do not preserve old rulesets, map versions, save formats, API shapes, replays or golden fixtures for their own sake. When a rule or format changes, change it everywhere (engine, clients, agents, docs, tests), migrate or delete the old data and tests, and keep one current version: one ruleset (`RULES` in `src/engine.js`), one map (`public/imperial-map.json`). Finished or abandoned stored rooms from an earlier version are skipped at server start with a log line (`loadable()` and `startupPlan()` in `src/server.js`), never migrated in place and never allowed to crash the server; a room still in play refuses startup instead (see Live server). Golden hashes are re-baselined when the rules change, with the reason in the commit. The contracts below that remain are about correctness, fairness, privacy, determinism, security, tests and UX.
 
 - `src/engine.js` owns rules. No I/O, clock reads, random combat, credentials or client-specific exceptions there.
 - All player interfaces use the same action validation, observation and limits. Practice bots must not read hidden data or mutate the game directly.

@@ -2,7 +2,7 @@
 
 ## Current scenario and saved records
 
-There is one map, `imperial-1910-v5` (`public/imperial-map.json`, the source of truth), and one ruleset (`RULES` in `src/engine.js`). The game keeps no backward compatibility: at startup the server loads a stored room only if it was created on this map with exactly the current rule fields (`loadable()` in `src/server.js`); a finished one also needs its materialized public review. Anything else is skipped with one log line (`Skipped N stored room(s) from an earlier version of the game: …`); unreadable snapshots are skipped too. Nothing is migrated: the rows stay in SQLite. The results table of earlier versions (Prestige) is dropped at start; standings count wins, draws and losses from then on. Back up SQLite normally before updating.
+There is one map, `imperial-1910-v5` (`public/imperial-map.json`, the source of truth), and one ruleset (`RULES` in `src/engine.js`). The game keeps no backward compatibility: at startup the server loads a stored room only if it was created on this map with exactly the current rule fields (`loadable()` in `src/server.js`); a finished one also needs its materialized public review. Finished or abandoned rooms that fail this check are skipped with one log line (`Skipped N stored room(s) from an earlier version of the game: …`); unreadable snapshots are skipped too. A room that may still be in play (running, or a lobby with a human seat, and not abandoned) makes startup **refuse** instead: see *Startup guard* below. Nothing is migrated: the rows stay in SQLite. The results table of earlier versions (Prestige) is dropped at start; standings count wins, draws and losses from then on. Back up SQLite normally before updating.
 
 ## Supported deployment
 
@@ -13,6 +13,42 @@ For Internet access, terminate TLS at a reverse proxy (or use the optional built
 The database is `data/council.db` (SQLite WAL). Persist the entire `data/` directory. Do not run two processes against the same match data: SQLite serializes writes, but it does not coordinate two independent in-memory simulation authorities. There is no horizontal scaling or hot failover.
 
 Use SIGTERM/SIGINT for shutdown. Snapshots are saved as commands are accepted and as simulation batches advance; normal shutdown saves once more. Restart restores the snapshot and pauses game time during server downtime. A machine crash can lose progress since the most recent committed snapshot. For a real infrastructure failure that compromises a competitive match, the organizer should treat it as void; there is no public void/admin API.
+
+## Deploying the live server
+
+The live game runs from a dedicated deploy worktree, `~/git/council-gameui` (branch `ui-v0.9-gameui`), as the systemd user unit `council-of-iron-ui-v08` (HTTPS on 3444, `PUBLIC_ORIGIN=https://192.168.1.216:3444`). Nobody edits or commits there. Work on a branch in another worktree, run the tests, push to the deploy branch (fast-forward), then:
+
+```sh
+scripts/deploy.sh --check     # dry run: all the checks below, no pull, no restart
+scripts/deploy.sh             # deploy origin/ui-v0.9-gameui
+```
+
+`scripts/deploy.sh` (run from any checkout; `COUNCIL_DEPLOY_DIR`, `COUNCIL_UNIT`, `COUNCIL_URL`, `COUNCIL_HOST` override the defaults):
+
+1. fetches, and refuses unless the deploy worktree is clean and the target (`--ref REF`, default `origin/<deploy branch>`) is a fast-forward of the deployed commit; it lists the commits and notes a map `id` or `src/engine.js` change;
+2. reads the live `GET /api/games` (`curl -k`, `Host` from the unit's first `PUBLIC_ORIGIN`) and **refuses** while any room is `running`, or in its `lobby` with at least one human seat, unless the room is `abandoned`; it prints those rooms. `--force` overrides this only when the user explicitly asked for this deploy;
+3. `git pull --ff-only`, `systemctl --user restart`, then verifies `200` on `/`, `/api/stt` (prints availability) and `/api/games`, and that every unfinished room listed before is listed again. On failure it prints the unit's journal and the rollback command.
+
+`--allow-drop-running` sets `COUNCIL_ALLOW_DROP_RUNNING=1` in the user manager for that one restart (and unsets it on exit); use it only when the user decided to drop the listed matches.
+
+**A room is abandoned** when more than 30 minutes of server uptime have passed since the last request from a seated human or agent in it (any authenticated request by a seat holder or the host: observing, planning, acting, joining; bots and ticks do not count). The server keeps this outside the snapshot in the `room_activity` table: `active_at` (last such request, written at most once a minute), `seen_at` (a running server's heartbeat, once a minute and at shutdown) and `dropped_at`. Idleness is `seen_at - active_at` at startup and `now - active_at` in `/api/games`, so time the server was down never makes a room abandoned. A room without a record (created before this table) is never abandoned.
+
+### Startup guard
+
+At startup `startupPlan()` in `src/server.js` sorts every stored room: load it (current map and rules), skip it (an earlier version that is finished, abandoned, a lobby without humans, or already dropped), or **block**. A blocked room is one that may be in play but that this version cannot load. The server then logs `REFUSING TO START`, names each room (id, name, status, tick, map, seats) and exits with status 78, so a careless restart fails loudly instead of deleting a live game. Add `RestartPreventExitStatus=78` to the unit's `[Service]` section so systemd leaves it failed rather than retrying (`deploy.sh` warns when it is missing). Then either redeploy the commit the room was created on and let it finish, or start once with `COUNCIL_ALLOW_DROP_RUNNING=1`: the rooms are logged as dropped, marked `dropped_at`, and never block again. Their snapshots stay in the database.
+
+### Restoring a dropped room onto a new map
+
+`scripts/restore-room.js` is a one-off for a room dropped by a map change with the same province and country IDs and identical rules. It copies the database (`VACUUM INTO` from a read-only handle) to a **new** file and migrates only that copy: the board tables are rebuilt from the current map, armies on the road finish their current leg as committed, a column whose later leg crosses a vanished border is rerouted by the engine's friendly-path rule (or stops at the end of its leg), and the private opening checkpoint is removed, so the finished match publishes scores without a replay. It prints every changed army and refuses on anything else. `--verify` serves a scratch copy on a random local port and checks listing, observation, a plan and a march, and running to the end.
+
+```sh
+systemctl --user stop council-of-iron-ui-v08          # only with the user's go-ahead; nobody else playing
+node scripts/restore-room.js --db ~/git/council-gameui/data/council.db --out /tmp/restored.db \
+  --room ROOM --from-map tests/fixtures/handplay-map.json --verify
+# keep a backup of data/council.db* , move /tmp/restored.db to data/council.db (remove the old -wal/-shm), start the unit
+```
+
+The alternative that changes nothing in the room is to redeploy the commit it was created on (`--ref`, which must still be a fast-forward, or an explicit rollback by the user) until it finishes.
 
 ## Persistence and credentials
 
