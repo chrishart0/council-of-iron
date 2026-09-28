@@ -119,9 +119,9 @@ tool('standings','Read experimental Prestige standings; not a strength-adjusted 
 
 const attackProperties={to:string,arriveAt:{type:'integer',minimum:1},sources:{type:'array',minItems:1,maxItems:16,
   items:{type:'object',properties:{from:string,amount:{type:'integer',minimum:1},percent:{type:'number',exclusiveMinimum:0,maximum:100}},required:['from'],additionalProperties:false}}};
-tool('plan_attack','Preview a multi-source attack and its earliest shared arrival tick without spending a command. Each source needs exactly one of amount or percent.',
+tool('plan_attack','Preview a multi-source attack and its earliest shared arrival tick without spending a command. Each source needs exactly one of amount or percent. For the actual attack, omit arriveAt unless deliberately scheduling later; a copied preview tick can become stale.',
   attackProperties,['to','sources'],a=>client.plan(a),true);
-tool('coordinated_attack','Commit connected source provinces to one target on the same tick. Attacking another country requires an active war first; use declare_war. Supply amount or percent per source, optionally arriveAt. Nearby sources wait under reservation. One shared command; no privileged bot execution.',
+tool('coordinated_attack','Commit connected source provinces to one target on the same tick. Attacking another country requires an active war first; use declare_war. Supply amount or percent per source. Omit arriveAt for the earliest legal arrival; a preview tick can become stale. Nearby sources wait under reservation. One shared command; no privileged bot execution.',
   {...attackProperties,...op},['to','sources'],a=>{const {opId,...action}=a;return client.action({type:'attack',...action},opId);});
 tool('recall','Cancel a queued attack or recall an outbound army/group. Troops already marching return from their current position and remain vulnerable; they fight if home is now hostile.',
   {id:string,...op},['id'],a=>client.action({type:'recall',id:a.id},a.opId));
