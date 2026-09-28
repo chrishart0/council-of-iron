@@ -16,7 +16,7 @@ test('Pi resolves arbitrary local model profile entirely from config', () => {
     alias: 'sample', provider: 'openai-completions', id: 'vendor/model', playerName: 'Sample Pi',
     name: 'Sample Pi', leaderName: 'The Visiting Regent', baseUrl: 'http://127.0.0.1:8000/v1',
     transport: 'chat_completions', apiKey: 'local', contextWindow: 1048576, maxTokens: 4096,
-    thinkingLevel: 'off', reasoning: false, thinkingFormat: undefined, chatTemplateKwargs: undefined,
+    thinkingLevel: 'off', reasoning: false, inputImages: false, thinkingFormat: undefined, chatTemplateKwargs: undefined,
   });
 });
 
@@ -35,6 +35,8 @@ test('Pi preserves configured chat-template options without naming a provider', 
     PI_MODEL_SAMPLE_CHAT_TEMPLATE_KWARGS: '{"thinking":false,"reasoning_effort":"low"}',
   };
   assert.deepEqual(loadPiConfig('sample', env).chatTemplateKwargs, { thinking: false, reasoning_effort: 'low' });
+  env.PI_MODEL_SAMPLE_INPUT_IMAGES = 'true';
+  assert.equal(loadPiConfig('sample', env).inputImages, true);
   env.PI_MODEL_SAMPLE_CHAT_TEMPLATE_KWARGS = '{bad';
   assert.throws(() => loadPiConfig('sample', env), /invalid CHAT_TEMPLATE_KWARGS/);
 });

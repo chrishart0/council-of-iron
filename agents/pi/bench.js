@@ -41,6 +41,10 @@ export function summarizeRun(raw, modelGroup) {
   const turns = raw.turnLog || [];
   const usedSituation = client === 'Pi' ? calls.some(call => call.name === 'situation')
     : completed.some(event => event.name === 'situation');
+  const usedBoard = client === 'Pi' ? calls.some(call => call.name === 'board')
+    : completed.some(event => event.name === 'board' || event.name?.endsWith('__board'));
+  const usedView = client === 'Pi' ? calls.some(call => call.name === 'view_map')
+    : completed.some(event => event.name === 'view_map' || event.name?.endsWith('__view_map'));
   const tokenUsage = raw.usage;
   const inputTokens = number(tokenUsage?.input);
   const outputTokens = number(tokenUsage?.output);
@@ -51,8 +55,9 @@ export function summarizeRun(raw, modelGroup) {
   return {
     id: raw.runId, match: raw.match, combatSeed: raw.combatSeed || null,
     startedAt: raw.startedAt, modelGroup, client, access, country: raw.country || 'britain',
-    strategy: usedSituation ? 'concise situation' : raw.maxTurnSeconds ? 'full observation, capped' : 'full observation',
+    strategy: usedView ? 'visual map' : usedBoard ? 'compact board' : usedSituation ? 'concise situation' : raw.maxTurnSeconds ? 'full observation, capped' : 'full observation',
     maxTurnSeconds: number(raw.maxTurnSeconds),
+    decisionIntervalTicks: number(raw.decisionIntervalTicks),
     sessionMode: raw.sessionMode || (client === 'Pi' ? 'persistent' : null),
     preset: raw.preset, status: raw.status, resultReason: raw.outcome?.reason || null,
     finalTick: number(raw.finalTick), prestige: round(raw.score.prestige),

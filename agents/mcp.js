@@ -6,6 +6,8 @@
 import { CouncilClient } from './client.js';
 import { strategicOptions } from './strategic-options.js';
 import { situation } from './situation.js';
+import { boardView } from './board.js';
+import { mapViewPng } from './map-view.js';
 import { createInterface } from 'node:readline';
 const client=new CouncilClient();
 const string={type:'string'},integer={type:'integer'},op={opId:{type:'string',description:'Stable unique command ID. Reuse only to retry this exact action.'}};
@@ -35,6 +37,14 @@ tool('situation','Read a concise board and delivered diplomacy without full batt
       const fresh=await client.observe(a.after ?? 0);situationMatch=fresh.id;situationCursor=fresh.cursor;return situation(fresh);
     }
     situationMatch=o.id;situationCursor=o.cursor;return situation(o);
+  },true);
+tool('board','Read one compact map-like snapshot: all province ownership, troops and industry; your available troops and directly connected neighbors; active wars, command budget and pending diplomacy. Use this to choose a legal march. Use preview only for a chosen battle and situation for delivered messages.',
+  {},[],async()=>boardView(await client.observe(0),await client.map()),true);
+tool('view_map','See the current colored world map with your provinces outlined and nearby troop counts. The first content block also has the exact compact board data. Use this only with a vision-capable model; no private player text is drawn.',
+  {},[],async()=>{
+    const observation=await client.observe(0),map=await client.map();
+    return { mcpContent: [{type:'text',text:JSON.stringify(boardView(observation,map))},
+      {type:'image',mimeType:'image/png',data:(await mapViewPng(observation,map)).toString('base64')}] };
   },true);
 tool('match_leaderboard','Read the current match ranking by completed industry. Includes every alliance (solo sides too), each player’s industry, current strength-weighted victory share and conditional payouts. This is not persistent cross-match standings.',
   {},[],async()=>{const o=await client.observe(0);return {status:o.status,tick:o.tick,economyThreshold:o.economyThreshold,
@@ -144,7 +154,8 @@ async function handle(line){
   if(!definition){send(request.id,null,{code:-32602,message:'Unknown tool'});return;}
   const args=request.params?.arguments || {},error=validate(definition.inputSchema,args);
   if(error){send(request.id,null,{code:-32602,message:error});return;}
-  try{const result=await definition.run(args);send(request.id,{content:[{type:'text',text:JSON.stringify(result)}]});}
+  try{const result=await definition.run(args);send(request.id,
+    result?.mcpContent ? {content:result.mcpContent} : {content:[{type:'text',text:JSON.stringify(result)}]});}
   catch(error){send(request.id,{isError:true,content:[{type:'text',text:JSON.stringify({error:error.message})}]});}
 }
 const lines=createInterface({input:process.stdin,crlfDelay:Infinity});

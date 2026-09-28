@@ -21,6 +21,10 @@ test('benchmark export keeps aggregate Pi metrics and excludes private run conte
   assert.equal(run.country, 'britain');
   assert.doesNotMatch(JSON.stringify(run), /private|secret|endpoint/);
   assert.equal(summarizeRun(raw, 'external').modelGroup, 'external');
+  assert.equal(summarizeRun({ ...raw, toolCalls: [{ name: 'board', ok: true }] }, 'luna').strategy,
+    'compact board');
+  assert.equal(summarizeRun({ ...raw, toolCalls: [{ name: 'view_map', ok: true }] }, 'luna').strategy,
+    'visual map');
 });
 
 test('benchmark export does not invent missing historical action or token counts', () => {
