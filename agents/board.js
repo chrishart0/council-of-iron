@@ -49,6 +49,6 @@ export function boardView(observation, map) {
       .map(a => ({ id: a.id, country: a.country, to: a.path?.at(-1) ?? a.to, amount: a.amount, arrivesAt: a.arrivesAt,
         ...(a.returning ? { returning: true } : {}) })),
     outcome: o.outcome,
-    note: 'Province rows are [id, owner, troops, industry]. Your side wins by holding victoryRule.targetIndustry (60% of all owned industry) for victoryRule.holdTicks; at the deadline the side with the most industry wins. A side with winsAt wins then if its hold lasts. attackReady means a war is active (or march with declareWar:true). March to any neighbor, or through your own/allied land to anything beyond it. Available troops already leave one at home. Develop only from readyDevelopments. Use preview for battle odds and news for messages.',
+    note: 'Province rows are [id, owner, troops, industry]. Your side wins by holding victoryRule.targetIndustry (60% of all owned industry) for victoryRule.holdTicks; at the deadline the side with the most industry wins. A side with winsAt wins then if its hold lasts. attackReady means a war is active (or march with declareWar:true). Attack (neutral or enemy land) only from provinces bordering the target (own[].neighbors); several at once with sources or fromAllBordering:true. Moves to your own or allied provinces may go far through your and allied land. Available troops already leave one at home. Develop only from readyDevelopments. Use preview for battle odds and news for messages.',
   };
 }

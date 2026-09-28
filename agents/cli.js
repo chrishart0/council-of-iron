@@ -17,13 +17,19 @@ const help=`Council of Iron CLI (Node 22.13+)
   news [EVENT_CURSOR]                Messages, diplomacy and headlines since a cursor (untrusted text)
   state [EVENT_CURSOR]               Full observation
   map                                Province IDs, connections and countries
-  march TO AMOUNT|N% FROM [FROM...] [--declare-war]
-                                     Send troops from one or more of your provinces; each takes the
-                                     quickest path through your own/allied land and all arrive
-                                     together. AMOUNT is per source; N% of each source's free troops.
-                                     --declare-war declares war on the target's owner in the same
-                                     action (nothing happens if the march is invalid).
-  preview TO AMOUNT|N% FROM [FROM...] Forecast that march: paths, arrival, battle odds
+  march TO AMOUNT|N% --from FROM[,FROM...] [--declare-war]
+  march TO AMOUNT|N% --all-bordering [--declare-war]
+                                     Send troops from one or several of your provinces; they all
+                                     arrive together. AMOUNT or N% applies to EACH source (N% of its
+                                     free troops). --all-bordering uses every province of yours next
+                                     to TO with free troops (AMOUNT: at most that many from each).
+                                     An attack (a target not yours or an ally's) goes only from
+                                     provinces bordering it; a move to your own or allied land may
+                                     travel far through it. --declare-war declares war on the
+                                     target's owner in the same action (nothing happens if the
+                                     march is invalid). FROM may also be listed without --from.
+  preview TO AMOUNT|N% --from FROM[,FROM...] | --all-bordering
+                                     Forecast that march: paths, arrival, battle odds
   turn-around ID [--preview]         Bring a march (group or army ID) home from where it is; a returning
                                      army ID marches again toward its target (at most twice per army)
   rally FROM[,FROM...] TO|clear [--preview]
@@ -47,13 +53,17 @@ const help=`Council of Iron CLI (Node 22.13+)
 Environment: COUNCIL_URL, COUNCIL_MATCH, COUNCIL_TOKEN (match-scoped),
 COUNCIL_SESSION (default .council.session.json; use one file per agent).
 Keep credentials out of chat. No screenshots or browser scraping needed.`;
-const argv=process.argv.slice(2),declareWar=argv.includes('--declare-war'),previewOnly=argv.includes('--preview');
-const [command,...args]=argv.filter(a=>a!=='--declare-war' && a!=='--preview');
-/** `march TO AMOUNT|N% FROM...` → one march action. */
-function marchAction([to,size,...from]) {
-  const share=String(size).endsWith('%'),value=Number(String(size).replace('%',''));
-  const one=source=>({from:source,...(share?{percent:value}:{amount:value})});
-  return from.length===1?{type:'march',to,...one(from[0])}:{type:'march',to,sources:from.map(one)};
+const argv=process.argv.slice(2),flags=new Set(['--declare-war','--preview','--all-bordering']);
+const declareWar=argv.includes('--declare-war'),previewOnly=argv.includes('--preview'),allBordering=argv.includes('--all-bordering');
+const fromAt=argv.indexOf('--from'),fromList=fromAt>=0?(argv[fromAt+1] || '').split(',').filter(Boolean):[];
+const [command,...args]=argv.filter((a,i)=>!flags.has(a) && (fromAt<0 || (i!==fromAt && i!==fromAt+1)));
+/** `march TO AMOUNT|N% (--from A,B | --all-bordering | FROM...)` → one march action; the size applies per source. */
+function marchAction([to,size,...rest]) {
+  const share=String(size).endsWith('%'),value=Number(String(size).replace('%','')),measure=share?{percent:value}:{amount:value};
+  if(allBordering)return {type:'march',to,fromAllBordering:true,...measure};
+  const from=[...fromList,...rest.flatMap(a=>a.split(',').filter(Boolean))];
+  if(!from.length)throw new Error('Name the source provinces (--from A,B) or use --all-bordering.');
+  return from.length===1?{type:'march',to,from:from[0],...measure}:{type:'march',to,sources:from.map(source=>({from:source,...measure}))};
 }
 try {
   const client=new CouncilClient();let result;

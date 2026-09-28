@@ -19,7 +19,10 @@ export function repairHint(observation, map, toolName, args) {
           developing: Boolean(province.developing) } : {}) } : {}) };
   }).filter(Boolean);
   const target = args.to && provinces.get(args.to);
+  // An attack goes only from provinces bordering the target: list yours there with their free troops.
+  const bordering = target ? (geometry.get(target.id)?.neighbors || []).filter(id => provinces.get(id)?.owner === observation.you)
+    .map(id => ({ id, available: available.get(id) })) : [];
   return { observedAtTick: observation.tick, status: observation.status, sources,
     ...(target ? { target: { id: target.id, owner: target.owner, attackReady: !target.owner || target.owner === observation.you ||
-      observation.wars.includes([observation.you, target.owner].sort().join(':')) } } : {}) };
+      observation.wars.includes([observation.you, target.owner].sort().join(':')), yourBorderingProvinces: bordering } } : {}) };
 }

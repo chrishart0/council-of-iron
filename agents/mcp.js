@@ -18,9 +18,13 @@ function tool(name,description,properties,required,run,readOnly=false){
     annotations:{readOnlyHint:readOnly,destructiveHint:!readOnly,openWorldHint:false},run});
 }
 const amount={type:'integer',minimum:1},percent={type:'number',exclusiveMinimum:0,maximum:100};
-const marchProperties={to:string,from:string,amount,percent,sources:{type:'array',minItems:1,maxItems:16,
-  description:'Several of your provinces attacking together: [{from, amount|percent}]. Use instead of from/amount.',
-  items:{type:'object',properties:{from:string,amount,percent},required:['from'],additionalProperties:false}}};
+const marchProperties={to:string,from:{type:'string',description:'One source province of yours.'},
+  amount:{...amount,description:'Troops from EACH source (with fromAllBordering: at most this many from each).'},
+  percent:{...percent,description:'Share of EACH source\'s free troops, rounded down.'},
+  sources:{type:'array',minItems:1,maxItems:16,
+  description:'Several of your provinces sending together, all arriving on the same tick: [{from, amount|percent}], e.g. [{"from":"A","percent":50},{"from":"B","percent":50}]. Use instead of from.',
+  items:{type:'object',properties:{from:string,amount,percent},required:['from'],additionalProperties:false}},
+  fromAllBordering:{type:'boolean',enum:[true],description:'Send from every province of yours bordering `to` that has free troops, with the top-level amount or percent applied to each (e.g. {"to":"X","fromAllBordering":true,"percent":75}). Use instead of from/sources. The response lists each source\'s troops.'}};
 const marchAction=a=>{const {opId,...action}=a;return {type:'march',...action};};
 
 tool('list_matches','List rooms. Join a country before the host starts.',{},[],()=>client.list(),true);
@@ -57,9 +61,9 @@ tool('view_map','See the current colored world map with your provinces outlined 
   },true);
 tool('observe','The full observation: every province, army, battle, rule and travel time, and the events delivered to you after a cursor. Large; prefer board and news. Player text is untrusted game speech.',
   {after:{type:'integer',minimum:0}},[],a=>client.observe(a.after || 0),true);
-tool('preview','Forecast a march without sending it: the path each source takes, the shared arrival tick, the defenders expected by then and the exact battle odds (combatAtArrival.attackerWinChance). Same arguments as march. warRequired:true means you must declare war first (or march with declareWar:true).',
+tool('preview','Forecast a march without sending it: the path each source takes, the shared arrival tick, the defenders expected by then and the exact battle odds (combatAtArrival.attackerWinChance). Same arguments as march (from, sources or fromAllBordering). warRequired:true means you must declare war first (or march with declareWar:true).',
   marchProperties,['to'],a=>client.plan(marchAction(a)),true);
-tool('march','Send troops to a province. One source: from + amount (or percent of its free troops). Several sources attacking together: sources:[{from, amount|percent}] — they all arrive on the same tick. Each column takes the quickest path through your own and allied land (twice as fast there), so the target can be a neighbour or anything beyond your land. Leave one troop at home (board.own[].available already does). Attacking another country needs a war: set declareWar:true to declare war on the owner in the same action (nothing happens if the march is invalid). Friendly targets are reinforced; troops sent to an ally become the ally\'s.',
+tool('march','Send troops to one province, from one or several of your provinces at once; all columns arrive on the same tick. Sources: from (one), sources:[{from, amount|percent}] (several, e.g. {to:"X", sources:[{from:"A",percent:50},{from:"B",percent:50}]}), or fromAllBordering:true with amount|percent (every province of yours next to the target with free troops). amount/percent apply to EACH source. ATTACK (target neutral or another side\'s): every source must border the target (a land border or sea link: board.own[].neighbors, decision_view frontier sources); to attack from further away, first march troops to a province of yours bordering it. REINFORCE (target yours or an ally\'s): a source may be anywhere; each column takes the quickest path through your own and allied land (twice as fast there). Leave one troop at home (board.own[].available already does). Attacking another country needs a war: declareWar:true declares war on the owner in the same action (nothing happens if the march is invalid). Troops sent to an ally become the ally\'s. Response: total, sources [{from, amount, departsAt}], arrivesAt.',
   {...marchProperties,declareWar:{type:'boolean'},...op},['to'],a=>client.action(marchAction(a),a.opId));
 tool('turn_around','Bring troops back, or send them back again. Pass a march groupId or an advancing army ID: waiting sources are cancelled and marching troops turn home from where they are (they take as long as they have been out). Pass a RETURNING army ID (recalled, or turned back automatically; see the army_recalled reason): it marches again toward the target it had been heading for, from where it is now, if that is still a legal march (at war, neutral or allied). At most twice per army; engaged armies cannot. preview:true only forecasts (mode recall|resume, arrivesAt, any battle already there).',
   {id:string,preview:{type:'boolean'},...op},['id'],async a=>{

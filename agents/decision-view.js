@@ -47,6 +47,6 @@ export function decisionView(observation, map) {
     possiblePartners: board.sides.filter(s => s.members.length === 1 && s.id !== board.side)
       .map(s => ({ country: s.members[0], industry: s.industry, combinedIndustry: (side?.industry ?? ownIndustry) + s.industry })),
     recentOutcomes, eventCursor: observation.cursor, hasMoreEvents: observation.hasMore,
-    decisionNote: 'Frontier targets are direct neighbours of your provinces with free troops; requiresWar means declare war first (or march with declareWar:true). They are feasible sources, not a combat forecast: use preview for a chosen battle. Longer marches through your and allied land are also possible. Outcomes contain only events delivered to your seat and omit player speech; use news for messages. Drain hasMoreEvents before treating outcomes as recent.',
+    decisionNote: 'Frontier targets are the provinces you can attack now: each borders the listed sources of yours with free troops (an attack goes only from bordering provinces). Attack from all of them at once with march {to, fromAllBordering:true, percent}. requiresWar means declare war first (or march with declareWar:true). This is not a combat forecast: use preview for a chosen battle. To attack something further away, first march troops through your own or allied land to a province of yours bordering it. Outcomes contain only events delivered to your seat and omit player speech; use news for messages. Drain hasMoreEvents before treating outcomes as recent.',
   };
 }

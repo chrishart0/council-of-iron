@@ -198,8 +198,11 @@ test('real CLI subprocess joins, observes, sends orders, reconnects from a priva
   assert.equal(statSync(env.COUNCIL_SESSION).mode & 0o777,0o600);
   await f.launch(id,sa.token);
   const moved=await run('march','low-countries','5','england');assert.equal(moved.code,0,moved.stderr);
-  const both=await run('preview','north-france','50%','england','scotland');assert.equal(both.code,0,both.stderr);
-  assert.equal(JSON.parse(both.stdout).sources.length,2);assert.ok(JSON.parse(both.stdout).combatAtArrival);
+  const both=await run('preview','north-france','50%','--from','england,ireland');assert.equal(both.code,0,both.stderr);
+  assert.equal(JSON.parse(both.stdout).sources.length,2);
+  const bordering=await run('preview','north-france','50%','--all-bordering');assert.equal(bordering.code,0,bordering.stderr);
+  assert.deepEqual(JSON.parse(bordering.stdout).sources.map(s=>s.from).sort(),['england','ireland']);
+  const far=await run('preview','north-france','50%','--from','scotland');assert.equal(far.code,1);assert.match(far.stderr,/scotland does not border north-france.*yours: ireland, england/);assert.ok(JSON.parse(both.stdout).combatAtArrival);
   const state=JSON.parse((await run('state')).stdout);assert.equal(state.you,'britain');assert.equal(state.orders.length,1);
   const compact=JSON.parse((await run('board')).stdout);
   assert.equal(compact.you,'britain');
@@ -474,4 +477,34 @@ test('a long march has the same path and arrival for the browser (HTTP /plan), M
   assert.deepEqual(JSON.parse(cli.stdout).sources[0].path,http.sources[0].path);
   const sent=JSON.parse((await subprocess('agents/cli.js',['march','alaska','20','mexico'],env)).stdout);
   assert.deepEqual(sent.orders[0].path,http.sources[0].path);assert.equal(sent.arrivesAt,http.arrivesAt);
+});
+test('attack from every bordering province: HTTP, MCP and CLI agree; percent per source; a clear error when none',async t=>{
+  const f=await fixture(t),host=await f.register('Host'),other=await f.register('Other');
+  const id=await f.room(host),usa=await f.seat(id,host,'usa');await f.seat(id,other,'britain');
+  await f.launch(id,usa.token);
+  const g=f.app.games.get(id);Object.assign(g.provinces.find(v=>v.id==='central-us'),{troops:21});
+  const action={to:'mexico',fromAllBordering:true,percent:50};
+  const http=(await f.call(`/api/games/${id}/plan`,'POST',action,usa.token)).data;
+  assert.deepEqual(http.sources.map(s=>[s.from,s.amount]),[['central-us',10],['west-us',Math.floor((g.provinces.find(v=>v.id==='west-us').troops-1)/2)]]);
+  const env={COUNCIL_URL:f.url,COUNCIL_SESSION:pathJoin(f.dir,'bordering.session.json'),COUNCIL_TOKEN:usa.token,COUNCIL_MATCH:id};
+  const mcp=await subprocess('agents/mcp.js',[],env,[
+    {jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-06-18'}},{jsonrpc:'2.0',method:'notifications/initialized'},
+    {jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'preview',arguments:action}},
+    {jsonrpc:'2.0',id:3,method:'tools/call',params:{name:'march',arguments:{to:'andes',fromAllBordering:true,percent:50}}},
+    {jsonrpc:'2.0',id:4,method:'tools/call',params:{name:'march',arguments:{to:'mexico',fromAllBordering:false,percent:50}}},
+    {jsonrpc:'2.0',id:5,method:'tools/call',params:{name:'march',arguments:{to:'mexico',from:'east-us',amount:3}}},
+  ].map(x=>JSON.stringify(x)).join('\n')+'\n');
+  const out=mcp.stdout.trim().split('\n').map(x=>JSON.parse(x));
+  assert.deepEqual(JSON.parse(out[1].result.content[0].text).sources,http.sources);
+  assert.equal(out[2].result.isError,true);assert.match(out[2].result.content[0].text,/None of your provinces bordering andes has free troops/);
+  assert.equal(out[3].error.code,-32602,'only true is accepted');
+  const far=JSON.parse(out[4].result.content[0].text);
+  assert.match(far.error,/east-us does not border mexico.*yours: west-us, central-us/);
+  assert.deepEqual(far.hint.target.yourBorderingProvinces.map(p=>p.id).sort(),['central-us','west-us']);
+  const cli=await subprocess('agents/cli.js',['preview','mexico','50%','--all-bordering'],env);assert.equal(cli.code,0,cli.stderr);
+  assert.deepEqual(JSON.parse(cli.stdout).sources,http.sources);
+  const sent=JSON.parse((await subprocess('agents/cli.js',['march','mexico','50%','--all-bordering'],env)).stdout);
+  assert.deepEqual(sent.sources.map(s=>[s.from,s.amount]),http.sources.map(s=>[s.from,s.amount]));
+  assert.equal(sent.total,http.total);assert.equal(sent.arrivesAt,http.arrivesAt);
+  assert.equal(g.orders.filter(o=>o.to==='mexico').length,2);
 });
