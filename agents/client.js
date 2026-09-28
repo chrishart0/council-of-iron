@@ -50,7 +50,12 @@ export class CouncilClient {
     return {match,country,sessionFile:this.sessionPath,notices:result.notices || []};
   }
   gamePath(suffix='') {if(!this.match)throw new Error('Join a match or set COUNCIL_MATCH first.');return `/api/games/${this.match}${suffix}`;}
-  observe(after=0) { return this.request(this.gamePath(`?after=${after}`)); }
+  /** `inbox: true` adds the seat's inbox (unread messages, pending decisions) without marking anything read. */
+  observe(after=0,{inbox=false}={}) { return this.request(this.gamePath(`?after=${after}${inbox?'&inbox=1':''}`)); }
+  /** Read your inbox and mark it read (oldest first, 20 per call; `more` means call again). */
+  readInbox() { return this.request(this.gamePath('/inbox'),'POST',{}); }
+  /** Mark messages read through event `through`, as seen by a reader that started after event `after`. */
+  markRead(through,after) { return this.request(this.gamePath('/inbox'),'POST',{through,...(after!==undefined?{after}:{})}); }
   /** Public World feed (world chat + engine headlines), oldest first. Reply with chat on channel world. */
   feed(after=0,limit=100) { return this.request(this.gamePath(`/feed?${new URLSearchParams({after,limit})}`)); }
   review() {return this.request(this.gamePath('/review'));}

@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { Store } from './store.js';
-import { RULES, act, rallyPlan, turnAroundPlan, createGame, displayName, join, observe, preview, start, tick, worldFeed, RuleError, requireRule, text } from './engine.js';
+import { RULES, act, attention, inbox, markRead, rallyPlan, turnAroundPlan, createGame, displayName, join, observe, preview, start, tick, worldFeed, RuleError, requireRule, text } from './engine.js';
 import { buildReview, unavailableReview } from './review.js';
 import { replayReader } from '../public/replay-model.js';
 import { operationalInsights } from '../public/insights.js';
@@ -180,7 +180,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         g.rules.revealAllianceChatAfterMatch=true;
         games.set(g.id,g);save(g);return json(res,201,{id:g.id});
       }
-      const match=path.match(/^\/api\/games\/([a-zA-Z0-9-]+)(?:\/(join|start|bots|actions|plan|map|review|replay|feed|stt))?$/);
+      const match=path.match(/^\/api\/games\/([a-zA-Z0-9-]+)(?:\/(join|start|bots|actions|plan|map|review|replay|feed|stt|inbox))?$/);
       if(match) {
         const g=games.get(match[1]);requireRule(g,'Room not found.',404);
         const endpoint=match[2], gameMap=mapFor(g);
@@ -192,7 +192,9 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
           const after=Number(url.searchParams.get('after') || 0);
           requireRule(Number.isSafeInteger(after) && after>=0,'Invalid event cursor.');
           const view = observe(g,p?.id || null,after);
-          return json(res,200,{...view, insights:operationalInsights(view), isHost:identity?.id===g.hostId});
+          // ?inbox=1 (agent clients): the seat's unread messages and pending decisions, same as GET /inbox.
+          return json(res,200,{...view, insights:operationalInsights(view), isHost:identity?.id===g.hostId,
+            ...(p && url.searchParams.get('inbox')==='1'?{inbox:inbox(g,p.id)}:{})});
         }
         if(endpoint==='feed' && req.method==='GET') {
           // Public World feed: world chat + engine headlines only. Same for every viewer.
@@ -253,9 +255,27 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
           const p=seat();requireRule(g.status!=='finished','This match has finished.',409);
           return json(res,200,await stt.transcribe(req,`${g.id}:${p.id}`));
         }
+        if(endpoint==='inbox') {
+          // The seat's own inbox (docs/API.md). GET reads it; POST also moves the read cursor.
+          const p=seat();
+          if(req.method==='GET') return json(res,200,inbox(g,p.id));
+          if(req.method==='POST') {
+            const data=await body(req);
+            if(data.through!==undefined) {
+              markRead(g,p.id,data.through,data.after ?? null);save(g);return json(res,200,inbox(g,p.id));
+            }
+            // Read a page oldest first and mark through the last message shown: nothing unread is skipped.
+            const page=inbox(g,p.id,{limit:20,newest:false});
+            const readThrough=markRead(g,p.id,page.more?page.messages.at(-1).id:g.sequence);save(g);
+            return json(res,200,{...page,readThrough});
+          }
+        }
         if(endpoint==='actions' && req.method==='POST') {
           const p=seat(),data=await body(req);
-          const result=act(g,gameMap,p.id,data.action,data.opId);save(g);return json(res,200,result);
+          const result=act(g,gameMap,p.id,data.action,data.opId);save(g);
+          // Not part of the stored receipt: what waits for this seat right now (unread messages, decisions).
+          const note=attention(g,p.id);
+          return json(res,200,note?{...result,attention:note}:result);
         }
       }
       throw new RuleError('Not found.',404);

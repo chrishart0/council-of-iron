@@ -231,8 +231,8 @@ test('stdio MCP negotiates, validates schemas, joins an agent, calls real HTTP, 
   ].map(x=>JSON.stringify(x)).join('\n')+'\n';
   const result=await subprocess('agents/mcp.js',[],env,input);assert.equal(result.code,0,result.stderr);
   const output=result.stdout.trim().split('\n').map(x=>JSON.parse(x));assert.equal(output.length,11);
-  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,27);
-  assert.ok(['board','decision_view','news','preview','march','rally','turn_around','declare_war','offer_peace','accept_peace'].every(name=>output[1].result.tools.some(t=>t.name===name)));
+  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,28);
+  assert.ok(['board','decision_view','news','inbox','preview','march','rally','turn_around','declare_war','offer_peace','accept_peace'].every(name=>output[1].result.tools.some(t=>t.name===name)));
   assert.ok(!['move','transit','coordinated_attack','recall','vote_war','lock_opening','situation'].some(name=>output[1].result.tools.some(t=>t.name===name)));
   assert.equal(JSON.parse(output[2].result.content[0].text).country,'britain');
   const observed=JSON.parse(output[3].result.content[0].text);assert.equal(observed.you,'britain');

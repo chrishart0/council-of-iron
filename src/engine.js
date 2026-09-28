@@ -948,6 +948,59 @@ export function observe(g, country = null, after = 0, limit = 200) {
     events, cursor: hasMore ? events.at(-1).id : g.sequence, hasMore, outcome: g.outcome };
 }
 
+const firstAfter = (g, after) => {
+  let lo = 0, hi = g.events.length;
+  while (lo < hi) { const mid = (lo + hi) >>> 1;
+    if (g.events[mid].id <= after) lo = mid + 1; else hi = mid; }
+  return lo;
+};
+/** A seat's inbox: unread DMs and alliance messages delivered to it (the same recipient filter as
+ * `observe`: addressed to that seat at send time, never its own), plus the decisions waiting on it
+ * (alliance offers it has not accepted, peace offers to its side). Read-only.
+ * Unread = after the seat's read cursor (`readThrough`, an event ID), which moves only through
+ * `markRead`. `newest` shows the latest `limit` messages (`older` counts the rest); otherwise the
+ * oldest `limit` (`more` counts the rest), so a reader that marks through the last one shown loses nothing. */
+export function inbox(g, country, { limit = 5, newest = true } = {}) {
+  player(g, country);
+  const readThrough = g.readCursors[country] ?? 0, unread = [];
+  for (let i = firstAfter(g, readThrough); i < g.events.length; i++) {
+    const e = g.events[i];
+    if (e.type === 'message' && e.recipients?.includes(country) && e.from !== country) unread.push(e);
+  }
+  const shown = limit <= 0 ? [] : newest ? unread.slice(-limit) : unread.slice(0, limit);
+  const side = player(g, country).side;
+  const needsDecision = [
+    ...g.proposals.filter(q => q.status === 'open' && q.roster.includes(country) && !q.accepted.includes(country))
+      .map(q => ({ kind: 'alliance_offer', proposalId: q.id, from: q.creator, name: q.name, roster: q.roster, expiresAt: q.expiresAt })),
+    ...g.peaceOffers.filter(o => o.status === 'offered' && o.toSide === side)
+      .map(o => ({ kind: 'peace_offer', offerId: o.id, from: o.by, fromRoster: o.fromRoster, expiresAt: o.expiresAt }))];
+  const from = {};
+  for (const e of unread) from[e.from] = (from[e.from] || 0) + 1;
+  return { readThrough, unread: unread.length, from,
+    messages: shown.map(e => ({ id: e.id, tick: e.tick, from: e.from, channel: e.channel, text: e.text, untrusted: true })),
+    ...(unread.length > shown.length ? { [newest ? 'older' : 'more']: unread.length - shown.length } : {}), needsDecision };
+}
+/** Move a seat's read cursor forward to `through` (never back, never past the log). With `after`,
+ * the reader saw only events after that cursor: the move happens only when nothing unread lies
+ * before it (after <= readThrough), so skipping ahead never marks unseen messages read. */
+export function markRead(g, country, through, after = null) {
+  player(g, country);
+  requireRule(Number.isSafeInteger(through) && through >= 0, 'Invalid read cursor.');
+  requireRule(after === null || Number.isSafeInteger(after) && after >= 0, 'Invalid event cursor.');
+  const current = g.readCursors[country] ?? 0;
+  if (after === null || after <= current) g.readCursors[country] = Math.max(current, Math.min(through, g.sequence));
+  return g.readCursors[country] ?? 0;
+}
+/** One short line for order results when something waits for this seat, else null. */
+export function attention(g, country) {
+  const box = inbox(g, country, { limit: 0 }), parts = [];
+  if (box.unread) parts.push(`${box.unread} unread message${box.unread === 1 ? '' : 's'} (${Object.entries(box.from)
+    .map(([id, n]) => n > 1 ? `${id} ×${n}` : id).join(', ')}): read inbox`);
+  for (const d of box.needsDecision) parts.push(d.kind === 'alliance_offer'
+    ? `Alliance offer from ${d.from} awaiting your answer (${d.proposalId})` : `Peace offer from ${d.from} awaiting your answer (${d.offerId})`);
+  return parts.length ? parts.join('; ') : null;
+}
+
 /** Public World feed: world-channel chat plus headlines, oldest first, with its own cursor.
  * Identical for players, spectators and agents; never includes alliance or direct messages. */
 export function worldFeed(g, after = 0, limit = 100) {
