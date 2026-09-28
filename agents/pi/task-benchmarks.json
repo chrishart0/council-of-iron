@@ -207,6 +207,29 @@
       "cacheReadTokens": 199680,
       "totalTokens": 234840,
       "uncachedTokens": 35160
+    },
+    {
+      "id": "2026-09-28T04-12-28-958Z",
+      "taskId": "fixed-orders-v1",
+      "startedAt": "2026-09-28T04:12:28.958Z",
+      "modelGroup": "qwen",
+      "client": "Codex",
+      "access": "cli",
+      "success": true,
+      "correctSteps": 3,
+      "requiredSteps": 3,
+      "acceptedOrders": 3,
+      "rejectedOrders": 0,
+      "toolCalls": 6,
+      "failedToolCalls": 0,
+      "firstActionSeconds": 11.8,
+      "completionSeconds": 14.46,
+      "durationSeconds": 16.85,
+      "inputTokens": 76301,
+      "outputTokens": 578,
+      "cacheReadTokens": 60782,
+      "totalTokens": 76879,
+      "uncachedTokens": 16097
     }
   ]
 }
