@@ -198,7 +198,7 @@ test('real CLI subprocess joins, observes, sends orders, reconnects from a priva
   assert.equal(statSync(env.COUNCIL_SESSION).mode & 0o777,0o600);
   await f.launch(id,sa.token);
   const moved=await run('march','low-countries','5','england');assert.equal(moved.code,0,moved.stderr);
-  const both=await run('preview','north-france','50%','england','scotland');assert.equal(both.code,0,both.stderr);
+  const both=await run('preview','north-france','50%','england','ireland');assert.equal(both.code,0,both.stderr);
   assert.equal(JSON.parse(both.stdout).sources.length,2);assert.ok(JSON.parse(both.stdout).combatAtArrival);
   const state=JSON.parse((await run('state')).stdout);assert.equal(state.you,'britain');assert.equal(state.orders.length,1);
   const compact=JSON.parse((await run('board')).stdout);
@@ -275,12 +275,12 @@ test('new rooms use the current rules; rally plans and orders go over HTTP',asyn
   const usa=await f.seat(id,host,'usa'),germany=await f.seat(id,agent,'germany','agent');
   await f.launch(id,usa.token);
   const view=(await f.call(`/api/games/${id}`,'GET',undefined,usa.token)).data;
-  assert.equal(view.rules.moveSpeedPercent,120);assert.equal(view.internalTravelTimes['west-us']['central-us'],24);
+  assert.equal(view.rules.moveSpeedPercent,120);assert.equal(view.internalTravelTimes['west-us']['central-us'],26);
   assert.deepEqual(view.rallies,[]);
   const rally={type:'rally',from:['central-us','east-us'],to:'west-us'};
   const plan=await f.call(`/api/games/${id}/plan`,'POST',rally,usa.token);
   assert.equal(plan.status,200,JSON.stringify(plan.data));assert.deepEqual(plan.data.sources.map(s=>s.path),[['west-us'],['central-us','west-us']]);
-  assert.equal(plan.data.sources[1].travel,24+25);
+  assert.equal(plan.data.sources[1].travel,24+26);
   assert.equal((await f.call(`/api/games/${id}/plan`,'POST',{type:'rally',from:'alaska',to:'west-us'},usa.token)).status,409,'no friendly path');
   assert.equal(f.app.games.get(id).orders.length,0,'a plan spends nothing');
   assert.equal((await f.call(`/api/games/${id}/plan`,'POST',rally,germany.token)).status,403);
@@ -298,7 +298,7 @@ test('industrial HTTP plans are private, atomic, synchronized, recallable and pe
   const usa=await f.seat(id,host,'usa'),germany=await f.seat(id,agent,'germany','agent');
   await f.launch(id,usa.token);
   const map=(await f.call(`/api/games/${id}/map`)).data;
-  assert.equal(map.rulesVersion,3);assert.ok(map.provinces.length>64);
+  assert.equal(map.rulesVersion,3);assert.ok(map.provinces.length>=50);
   const request={to:'mexico',sources:[{from:'west-us',percent:50},{from:'central-us',percent:50}]};
   const plan=await f.call(`/api/games/${id}/plan`,'POST',request,usa.token);
   assert.equal(plan.status,200);assert.equal(f.app.games.get(id).orders.length,0);
@@ -307,7 +307,7 @@ test('industrial HTTP plans are private, atomic, synchronized, recallable and pe
   assert.equal(new Set(receipt.orders.map(o=>o.arrivesAt)).size,1);
   f.app.step(f.app.games.get(id),1);await f.restart();
   const restored=(await f.call(`/api/games/${id}`,'GET',undefined,usa.token)).data;
-  assert.equal(restored.scenario,'imperial-1910-v5');assert.ok(restored.armies.some(a=>a.groupId===receipt.groupId));
+  assert.equal(restored.scenario,'imperial-1910-v6');assert.ok(restored.armies.some(a=>a.groupId===receipt.groupId));
   const recall={opId:'return',action:{type:'recall',id:receipt.groupId}};
   assert.equal((await f.call(`/api/games/${id}/actions`,'POST',recall,usa.token)).status,200);
   f.app.step(f.app.games.get(id),10);
@@ -459,7 +459,7 @@ test('a long march has the same path and arrival for the browser (HTTP /plan), M
   const f=await fixture(t),host=await f.register('Host'),other=await f.register('Other');
   const id=await f.room(host),usa=await f.seat(id,host,'usa');await f.seat(id,other,'britain');
   await f.launch(id,usa.token);
-  const g=f.app.games.get(id);for(const p of ['mexico','west-canada'])Object.assign(g.provinces.find(v=>v.id===p),{owner:'usa',troops:30});
+  const g=f.app.games.get(id);for(const p of ['mexico','canada'])Object.assign(g.provinces.find(v=>v.id===p),{owner:'usa',troops:30});
   const action={to:'alaska',from:'mexico',amount:20};
   const http=(await f.call(`/api/games/${id}/plan`,'POST',action,usa.token)).data;
   assert.ok(http.sources[0].path.length>=3,JSON.stringify(http));

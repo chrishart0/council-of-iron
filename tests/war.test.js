@@ -22,7 +22,7 @@ test('occupied attacks need war; neutral land remains open and failed orders res
   const war=send(g,'usa',{type:'declare_war',country:'britain'});
   assert.deepEqual(war.toRoster,['britain']);assert.deepEqual(g.wars,['britain:usa']);
   assert.equal(send(g,'usa',{type:'march',from:'west-us',to:'mexico',amount:5}).orderId.startsWith('order-'),true);
-  assert.equal(send(g,'usa',{type:'march',from:'west-us',to:'west-canada',amount:2}).orderId.startsWith('order-'),true);
+  assert.equal(send(g,'usa',{type:'march',from:'west-us',to:'canada',amount:2}).orderId.startsWith('order-'),true);
 });
 
 test('any member speaks for its alliance: war is instant for both sides; anyone on the other side accepts peace',()=>{
