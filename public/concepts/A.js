@@ -106,6 +106,14 @@ function powersList(b, { detailed = false, viewer = you } = {}) {
 
 /* Dispatches: history + chat rows. */
 const toneIcon = { war: 'war', alliance: 'ally', peace: 'seal', broken: 'close', industry: 'industry', victory: 'laurel', neutral: 'dispatch' };
+/* Right column (desktop): Powers above the shared Messages panel (kit/comms.js, skinned in A.css). */
+function powersSection({ detailed = false } = {}) {
+  return `<section class="ol ol-powers" data-region="powers">${plaque('Powers', `${tabs([['teams', 'Teams'], ['players', 'Players']], 'teams')}`)}<div class="ol-body">${powersList(board, { detailed })}</div><p class="folded">${board.rows.length} blocs · ${board.fronts.length} war fronts</p></section>`;
+}
+const panel = () => '<section id="cx-panel" class="comms" data-region="comms"></section>';
+const toasts = () => '<div id="cx-toasts" class="toast-lane" data-region="toasts"></div>';
+function rightcol(opts) { return `<aside class="rightcol" data-inset="right">${powersSection(opts)}${panel()}</aside>`; }
+
 /* Context cards (left column on desktop, bottom plate on phones). One primary, in a fixed footer. */
 function provinceCard() {
   const o = m.order, target = L.provinces.find(p => p.id === o.to), source = L.provinces.find(p => p.id === o.from);

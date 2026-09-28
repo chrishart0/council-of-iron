@@ -594,7 +594,7 @@ body[data-comms=thread] .wide>.oob .caret{transform:rotate(-90deg)}
 .dossier-foot.two .stamp.outline{min-height:40px;font-size:15px}
 .cx-title{font-size:19px}
 .phone .cx-toast p{white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-height:1.25;font-size:13.5px}
-.phone .cx-toast .cx-secondary{display:none}
+.phone .cx-toast .cx-secondary{padding:4px 2px}
 .phone .tape-name .long{display:none}.tape-name .short{display:none}.phone .tape-name .short{display:inline}
 .phone .dossier .hint{display:none}
 .phone>.dossier{max-height:58dvh}
