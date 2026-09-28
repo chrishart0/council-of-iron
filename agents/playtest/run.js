@@ -110,7 +110,7 @@ async function runCommand() {
 
   if (opts.systemd) {
     const inner = process.argv.slice(1).filter(a => a !== '--systemd');
-    const unit = ['systemd-run', '--user', `--unit=council-playtest-${match}`, '--collect', `--working-directory=${root}`,
+    const unit = ['systemd-run', '--user', `--unit=council-playtest-${match}`, '--collect', `--working-directory=${process.cwd()}`,
       `--setenv=PATH=${process.env.PATH}`, `--setenv=HOME=${homedir()}`, process.execPath, ...inner];
     console.log(shellQuote(unit));
     if (opts.dryRun) return;
@@ -136,7 +136,7 @@ async function runCommand() {
         console.log(`${step.input ? 'echo Y | ' : ''}${shellQuote([step.command, ...step.args])}`);
       const cmd = turnCommand(s, { prompt: '<TURN PROMPT>', work: s.work, mcp: s.mcp, usageFile: resolve(s.dir, 'turns/N.usage.json'),
         hermesProvider: opts.hermesProvider, fakeScript: FAKE });
-      console.log(`(cd ${shellQuote([cmd.cwd])} && ${cmd.env ? `${Object.keys(cmd.env).map(k => `${k}=…`).join(' ')} ` : ''}${shellQuote([cmd.command, ...cmd.args])} < /dev/null)`);
+      console.log(`(cd ${shellQuote([cmd.cwd])} && ${cmd.env ? `${Object.entries(cmd.env).map(([k, v]) => shellQuote([`${k}=${v}`])).join(' ')} ` : ''}${shellQuote([cmd.command, ...cmd.args])} < /dev/null)`);
     }
     console.log(`\n# <TURN PROMPT> = these rules + MEMORY + INBOX + the seat's current decision_view:\n${turnRules({ country: '<COUNTRY>', match, interval })}`);
     return;
@@ -147,8 +147,13 @@ async function runCommand() {
   chmodSync(dataRoot, 0o700); chmodSync(runDir, 0o700);
   const log = text => console.log(`${new Date().toISOString().slice(11, 19)} ${text}`);
 
+  // Slow client setup first (a Hermes profile takes ~30 s), so the joins and first reads happen together.
   for (const s of seatState) {
     for (const d of [s.dir, s.work, resolve(s.dir, 'turns')]) { mkdirSync(d, { recursive: true, mode: 0o700 }); chmodSync(d, 0o700); }
+    if (s.client === 'grok') { mkdirSync(resolve(s.work, '.grok'), { recursive: true, mode: 0o700 }); writePrivate(resolve(s.work, '.grok/config.toml'), grokConfig(s.mcp, grokUserServers())); }
+    if (s.client === 'hermes') setupHermes(s, log);
+  }
+  for (const s of seatState) {
     s.client_ = new CouncilClient({ url: opts.url, sessionPath: s.mcp.env.COUNCIL_SESSION, token: '', match });
     const joined = s.client_.session.match === match && s.client_.session.seatToken;
     if (!joined) {
@@ -158,16 +163,16 @@ async function runCommand() {
       log(`${s.slot}: joined ${match} as ${s.country}`);
     } else if (s.client_.session.country !== s.country) throw new Error(`Seat ${s.slot}'s session plays ${s.client_.session.country}, not ${s.country}.`);
     chmodSync(s.mcp.env.COUNCIL_SESSION, 0o600);
-    if (s.client === 'grok') { mkdirSync(resolve(s.work, '.grok'), { recursive: true, mode: 0o700 }); writePrivate(resolve(s.work, '.grok/config.toml'), grokConfig(s.mcp, grokUserServers())); }
-    if (s.client === 'hermes') setupHermes(s, log);
     Object.assign(s, { cursor: 0, memory: '', turns: 0, failures: 0, inbox: [], sinceTurn: [], lastStartTick: 0, lastEndAt: 0 },
       readJson(resolve(s.dir, 'state.json'), {}));
     s.turns = readJsonl(resolve(s.dir, 'turns.jsonl')).length;
   }
-  const map = await seatState[0].client_.map();
+  // Reads are retried on transport errors (e.g. a stale keep-alive socket); game errors are not.
+  const retry = async fn => { for (let i = 0; ; i++) { try { return await fn(); } catch (error) { if (error.status || i >= 4) throw error; await sleep(500 * (i + 1)); } } };
+  const map = await retry(() => seatState[0].client_.map());
   writePrivate(resolve(runDir, 'run.json'), JSON.stringify({ match, url: opts.url, seats, interval, turnTimeoutMs, minGapMs, startedAt: new Date().toISOString() }, null, 2));
 
-  let interrupted = false, startTick = null, gameStatus = 'lobby', tick = 0, outcome = null, reason = null;
+  let interrupted = false, startTick = readJson(resolve(runDir, 'status.json'))?.startTick ?? null, gameStatus = 'lobby', tick = 0, outcome = null, reason = null;
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => { if (interrupted) process.exit(130); interrupted = true; log(`${signal}: stopping all seats`); });
   const deadline = maxMinutes ? Date.now() + maxMinutes * 60_000 : Infinity;
   const saveSeat = s => writePrivate(resolve(s.dir, 'state.json'), JSON.stringify({ cursor: s.cursor, memory: s.memory, failures: s.failures, lastStartTick: s.lastStartTick }));

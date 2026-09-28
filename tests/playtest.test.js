@@ -48,7 +48,10 @@ test('grok argv and project config: trust, low effort, no web or subagents, only
   for (const flag of ['--always-approve', '--disable-web-search', '--no-subagents']) assert.ok(cmd.args.includes(flag), flag);
   assert.equal(at(cmd.args, '--reasoning-effort'), 'low');
   assert.equal(at(cmd.args, '--output-format'), 'streaming-json');
-  assert.match(at(cmd.args, '--disallowed-tools'), /run_terminal_command/);
+  assert.equal(at(cmd.args, '--tools'), 'search_tool,use_tool');
+  assert.equal(cmd.env.GROK_MEMORY, '0');
+  assert.equal(cmd.env.GROK_CLAUDE_MCPS_ENABLED, 'false');
+  assert.equal(cmd.env.GROK_CURSOR_SKILLS_ENABLED, 'false');
   const config = grokConfig(mcp, ['council-game', 'mobbin', 'council']);
   assert.match(config, /\[mcp_servers\.council\]\ncommand = "\/usr\/bin\/node"/);
   assert.match(config, /COUNCIL_SESSION = "\/d\/s.json"/);
@@ -65,6 +68,8 @@ test('hermes argv and profile setup: one-shot, own profile, never --clone-all, o
   assert.equal(at(cmd.args, '--provider'), 'openai-codex');
   assert.equal(at(cmd.args, '--reasoning'), 'high');
   assert.equal(at(cmd.args, '--usage-file'), '/d/u.json');
+  assert.equal(at(cmd.args, '-t'), 'council');
+  assert.ok(cmd.args.includes('--ignore-rules'));
   const steps = setupCommands(seat, { mcp, profileExists: false, enabledOtherServers: ['context7', 'council'] });
   assert.deepEqual(steps[0].args, ['profile', 'create', 'councilpthermes', '--clone', '--no-alias']);
   assert.ok(steps.every(s => !s.args.includes('--clone-all')));

@@ -148,9 +148,10 @@ export function grokConfig(mcp, disabledServers = []) {
 /** `[mcp_servers.NAME]` table names in a TOML file. */
 export const tomlServerNames = text => [...new Set([...String(text).matchAll(/^\s*\[mcp_servers\.("?)([^\].]+)\1\]\s*$/gm)].map(m => m[2]))];
 
-export const GROK_DISALLOWED = ['run_terminal_command', 'read_file', 'search_replace', 'list_dir', 'grep', 'write',
-  'kill_command_or_subagent', 'get_command_or_subagent_output', 'spawn_subagent', 'scheduler_create', 'scheduler_delete',
-  'workflow', 'monitor', 'image_gen', 'image_edit', 'image_to_video', 'reference_to_video'];
+/** Grok imports Claude/Cursor skills, rules, hooks and MCP servers and keeps cross-session memory; these
+ * variables turn all of that off for the agent process only (the user's configs are never edited). */
+export const GROK_ENV = { GROK_MEMORY: '0', ...Object.fromEntries(['CLAUDE', 'CURSOR'].flatMap(vendor =>
+  ['AGENTS', 'HOOKS', 'MCPS', 'RULES', 'SKILLS'].map(cell => [`GROK_${vendor}_${cell}_ENABLED`, 'false']))) };
 
 /** Exact argv for one turn. `mcp` = {command, args, env} of the logging MCP proxy. Never a shell string. */
 export function turnCommand(seat, { prompt, work, mcp, usageFile, hermesProvider = 'openai-codex', fakeScript }) {
@@ -164,9 +165,10 @@ export function turnCommand(seat, { prompt, work, mcp, usageFile, hermesProvider
         default_tools_approval_mode: 'approve', tool_timeout_sec: 60 })}`, prompt] };
     case 'grok': return { command: 'grok', cwd: work, args: ['--trust', '-p', prompt, '--cwd', work, '-m', seat.model,
       '--reasoning-effort', seat.effort, '--always-approve', '--disable-web-search', '--no-subagents',
-      '--disallowed-tools', GROK_DISALLOWED.join(','), '--output-format', 'streaming-json'] };
+      // Only the MCP gateway tools: no shell, file, image or scheduler tools.
+      '--tools', 'search_tool,use_tool', '--output-format', 'streaming-json'], env: GROK_ENV };
     case 'hermes': return { command: 'hermes', cwd: work, args: ['-p', hermesProfile(seat.slot), '-z', prompt, '-m', seat.model,
-      '--provider', hermesProvider, '--reasoning', seat.effort, '--yolo', '--ignore-rules', '--usage-file', usageFile] };
+      '--provider', hermesProvider, '--reasoning', seat.effort, '--yolo', '--ignore-rules', '-t', 'council', '--usage-file', usageFile] };
     case 'fake': return { command: process.execPath, cwd: work, args: [fakeScript, prompt],
       env: { PLAYTEST_FAKE_MCP: JSON.stringify(mcp) } };
     default: throw new Error(`Unknown client ${seat.client}`);
