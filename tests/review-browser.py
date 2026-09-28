@@ -133,7 +133,7 @@ def main():
             assert page.locator('#result img').count()==0
             assert not page.evaluate('Boolean(window.REVIEW_XSS)')
             page.locator('#aar-tab-replay').click();expect(page.locator('#replay-stage')).to_be_visible()
-            assert page.locator('#review-map .province').count()==79
+            assert page.locator('#review-map .province').count()==80  # the draw fixture uses the current map (imperial-1910-v4, with Hawaii)
             page.locator('#back').click();page.locator('[data-room="old-fixture"]').click()
             expect(page.locator('#aar-player-scores tbody tr')).to_have_count(8)
             page.locator('#aar-tab-replay').click();expect(page.locator('#aar-replay')).to_contain_text('History unavailable')

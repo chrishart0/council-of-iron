@@ -110,6 +110,7 @@ def main():
                 page.locator('#create-form button').click()
                 expect(page.locator('#lobby')).to_be_visible()
                 room=http('/api/games')['games'][0]['id']
+                assert http('/api/games')['games'][0]['ruleset']=='logistics-1','new rooms default to logistics-1'
                 page.locator('#country-choice').select_option('usa')
                 page.locator('#join-form button').click()
                 expect(page.locator('#lobby-note')).to_contain_text('You command United States')
@@ -347,6 +348,7 @@ def main():
                 report['assertions'].append('Persistent experimental standings included the browser player after returning to the lobby.')
                 # Local UI interactions: distinct source selection, keyboard tabs and a real next room.
                 page.locator('#room-name').fill('Second Council')
+                page.locator('#ruleset').select_option('classic')  # this room checks the classic 12-troop development path
                 page.locator('#create-form button').click()
                 expect(page.locator('#lobby')).to_be_visible()
                 page.locator('#country-choice').select_option('usa')
