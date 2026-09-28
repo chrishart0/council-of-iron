@@ -40,25 +40,30 @@ export function summarizeRun(raw, modelGroup) {
     : raw.httpActions?.find(action => action.status === 200)?.at;
   const turns = raw.turnLog || [];
   const usedSituation = client === 'Pi' ? calls.some(call => call.name === 'situation')
-    : completed.some(event => event.name === 'situation');
+    : completed.some(event => event.name === 'situation' || event.name?.endsWith('__situation'));
+  const usedNews = client === 'Pi' ? calls.some(call => call.name === 'news')
+    : completed.some(event => event.name === 'news' || event.name?.endsWith('__news'));
   const usedBoard = client === 'Pi' ? calls.some(call => call.name === 'board')
     : completed.some(event => event.name === 'board' || event.name?.endsWith('__board'));
   const usedView = client === 'Pi' ? calls.some(call => call.name === 'view_map')
     : completed.some(event => event.name === 'view_map' || event.name?.endsWith('__view_map'));
-  const tokenUsage = raw.usage;
+  const tokenUsage = raw.usageIncomplete ? null : raw.usage;
   const inputTokens = number(tokenUsage?.input);
   const outputTokens = number(tokenUsage?.output);
   const cacheReadTokens = number(tokenUsage?.cacheRead);
   const totalTokens = number(tokenUsage?.total) ?? (inputTokens === null || outputTokens === null ? null : inputTokens + outputTokens);
-  const totalTurnMs = turns.length ? finiteSum(turns, 'wallMs') : null;
+  const totalTurnMs = turns.length && !raw.usageIncomplete ? finiteSum(turns, 'wallMs') : null;
   const durationSeconds = raw.finishedAt ? (Date.parse(raw.finishedAt) - Date.parse(raw.startedAt)) / 1000 : null;
   return {
     id: raw.runId, match: raw.match, combatSeed: raw.combatSeed || null,
     startedAt: raw.startedAt, modelGroup, client, access, country: raw.country || 'britain',
-    strategy: usedView ? 'visual map' : usedBoard ? 'compact board' : usedSituation ? 'concise situation' : raw.maxTurnSeconds ? 'full observation, capped' : 'full observation',
+    interfaceVersion: raw.interfaceVersion || null,
+    strategy: raw.embeddedBoard ? usedView ? 'board prompt + visual' : 'board in prompt'
+      : usedView ? 'visual map' : usedBoard ? usedNews ? 'compact board + news' : 'compact board'
+      : usedSituation ? 'concise situation' : usedNews ? 'news' : raw.maxTurnSeconds ? 'full observation, capped' : 'full observation',
     maxTurnSeconds: number(raw.maxTurnSeconds),
     decisionIntervalTicks: number(raw.decisionIntervalTicks),
-    sessionMode: raw.sessionMode || (client === 'Pi' ? 'persistent' : null),
+    sessionMode: raw.sessionMode || raw.turnMode || (client === 'Pi' ? 'persistent' : null),
     preset: raw.preset, status: raw.status, resultReason: raw.outcome?.reason || null,
     finalTick: number(raw.finalTick), prestige: round(raw.score.prestige),
     acceptedActions, rejectedActions, toolCalls: calls.length, failedToolCalls: failed,

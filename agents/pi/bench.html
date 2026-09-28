@@ -79,7 +79,7 @@
   </section>
   <section class="surface" aria-labelledby="table-title">
     <div class="surface-heading"><h2 id="table-title">Match ledger</h2><p>— means the original runner did not record that metric.</p></div>
-    <div class="table-wrap"><table><thead><tr><th>Started</th><th>Model</th><th>Country</th><th>Client</th><th>Clock</th><th>Seed</th><th>Strategy</th><th>Prestige</th><th>Accepted</th><th>Rejected orders</th><th>Failed / calls</th><th>Tokens</th><th>First action (s)</th><th>Seconds / turn</th></tr></thead><tbody id="rows"></tbody></table></div>
+    <div class="table-wrap"><table><thead><tr><th>Started</th><th>Model</th><th>Country</th><th>Client</th><th>Clock</th><th>Seed</th><th>Strategy / version</th><th>Prestige</th><th>Accepted</th><th>Rejected orders</th><th>Failed / calls</th><th>Tokens</th><th>First action (s)</th><th>Seconds / turn</th></tr></thead><tbody id="rows"></tbody></table></div>
   </section>
   <section class="surface" aria-labelledby="pair-title">
     <div class="surface-heading"><h2 id="pair-title">Same-seed run deltas</h2><p>Pi minus Codex. Positive Prestige and negative failure, rejection or token deltas favor Pi; these are separate games.</p></div>
@@ -126,13 +126,13 @@ function draw() {
   const tbody=$('rows');tbody.replaceChildren();
   for(const run of [...selected].reverse()) {
     const tr=document.createElement('tr');
-    const cells=[new Date(run.startedAt).toLocaleString(),run.modelGroup.toUpperCase(),run.country||'britain',`${run.client} ${run.access}`,run.preset,run.combatSeed||'—',`${run.strategy||'full observation'}${run.sessionMode?` · ${run.sessionMode}`:''}`,fmt(run.prestige),fmt(run.acceptedActions),fmt(run.rejectedActions),`${run.failedToolCalls} / ${run.toolCalls}`,fmt(run.totalTokens),fmt(run.firstActionSeconds),fmt(run.meanTurnSeconds)];
+    const cells=[new Date(run.startedAt).toLocaleString(),run.modelGroup.toUpperCase(),run.country||'britain',`${run.client} ${run.access}`,run.preset,run.combatSeed||'—',`${run.strategy||'full observation'}${run.sessionMode?` · ${run.sessionMode}`:''}${run.interfaceVersion?` · ${run.interfaceVersion}`:''}`,fmt(run.prestige),fmt(run.acceptedActions),fmt(run.rejectedActions),`${run.failedToolCalls} / ${run.toolCalls}`,fmt(run.totalTokens),fmt(run.firstActionSeconds),fmt(run.meanTurnSeconds)];
     for(let i=0;i<cells.length;i++){const td=document.createElement('td');td.textContent=cells[i];if(i===3)td.className=`client ${run.client.toLowerCase()}`;if(i===7)td.className=run.prestige<0?'negative':'positive';tr.append(td);}tbody.append(tr);
   }
   const pairRows=$('pairs');pairRows.replaceChildren();
   const bySeed=new Map();
   for(const run of selected.filter(run=>run.combatSeed)) {const key=`${run.modelGroup}|${run.country||'britain'}|${run.preset}|${run.combatSeed}`;const pair=bySeed.get(key)||{};pair[run.client]=run;bySeed.set(key,pair);}
-  for(const [key,pair] of bySeed) {if(!pair.Pi||!pair.Codex)continue;const [model,country,preset,seed]=key.split('|');const diff=(field)=>Number.isFinite(pair.Pi[field])&&Number.isFinite(pair.Codex[field])?fmt(pair.Pi[field]-pair.Codex[field]):'—';const cells=[model.toUpperCase(),country,preset,seed,diff('prestige'),diff('failedToolCalls'),diff('rejectedActions'),diff('totalTokens'),`${pair.Pi.strategy} · ${pair.Pi.sessionMode}`,`${pair.Codex.access}`];const tr=document.createElement('tr');for(const value of cells){const td=document.createElement('td');td.textContent=value;tr.append(td);}pairRows.append(tr);}
+  for(const [key,pair] of bySeed) {if(!pair.Pi||!pair.Codex)continue;const [model,country,preset,seed]=key.split('|');const diff=(field)=>Number.isFinite(pair.Pi[field])&&Number.isFinite(pair.Codex[field])?fmt(pair.Pi[field]-pair.Codex[field]):'—';const cells=[model.toUpperCase(),country,preset,seed,diff('prestige'),diff('failedToolCalls'),diff('rejectedActions'),diff('totalTokens'),`${pair.Pi.strategy} · ${pair.Pi.sessionMode}${pair.Pi.interfaceVersion?` · ${pair.Pi.interfaceVersion}`:''}`,`${pair.Codex.access}${pair.Codex.interfaceVersion?` · ${pair.Codex.interfaceVersion}`:''}`];const tr=document.createElement('tr');for(const value of cells){const td=document.createElement('td');td.textContent=value;tr.append(td);}pairRows.append(tr);}
   if(!pairRows.children.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=10;td.textContent='No completed Pi/Codex pair for this selection yet.';tr.append(td);pairRows.append(tr);}
   drawTask();
 }
