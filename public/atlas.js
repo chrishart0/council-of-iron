@@ -44,7 +44,12 @@ export class Atlas {
     // targets(from) → [id] (legal destinations, lit while a source is chosen), path(from, to) → [id…, to] (the route, drawn leg by leg) }`
     // turns a drag that starts on one of the host's provinces into an order arrow instead of a pan;
     // `onArmy(id) → boolean` handles a tap on a moving army (true = handled, no tooltip).
+    // Multi-select (optional): `lasso(ids)` receives the provinces inside a Shift-drag rectangle (mouse); with
+    // `longPress: true` a touch held still on a province calls onSelect(id, { toggle: true }) instead of a tap.
     this.dragHooks = options.drag || null; this.onArmy = options.onArmy || null; this.draftState = null;
+    this.lassoHook = options.lasso || null; this.longPress = Boolean(options.longPress);
+    // `why(id) → string|null` (optional): a reason shown in the hover tooltip, e.g. why a province is not a destination.
+    this.whyHook = options.why || null;
     this.positionsById = Object.fromEntries(map.provinces.map(p => [p.id, { x: p.x, y: p.y }]));
     this.places = new Map(map.provinces.map(p => [p.id, p]));
     this.rings = new Map(map.provinces.map(p => [p.id, provinceRings(p.path)]));
@@ -162,7 +167,7 @@ export class Atlas {
     svg.addEventListener('pointerdown', event => this.down(event));
     svg.addEventListener('pointermove', event => this.move(event));
     svg.addEventListener('pointerup', event => this.up(event));
-    svg.addEventListener('pointercancel', event => { if (this.gesture?.command) this.endDraft(null); this.pointers.delete(event.pointerId); this.gesture = null; this.dragged = true; });
+    svg.addEventListener('pointercancel', event => { if (this.gesture?.command) this.endDraft(null); this.endLasso(); clearTimeout(this.pressTimer); this.pointers.delete(event.pointerId); this.gesture = null; this.dragged = true; });
     svg.addEventListener('pointerleave', () => { this.tooltip.hidden = true; this.hoverCountry(null); });
     if (!svg.hasAttribute('tabindex')) svg.setAttribute('tabindex', 0);
     svg.addEventListener('keydown', event => {
@@ -173,7 +178,7 @@ export class Atlas {
       const cluster = event.target.closest('[data-cluster]')?.dataset.cluster;
       const id = event.target.closest('[data-province]')?.dataset.province;
       if (cluster) { event.preventDefault(); this.fit(cluster.split(',')); }
-      else if (id) { event.preventDefault(); onSelect(id, { shiftKey: event.shiftKey, keyboard: true }); }
+      else if (id) { event.preventDefault(); onSelect(id, { shiftKey: event.shiftKey, toggle: event.shiftKey || event.ctrlKey || event.metaKey, keyboard: true }); }
     });
     this.resize = new ResizeObserver(() => this.applyView()); this.resize.observe(svg);
     this.applyView();
@@ -198,8 +203,15 @@ export class Atlas {
         ...this.hit(event), shiftKey: event.shiftKey, target: event.button === 2 }; this.dragged = false;
       // A drag from the host's own province draws an order arrow instead of panning.
       const g = this.gesture;
-      if (g.id && !g.army && event.button === 0 && this.dragHooks?.start?.(g.id, { counter: Boolean(event.target.closest?.('.map-counter')) })) g.command = g.id;
-    } else { if (this.gesture?.command) this.endDraft(null); this.dragged = true; this.gesture = null; this.pinchDistance = this.distance(); }
+      // Shift-drag with a mouse draws a selection rectangle (the host's `lasso` hook) instead of an arrow or a pan.
+      if (event.shiftKey && event.button === 0 && this.lassoHook && event.pointerType !== 'touch') g.lasso = this.coordinates(event.clientX, event.clientY);
+      else if (g.id && !g.army && event.button === 0 && this.dragHooks?.start?.(g.id, { counter: Boolean(event.target.closest?.('.map-counter')) })) g.command = g.id;
+      clearTimeout(this.pressTimer);
+      if (this.longPress && event.pointerType === 'touch' && g.id && !g.army) this.pressTimer = setTimeout(() => {
+        if (this.gesture !== g || this.dragged) return;
+        g.pressed = true; g.command = null; navigator.vibrate?.(12); this.onSelect(g.id, { toggle: true, longPress: true });
+      }, 480);
+    } else { if (this.gesture?.command) this.endDraft(null); this.endLasso(); clearTimeout(this.pressTimer); this.dragged = true; this.gesture = null; this.pinchDistance = this.distance(); }
     if (!this.gesture?.army) this.tooltip.hidden = true;
   }
   distance() { const [a, b] = this.pointers.values(); return b ? Math.hypot(a.x - b.x, a.y - b.y) : 0; }
@@ -213,7 +225,9 @@ export class Atlas {
     }
     if (!this.gesture) return;
     const dx = event.clientX - this.gesture.x, dy = event.clientY - this.gesture.y;
-    if (Math.abs(dx) + Math.abs(dy) > 6) this.dragged = true;
+    if (Math.abs(dx) + Math.abs(dy) > 6) { this.dragged = true; clearTimeout(this.pressTimer); }
+    if (this.gesture.pressed) return;
+    if (this.gesture.lasso) { if (this.dragged) this.drawLasso(this.gesture.lasso, this.coordinates(event.clientX, event.clientY)); return; }
     if (this.gesture.command) { if (this.dragged) this.dragTo(event.clientX, event.clientY); return; }
     if (this.dragged) {
       const scale = this.svg.getScreenCTM()?.a || 1;
@@ -221,8 +235,13 @@ export class Atlas {
     }
   }
   up(event) {
-    const gesture = this.gesture; this.pointers.delete(event.pointerId);
+    const gesture = this.gesture; this.pointers.delete(event.pointerId); clearTimeout(this.pressTimer);
     if (this.svg.hasPointerCapture(event.pointerId)) this.svg.releasePointerCapture(event.pointerId);
+    if (gesture?.pressed) { if (!this.pointers.size) this.gesture = null; return; }
+    if (gesture?.lasso && this.dragged) {
+      const ids = this.inLasso(gesture.lasso, this.coordinates(event.clientX, event.clientY)); this.endLasso();
+      this.lassoHook(ids); if (!this.pointers.size) this.gesture = null; return;
+    }
     if (gesture?.command && this.dragged) {
       this.dragTo(event.clientX, event.clientY); const to = this.dragging?.to ?? null;
       this.endDraft(gesture.command, to); if (!this.pointers.size) this.gesture = null; return;
@@ -238,7 +257,7 @@ export class Atlas {
     if (!this.dragged && gesture?.army && this.onArmy?.(gesture.army)) { this.tooltip.hidden = true; }
     else if (!this.dragged && gesture?.army) this.showArmy(gesture.army, { left: event.clientX - 14, top: event.clientY + 65, width: 0 });
     else if (!this.dragged && gesture?.cluster) this.fit(gesture.cluster.split(','));
-    else if (!this.dragged && gesture?.id) this.onSelect(gesture.id, { shiftKey: gesture.shiftKey, target: gesture.target });
+    else if (!this.dragged && gesture?.id) this.onSelect(gesture.id, { shiftKey: gesture.shiftKey, toggle: gesture.shiftKey || event.ctrlKey || event.metaKey, target: gesture.target });
     if (!this.pointers.size) this.gesture = null;
   }
   /** What a pointer event is on. A click on a repeated world copy resolves to the same province. */
@@ -275,6 +294,7 @@ export class Atlas {
       const battle = this.battleInfo?.get(id);
       detail = battle ? `Battle in progress · attackers ${battle.attack} vs defenders ${battle.defend}` :
         `${this.countries.get(p.owner)?.name || 'Uncontrolled'} · ${p.troops} troops · industry ${p.development}`;
+      const why = this.whyHook?.(id); if (why) detail += ` · ${why}`;
     } else { this.tooltip.hidden = true; return; }
     this.tip(title, detail, event.clientX, event.clientY);
   }
@@ -641,14 +661,17 @@ export class Atlas {
       }
     }
   }
-  update(state, source, destination) {
+  /** `extra` (optional): `selected` — every province picked as a source (drawn like `source`); `reach` — a Map of
+   * province → 'friendly' | 'attack' | 'partial' lighting the legal destinations of that selection. */
+  update(state, source, destination, { selected = null, reach: lit = null } = {}) {
     if (!this.state || this.state.tick !== state.tick) this.receivedAt = performance.now();
     this.state = state; this.source = source; this.destination = destination;
     this.byId = new Map(state.provinces.map(p => [p.id, p]));
     const me = state.players.find(p => p.id === state.you), sides = new Map(state.players.map(p => [p.id, p.side]));
     const neighbors = this.places.get(source)?.neighbors || [];
     // With a source of yours chosen, every legal destination is lit (reinforce or attack) and the rest dimmed.
-    const reach = source && this.dragHooks?.targets ? new Set(this.dragHooks.targets(source)) : null;
+    const reach = lit ? new Set(lit.keys()) : source && this.dragHooks?.targets ? new Set(this.dragHooks.targets(source)) : null;
+    const picked = new Set(selected || (source ? [source] : []));
     const friendly = owner => owner && me && sides.get(owner) === me.side;
     this.svg.classList.toggle('has-source', Boolean(reach));
     // Provinces of the viewer that an army at war with it is marching on get a red ring (v0.8: no alert stack).
@@ -656,9 +679,9 @@ export class Atlas {
     for (const p of state.provinces) {
       const shape = this.shapes.get(p.id), marker = this.markers.get(p.id);
       if (!shape) continue;
-      const role = p.id === source ? 'selected' : p.id === destination ? 'destination' : (reach ? reach.has(p.id) : neighbors.includes(p.id)) ? 'neighbor' : '';
-      const lit = reach && role === 'neighbor' ? (friendly(p.owner) ? ' reach-friendly' : ' reach-attack') : '';
-      shape.setAttribute('class', `province ${role}${lit}${p.owner ? ' occupied' : ''}${threatened.has(p.id) ? ' threatened' : ''}`);
+      const role = picked.has(p.id) ? 'selected' : p.id === destination ? 'destination' : (reach ? reach.has(p.id) : neighbors.includes(p.id)) ? 'neighbor' : '';
+      const how = reach && role === 'neighbor' ? ` reach-${lit ? lit.get(p.id) : friendly(p.owner) ? 'friendly' : 'attack'}` : '';
+      shape.setAttribute('class', `province ${role}${how}${p.owner ? ' occupied' : ''}${threatened.has(p.id) ? ' threatened' : ''}`);
       marker.group.setAttribute('class', `map-counter ${role}${p.owner === state.you && state.you ? ' owned' : ''}${threatened.has(p.id) ? ' threatened' : ''}`);
       marker.disc.setAttribute('stroke', this.countries.get(p.owner)?.color || NEUTRAL);
       marker.stripe.setAttribute('fill', this.countries.get(p.owner)?.color || NEUTRAL);
@@ -1095,10 +1118,23 @@ export class Atlas {
     const was = this.dragging; this.dragging = null; this.paintDraft();
     if (from && was) this.dragHooks?.end?.(from, to);
   }
+  /** The selection rectangle between two map points (drawn in map units above the counters). */
+  drawLasso(a, b) {
+    if (!this.lassoRect) { this.lassoRect = node('rect', { class: 'lasso', 'pointer-events': 'none', 'aria-hidden': 'true' }); this.svg.append(this.lassoRect); }
+    this.lassoRect.setAttribute('x', Math.min(a.x, b.x)); this.lassoRect.setAttribute('y', Math.min(a.y, b.y));
+    this.lassoRect.setAttribute('width', Math.abs(a.x - b.x)); this.lassoRect.setAttribute('height', Math.abs(a.y - b.y));
+  }
+  endLasso() { this.lassoRect?.remove(); this.lassoRect = null; }
+  /** Provinces whose counter point lies inside the rectangle, on any repeated world copy. */
+  inLasso(a, b) {
+    const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
+    return this.map.provinces.filter(p => { const q = this.positionsById[p.id] || p;
+      return q.y >= y0 && q.y <= y1 && [-WORLD, 0, WORLD, 2 * WORLD].some(k => q.x + k >= x0 && q.x + k <= x1); }).map(p => p.id);
+  }
   destroy() {
     if (this.frame) cancelAnimationFrame(this.frame); this.frame = null;
     if (this.layoutFrame) cancelAnimationFrame(this.layoutFrame); this.layoutFrame = null;
-    for (const t of this.timers) clearTimeout(t); this.timers.clear();
+    for (const t of this.timers) clearTimeout(t); this.timers.clear(); clearTimeout(this.pressTimer);
     clearTimeout(this.hoverTimer); if (this.relationsFrame) cancelAnimationFrame(this.relationsFrame);
     this.resize.disconnect(); this.tooltip.remove(); this.chip.remove();
   }

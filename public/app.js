@@ -27,6 +27,8 @@ const pastSides=new Set(); // coalitions this seat belonged to ("your alliance d
 let comms, herald, standings, expander;
 // Selection: one or more of your provinces (sources) and a target province; or a moving army.
 let sources=[], target=null, armyId=null;
+/** Select mode (the map's Select toggle; phones): taps on your provinces add or remove them as sources. */
+let selectMode=false;
 /** Rally pick mode: the next tapped province of yours becomes `rallyFrom`'s rally point. */
 let rallyFrom=null;
 // The one context card: { kind: 'province' | 'army' | 'country' | 'alliance', id }.
@@ -47,24 +49,54 @@ const mayEnter = (a,b) => !b || sameSide(a,b) || warBetween(state,a,b);
 const seated = () => Boolean(state?.you) && !spectating;
 const active = () => seated() && state.status==='running' && myPlayer()?.eliminatedAt===null;
 const neighbours = id => place(id)?.neighbors || [];
-/** How your troops in `from` reach `to`: a neighbour directly (faster when both ends are yours or allied), else
- * the quickest route through your own and allied land — the same route and times the server charges. Null: unreachable. */
+/** Your own or an ally's province: a move there may cross friendly land; anything else is an attack. */
+const friendlyLand=id=>{const o=prov(id)?.owner;return Boolean(o && state?.you && sameSide(o,state.you));};
+/** An attack needs a border of your own: one of your provinces (not merely an ally's) next to `id`. */
+const ownBorder=id=>neighbours(id).some(n=>prov(n)?.owner===state?.you);
+/** How your troops in `from` reach `to`: a neighbour directly (faster when both ends are yours or allied), else the
+ * quickest route through your own and allied land — the same route and times the server charges. Land that is not
+ * yours or an ally's can be attacked only if it borders a province of yours. Null: unreachable. */
 function routeOf(from,to){
   if(!state || !from || !to || from===to || !state.you || prov(from)?.owner!==state.you)return null;
+  if(!friendlyLand(to) && !ownBorder(to))return null;
   if(neighbours(from).includes(to)){
     const internal=sameSide(prov(from).owner,state.you) && sameSide(prov(to)?.owner,state.you);
     return {path:[to],travel:(internal?state.internalTravelTimes:state.travelTimes)[from][to]};
   }
   return friendlyPath(state,state.you,from,to);
 }
+/** Why a province is not a destination for the current selection (the map tooltip), or null. */
+function unreachableWhy(id){
+  if(!active() || target || !sources.length || sources.includes(id))return null;
+  const n=sources.filter(s=>canReach(s,id)).length;
+  if(n===sources.length)return null;
+  if(n)return `Only ${n} of the ${sources.length} selected provinces can reach it`;
+  if(!friendlyLand(id) && !ownBorder(id))return 'You cannot attack it: none of your provinces borders it';
+  return sources.length>1?'No way there from the selected provinces':'No way there through your or allied land';
+}
+/** Your provinces bordering `id` with free troops: where an attack on it can come from. */
+const bordering=id=>state.provinces.filter(q=>q.owner===state.you && q.id!==id && neighbours(q.id).includes(id) && freeTroops(q.id)>0).map(q=>q.id);
 const canReach=(from,to)=>Boolean(routeOf(from,to));
 /** Every province your troops in `from` can be sent to (neighbours first). */
-let reachCache={key:'',list:[]};
+let reachCache={key:'',lists:new Map()};
 const reachable=from=>{
-  const key=`${from}|${state?.tick}|${state?.provinces.map(p=>p.owner).join()}|${state?.players.map(p=>p.side).join()}`;
-  if(reachCache.key!==key)reachCache={key,list:[...neighbours(from),...map.provinces.map(p=>p.id).filter(id=>!neighbours(from).includes(id) && canReach(from,id))]};
-  return reachCache.list;
+  const key=`${state?.tick}|${state?.provinces.map(p=>p.owner).join()}|${state?.players.map(p=>p.side).join()}`;
+  if(reachCache.key!==key)reachCache={key,lists:new Map()};
+  if(!reachCache.lists.has(from))reachCache.lists.set(from,[...neighbours(from),...map.provinces.map(p=>p.id).filter(id=>!neighbours(from).includes(id) && canReach(from,id))]);
+  return reachCache.lists.get(from);
 };
+/** Lit destinations of a multi-province selection: friendly land any source can reach, attacks every source can
+ * reach ('attack') or only some of them ('partial': the others are left out of the order). */
+function selectionReach(){
+  const lit=new Map(),sets=sources.map(s=>new Set(reachable(s)));
+  for(const p of map.provinces){
+    if(sources.includes(p.id))continue;
+    const n=sets.filter(r=>r.has(p.id)).length;
+    if(!n)continue;
+    lit.set(p.id,friendlyLand(p.id)?'friendly':n===sources.length?'attack':'partial');
+  }
+  return lit;
+}
 /** Recall for one of your marching armies: it turns at its current position and goes home. Mirrors the engine
  * (a column measures from its first departure, never longer than it has been out). Null when there is nothing to offer. */
 function recallOption(a){
@@ -211,7 +243,11 @@ async function rooms(){
   const record=(await request('/api/standings')).standings;
   $('standings').innerHTML=record.length?record.map(p=>`<div class="standing-row"><span>${esc(p.name)} <small class="muted">${p.matches} ${p.matches===1?'match':'matches'}</small></span><b>${p.wins}–${p.draws}–${p.losses}</b></div>`).join('')+'<p class="empty-note">Wins–draws–losses in finished matches.</p>':'<p class="empty-note">No results yet. Finish a match to start your record.</p>';
 }
-function clearSelection(){sources=[];target=null;armyId=null;proposing=false;rallyFrom=null;}
+function clearSelection(){sources=[];target=null;armyId=null;proposing=false;rallyFrom=null;setSelectMode(false);}
+function setSelectMode(on){
+  selectMode=on;const b=$('select-mode');if(!b)return;
+  b.setAttribute('aria-pressed',String(on));b.classList.toggle('on',on);
+}
 const rallyOf=id=>(state?.rallies || []).find(r=>r.from===id);
 const RALLY_PAUSE={destination_lost:'paused: the rally province is not yours',no_path:'paused: no path through your or allied land'};
 function rallyText(r){return `Rally → ${place(r.to).name}${r.status==='paused'?` · ${RALLY_PAUSE[r.reason] || 'paused'}`:''}`;}
@@ -275,11 +311,13 @@ function initMap(){
   // The map key (legend + Political/Diplomacy toggle) lives in the ☰ menu.
   atlas=new Atlas(replacement,map,selectProvince,{legend:{placement:'bottom-left',container:$('map-key'),collapsed:false},
     drag:{start:(id,{counter})=>active() && prov(id)?.owner===state.you && (counter || sources.includes(id)) && freeTroops(id)>0,
-      begin:from=>{sources=[from];target=null;armyId=null;proposing=false;paintMap();},
+      // Dragging from one province of a multi-selection sends the whole selection there.
+      begin:from=>{if(!(sources.length>1 && sources.includes(from)))sources=[from];target=null;armyId=null;proposing=false;paintMap();},
       label:(from,to)=>`${amountFor(from)} · ${routeOf(from,to)?.travel ?? '?'}s`,
       targets:from=>reachable(from),
       path:(from,to)=>routeOf(from,to)?.path,
-      end:(from,to)=>{sources=[from];target=to;armyId=null;openCard('province',to || from);paintMap();revealUnderCard(to || from);}},
+      end:(from,to)=>{if(!(sources.length>1 && sources.includes(from)))sources=[from];target=to;armyId=null;openCard('province',to || from);paintMap();revealUnderCard(to || from);}},
+    lasso:ids=>lassoSelect(ids),longPress:true,why:id=>unreachableWhy(id),
     onArmy:id=>{const a=state?.armies.find(a=>a.id===id);if(!a)return false;armyId=id;sources=[];target=null;openCard('army',id);paintMap();return true;}});
   $('landing-map').innerHTML=map.provinces.map(p=>`<path d="${p.path}"/>`).join('');
 }
@@ -312,7 +350,9 @@ function revealUnderCard(id){
 }
 function paintMap(){
   if(!state)return;
-  atlas.update(state,sources[0] || null,target);
+  $('select-mode').hidden=!active();
+  const many=sources.length>1;
+  atlas.update(state,many?null:sources[0] || null,target,many?{selected:sources,reach:target?null:selectionReach()}:{});
   const plan=card?.kind==='province' && target && sources.length?orderPlan():null;
   atlas.setDraft(plan?{sources,to:target,label:plan.arrowLabel}:null);
 }
@@ -323,8 +363,10 @@ function freeTroops(id) {
 }
 const amountFor=id=>{const free=freeTroops(id);return free>0?Math.max(1,Math.floor(free*fraction)):0;};
 
-/** Tap/click/Enter on a province. Tap-tap fallback of the drag: your province, then a neighbour.
- * With a target chosen, tapping more of your provinces beside it adds (or removes) them as sources. */
+/** Tap/click/Enter on a province. Tap-tap fallback of the drag: your province, then a target.
+ * Several sources: Shift/Ctrl-click, long-press or Select mode toggles your provinces in and out of the selection
+ * (a Shift-drag rectangle adds every province of yours inside it); then one tap on the target. With a target chosen,
+ * tapping more of your provinces able to send there adds (or removes) them as sources. */
 function selectProvince(id,modifiers={}){
   if(!state)return;
   const p=prov(id),mine=active() && p.owner===state.you;
@@ -335,22 +377,42 @@ function selectProvince(id,modifiers={}){
     return;
   }
   armyId=null;proposing=false;
-  if(modifiers.shiftKey && mine){sources=[id];target=null;}
+  const toggle=mine && (modifiers.toggle || selectMode && !modifiers.keyboard);
+  if(toggle){
+    sources=sources.includes(id)?sources.filter(s=>s!==id):[...sources,id];
+    if(target===id)target=null;
+    if(!sources.length && !target){closeCard({restoreFocus:false});return;}
+  }
   else if(target===id || (!target && sources.length===1 && sources[0]===id)){closeCard({restoreFocus:false});return;}
   else if(target && mine && canReach(id,target)){
     sources=sources.includes(id)?sources.filter(s=>s!==id):[...sources,id];
     if(!sources.length)sources=[id];
   }
-  else if(sources.length===1 && !target && canReach(sources[0],id))target=id;
+  else if(!target && sources.length>1 && sources.includes(id)){sources=sources.filter(s=>s!==id);}
+  else if(!target && (sources.length>1 || sources.length===1 && canReach(sources[0],id)))target=id;
   else if(mine){sources=[id];target=null;}
   else{
-    // Target first: the best-placed of your provinces is proposed as the source (neighbours first).
+    // Target first: your best-placed province is proposed as the source (neighbours first).
     const donors=active()?state.provinces.filter(q=>q.owner===state.you && freeTroops(q.id)>0 && canReach(q.id,id))
       .sort((a,b)=>Number(neighbours(b.id).includes(id))-Number(neighbours(a.id).includes(id)) || freeTroops(b.id)-freeTroops(a.id)):[];
     sources=donors.length?[donors[0].id]:[];target=id;
   }
-  openCard('province',target || sources[0] || id);paintMap();revealUnderCard(target || sources[0] || id);
+  const focus=target || (sources.length>1?sources.at(-1):sources[0]) || id;
+  openCard('province',target || sources[0] || id);paintMap();revealUnderCard(focus);
   if(modifiers.keyboard && target && !$('primary')?.disabled)$('primary')?.focus();
+}
+/** Shift-drag rectangle: add every province of yours inside it to the selection. */
+function lassoSelect(ids){
+  if(!active())return;
+  const mine=ids.filter(id=>prov(id)?.owner===state.you && !sources.includes(id));
+  if(!mine.length){toast('No province of yours inside the rectangle.');return;}
+  armyId=null;proposing=false;sources=[...sources,...mine];
+  openCard('province',target || sources[0]);paintMap();
+}
+/** "Select all bordering X": every province of yours next to the target with free troops. */
+function selectBordering(id){
+  const list=bordering(id);if(!list.length)return;
+  sources=list;target=id;armyId=null;proposing=false;openCard('province',id);paintMap();
 }
 
 /* ── Orders ── */
@@ -363,27 +425,34 @@ function warPlan(owner){
 /** Everything the order card shows for the current sources → target, and its one primary action. */
 function orderPlan(){
   const tp=prov(target),owner=tp?.owner || null,name=place(target).name,who=owner?faction(owner).short:null;
-  const parts=sources.map(from=>{const route=routeOf(from,target);return {from,free:freeTroops(from),amount:amountFor(from),travel:route?.travel ?? 0};});
+  // Only sources able to send there take part: an attack needs a bordering province; the rest are left out (and say so).
+  const eligible=sources.filter(from=>canReach(from,target)),left=sources.filter(from=>!eligible.includes(from));
+  const parts=eligible.map(from=>{const route=routeOf(from,target);return {from,free:freeTroops(from),amount:amountFor(from),travel:route?.travel ?? 0};});
   const total=parts.reduce((n,s)=>n+s.amount,0),travel=Math.max(0,...parts.map(s=>s.travel)),war=warPlan(owner);
   const relation=!owner?'unclaimed':owner===state.you?'own':sameSide(state.you,owner)?'ally':war?'neutral':'enemy';
   const words={unclaimed:['UNCLAIMED','No declaration needed.'],own:['YOUR PROVINCE','Move troops within your land.'],ally:['ALLIED',`Troops you send become ${who}’s.`],
     enemy:['AT WAR','You can attack.'],
     neutral:['NOT AT WAR',`Sending troops declares war on ${who}${war?.enemies.length>1?' and its allies':''}${war?.allies.length?'; your allies join in':''}.`]}[relation];
+  const sent=parts.filter(s=>s.amount>0),many=sent.length>1,from=many?` from ${sent.length} provinces`:'';
   let label,danger=false,disabled=!active() || pendingCommand;
-  if(relation==='own' || relation==='ally')label=`Reinforce ${name} with ${total}`;
-  else if(war){label=`Declare war on ${who} & send ${total}`;danger=true;}
-  else if(owner)label=`Attack ${name} with ${total}`;
-  else label=`Send ${total} → ${name}`;
+  if(relation==='own' || relation==='ally')label=`Reinforce ${name} with ${total}${many?` from ${sent.length}`:''}`;
+  else if(war){label=`Declare war on ${who} & send ${total}${from}`;danger=true;}
+  else if(owner)label=many?`Attack ${name} from ${sent.length} provinces · ${total}`:`Attack ${name} with ${total}`;
+  else label=`Send ${total} → ${name}${from}`;
+  const hostile=relation!=='own' && relation!=='ally',names=ids=>ids.map(v=>place(v).name).join(', ');
   let why='';
-  if(!sources.length){disabled=true;why=`None of your provinces can reach ${name}.`;}
+  if(!parts.length){disabled=true;why=hostile && !ownBorder(target)?`You have no province bordering ${name}. Take or hold a province next to it first.`:`None of ${sources.length?'the selected':'your'} provinces can reach ${name}.`;}
   else if(!total){disabled=true;why='No free troops: one must stay home.';}
   if(pendingCommand)label='Sending order…';
   // One line: where the troops go, the way (the server's route once /plan answers) and when they arrive.
-  const planned=marchPlan.key===JSON.stringify(actionFor(parts))?marchPlan.result:null,sent=parts.filter(s=>s.amount>0);
+  const planned=marchPlan.key===JSON.stringify(actionFor(parts))?marchPlan.result:null;
   const way=sent.length===1?(planned?.sources?.[0]?.path || routeOf(sent[0].from,target)?.path || []).slice(0,-1):[];
-  const arrives=planned?.arrivesAt ?? state.tick+travel+1;
-  const preview=sources.length?`Send ${total} → ${name}${sent.length>1?` from ${sent.length} provinces`:''}${way.length?` via ${way.map(v=>place(v).name).join(', ')}`:''} (arrive${sent.length>1?' together':'s'} ${time(arrives)}) · ${tp.troops} ${relation==='own' || relation==='ally'?'there now':'defenders'}`:'';
-  return {parts,total,travel,war,relation,words,label,danger,disabled,why,preview,owner,arrowLabel:`${total} · ${travel+1}s`};
+  const arrives=planned?.arrivesAt ?? state.tick+travel+1,here=`${tp.troops} ${hostile?'defenders':'there now'}`;
+  const preview=!sent.length?'':many?`${hostile?'Attack':'Reinforce'} ${name}${from} · ${total} troops · all arrive together at ${time(arrives)} · ${here}`
+    :`Send ${total} → ${name}${way.length?` via ${names(way)}`:''} (arrives ${time(arrives)}) · ${here}`;
+  const note=left.length && parts.length?`${names(left)} ${left.length>1?'have':'has'} no way to ${name}: left out.`:'';
+  const chips=sources.map(from=>({from,free:freeTroops(from),amount:eligible.includes(from)?amountFor(from):0,off:!eligible.includes(from)}));
+  return {parts,left,chips,total,travel,war,relation,words,label,danger,disabled,why,preview,note,owner,arrowLabel:`${total} · ${travel+1}s`};
 }
 /** "Declare war on X?" with the real consequences: both whole sides go to war. */
 function confirmWar(owner,amount,plan){
@@ -398,7 +467,8 @@ async function sendOrder(){
   if(plan.war && !await confirmWar(plan.owner,plan.total,plan.war))return;
   // One order, one opId: declare war and march together, or neither (the engine validates both).
   const r=await command(marchAction(plan.war));if(!r)return;
-  toast(`${plan.war?'War declared. ':''}Sent ${plan.total} → ${place(target).name}. Arrives ${time(r.arrivesAt)}.`);
+  const n=r.sources?.length || 1;
+  toast(`${plan.war?'War declared. ':''}Sent ${plan.total} → ${place(target).name}${n>1?` from ${n} provinces`:''}. ${n>1?'All arrive':'Arrives'} ${time(r.arrivesAt)}.`);
   closeCard();
 }
 /** The one march order for the current selection (several sources arrive together). */
@@ -495,8 +565,14 @@ function renderCard(){
   if(!$('card-body').hidden)view.more();
   // Dock: sources and amount (orders), a message box (diplomacy), then the actions.
   const order=view.order;
-  $('sources').hidden=!order || order.parts.length<2 && !order.hint;
-  if(order)part('sources',JSON.stringify([order.parts.map(s=>[s.from,s.amount]),order.hint]),()=>[...(order.parts.length>1?order.parts.map(s=>{const b=button('',{removeSource:s.from},'source-chip');b.append(el('b','',String(s.amount)),el('span','',place(s.from).name),el('i','','×'));b.setAttribute('aria-label',`Remove ${place(s.from).name} (${s.amount} troops)`);return b;}):[]),...(order.hint?[el('small','sources-hint',order.hint)]:[])]);
+  // The selection bar: every selected source with the troops it sends (of its free troops), × removes it.
+  const chips=order?.chips || [],showChips=chips.length>1 || selectMode && chips.length>0;
+  $('sources').hidden=!order || !showChips && !order.hint && !order.note;
+  if(order)part('sources',JSON.stringify([showChips && chips,order.hint,order.note]),()=>[...(showChips?chips.map(c=>{
+    const b=button('',{removeSource:c.from},`source-chip${c.off?' off':''}`);
+    b.append(el('b','',c.off?'–':String(c.amount)),el('span','',place(c.from).name),el('small','',c.off?'out':`/${c.free}`),el('i','','×'));
+    b.setAttribute('aria-label',`Remove ${place(c.from).name} (${c.off?'cannot send there':`${c.amount} of ${c.free} free troops`})`);return b;}):[]),
+    ...(order.note?[el('small','sources-hint sources-off',order.note)]:[]),...(order.hint?[el('small','sources-hint',order.hint)]:[])]);
   $('amount-control').hidden=!order || !order.parts.length;
   if(order){
     const pct=Math.round(fraction*100);if(document.activeElement!==$('amount-slider'))$('amount-slider').value=String(pct);
@@ -519,15 +595,25 @@ function provinceCard(){
   if(!p){return {title:'',actions:[]};}
   const owner=p.owner,mine=owner===state.you && state.you;
   const base={flag:owner,title:place(id).name};
+  if(!target && active() && (sources.length>1 || selectMode && sources.length)){ // several sources chosen, no target yet
+    const free=sources.reduce((n,s)=>n+freeTroops(s),0),chips=sources.map(from=>({from,free:freeTroops(from),amount:amountFor(from),off:false}));
+    const status=el('div','card-relation');status.append(el('span','card-hint',selectMode?'Tap your provinces to add or remove them, then tap a target.':'Tap a target: they all march there and arrive together. You can attack land that borders yours.'));
+    return {flag:state.you,title:sources.length>1?`${sources.length} provinces selected`:place(sources[0]).name,
+      sub:[el('span','card-meta',`${free} free troops · ${chips.reduce((n,c)=>n+c.amount,0)} to send`)],subKey:[sources,free,fraction],
+      status,statusKey:[selectMode],relation:'own',
+      order:{parts:chips,chips,total:chips.reduce((n,c)=>n+c.amount,0),hint:'',note:'',preview:'',why:''},
+      actions:[{label:'Clear selection',act:'clear-selection',id:'clear-selection'}]};
+  }
   if(target && active() && (sources.length || !mine)){ // spectators and fallen players get the information card
-    const plan=orderPlan(),waiting=[...new Set(state.provinces.filter(q=>q.owner===state.you && !sources.includes(q.id) && neighbours(q.id).includes(target) && freeTroops(q.id)>0).map(q=>place(q.id).name))];
-    const hint=!active() || !sources.length?'':waiting.length?`Tap ${waiting.slice(0,2).join(' or ')}${waiting.length>2?' …':''} to send from there too.`:'';
+    const plan=orderPlan(),near=bordering(target),waiting=near.filter(q=>!sources.includes(q)).map(q=>place(q).name);
+    const hint=!active() || !sources.length || waiting.length!==1?'':`Tap ${waiting[0]} to send from there too.`;
+    const all=near.length>1 && waiting.length?{label:`Select all bordering (${near.length})`,act:'select-bordering',arg:target,id:'select-bordering',disabled:pendingCommand}:null;
     const status=el('div','card-relation');status.append(el('b',`rel rel-${plan.relation}`,plan.words[0]),el('span','',plan.words[1]));
     return {...base,title:place(target).name,
       sub:[owner?ownerButton(owner):el('span','card-meta','Unclaimed'),el('span','card-meta',`${p.troops} troops${sources.length?` · from ${sources.length===1?place(sources[0]).name:`${sources.length} provinces`}`:''}`)],subKey:[owner,relationOf(owner),p.troops,sources],
       status,statusKey:[plan.relation,plan.words],relation:plan.relation,
       order:active()?{...plan,hint}:null,
-      actions:active()?[{label:plan.label,act:'send',primary:true,danger:plan.danger,disabled:plan.disabled,id:'primary'}]:[],
+      actions:active()?[{label:plan.label,act:'send',primary:true,danger:plan.danger,disabled:plan.disabled,id:'primary'},...(all?[all]:[])]:[],
       more:()=>moreProvince(target,true)};
   }
   const battle=state.battles?.find(b=>b.province===id);
@@ -537,7 +623,7 @@ function provinceCard(){
     status.append(el('b','rel rel-war','BATTLE'),el('span','',`${attackers} attackers against ${p.troops} defenders · attackers take it ${Math.round(100*odds.attackerWinChance)}% of the time${odds.defenseBonus?` · industry adds ${odds.defenseBonus} to the top defender die`:''}.`));
   }
   else if(mine && active())status.append(el('span','card-hint',freeTroops(id)>0?'Drag to any target — or tap it — to send troops.':'Only one troop here: it must stay home.'));
-  else if(!mine && !spectating && state.you)status.append(el('span','card-hint',`None of your provinces can reach ${place(id).name}.`));
+  else if(!mine && !spectating && state.you)status.append(el('span','card-hint',friendlyLand(id) || ownBorder(id)?`None of your provinces can reach ${place(id).name}.`:`You have no province bordering ${place(id).name}. Take or hold a province next to it first.`));
   const actions=[];
   if(mine && active() && p.development<state.rules.maxDevelopment){
     const cost=state.rules.developmentCosts[p.development],queued=state.orders.some(o=>o.type==='develop' && o.from===id);
@@ -847,6 +933,8 @@ $('coach-replay').addEventListener('click',()=>{closeMenu();try{localStorage.rem
 async function perform(act,arg){
   switch(act){
     case 'send':return sendOrder();
+    case 'select-bordering':return selectBordering(arg);
+    case 'clear-selection':closeCard({restoreFocus:true});return;
     case 'develop':{
       const p=prov(arg),cost=state.rules.developmentCosts[p.development],f=developmentForecast(state,arg);
       if(!await confirmAction({title:`Develop ${place(arg).name}?`,message:`Spend ${cost} troops from this garrison. ${f?`Earliest payback ${time(f.paybackAt)}; ${f.paysBackBeforeDeadline?'it repays before the deadline':'it will not repay before the deadline'}.`:''} Unfinished construction is lost on capture; completed industry can be captured.`,accept:`Invest ${cost} troops`}))return;
@@ -981,7 +1069,15 @@ document.addEventListener('click',safely(async event=>{
   if(b.dataset.room)await openRoom(b.dataset.room,b.dataset.spectate==='true');
   if(b.dataset.home)await home();
   if(b.dataset.fraction){fraction=Number(b.dataset.fraction);try{localStorage.setItem('coi.fraction',String(fraction));}catch{}renderCard();paintMapDraftOnly();}
-  if(b.dataset.removeSource){sources=sources.filter(s=>s!==b.dataset.removeSource);renderCard();paintMap();}
+  if(b.dataset.removeSource){sources=sources.filter(s=>s!==b.dataset.removeSource);if(!sources.length && !target)closeCard();else{if(!target)openCard('province',sources[0]);else renderCard();paintMap();}}
+  if(b.id==='select-mode' && active()){
+    const on=!selectMode;
+    if(on){target=null;if(card && (card.kind!=='province' || !sources.length))closeCard();}
+    setSelectMode(on);
+    if(on)toast('Select: tap your provinces to add or remove them, then tap a target.');
+    if(card?.kind==='province')openCard('province',target || sources[0] || card.id);
+    paintMap();
+  }
   if(b.dataset.feedProvince && state)showProvince(b.dataset.feedProvince);
   if(b.dataset.openCountry && state)openCard('country',b.dataset.openCountry,{focus:!b.closest('#card')});
   if(b.dataset.recall)await perform('recall',b.dataset.recall);

@@ -144,7 +144,7 @@
 #map.command-drag .province:not(.neighbor):not(.selected){fill-opacity:.4}#map.command-drag .province.neighbor{stroke:#fff3cf;stroke-width:2.2;fill-opacity:1}
 /* A source of yours chosen: every legal destination lit (cream = reinforce, coral = attack), everything else dimmed. */
 #map.has-source .province:not(.neighbor):not(.selected):not(.destination){fill-opacity:.42}#map.has-source .province.neighbor{fill-opacity:1}
-#map .province.neighbor.reach-attack{stroke:#ff9f82}#map.command-drag .province.neighbor.reach-attack{stroke:#ffb49c}
+#map .province.neighbor.reach-attack{stroke:#ff9f82}#map .province.neighbor.reach-partial{stroke:#ff9f82;stroke-dasharray:3 3;fill-opacity:.7}#map .lasso{fill:#ffe1a01f;stroke:#ffe1a0;stroke-width:1.5;stroke-dasharray:6 4;vector-effect:non-scaling-stroke}#map.command-drag .province.neighbor.reach-attack{stroke:#ffb49c}
 .province.threatened{stroke:#ff6a4d;stroke-width:2}.map-counter.threatened .counter-body{stroke:#ff5a3c!important;stroke-width:2.6}
 /* Rally points (logistics): a dashed arrow in your colour from source to rally province; paused = faint. */
 .rally-halo{stroke:#0d1b22d0;stroke-width:5;fill:none;vector-effect:non-scaling-stroke}.rally-connection{stroke-width:3;stroke-dasharray:6 4;fill:none;opacity:.85;vector-effect:non-scaling-stroke}.rally-connection.paused{opacity:.4;stroke-dasharray:2 6}

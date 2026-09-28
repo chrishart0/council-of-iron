@@ -28,7 +28,11 @@ const finished=replay().game;finished.id='ui-review';finished.name='The Atlantic
 const warRoom=(id,name)=>{const room=createGame({id,name,hostId:profiles.britain.id},map);
   for(const c of map.countries)join(room,map,{country:c.id,name:profiles[c.id].name,profileId:profiles[c.id].id,kind:'agent'});start(room);return room;};
 const w=warRoom('ui-war','The Rhine front');
-const taskRooms=Object.fromEntries(['ui-tasks-m','ui-tasks-d','ui-turn'].map(id=>[id,warRoom(id,'The Rhine front · walkthrough')]));
+const taskRooms=Object.fromEntries(['ui-tasks-m','ui-tasks-d','ui-turn','ui-multi-m','ui-multi-d'].map(id=>[id,warRoom(id,'The Rhine front · walkthrough')]));
+// Multi-select walkthroughs: Britain also holds the Caribbean and the Great Plains (central-us), so four British provinces
+// (Caribbean, Great Plains, Eastern Canada, Southern England) border the USA's Atlantic States (east-us); Britain is at war with the USA.
+for(const id of ['ui-multi-m','ui-multi-d'])for(const [p,troops] of [['caribbean',14],['central-us',16]])
+  Object.assign(taskRooms[id].provinces.find(v=>v.id===p),{owner:'britain',troops});
 // Britain (the browser seat) also declares war on the USA at tick 0: no armies move on that front, so the
 // recorded battles are unchanged, but the viewer has a real war for the v0.7 relation UI.
 const warOrders={0:[['britain',{type:'declare_war',country:'usa'}],['russia',{type:'declare_war',country:'ottoman'}],['russia',{type:'march',from:'ukraine',to:'east-anatolia',amount:10}],['germany',{type:'declare_war',country:'france'}]],

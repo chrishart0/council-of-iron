@@ -5,7 +5,7 @@ import argparse,io,json,os,re,subprocess
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
 from browser_helpers import load_bridge, lane, open_thread, close_comms
-from ui_tasks import walkthrough
+from ui_tasks import walkthrough, multiselect
 ROOT=Path(__file__).resolve().parents[1]
 
 # Reads what the live map actually shows and compares it with the public room state.
@@ -1246,6 +1246,10 @@ def main():
                 # v0.8 core tasks, scripted like a player, with measured interaction counts (bounds in ui_tasks.BOUNDS).
                 report['tapCounts']={'390x844 touch':walkthrough(browser,url,identity,server,report,out,'ui-tasks-m',390,844,True),
                     '1366x768 mouse':walkthrough(browser,url,identity,server,report,out,'ui-tasks-d',1366,768,False)}
+                # Several sources, one target: "Select all bordering", Shift-click, a Shift-drag rectangle, Select mode, long-press.
+                report['tapCounts']['multi-select 1536x864 mouse']=multiselect(browser,url,identity,server,report,out,'ui-multi-d',1536,864,False)
+                report['tapCounts']['multi-select 390x844 touch']=multiselect(browser,url,identity,server,report,out,'ui-multi-m',390,844,True)
+                report['assertions'].append('Multi-select: attack the Atlantic States from all four bordering British provinces with "Select all bordering" (3 interactions at 1536×864 mouse and 390×844 touch; one order group, one arrival, 4 arrows and source chips), Shift-click two provinces then the target (desktop), a Shift-drag rectangle selects only your provinces and a province you cannot attack is dimmed with the reason on hover (desktop), Select mode taps and a long-press add sources (phone), Escape clears the selection and the mode.')
                 report['assertions'].append('Core tasks at 390×844 (touch) and 1366×768 (mouse), counted interactions within bounds: declare war on a neutral country and march ≤3, attack a neighbouring enemy with 50% ≤3 (drag on desktop, tap on phone), recall an army ≤2, march a returning army again ≤2, propose an alliance ≤3, answer an alliance offer from the badge ≤2, reply to a DM ≤2 plus typing, develop a province ≤3, set a rally point ≤3, a DM/alliance conversation ≤7, a long move through your own land ≤3 and one through an ally’s land ≤3 (tap source, tap destination, one button; the preview names the way and the arrow follows it; routes in tapCounts) (actual counts in tapCounts; screenshots in tasks/).')
             assert not report['pageErrors'],report['pageErrors'];report['status']='passed'
             browser.close()
