@@ -134,7 +134,7 @@ test('HTTP, CLI and MCP share the inbox, the attention line and the read cursor'
   await act(usa, 'c3', { type: 'chat', channel: 'dm', to: 'britain', text: 'please answer' }); app.step(g, 2);
   const offer = await act(usa, 'p1', { type: 'propose', country: 'britain', name: 'Accord' });
   // HTTP: attention on an order result, not stored in the receipt.
-  const order = await act(britain, 'r1', { type: 'rally', from: 'scotland', to: 'england' });
+  const order = await act(britain, 'r1', { type: 'rally', from: 'ireland', to: 'england' });
   assert.equal(order.attention, `2 unread messages (usa ×2): read inbox; Alliance offer from usa awaiting your answer (${offer.proposalId})`);
   assert.equal(g.receipts['britain:r1'].result.attention, undefined);
   assert.equal((await call(`/api/games/${id}/inbox`, 'GET', undefined, france)).data.unread, 0);

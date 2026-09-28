@@ -493,14 +493,14 @@ test('attack from every bordering province: HTTP, MCP and CLI agree; percent per
     {jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'preview',arguments:action}},
     {jsonrpc:'2.0',id:3,method:'tools/call',params:{name:'march',arguments:{to:'andes',fromAllBordering:true,percent:50}}},
     {jsonrpc:'2.0',id:4,method:'tools/call',params:{name:'march',arguments:{to:'mexico',fromAllBordering:false,percent:50}}},
-    {jsonrpc:'2.0',id:5,method:'tools/call',params:{name:'march',arguments:{to:'central-america',from:'east-us',amount:3}}},
+    {jsonrpc:'2.0',id:5,method:'tools/call',params:{name:'march',arguments:{to:'brazil',from:'east-us',amount:3}}},
   ].map(x=>JSON.stringify(x)).join('\n')+'\n');
   const out=mcp.stdout.trim().split('\n').map(x=>JSON.parse(x));
   assert.deepEqual(JSON.parse(out[1].result.content[0].text).sources,http.sources);
   assert.equal(out[2].result.isError,true);assert.match(out[2].result.content[0].text,/You have no province bordering andes/);
   assert.equal(out[3].error.code,-32602,'only true is accepted');
   const far=JSON.parse(out[4].result.content[0].text);
-  assert.match(far.error,/You have no province bordering central-america\. Take or hold a province next to it first\. Your nearest: /);
+  assert.match(far.error,/You have no province bordering brazil\. Take or hold a province next to it first\. Your nearest: /);
   assert.deepEqual(far.hint.target.yourBorderingProvinces,[]);
   const cli=await subprocess('agents/cli.js',['preview','mexico','50%','--all-bordering'],env);assert.equal(cli.code,0,cli.stderr);
   assert.deepEqual(JSON.parse(cli.stdout).sources,http.sources);
