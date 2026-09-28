@@ -17,6 +17,7 @@ test('Pi resolves arbitrary local model profile entirely from config', () => {
     name: 'Sample Pi', leaderName: 'The Visiting Regent', baseUrl: 'http://127.0.0.1:8000/v1',
     transport: 'chat_completions', apiKey: 'local', contextWindow: 1048576, maxTokens: 4096,
     thinkingLevel: 'off', reasoning: false, inputImages: false, thinkingFormat: undefined, chatTemplateKwargs: undefined,
+    offReasoningEffort: undefined,
   });
 });
 
@@ -39,4 +40,19 @@ test('Pi preserves configured chat-template options without naming a provider', 
   assert.equal(loadPiConfig('sample', env).inputImages, true);
   env.PI_MODEL_SAMPLE_CHAT_TEMPLATE_KWARGS = '{bad';
   assert.throws(() => loadPiConfig('sample', env), /invalid CHAT_TEMPLATE_KWARGS/);
+});
+
+test('Pi accepts an explicit off reasoning effort for compatible local servers', () => {
+  const env = {
+    PI_MODEL_SAMPLE_PROVIDER: 'openai-completions', PI_MODEL_SAMPLE_BASE_URL: 'http://127.0.0.1:8000/v1',
+    PI_MODEL_SAMPLE_ID: 'vendor/model', PI_MODEL_SAMPLE_PLAYER_NAME: 'Sample Pi',
+    PI_MODEL_SAMPLE_CONTEXT_WINDOW: '1048576', PI_MODEL_SAMPLE_REASONING: 'true',
+    PI_MODEL_SAMPLE_THINKING_LEVEL: 'off', PI_MODEL_SAMPLE_OFF_REASONING_EFFORT: 'none',
+  };
+  assert.equal(loadPiConfig('sample', env).offReasoningEffort, 'none');
+  env.PI_MODEL_SAMPLE_THINKING_FORMAT = 'chat-template';
+  assert.throws(() => loadPiConfig('sample', env), /cannot combine/);
+  delete env.PI_MODEL_SAMPLE_THINKING_FORMAT;
+  env.PI_MODEL_SAMPLE_REASONING = 'false';
+  assert.throws(() => loadPiConfig('sample', env), /REASONING=true/);
 });
