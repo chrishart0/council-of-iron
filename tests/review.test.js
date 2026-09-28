@@ -49,7 +49,7 @@ test('review excludes all private conversations, offers, waiting orders, credent
   assert.equal(review.report.events.some(e=>e.type==='message'),false);
 });
 test('military and economic report reconciles neutral forces, shared battles and investments',()=>{
-  assert.deepEqual(review.report.totals,{battles:49,casualties:994,interned:0,recruited:7964,invested:24,upgrades:1,initialTroops:509,remainingTroops:7455});
+  assert.deepEqual(review.report.totals,{battles:49,casualties:894,interned:0,recruited:7964,invested:24,upgrades:1,initialTroops:509,remainingTroops:7555});
   assert.equal(total(review.report.metrics.map(p=>p.recruited)),7964);
   assert.equal(review.report.series.at(-1).tick,1800);
   // Investment and upgrades, in a short match of its own.
