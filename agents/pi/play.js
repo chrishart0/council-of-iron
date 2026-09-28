@@ -245,6 +245,7 @@ try {
     const actionsBefore = record.actions.length;
     const tokensBefore = session.getSessionStats().tokens;
     let turnTimedOut = false;
+    let stopReason = null, modelErrorKind = null;
     const turnTimer = setTimeout(() => {
       turnTimedOut = true;
       void session.abort().catch(error => { record.abortError = error.message; save(); });
@@ -259,6 +260,10 @@ try {
       record.lastStopReason = last?.stopReason;
       record.lastModelError = last?.errorMessage;
       record.lastContentTypes = last?.content?.map(part => part.type);
+      stopReason = last?.stopReason ?? null;
+      if (last?.errorMessage) modelErrorKind = /connection|ECONN|fetch failed/i.test(last.errorMessage) ? 'connection'
+        : /timeout|abort/i.test(last.errorMessage) ? 'timeout'
+        : /HTTP|status/i.test(last.errorMessage) ? 'http' : 'other';
       consecutiveModelErrors = last?.stopReason === 'error' ? consecutiveModelErrors + 1 : 0;
       if (consecutiveModelErrors >= 3) {
         record.error = `Model failed three consecutive turns: ${last?.errorMessage || 'unknown error'}`;
@@ -273,6 +278,7 @@ try {
     record.contextTrimCount = contextTrimCount;
     record.turnLog.push({ turn: record.turns, startTick: before, endTick: after, wallMs: Date.now() - started,
       actionCount: record.actions.length - actionsBefore, timedOut: turnTimedOut,
+      stopReason, modelErrorKind,
       inputTokens: tokensAfter.input - tokensBefore.input,
       outputTokens: tokensAfter.output - tokensBefore.output,
       cacheReadTokens: tokensAfter.cacheRead - tokensBefore.cacheRead });
