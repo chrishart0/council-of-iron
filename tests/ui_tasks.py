@@ -235,7 +235,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     # the British seat's analogue of "always send Mexico's new troops to Pacific States").
     w.begin('rally')
     w.stdin('war 420')
-    page.keyboard.press('Escape'); w.bring('ireland')
+    page.keyboard.press('Escape'); page.locator('#home-view').click(); w.bring('ireland')  # home view (camera) is next to Ireland
     w.tap(w.counter('ireland'), 'source')
     rally = page.locator('#rally-province'); expect(rally).to_have_text('Rally troops to…'); expect(rally).to_be_enabled(timeout=5000)
     w.tap(rally, 'pick')
@@ -299,7 +299,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     # preview names the way (the server's /plan route); the arrow on the map follows it leg by leg.
     routes = w.results.setdefault('routes', {})
     for task, source, dest, ally in [('long', 'ireland', 'low-countries', False), ('through-ally', 'ireland', 'bavaria', True)]:
-        page.keyboard.press('Escape'); w.bring(source)
+        page.keyboard.press('Escape'); page.locator('#home-view').click(); w.bring(source)
         w.begin(task)
         w.tap(w.counter(source), 'source')
         if not w.counter(dest).evaluate('(el)=>{const r=el.getBoundingClientRect();return r.left>20&&r.right<innerWidth-20&&r.top>60&&r.bottom<innerHeight*.55&&el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}'):
