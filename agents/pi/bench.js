@@ -33,9 +33,9 @@ export function summarizeRun(raw, modelGroup) {
   const calls = client === 'Pi' ? raw.toolCalls || [] : completed;
   const failed = client === 'Pi' ? calls.filter(call => call.ok === false).length : calls.filter(codexToolFailure).length;
   const acceptedActions = client === 'Pi' ? (raw.actions || []).filter(action => action.ok).length
-    : raw.httpActions?.length ? raw.httpActions.filter(action => action.status === 200).length : null;
+    : Array.isArray(raw.httpActions) ? raw.httpActions.filter(action => action.status === 200).length : null;
   const rejectedActions = client === 'Pi' ? (raw.actions || []).filter(action => action.ok === false).length
-    : raw.httpActions?.length ? raw.httpActions.filter(action => action.status !== 200).length : null;
+    : Array.isArray(raw.httpActions) ? raw.httpActions.filter(action => action.status !== 200).length : null;
   const firstAcceptedAt = client === 'Pi' ? (raw.actions || []).find(action => action.ok && action.at)?.at
     : raw.httpActions?.find(action => action.status === 200)?.at;
   const turns = raw.turnLog || [];

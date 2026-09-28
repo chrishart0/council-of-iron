@@ -35,5 +35,9 @@ test('benchmark export does not invent missing historical action or token counts
   assert.equal(run.totalTokens, null);
   assert.equal(run.firstActionSeconds, null);
   assert.equal(run.meanTurnSeconds, null);
+  const noOrders = summarizeRun({ runId: 'zero', startedAt: '2026-09-28T00:00:00Z', match: 'abcd1234',
+    status: 'finished', score, client: 'codex', access: 'cli', events: [], httpActions: [] }, 'qwen');
+  assert.equal(noOrders.acceptedActions, 0);
+  assert.equal(noOrders.rejectedActions, 0);
   assert.throws(() => summarizeRun({ status: 'running' }, 'qwen'), /finished score/);
 });
