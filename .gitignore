@@ -1,8 +1,10 @@
 node_modules/
 data/
+agents/pi/workspace/
 artifacts/
 __pycache__/
 *.db
 *.db-*
 .env
 *.session.json
+.claude/worktrees/

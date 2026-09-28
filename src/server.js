@@ -188,7 +188,11 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
           save(g);return json(res,200,{...result,status:g.status});
         }
         if(endpoint==='bots' && req.method==='POST') {
-          host();await body(req);requireRule(g.status==='lobby','Cannot add seats during play.',409);
+          host();const data=await body(req);requireRule(g.status==='lobby','Cannot add seats during play.',409);
+          if (!g.players.some(p=>p.profileId===identity.id)) {
+            requireRule(typeof data.country==='string','Choose your country before filling practice seats.');
+            join(g,gameMap,{profileId:identity.id,name:identity.name,country:data.country,kind:'human'});
+          }
           for(const c of gameMap.countries.filter(c=>!g.players.some(p=>p.id===c.id))) {
             const profile=store.register(`${c.name.split(' ')[0]} automaton`);
             join(g,gameMap,{profileId:profile.id,name:profile.name,country:c.id,kind:'bot',model:'heuristic-industrial-v3',persona:'expansion-first'});

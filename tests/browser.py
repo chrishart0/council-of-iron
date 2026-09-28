@@ -295,7 +295,7 @@ def main():
                 page.screenshot(path=str(artifacts/'06-coordinated-plan.png'),full_page=True)
                 capture(page,1300)
                 page.locator('#coordinate-commit').click()
-                expect(page.locator('#toast')).to_contain_text('Coordinated attack committed')
+                expect(page.locator('#toast')).to_contain_text('Group march committed')
                 page.wait_for_timeout(1400)
                 # Group recall is a browser control, never direct mutation of the game.
                 recall_group=page.locator('[data-recall]').filter(has_text='Recall group')
@@ -306,6 +306,17 @@ def main():
                 page.screenshot(path=str(artifacts/'07-recalling.png'),full_page=True)
                 capture(page,1300)
                 report['assertions'].append('Browser previewed and committed a two-source synchronized attack, then recalled the group with real return time.')
+                page.locator('#source').select_option('west-us')
+                page.locator('#destination').select_option('east-us')
+                expect(page.locator('#group-percent')).to_have_value('100')
+                page.locator('[data-attack-source="central-us"]').check()
+                expect(page.locator('#attack-summary')).to_contain_text('2 sources')
+                page.locator('#coordinate-preview').click()
+                expect(page.locator('#attack-plan')).to_contain_text('Shared arrival')
+                expect(page.locator('#coordinate-commit')).to_be_enabled(timeout=15000)
+                page.locator('#coordinate-commit').click()
+                expect(page.locator('#toast')).to_contain_text('Group march committed')
+                report['assertions'].append('Browser selected two owned source provinces, defaulted to 100% available troops, and committed one long-distance group transfer to East US.')
                 # Alaska starts undeveloped; let natural recruitment fund construction.
                 page.locator('[data-order-mode=develop]').click()
                 page.locator('#source').select_option('alaska')
@@ -325,6 +336,22 @@ def main():
                 assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1')
                 page.screenshot(path=str(artifacts/'09-mobile-orders.png'),full_page=True)
                 page.set_viewport_size({'width':1600,'height':1050})
+
+                page.locator('#back').click()
+                page.locator('#room-name').fill('Practice Council')
+                page.locator('#create-form button').click()
+                expect(page.locator('#lobby')).to_be_visible()
+                page.locator('#country-choice').select_option('usa')
+                page.locator('#fill-bots').click()
+                expect(page.locator('#lobby-note')).to_contain_text('You command United States')
+                expect(page.locator('#room-label')).to_contain_text('8/8')
+                practice=http('/api/games')['games'][0]['id']
+                practice_state=http(f'/api/games/{practice}')
+                assert practice_state['players'][0]['id']=='usa'
+                assert sum(p['kind']=='bot' for p in practice_state['players'])==7
+                page.locator('#start-match').click()
+                expect(page.locator('#phase')).to_have_text('OPENING COUNCIL')
+                report['assertions'].append('Host filled a new room before manually joining, took the selected country, and started a seven-bot practice match.')
 
                 assert not report['pageErrors'],report['pageErrors']
                 if args.gif:

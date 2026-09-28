@@ -1,6 +1,8 @@
 /** Explain victory routes using only the ordinary, recipient-filtered observation.
  * These are static board comparisons, not forecasts of combat or diplomacy.
  */
+import { developmentForecast } from '../public/insights.js';
+
 export function strategicOptions(state, map) {
   if (!state.you) throw new Error('Join a country to inspect your strategic options.');
   const me = state.players.find(p => p.id === state.you);
@@ -27,6 +29,14 @@ export function strategicOptions(state, map) {
   for (const order of state.commandBudget?.reserved || [])
     if (['move', 'develop', 'transit'].includes(order.type) && order.from)
       reserved.set(order.from, (reserved.get(order.from) || 0) + (order.amount || 0));
+  const developmentChoices = ownProvinces.map(p => {
+    const forecast = developmentForecast(state, p.id);
+    if (!forecast) return null;
+    const availableNow = Math.max(0, p.troops - 1 - (reserved.get(p.id) || 0));
+    return { ...forecast, availableNow,
+      manpowerReady: availableNow >= forecast.cost && !forecast.alreadyInvested && !forecast.queued,
+      commandReady: (state.commandBudget?.remaining || 0) > 0 };
+  }).filter(Boolean);
   const targets = [];
   for (const target of state.provinces) {
     if (target.owner && ownMembers.has(target.owner)) continue;
@@ -69,7 +79,7 @@ export function strategicOptions(state, map) {
     holdTicks: hold, latestHoldStart, ticksUntilLatestStart: Math.max(0, latestHoldStart - state.tick),
     holdStillStartable: state.tick <= latestHoldStart,
     currentDeadlinePayout: state.leaderboard?.players.find(p => p.country === state.you)?.projectedDeadlinePayout ?? null,
-    nearbyTargets: targets, possibleIndependentPartners: partners,
+    nearbyTargets: targets, developmentChoices, possibleIndependentPartners: partners,
     assumptions: 'Static public board only. Capture comparisons assume the current industry level survives, no other province changes, and your side keeps the target. Adjacent sources are your own uncommitted garrisons; they are not an attack plan. Defenders, recruitment, travel, orders, war votes, alliance notice, tenure, and other players can change before arrival. Use plan_attack or preview for a chosen target.'
   };
 }

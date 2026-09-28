@@ -1,4 +1,4 @@
-import { journeyPoint } from './movement.js';
+import { journeyPoint, ownedPath } from './movement.js';
 /** Presentation only: the server decides every movement, battle and ownership change. */
 const NS = 'http://www.w3.org/2000/svg';
 function node(tag, attributes = {}) {
@@ -200,6 +200,12 @@ export class Atlas {
     for(const edge of this.seas.children)edge.classList.toggle('selected-connection',edge.dataset.edge.split('|').includes(source));
     this.connections.replaceChildren();
     for(const id of neighbors)this.connections.append(node('path',{d:this.path(source,id),class:id===destination?'target-connection':'adjacent-connection',...(id===destination?{'marker-end':`url(#${this.prefix}march-head)`}:{})}));
+    if(source && destination && !neighbors.includes(destination) && state.rules.distanceMovement){
+      const route=ownedPath(this.map,state.provinces,state.travelTimes,state.you,source,destination,true);
+      for(let i=0;route && i<route.length;i++)this.connections.append(node('path',{
+        d:this.path(i?route[i-1]:source,route[i]),class:'target-connection',
+        ...(i===route.length-1?{'marker-end':`url(#${this.prefix}march-head)`}:{})}));
+    }
     this.routes.replaceChildren();
     for(const p of state.provinces)if(p.route && (p.owner===state.you || p.id===source))this.routes.append(node('path',{d:this.path(p.id,p.route),class:'recruit-connection','marker-end':`url(#${this.prefix}march-head)`}));
     this.trails.replaceChildren();

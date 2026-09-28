@@ -14,7 +14,7 @@ function tool(name,description,properties,required,run,readOnly=false){
     annotations:{readOnlyHint:readOnly,destructiveHint:!readOnly,openWorldHint:false},run});
 }
 tool('list_matches','List public rooms. Join a country before the host starts.',{},[],()=>client.list(),true);
-tool('map','Read province IDs, adjacency, starting countries and map geometry.',{},[],()=>client.map(),true);
+tool('map','Read province IDs, adjacency, coordinates, connections and starting countries. Decorative SVG paths are omitted.',{},[],async()=>{const map=await client.map();return {...map,provinces:map.provinces.map(({path,...province})=>province)};},true);
 tool('create_match','Create a room. Registers a local identity if needed. Standard is 30 real minutes, quick is five.',
   {name:string,playerName:string,preset:{type:'string',enum:['standard','quick']}},['name','playerName'],async a=>{
     if(!client.session.profileToken && !client.explicitToken)await client.register(a.playerName);return client.create(a.name,a.preset || 'standard');});
@@ -29,7 +29,7 @@ tool('observe','Observe current board, legal command budget, proposals, scores, 
 tool('match_leaderboard','Read the current match ranking by completed industry. Includes every alliance (solo sides too), each player’s industry, current strength-weighted victory share and conditional payouts. This is not persistent cross-match standings.',
   {},[],async()=>{const o=await client.observe(0);return {status:o.status,tick:o.tick,economyThreshold:o.economyThreshold,
     leaderboard:o.leaderboard,outcome:o.outcome};},true);
-tool('strategic_options','Compare your exact industry gap and latest possible hold start with adjacent public targets and possible independent partners. Static board arithmetic only: this does not predict combat, acceptance, or future orders.',
+tool('strategic_options','Compare your industry gap, adjacent targets and development choices. Development choices show cost, uncommitted local manpower and whether it is currently ready. Static board arithmetic only: this does not predict combat, acceptance, or future orders.',
   {},[],async()=>strategicOptions(await client.observe(0),await client.map()),true);
 tool('alliance_victory_share','Read your current alliance victory share and conditional point forecasts. Decisive assumes your side completes a 60% hold; deadline assumes current industry ranking stays final. This spends no command.',
   {},[],async()=>{const o=await client.observe(0);if(!o.you)throw new Error('Join a country to read your own alliance share.');
@@ -43,7 +43,7 @@ tool('alliance_victory_share','Read your current alliance victory share and cond
       assumption:o.leaderboard.assumption,actualResult:o.outcome?.scores.find(p=>p.country===o.you)??null};},true);
 tool('preview','Read exact static Risk-round capture odds against the current garrison. Defender wins ties. Reinforcements, recruitment and retreat can change the outcome.',
   {from:string,to:string,amount:integer},['from','to','amount'],a=>client.preview(a.from,a.to,a.amount),true);
-tool('move','Commit troops across one connection. Leave one behind. Counts as one military command; executes next tick by default. Industrial scenario allows recall and distance-based travel. Supply exactly one of amount or percent; optional arriveAt schedules arrival.',
+tool('move','Commit troops across one connection. Leave one behind. Attacking another country requires an active war first; use declare_war. Counts as one military command; executes next tick by default. Industrial scenario allows recall and distance-based travel. Supply exactly one of amount or percent; optional arriveAt schedules arrival.',
   {from:string,to:string,amount:{type:'integer',minimum:1},percent:{type:'number',exclusiveMinimum:0,maximum:100},arriveAt:{type:'integer',minimum:1},...op},['from','to'],a=>client.action({type:'move',from:a.from,to:a.to,amount:a.amount,percent:a.percent,arriveAt:a.arriveAt},a.opId));
 tool('transit','March through 1–7 allied intermediate provinces to a final connected destination without gifting the troops. Alliance departure waits while troops are inside an ally’s borders.',
   {from:string,amount:{type:'integer',minimum:1},path:{type:'array',minItems:2,maxItems:8,items:string},...op},
@@ -81,7 +81,7 @@ const attackProperties={to:string,arriveAt:{type:'integer',minimum:1},sources:{t
   items:{type:'object',properties:{from:string,amount:{type:'integer',minimum:1},percent:{type:'number',exclusiveMinimum:0,maximum:100}},required:['from'],additionalProperties:false}}};
 tool('plan_attack','Preview a multi-source attack and its earliest shared arrival tick without spending a command. Each source needs exactly one of amount or percent.',
   attackProperties,['to','sources'],a=>client.plan(a),true);
-tool('coordinated_attack','Commit connected source provinces to one target on the same tick. Supply amount or percent per source, optionally arriveAt. Nearby sources wait under reservation. One shared command; no privileged bot execution.',
+tool('coordinated_attack','Commit connected source provinces to one target on the same tick. Attacking another country requires an active war first; use declare_war. Supply amount or percent per source, optionally arriveAt. Nearby sources wait under reservation. One shared command; no privileged bot execution.',
   {...attackProperties,...op},['to','sources'],a=>{const {opId,...action}=a;return client.action({type:'attack',...action},opId);});
 tool('recall','Cancel a queued attack or recall an outbound army/group. Troops already marching return from their current position and remain vulnerable; they fight if home is now hostile.',
   {id:string,...op},['id'],a=>client.action({type:'recall',id:a.id},a.opId));

@@ -1,4 +1,4 @@
-import { travelTicks, journeyPoint } from '../public/movement.js';
+import { travelTicks, journeyPoint, ownedPath } from '../public/movement.js';
 import { combatForecast } from '../public/combat.js';
 /** Authoritative, deterministic rules. Time is an integer simulation second.
  * No HTTP, random numbers, timers, credentials, or persistence in this module.
@@ -70,7 +70,7 @@ function alive(g, id) {
   const p = player(g, id); requireRule(p.eliminatedAt === null, 'Eliminated countries cannot do that.'); return p;
 }
 export function createGame({ id, name, hostId, speed = 1, eligible = false }, map) {
-  const rules = { ...RULES, ...map.rules, economyShare: .6 };
+  const rules = { ...RULES, ...(map.rulesVersion >= 3 ? { distanceMovement: true } : {}), ...map.rules, economyShare: .6 };
   const positions = Object.fromEntries(map.provinces.map(p => [p.id, { x: p.x, y: p.y }]));
   const byId = new Map(map.provinces.map(p => [p.id, p]));
   const travelTimes = Object.fromEntries(map.provinces.map(p => [p.id,
@@ -91,7 +91,13 @@ export function join(g, map, { profileId, name, country, kind = 'human', model =
   if (existing) { requireRule(existing.id === country, 'You already occupy another country.', 409); return existing; }
   const c = map.countries.find(c => c.id === country);
   requireRule(c, 'Choose a listed country.');
-  requireRule(!g.players.some(p => p.id === country), 'That country is taken.', 409);
+  const occupied = g.players.find(p => p.id === country);
+  if (occupied && profileId === g.hostId && occupied.kind === 'bot' && kind === 'human') {
+    Object.assign(occupied, { profileId, name: text(name, 'Player name', 40), kind, model: '', persona: '', visibility: 'private' });
+    event(g, 'seat_claimed', { country, name: occupied.name });
+    return occupied;
+  }
+  requireRule(!occupied, 'That country is taken.', 409);
   const p = { id: country, profileId, name: text(name, 'Player name', 40), kind,
     model: String(model).slice(0, 100), persona: String(persona).slice(0, 100), visibility,
     side: `solo:${country}:0`, joinedAt: 0, eliminatedAt: null, orderTicks: [], lastChat: null };
@@ -137,7 +143,9 @@ function running(g) { requireRule(g.status === 'running', 'The match is not runn
 function mapProvince(map, id) { return map.provinces.find(p => p.id === id); }
 function military(g, map, p, action) {
   alive(g, p.id);
-  if (action.type === 'move') return coordinated(g, map, p, { ...action, sources: [{ from: action.from, ...(action.amount !== undefined ? { amount: action.amount } : {}), ...(action.percent !== undefined ? { percent: action.percent } : {}) }] });
+  if (action.type === 'move') {
+    return coordinated(g, map, p, { ...action, sources: [{ from: action.from, ...(action.amount !== undefined ? { amount: action.amount } : {}), ...(action.percent !== undefined ? { percent: action.percent } : {}) }] });
+  }
   const source = province(g, action.from);
   requireRule(source.owner === p.id, 'You do not own the source province.', 403);
   requireRule(action.to === null && action.type === 'route' || mapProvince(map, source.id).neighbors.includes(action.to),
@@ -175,7 +183,10 @@ export function attackPlan(g, map, country, action) {
     const source = province(g, input.from);
     requireRule(source.owner === country, 'You do not own the source province.', 403);
     requireRule(!unique.has(source.id), 'Each source may appear only once.'); unique.add(source.id);
-    requireRule(mapProvince(map, source.id).neighbors.includes(action.to), 'Every source must connect to the destination.');
+    const adjacent=mapProvince(map, source.id).neighbors.includes(action.to);
+    const path=!adjacent && r.distanceMovement
+      ? ownedPath(map,g.provinces,g.travelTimes,country,source.id,action.to,true) : null;
+    requireRule(adjacent || path, 'Every source must connect to the destination.');
     const available = Math.max(0, source.troops - reservedTroops(g, country, source.id) - 1);
     requireRule((input.amount !== undefined) !== (input.percent !== undefined), 'Supply exactly one of amount or percent per source.');
     if (input.percent !== undefined) requireRule(Number.isFinite(input.percent) && input.percent > 0 && input.percent <= 100,
@@ -184,7 +195,9 @@ export function attackPlan(g, map, country, action) {
     const amount = input.amount ?? Math.floor(available * input.percent / 100);
     requireRule(Number.isSafeInteger(amount) && amount > 0 && amount <= available,
       'Not enough uncommitted troops; leave one at home. A percentage must select at least one troop.');
-    return { from: source.id, amount, available, travel: journeyTicks(g, source.id, action.to) };
+    return { from: source.id, amount, available,
+      travel: path ? path.reduce((sum,id,i)=>sum+journeyTicks(g,i?path[i-1]:source.id,id),0) : journeyTicks(g, source.id, action.to),
+      ...(path ? {path} : {}) };
   });
   const earliest = g.tick + 1 + Math.max(...sources.map(s => s.travel));
   const arrivesAt = action.arriveAt ?? earliest;
@@ -202,7 +215,8 @@ function coordinated(g, map, p, action) {
   const plan = attackPlan(g, map, p.id, action); checkBudget(g, p);
   const groupId = identifier(g, 'attack-');
   const orders = plan.sources.map(s => ({ id: identifier(g, 'order-'), groupId, country: p.id,
-    type: 'move', from: s.from, to: plan.to, amount: s.amount, executeAt: s.executeAt, arrivesAt: plan.arrivesAt }));
+    type: 'move', from: s.from, to: s.path?.[0] || plan.to, amount: s.amount, executeAt: s.executeAt, arrivesAt: plan.arrivesAt,
+    ...(s.path ? {path:s.path,controlledMarch:true} : {}) }));
   useBudget(g, p); g.orders.push(...orders);
   event(g, 'attack_accepted', { country: p.id, groupId, arrivesAt: plan.arrivesAt, orders }, [p.id]);
   return { groupId, orderId: orders[0].id, executeAt: orders[0].executeAt, arrivesAt: plan.arrivesAt, orders };
@@ -541,7 +555,8 @@ function departArmy(g, country, from, to, amount, automatic = false, order = nul
   const arrivesAt = order?.transit ? g.tick+journeyTicks(g,from,to) : order?.arrivesAt ?? g.tick + journeyTicks(g, from, to);
   g.armies.push({ id: identifier(g, 'army-'), country, from, to, amount, departedAt: g.tick,
     arrivesAt, ...(order ? { orderId: order.id, groupId: order.groupId } : {}),
-    ...(order?.transit?{transit:true,path:[...order.path],pathIndex:0,origin:from,originDepartedAt:g.tick}:{}) });
+    ...(order?.transit?{transit:true,path:[...order.path],pathIndex:0,origin:from,originDepartedAt:g.tick,
+      ...(order.controlledMarch?{controlledMarch:true}:{})}:{}) });
   if (!automatic) event(g, 'army_departed', { country, from, to, amount, arrivesAt });
 }
 function executeOrders(g) {
@@ -554,6 +569,8 @@ function executeOrders(g) {
     if (['move', 'transit', 'develop'].includes(o.type) && o.amount >= source.troops) error = 'Not enough troops remain.';
     if (o.type === 'route' && o.to !== null && !allied(g, o.country, province(g, o.to).owner)) error = 'Destination is no longer friendly.';
     if (o.type === 'move' && !mayEnter(g,o.country,province(g,o.to).owner)) error = 'War ended before departure.';
+    if (o.controlledMarch && o.path.slice(0,-1).some(id=>province(g,id).owner!==o.country)) error='Controlled route changed before departure.';
+    if (o.controlledMarch && !mayEnter(g,o.country,province(g,o.path.at(-1)).owner)) error='War ended before departure.';
     if(o.type==='transit' && (o.path.slice(0,-1).some(id=>!allied(g,o.country,province(g,id).owner)) ||
       !mayEnter(g,o.country,province(g,o.path.at(-1)).owner)))error='Transit route or war status changed.';
     if (o.type === 'develop' && (source.developing || source.development !== o.level - 1)) error = 'Development state changed.';
@@ -564,7 +581,7 @@ function executeOrders(g) {
       source.developing = { level: o.level, completesAt: g.tick + gameRules(g).developmentTicks[source.development] };
       event(g, 'development_started', { country: o.country, province: source.id, cost: o.amount, ...source.developing });
     } else { source.troops -= o.amount; departArmy(g, o.country, o.from, o.to, o.amount, false,
-      o.type==='transit'?{...o,transit:true}:o); }
+      o.type==='transit' || o.controlledMarch?{...o,transit:true}:o); }
     event(g, 'order_executed', { country: o.country, orderId: o.id }, [o.country]);
   }
   g.orders = g.orders.filter(o => o.executeAt > g.tick);
@@ -650,7 +667,7 @@ function resolveArrivals(g) {
     const arriving=[];
     for(const army of byTarget.get(target.id)||[]) {
       if(army.transit && !army.returning && army.pathIndex<army.path.length-1) {
-        if(allied(g,army.country,target.owner) && !(g.battles||[]).some(b=>b.province===target.id)) {
+        if((army.controlledMarch ? target.owner===army.country : allied(g,army.country,target.owner)) && !(g.battles||[]).some(b=>b.province===target.id)) {
           army.from=target.id;army.pathIndex++;army.to=army.path[army.pathIndex];
           army.departedAt=g.tick;army.arrivesAt=g.tick+journeyTicks(g,army.from,army.to);
           g.armies.push(army);event(g,'army_transited',{country:army.country,province:target.id,to:army.to,amount:army.amount});
@@ -889,7 +906,9 @@ export function observe(g, country = null, after = 0, limit = 200) {
 
 export function preview(g, map, from, to, amount, viewer = null) {
   const a=province(g,from),b=province(g,to);
-  requireRule(mapProvince(map,from).neighbors.includes(to),'Destination is not adjacent.');
+  const path=!mapProvince(map,from).neighbors.includes(to) && gameRules(g).distanceMovement && a.owner
+    ? ownedPath(map,g.provinces,g.travelTimes,a.owner,from,to,true) : null;
+  requireRule(mapProvince(map,from).neighbors.includes(to) || path,'Destination is not connected through controlled provinces.');
   // Only the owner can inspect unexecuted reservations; spectators see the public garrison.
   const reserved = a.owner && a.owner === viewer ? reservedTroops(g, viewer, from) : 0;
   requireRule(Number.isSafeInteger(amount) && amount>0 && amount<a.troops-reserved,'Choose a positive amount of uncommitted troops and leave at least one behind.');
@@ -900,8 +919,10 @@ export function preview(g, map, from, to, amount, viewer = null) {
   else if(amount>b.troops) summary=`Against the current garrison: capture with ${amount-b.troops} surviving troops.`;
   else if(amount===b.troops) summary='Both forces are destroyed; the previous owner keeps the empty province.';
   else summary=`The current defenders survive with ${b.troops-amount} troops.`;
-  const arrivesAt=g.tick+1+journeyTicks(g,from,to),defenseAtArrival=arrivalDefense(g,b,arrivesAt);
-  return {from,to,amount,reserved,warRequired:Boolean(a.owner && !mayEnter(g,a.owner,b.owner)),travelTicks:journeyTicks(g,from,to),arrivesAt,available:a.troops-reserved-1,remaining:a.troops-reserved-amount,summary,combat:combatForecast(amount,b.troops,b.development),
+  const travel=path?path.reduce((sum,id,i)=>sum+journeyTicks(g,i?path[i-1]:from,id),0):journeyTicks(g,from,to);
+  const arrivesAt=g.tick+1+travel,defenseAtArrival=arrivalDefense(g,b,arrivesAt);
+  return {from,to,amount,reserved,warRequired:Boolean(a.owner && !mayEnter(g,a.owner,b.owner)),travelTicks:travel,
+    ...(path?{path}:{}),arrivesAt,available:a.troops-reserved-1,remaining:a.troops-reserved-amount,summary,combat:combatForecast(amount,b.troops,b.development),
     defenseAtArrival,combatAtArrival:combatForecast(amount,defenseAtArrival.total,b.development),
     incoming:g.armies.filter(a=>a.to===to),warning:'Arrival forecast counts scheduled recruitment and visible friendly incoming armies. New orders, battles, diplomacy and recalls can change it.'};
 }

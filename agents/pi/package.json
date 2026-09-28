@@ -1,0 +1,14 @@
+{
+  "name": "council-of-iron-pi-player",
+  "private": true,
+  "type": "module",
+  "description": "Isolated Pi controller for one Council of Iron seat",
+  "scripts": {
+    "play": "node play.js",
+    "play:codex": "node codex-play.js"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "0.87.1",
+    "@earendil-works/pi-coding-agent": "0.87.1"
+  }
+}

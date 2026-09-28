@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { join as pathJoin } from 'node:path';
 import { spawn } from 'node:child_process';
 import { request as httpRequest } from 'node:http';
-import { makeServer } from '../src/server.js';
-import { start as launchEngine } from '../src/engine.js';
+import { makeServer, MAP } from '../src/server.js';
+import { join as joinEngine, start as launchEngine } from '../src/engine.js';
 
 async function fixture(t,{disk=false,...options}={}) {
   const dir=mkdtempSync(pathJoin(tmpdir(),'council-test-'));
@@ -174,6 +174,34 @@ test('built-in practice bots invalidate league eligibility and use the common ga
   const review=(await f.call(`/api/games/${id}/review`)).data;
   assert.equal(review.historyAvailable,true);
   assert.equal(review.totals.initialTroops+review.totals.recruited-review.totals.invested-review.totals.casualties-review.totals.interned,review.totals.remainingTroops);
+});
+test('a host can fill practice seats before joining and reclaim a bot in an older full lobby',async t=>{
+  const f=await fixture(t),host=await f.register('Practice host'),visitor=await f.register('Visitor');
+  const id=await f.room(host);
+  assert.equal((await f.call(`/api/games/${id}/bots`,'POST',{},host.token)).status,400);
+  const filled=await f.call(`/api/games/${id}/bots`,'POST',{country:'japan'},host.token);
+  assert.equal(filled.status,200);
+  let view=(await f.call(`/api/games/${id}`,'GET',undefined,host.token)).data;
+  assert.equal(view.you,'japan');assert.equal(view.players.length,8);
+  assert.equal(view.players.filter(p=>p.kind==='bot').length,7);
+  assert.equal((await f.call(`/api/games/${id}/start`,'POST',{},host.token)).status,200);
+
+  const older=await f.room(host,'Full practice lobby');
+  const g=f.app.games.get(older);
+  for(const c of MAP.countries) joinEngine(g,MAP,{profileId:`old-bot-${c.id}`,name:`${c.name} bot`,country:c.id,kind:'bot'});
+  assert.equal((await f.call(`/api/games/${older}/join`,'POST',{country:'usa'},visitor.token)).status,409);
+  const claimed=await f.call(`/api/games/${older}/join`,'POST',{country:'usa',kind:'human'},host.token);
+  assert.equal(claimed.status,200);
+  view=(await f.call(`/api/games/${older}`,'GET',undefined,host.token)).data;
+  assert.equal(view.you,'usa');assert.equal(view.players.length,8);
+  assert.equal(view.players.find(p=>p.id==='usa').kind,'human');
+  assert.equal(view.players.filter(p=>p.kind==='bot').length,7);
+  assert.equal(view.eligible,false);
+  assert.equal(view.events.filter(e=>e.type==='seat_claimed').length,1);
+  assert.equal((await f.call(`/api/games/${older}/join`,'POST',{country:'usa'},host.token)).status,200);
+  assert.equal((await f.call(`/api/games/${older}/start`,'POST',{},host.token)).status,200);
+  launchEngine(g);f.app.step(g,1800);
+  assert.equal((await f.call(`/api/games/${older}/review`)).data.historyAvailable,true);
 });
 test('real CLI subprocess joins, observes, sends orders, reconnects from a private session file',async t=>{
   const f=await fixture(t),host=await f.register('Host'),id=await f.room(host);const sa=await f.seat(id,host,'usa');

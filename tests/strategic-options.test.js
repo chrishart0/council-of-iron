@@ -30,7 +30,25 @@ test('strategic options distinguish taking rival industry from taking neutral in
   assert.equal(mexico.industryGapAfterCapture,9);
   assert.equal(result.possibleIndependentPartners[0].country,'britain');
   assert.equal(result.possibleIndependentPartners[0].industryGapTogether,0);
+  const east = result.developmentChoices.find(p=>p.province==='east-us');
+  assert.equal(east.availableNow, game.provinces.find(p=>p.id==='east-us').troops-1);
+  assert.equal(east.manpowerReady, east.availableNow>=east.cost);
   assert.deepEqual(game,before);
+});
+
+test('strategic development options exclude reserved manpower', () => {
+  const game = createGame({id:'develop-options',name:'Options',hostId:'test'},map);
+  join(game,map,{profileId:'usa',name:'USA',country:'usa'});
+  join(game,map,{profileId:'britain',name:'Britain',country:'britain'});
+  start(game);
+  const province=game.provinces.find(p=>p.id==='east-us');
+  province.troops=100;
+  const ready=strategicOptions(observe(game,'usa'),map).developmentChoices.find(p=>p.province==='east-us');
+  assert.equal(ready.manpowerReady,true);
+  game.orders.push({type:'move',country:'usa',from:'east-us',to:'west-us',amount:90,executeAt:game.tick+1});
+  const reserved=strategicOptions(observe(game,'usa'),map).developmentChoices.find(p=>p.province==='east-us');
+  assert.equal(reserved.availableNow,9);
+  assert.equal(reserved.manpowerReady,false);
 });
 
 test('strategic options require a player seat', () => {

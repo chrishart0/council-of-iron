@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createGame, join, start, act, tick, observe, attackPlan, gameRules, reservedTroops, economyThreshold } from '../src/engine.js';
+import { createGame, join, start, act, tick, observe, attackPlan, preview, gameRules, reservedTroops, economyThreshold } from '../src/engine.js';
 import { journeyPoint, distanceKm } from '../public/movement.js';
 const map = JSON.parse(readFileSync(new URL('../public/imperial-map.json',import.meta.url)));
 const country = (g,id) => g.players.find(p=>p.id===id);
@@ -65,6 +65,44 @@ test('distance movement takes longer overseas and crosses the antimeridian by th
   const r=action(g,'usa',{type:'move',from:'west-us',to:'mexico',percent:50});
   const available=province(g,'west-us').troops-1;assert.equal(r.orders[0].amount,Math.floor(available/2));
   tick(g);assert.equal(g.armies[0].arrivesAt,1+g.travelTimes['west-us'].mexico);
+});
+test('one group order sends every available troop from multiple owned provinces across controlled land',()=>{
+  const g=game(),target=province(g,'east-us');g.rules.warRequired=true;
+  for(const id of ['west-us','central-us','east-us'])province(g,id).nextRecruit=1000;
+  const source=[{from:'west-us',percent:100},{from:'central-us',percent:100}];
+  const plan=attackPlan(g,map,'usa',{to:'east-us',sources:source});
+  assert.deepEqual(plan.sources[0].path,['central-us','east-us']);
+  assert.equal(plan.sources[0].amount,11);assert.equal(plan.sources[1].amount,11);
+  assert.equal(preview(g,map,'west-us','east-us',11,'usa').travelTicks,plan.sources[0].travel);
+  const receipt=action(g,'usa',{type:'attack',to:'east-us',sources:source},'transfer-group');
+  assert.deepEqual(action(g,'usa',{type:'attack',to:'east-us',sources:source},'transfer-group'),receipt);
+  assert.equal(observe(g,'usa').commandBudget.remaining,2);
+  assert.equal(reservedTroops(g,'usa','west-us'),11);
+  assert.equal(reservedTroops(g,'usa','central-us'),11);
+  advance(g,receipt.arrivesAt);
+  assert.equal(province(g,'west-us').troops,1);
+  assert.equal(province(g,'central-us').troops,1);
+  assert.equal(target.troops,34);
+  assert.equal(g.armies.length,0);
+});
+test('long group routes reject unowned gaps and preserve the legacy adjacent-only rule',()=>{
+  const g=game();province(g,'central-us').owner='britain';
+  assert.throws(()=>action(g,'usa',{type:'move',from:'west-us',to:'east-us',amount:5}),/connect/);
+  assert.equal(g.orders.length,0);
+  province(g,'central-us').owner='usa';delete g.rules.distanceMovement;
+  assert.throws(()=>action(g,'usa',{type:'move',from:'west-us',to:'east-us',amount:5}),/connect/);
+});
+test('distant sources can join a single attack through owned intermediate land',()=>{
+  const g=game();g.rules.warRequired=true;
+  const sources=[{from:'east-us',percent:100},{from:'central-us',percent:100}];
+  const plan=attackPlan(g,map,'usa',{to:'mexico',sources});
+  assert.ok(plan.sources.find(s=>s.from==='east-us').path.includes('central-us'));
+  const receipt=action(g,'usa',{type:'attack',to:'mexico',sources});
+  assert.equal(receipt.orders.length,2);
+  assert.equal(receipt.orders.find(o=>o.from==='east-us').controlledMarch,true);
+  advance(g,receipt.arrivesAt);
+  assert.ok(g.events.some(e=>e.type==='army_transited' && e.country==='usa'));
+  assert.equal(g.armies.filter(a=>a.to==='mexico' && a.engaged).length,2);
 });
 test('multi-source plan validates atomically, reserves exact amounts, dispatches later sources, arrives together',()=>{
   const g=game(),to='mexico';const sources=['west-us','central-us'];

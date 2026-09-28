@@ -1,3 +1,9 @@
+# Long-distance group marches — 27 September 2026
+
+The updated rules passed 93 Node tests and `npm run check`. Focused tests sent 100% of available troops from West US and Central US to East US in one reserved group order, leaving one troop at each source; they also verified a distant source joining an attack through controlled intermediate land and preserved adjacency when `distanceMovement` is absent. The 32-round diplomacy heuristic run completed with zero invariant failures. This simulation is a regression check, not evidence of human enjoyment or numerical balance.
+
+The native `python tests/browser.py --gif docs/media/gameplay.gif` run passed the live gameplay, recorded review and focused UI suites with no page errors. The browser selected two owned sources, defaulted the group to 100% available, previewed the shared arrival and committed one long-distance transfer. The actual live-match recording contains 61 frames at the whole-clock 12× test scale; the recorded-position UI fixture remains separately labeled.
+
 # Opening, combat forecasts, development defense and faster marches — 27 September 2026
 
 The existing eight-model match `5b3f1596` was inspected as a recorded game. Qing’s order to send 20 troops from North China to Manchuria was chosen from an observation at tick 183, when Manchuria was Qing-owned. The model decision was accepted at tick 238 after Japan had captured the province; a visible Japanese reinforcement of 20 was already due at tick 298, before Qing’s arrival at tick 311. Manchuria had 24 defenders on Qing’s arrival. This is evidence of stale observation and missing arrival-aware guidance for that order, not proof that the model misunderstood Risk odds in general. The agent handoff and model runner now provide current and conditional arrival odds, and the runner discards a military order when the destination owner changes during model inference.
@@ -182,3 +188,11 @@ The map is usable and connected, but not demonstrated balanced. Southern expansi
 Actual independent human participants have not rated enjoyment or legibility. No attached live LLM has been tested, and no claim is made about vendor-specific MCP setup, model bias or negotiation quality. The tools-only MCP adapter has subprocess protocol tests, not certification against every client. Docker configuration has not been built locally. Public deployment hardening, load testing, moderation, account recovery, operator verification and calibrated rankings are outside this prototype.
 
 Before promoting this to a competitive game, run ordinary-speed matches with real humans and several independently controlled LLM agents; rotate countries, record latency, inspect coalition-size and late-join behavior, and change map connectivity before adding economic complexity.
+
+# Practice lobby recovery — 27 September 2026
+
+The live room `15c7f20e` on port 3108 was observed through its public API while still in the lobby: all eight countries were held by practice bots and no human seat was present. The service runs from the separate `council-ui-fullscreen` worktree, so this checkout's fix was not deployed to that room during verification.
+
+In this checkout, 88 Node tests passed. A focused HTTP regression confirmed that filling bots before joining takes the host's selected country, that an older full-bot lobby lets only its host claim a bot seat, and that the claimed match starts and produces a verifiable public review. `npm run check` passed. The 32-round diplomacy heuristic run reported zero invariant failures; it is a mechanics regression, not evidence of numerical balance or human enjoyment.
+
+The native `python tests/browser.py` run passed the live gameplay, recorded review, and recorded-position UI suites with no captured page errors. Its new browser check filled a third room before a separate join, saw one human and seven bots, and started opening. The final timed browser run ended at tick 1658 with a coalition victory; all three browser suites passed with no page errors. Browser artifacts were written under `/tmp/council-practice-recovery-browser-final`, not committed.
