@@ -10,6 +10,7 @@ import { inbox, arrivals } from './comms-model.js';
 import { headlineCopy, systemCopy } from './feed-model.js';
 import { icon, insignia, faction } from './presentation.js';
 import { escapeHTML as esc } from './ui.js';
+import { relationsOf } from './relations.js';
 
 const QUICK = ['Agreed.', 'Not now.', 'Let us talk terms.'];
 const clock = n => `${Math.floor(Math.max(0, n) / 60).toString().padStart(2, '0')}:${Math.floor(Math.max(0, n) % 60).toString().padStart(2, '0')}`;
@@ -21,12 +22,12 @@ export class Comms {
   constructor(opts) {
     Object.assign(this, { button: opts.button, toasts: opts.toasts, panel: opts.panel, names: opts.names, docked: opts.docked || (() => false),
       onAct: opts.onAct || (async () => null), onView: opts.onView || (() => {}), onSend: opts.onSend || (async () => null), onRead: opts.onRead || (() => {}),
-      onOpen: opts.onOpen || (() => {}), onNotice: opts.onNotice || (() => {}), sfxHook: opts.sfx || (() => {}) });
+      onOpen: opts.onOpen || (() => {}), onPropose: opts.onPropose || (() => {}), onNotice: opts.onNotice || (() => {}), sfxHook: opts.sfx || (() => {}) });
     this.reset();
     this.build(); this.bind();
   }
   reset() {
-    this.read = new Set(); this.dismissed = new Set(); this.scroll = new Map(); this.expanded = new Set();
+    this.read = new Set(); this.dismissed = new Set(); this.scroll = new Map(); this.expanded = new Set(); this.drafts = new Map();
     this.state = null; this.history = []; this.items = null; this.box = null; this.readOnly = true;
     this.view = 'closed'; this.conv = null; this.divider = null; this.toast = { actions: [], personal: null, flash: null }; this.pulse = false;
     clearTimeout(this.personalTimer); clearTimeout(this.flashTimer);
@@ -41,9 +42,9 @@ export class Comms {
     const p = this.panel; p.classList.add('cx-panel'); p.setAttribute('aria-label', 'Messages');
     p.innerHTML = `<header class="cx-head plaque"><button type="button" class="cx-back" aria-label="All conversations" data-sfx="press">${icon('back')}</button><h2 class="cx-title">Messages</h2><button type="button" class="cx-readall" data-sfx="press">Mark all read</button><button type="button" class="cx-close" aria-label="Close messages" data-sfx="press">${icon('close')}</button></header>
 <ol class="cx-list" aria-label="Conversations"></ol>
-<section class="cx-thread" aria-label="Conversation"><ol class="cx-rows" aria-live="polite" aria-relevant="additions"></ol><button type="button" class="cx-jump" hidden data-sfx="press"></button>
+<section class="cx-thread" aria-label="Conversation"><nav class="cx-switch" aria-label="Switch conversation"></nav><div class="cx-members" hidden></div><ol class="cx-rows" aria-live="polite" aria-relevant="additions"></ol><button type="button" class="cx-jump" hidden data-sfx="press"></button>
 <div class="cx-quick" role="group" aria-label="Quick replies"></div>
-<form class="cx-composer composer"><label class="sr-only" for="cx-text">Message</label><input id="cx-text" class="cx-input" maxlength="500" autocomplete="off" data-voice required><button type="submit" class="cx-send" data-sfx="confirm">${icon('send')}<span>Send</span></button><small class="cx-note"></small></form></section>`;
+<form class="cx-composer composer"><label class="sr-only" for="cx-text">Message</label><textarea id="cx-text" class="cx-input" maxlength="500" rows="1" autocomplete="off" enterkeyhint="send" data-voice required></textarea><button type="submit" class="cx-send" data-sfx="confirm">${icon('send')}<span class="cx-send-label">Send</span></button><small class="cx-note"></small></form></section>`;
     this.render();
   }
   $(s) { return this.panel.querySelector(s); }
@@ -52,12 +53,19 @@ export class Comms {
     this.$('.cx-back').addEventListener('click', () => this.showList());
     this.$('.cx-close').addEventListener('click', () => this.close());
     this.$('.cx-readall').addEventListener('click', () => this.markAllRead());
-    this.$('.cx-list').addEventListener('click', e => { const b = e.target.closest('[data-conv]'); if (b) this.openThread(b.dataset.conv); });
+    this.$('.cx-list').addEventListener('click', e => { const b = e.target.closest('[data-conv]'); if (!b) return; const c = this.box?.conversations.find(c => c.key === b.dataset.conv); this.openThread(b.dataset.conv, { focusComposer: !c?.action }); });
     this.$('.cx-rows').addEventListener('click', e => this.rowClick(e));
     this.$('.cx-rows').addEventListener('scroll', () => this.onScroll(), { passive: true });
     this.$('.cx-jump').addEventListener('click', () => this.toBottom(true));
     this.$('.cx-quick').addEventListener('click', e => { const q = e.target.closest('[data-quick]'); if (q) { const i = this.$('.cx-input'); i.value = q.dataset.quick; i.focus(); } });
     this.$('.cx-composer').addEventListener('submit', e => { e.preventDefault(); this.send(); });
+    // Enter sends, Shift+Enter is a new line; the box grows to four lines.
+    const input = this.$('.cx-input');
+    input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); this.send(); } });
+    input.addEventListener('input', () => { this.grow(); if (this.conv) this.drafts.set(this.conv, input.value); });
+    this.$('.cx-switch').addEventListener('click', e => { const b = e.target.closest('[data-conv]'); if (b && b.dataset.conv !== this.conv) this.openThread(b.dataset.conv, { focusComposer: true }); });
+    this.$('.cx-list').addEventListener('click', e => { const b = e.target.closest('[data-propose]'); if (b) { e.stopPropagation(); this.onPropose(b.dataset.propose || null); } }, true);
+    this.$('.cx-rows').addEventListener('click', e => { const b = e.target.closest('[data-propose]'); if (b) this.onPropose(b.dataset.propose || null); });
     this.toasts.addEventListener('click', e => this.toastClick(e));
     let start = null; // swipe a toast sideways to dismiss it
     this.toasts.addEventListener('pointerdown', e => { const t = e.target.closest('.cx-toast'); if (t && !e.target.closest('button')) start = { t, x: e.clientX }; });
@@ -108,13 +116,14 @@ export class Comms {
   /* ── navigation ── */
   /** The most important conversation; for an unread message (no decision waiting) the composer is focused, ready to reply. */
   openBest() { const c = this.box?.conversations.find(c => c.action || c.unread); c ? this.openThread(c.key, { focusComposer: !c.action }) : this.showList(); }
-  showList() { this.saveScroll(); this.view = 'list'; this.render(); this.onOpen('list'); this.focusConv(this.conv || this.box?.conversations[0]?.key); }
-  close() { this.saveScroll(); const wasOpen = this.view !== 'closed'; this.view = this.docked() ? 'list' : 'closed'; this.render(); if (wasOpen) this.onOpen(this.view); if (this.panel.contains(document.activeElement) || wasOpen) this.button.focus({ preventScroll: true }); }
+  showList() { this.saveDraft(); this.saveScroll(); this.view = 'list'; this.render(); this.onOpen('list'); this.focusConv(this.conv || this.box?.conversations[0]?.key); }
+  close() { this.saveDraft(); this.saveScroll(); const wasOpen = this.view !== 'closed'; this.view = this.docked() ? 'list' : 'closed'; this.render(); if (wasOpen) this.onOpen(this.view); if (this.panel.contains(document.activeElement) || wasOpen) this.button.focus({ preventScroll: true }); }
   focusConv(key) { if (!key) return; this.conv = key; this.renderList(); this.panel.querySelector(`[data-conv="${CSS.escape(key)}"]`)?.focus({ preventScroll: true }); }
   /** Open a thread: jump to the first unread row (under an "Unread" divider) or the saved position. */
   openThread(key, { focusComposer = false, focus = true } = {}) {
     if (!this.box) return;
-    this.saveScroll(); this.view = 'thread'; this.conv = key; this.below = 0; this.jump(0);
+    this.saveDraft(); this.saveScroll(); this.view = 'thread'; this.conv = key; this.below = 0; this.jump(0);
+    const input = this.$('.cx-input'); input.value = this.drafts.get(key) || ''; this.grow();
     this.divider = this.box.rows.find(r => r.thread === key && r.unread)?.key ?? null;
     if (key === 'world') this.pulse = false;
     this.toast.actions = this.toast.actions.filter(r => r.thread !== key);
@@ -129,6 +138,7 @@ export class Comms {
       else if (focus) this.$('.cx-title').focus?.({ preventScroll: true });
     });
   }
+  saveDraft() { if (this.view === 'thread' && this.conv) { const v = this.$('.cx-input').value; if (v) this.drafts.set(this.conv, v); else this.drafts.delete(this.conv); } }
   saveScroll() { if (this.view === 'thread' && this.conv) this.scroll.set(this.conv, this.$('.cx-rows').scrollTop); }
   onScroll() { this.markVisible(); const rows = this.$('.cx-rows'); if (rows.scrollHeight - rows.scrollTop - rows.clientHeight < 32) this.jump(0); }
   toBottom(smooth) { const rows = this.$('.cx-rows'); rows.scrollTo({ top: rows.scrollHeight, behavior: smooth && !reduced() ? 'smooth' : 'auto' }); this.jump(0); }
@@ -185,11 +195,13 @@ export class Comms {
     this.sfx(choice === 'accept' ? 'seal' : 'press');
   }
   async send() {
-    const input = this.$('.cx-input'), text = input.value.trim(); if (!text || !this.conv || this.readOnly) return;
-    const channel = this.conv === 'world' ? 'world' : this.conv === 'alliance' ? 'alliance' : 'dm';
-    const ok = await this.onSend(channel, channel === 'dm' ? this.conv.slice(3) : null, text);
-    if (ok) { input.value = ''; this.toBottom(false); }
+    const input = this.$('.cx-input'), text = input.value.trim(), conv = this.conv; if (!text || !conv || this.readOnly || this.$('.cx-send').disabled) return;
+    const channel = conv === 'world' ? 'world' : conv === 'alliance' ? 'alliance' : 'dm';
+    const ok = await this.onSend(channel, channel === 'dm' ? conv.slice(3) : null, text);
+    // Keep the conversation going: clear only what was sent, keep focus in the box.
+    if (ok) { this.drafts.delete(conv); if (this.conv === conv && input.value.trim() === text) input.value = ''; this.grow(); this.toBottom(false); input.focus({ preventScroll: true }); }
   }
+  grow() { const i = this.$('.cx-input'); i.style.height = 'auto'; i.style.height = `${Math.min(i.scrollHeight, 108)}px`; }
   sfx(cue) { if (cue) this.sfxHook(cue); }
   /* ── rendering ── */
   render() {
@@ -252,16 +264,29 @@ export class Comms {
   }
   flashToast(f) { return `<div class="cx-toast${f.error ? ' error' : ''}" data-tier="flash" data-key="${esc(f.key)}" role="${f.error ? 'alert' : 'status'}"><p>${esc(f.text)}</p><button type="button" class="cx-dismiss" data-do="dismiss" aria-label="Dismiss" data-sfx="press">${icon('close')}</button></div>`; }
   convTitle(c) { return c.kind === 'world' ? 'World' : c.kind === 'alliance' ? (c.side ? this.names.side(c.side) : 'Alliance') : this.names.country(c.country); }
+  /** Pinned first: your alliance (or how to get one), then World and every power, sorted by what needs you. */
+  ordered() {
+    const convs = this.box.conversations, alliance = convs.find(c => c.kind === 'alliance');
+    return [...(alliance ? [alliance] : []), ...convs.filter(c => c.kind !== 'alliance' && !(c.kind === 'dm' && c.eliminated && !c.active))];
+  }
+  relationTag(country) {
+    if (!this.state.you) return '';
+    const r = relationsOf(this.state, this.state.you);
+    return r.allies.includes(country) ? 'Ally' : r.enemies.includes(country) ? (this.state.rules?.warRequired === false ? 'Hostile' : 'At war') : 'Neutral';
+  }
   renderList() {
     const list = this.$('.cx-list'), box = this.box; if (!box) return;
-    const quiet = box.conversations.filter(c => c.kind === 'dm' && !c.active && !c.eliminated);
-    const html = box.conversations.filter(c => !(c.kind === 'dm' && !c.active)).map(c => {
-      const preview = !c.last ? (c.kind === 'alliance' && !c.side ? 'Join an alliance to talk here.' : 'No messages yet.') : this.preview(c.last);
+    const html = this.ordered().map(c => {
+      const noAlliance = c.kind === 'alliance' && !c.side;
+      const preview = c.last ? this.preview(c.last) : noAlliance ? 'You are independent. Propose an alliance to open a group chat.' : c.kind === 'dm' ? 'No messages yet. Say hello.' : 'No messages yet.';
       const chip = c.action ? `<span class="cx-chip">${c.rows.find(r => r.pending)?.item.system === 'offer' ? 'Offer' : c.rows.find(r => r.pending)?.item.type === 'threat' ? 'Attack' : 'Decide'}</span>` : '';
       const badge = c.unread ? `<i class="cx-count" data-tier="personal">${c.unread}</i>` : '';
+      const tag = c.kind === 'dm' ? this.relationTag(c.country) : '';
       const glyph = c.kind === 'dm' ? insignia(c.country) : icon(c.kind === 'world' ? 'globe' : 'ally');
-      return `<li><button type="button" class="cx-conv" aria-current="${c.key === this.conv && this.view === 'thread'}" data-conv="${esc(c.key)}" data-state="${c.action ? 'action' : c.unread ? 'unread' : 'read'}"${c.kind === 'world' && this.pulse ? ' data-pulse="1"' : ''}><span class="cx-standard">${glyph}</span><span class="cx-conv-main"><b>${esc(this.convTitle(c))}</b><span class="cx-preview">${esc(preview)}</span></span><span class="cx-conv-meta"><time>${c.last ? clock(c.last.tick) : ''}</time>${chip}${badge}</span></button></li>`;
-    }).join('') + (quiet.length && !this.readOnly ? `<li class="cx-start"><span class="cx-start-label">Write to</span>${quiet.map(c => `<button type="button" class="cx-start-btn" data-conv="${esc(c.key)}" aria-label="Write to ${esc(this.names.country(c.country))}" data-sfx="press">${insignia(c.country)}<span>${esc(faction(c.country).short)}</span></button>`).join('')}</li>` : '');
+      const title = c.kind === 'alliance' ? (c.side ? `Your alliance: ${this.names.side(c.side)}` : 'No alliance yet') : this.convTitle(c);
+      const propose = noAlliance && !this.readOnly && this.state.status === 'running' ? '<button type="button" class="cx-propose" data-propose="" data-sfx="press">Propose an alliance</button>' : '';
+      return `<li${c.kind === 'alliance' ? ' class="cx-pinned"' : ''}><button type="button" class="cx-conv" aria-current="${c.key === this.conv && this.view === 'thread'}" data-conv="${esc(c.key)}" data-kind="${c.kind}" data-state="${c.action ? 'action' : c.unread ? 'unread' : 'read'}"${c.kind === 'world' && this.pulse ? ' data-pulse="1"' : ''}><span class="cx-standard">${glyph}</span><span class="cx-conv-main"><b>${esc(title)}</b><span class="cx-preview">${esc(preview)}</span></span><span class="cx-conv-meta"><time>${c.last ? clock(c.last.tick) : ''}</time>${tag ? `<small class="cx-rel" data-rel="${esc(tag)}">${esc(tag)}</small>` : ''}${chip}${badge}</span></button>${propose}</li>`;
+    }).join('');
     if (list.dataset.html !== html) { list.dataset.html = html; list.innerHTML = html; }
   }
   preview(r) {
@@ -293,7 +318,11 @@ export class Comms {
     const input = this.$('.cx-input'), n = this.names;
     input.placeholder = conv.kind === 'world' ? 'Message everyone…' : conv.kind === 'alliance' ? 'Message your alliance…' : `Message ${faction(conv.country).short}…`;
     const wait = Math.max(0, (this.state.commandBudget?.chatReadyAt || 0) - this.state.tick);
-    this.$('.cx-send').disabled = wait > 0; this.$('.cx-note').textContent = wait ? `Next message in ${wait}s` : conv.kind === 'alliance' && this.state.rules?.revealAllianceChatAfterMatch ? 'Shown in the replay after the match.' : '';
+    // The chat cooldown is on the button itself; the draft stays in the box meanwhile.
+    this.$('.cx-send').disabled = wait > 0; const label = wait ? `Send · ${wait}s` : 'Send';
+    if (this.$('.cx-send-label').textContent !== label) this.$('.cx-send-label').textContent = label;
+    this.$('.cx-note').textContent = conv.kind === 'alliance' && this.state.rules?.revealAllianceChatAfterMatch ? 'Alliance chat becomes public in the replay after the match ends.' : '';
+    this.renderSwitch(conv); this.renderMembers(conv);
     const qhtml = QUICK.map(q => `<button type="button" data-quick="${esc(q)}" data-sfx="press">${esc(q)}</button>`).join('');
     if (quick.dataset.html !== qhtml) { quick.dataset.html = qhtml; quick.innerHTML = qhtml; }
     let minute = -1, html = '';
@@ -304,11 +333,29 @@ export class Comms {
       if (r.key === this.divider) html += '<li class="cx-divider" role="separator"><span>Unread</span></li>';
       html += this.row(r);
     }
-    if (!conv.rows.length) html = `<li class="cx-empty">${conv.kind === 'alliance' ? 'You are independent. Propose an alliance from a country card, or accept an offer, to open this channel.' : conv.kind === 'world' ? 'Nothing has happened yet.' : `No messages with ${esc(n.country(conv.country))} yet.${canWrite ? ' Write below.' : ''}`}</li>`;
+    if (!conv.rows.length) html = `<li class="cx-empty">${conv.kind === 'alliance' && !conv.side ? `You are independent. Propose an alliance to open a group chat.${this.readOnly ? '' : `<span class="cx-propose-list">${(this.state.players || []).filter(p => p.id !== this.state.you && p.eliminatedAt == null).map(p => `<button type="button" data-propose="${esc(p.id)}" data-sfx="press">${insignia(p.id)}<span>${esc(faction(p.id).short)}</span></button>`).join('')}</span>`}` : conv.kind === 'alliance' ? 'No alliance messages yet. Write below.' : conv.kind === 'world' ? 'Nothing has happened yet.' : `No messages with ${esc(n.country(conv.country))} yet.${canWrite ? ' Write below.' : ''}`}</li>`;
     if (rowsEl.dataset.html !== html) { rowsEl.dataset.html = html; const keep = rowsEl.scrollTop, bottom = rowsEl.scrollHeight - rowsEl.scrollTop - rowsEl.clientHeight < 32; rowsEl.innerHTML = html; rowsEl.scrollTop = bottom ? rowsEl.scrollHeight : keep; requestAnimationFrame(() => this.clampCheck()); }
+    const unreadKeys = new Set(conv.rows.filter(r => r.unread).map(r => r.key));
+    for (const li of rowsEl.querySelectorAll('[data-key]')) li.classList.toggle('cx-is-unread', unreadKeys.has(li.dataset.key));
+  }
+  /** One tap between conversations: your alliance, World, then the powers you talk to (and the rest). */
+  renderSwitch(conv) {
+    const nav = this.$('.cx-switch');
+    const items = this.ordered().filter(c => c.kind !== 'dm' || c.active || c.key === conv.key || !this.readOnly);
+    const html = this.readOnly ? '' : items.map(c => `<button type="button" data-conv="${esc(c.key)}" aria-current="${c.key === conv.key}" title="${esc(c.kind === 'alliance' ? (c.side ? this.names.side(c.side) : 'Alliance') : this.convTitle(c))}" aria-label="${esc(c.kind === 'alliance' ? 'Alliance chat' : this.convTitle(c))}${c.unread ? `, ${c.unread} unread` : ''}" data-sfx="press">${c.kind === 'dm' ? insignia(c.country) : icon(c.kind === 'world' ? 'globe' : 'ally')}${c.unread || c.action ? '<i class="cx-dot"></i>' : ''}</button>`).join('');
+    if (nav.dataset.html !== html) { nav.dataset.html = html; nav.innerHTML = html; }
+    nav.hidden = !html;
+  }
+  /** The alliance thread names its members (standards and names). */
+  renderMembers(conv) {
+    const box = this.$('.cx-members'), side = conv.kind === 'alliance' && conv.side ? (this.state.sides || []).find(s => s.id === conv.side) : null;
+    const html = side ? side.members.map(id => `<span>${insignia(id)}<b>${id === this.state.you ? 'You' : esc(faction(id).short)}</b></span>`).join('') : '';
+    if (box.dataset.html !== html) { box.dataset.html = html; box.innerHTML = html; }
+    box.hidden = !html;
   }
   row(r) {
-    const i = r.item, n = this.names, unread = r.unread ? ' cx-is-unread' : '', time = `<time>${clock(r.tick)}</time>`;
+    // Unread is a class set after rendering, so reading a row never rebuilds it (a tap on its buttons is never lost).
+    const i = r.item, n = this.names, unread = '', time = `<time>${clock(r.tick)}</time>`;
     if (i.type === 'message') {
       const open = this.expanded.has(r.key) ? ' data-open="1"' : '';
       return `<li class="cx-msg${unread}" data-key="${esc(r.key)}" data-mine="${r.mine}"><header><span class="cx-standard">${insignia(i.from)}</span><b>${r.mine ? 'You' : esc(n.country(i.from))}</b>${time}</header><p class="cx-text"${open}>${esc(i.text)}</p><button type="button" class="cx-more-btn" hidden data-sfx="press">More</button></li>`;

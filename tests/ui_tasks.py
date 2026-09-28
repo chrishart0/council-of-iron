@@ -10,7 +10,7 @@ import json
 from playwright.sync_api import expect
 from browser_helpers import lane, close_comms
 
-BOUNDS = {'attack': 3, 'declare': 4, 'propose': 3, 'respond': 2, 'reply': 3, 'recall': 2, 'turn': 2, 'develop': 3, 'rally': 3}
+BOUNDS = {'attack': 3, 'declare': 4, 'propose': 3, 'respond': 2, 'reply': 3, 'recall': 2, 'turn': 2, 'develop': 3, 'rally': 3, 'converse': 7}
 
 class Walk:
     def __init__(self, page, server, room, touch, out, report):
@@ -243,6 +243,51 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     expect(page.locator('[data-rally="scotland"]').first).to_be_attached(timeout=5000)
     w.snap('arrow')
     w.end()
+
+    # Back and forth: DM Japan, receive a reply, reply again, switch to the alliance chat, send, switch back.
+    # Budgets: ≤2 taps to open a thread from the idle map, ≤1 to switch threads, 1 per Send (7 in all).
+    w.begin('converse')
+    page.keyboard.press('Escape'); close_comms(page)
+    steps = {}
+    before = w.count
+    if not page.locator('#comms [data-conv="dm:japan"]').first.is_visible(): w.tap(page.locator('#comms-button'))
+    # The button opens the most important thread (or the list); either way Japan is one more tap (row or switcher).
+    japan = page.locator('#comms .cx-switch [data-conv="dm:japan"]' if page.evaluate('document.body.dataset.comms') == 'thread' else '#comms .cx-list [data-conv="dm:japan"]')
+    japan.scroll_into_view_if_needed()  # the list scrolls inside its panel (a scroll, not a tap)
+    w.tap(japan, 'dm-open')
+    steps['openDm'] = w.count - before; assert steps['openDm'] <= 2, steps
+    expect(page.locator('#comms .cx-title')).to_have_text('Empire of Japan')
+    expect(page.locator('#cx-text')).to_be_focused()
+    w.stdin('war 172'); expect(page.locator('#comms .cx-send')).to_be_enabled(timeout=5000)
+    page.keyboard.type('Tokyo and London share an enemy.'); w.tap(page.locator('#comms .cx-send'), 'dm-sent')
+    expect(page.locator('#comms .cx-msg[data-mine="true"]').last).to_contain_text('share an enemy', timeout=5000)
+    expect(page.locator('#cx-text')).to_be_focused()
+    unread = page.locator('#comms-button').get_attribute('data-unread')
+    w.stdin('dm japan britain Then let us share the Pacific. What do you propose?')
+    expect(page.locator('#comms .cx-msg:not([data-mine="true"])').last).to_contain_text('share the Pacific', timeout=5000)
+    page.wait_for_timeout(900)
+    assert page.locator('#toasts .cx-toast[data-thread="dm:japan"]').count() == 0, 'no toast for the open thread'
+    expect(page.locator('#comms-button')).to_have_attribute('data-unread', unread)  # read on arrival in the open thread
+    page.keyboard.type('A pact, and the Philippines stay yours.')
+    w.stdin('war 184'); page.wait_for_timeout(1600)  # polling while a draft is typed
+    expect(page.locator('#cx-text')).to_have_value('A pact, and the Philippines stay yours.'); expect(page.locator('#cx-text')).to_be_focused()
+    expect(page.locator('#comms .cx-send')).to_be_enabled(timeout=5000)
+    w.tap(page.locator('#comms .cx-send'), 'dm-reply')
+    expect(page.locator('#comms .cx-msg[data-mine="true"]').last).to_contain_text('Philippines', timeout=5000)
+    page.keyboard.type('Half-written thought')  # a draft left in the Japan thread
+    before = w.count
+    w.tap(page.locator('#comms .cx-switch [data-conv="alliance"]'), 'alliance-open')
+    steps['toAlliance'] = w.count - before; assert steps['toAlliance'] <= 1, steps
+    expect(page.locator('#comms .cx-members')).to_be_visible(); expect(page.locator('#comms .cx-members')).to_contain_text('Germany')
+    expect(page.locator('#cx-text')).to_have_value('')
+    w.stdin('war 196'); expect(page.locator('#comms .cx-send')).to_be_enabled(timeout=5000)
+    page.keyboard.type('Japan is ready to talk. I will keep the Pacific quiet.'); w.tap(page.locator('#comms .cx-send'), 'alliance-sent')
+    expect(page.locator('#comms .cx-msg[data-mine="true"]').last).to_contain_text('Pacific quiet', timeout=5000)
+    before = w.count
+    w.tap(page.locator('#comms .cx-switch [data-conv="dm:japan"]'), 'dm-back')
+    steps['toDm'] = w.count - before; assert steps['toDm'] <= 1, steps
+    expect(page.locator('#comms .cx-title')).to_have_text('Empire of Japan'); expect(page.locator('#cx-text')).to_have_value('Half-written thought')
+    w.end(); w.results['converse']['steps'] = steps
     assert not errors, errors
     context.close()
     return w.results

@@ -136,7 +136,7 @@ function renderComms(live){
     comms.notify({key:`n-${r.key}`,standard:state.you,sticky:true,title:`Your ${item.amount} troops turned back${item.province?` from ${place(item.province).name}`:''}`,detail:`${why[0].toUpperCase()}${why.slice(1)}.`,buttons});
   }
   for(const [army,key] of turnedBack)if(!state.armies.some(a=>a.id===army && a.returning)){comms.withdraw(key);turnedBack.delete(army);}
-  // A rally point of yours that pauses (under attack, rally province lost, no path) is a PERSONAL notice (owner-only data).
+  // A rally point of yours that pauses (rally province lost, no path) is a PERSONAL notice (owner-only data).
   const rallies=new Map((state.rallies || []).map(r=>[r.from,r]));
   if(live && seated())for(const [from,r] of rallies)if(r.status==='paused' && rallyPaused.get(from)!==r.reason)
     comms.notify({key:`rally-${from}-${r.reason}-${state.tick}`,standard:state.you,title:`Rally from ${place(from).name} paused`,detail:`${(RALLY_PAUSE[r.reason] || 'paused').replace(/^paused(: |\s)/,'')}.`.replace(/^./,c=>c.toUpperCase()),view:{province:from}});
@@ -963,6 +963,7 @@ comms=new Comms({button:$('comms-button'),toasts:$('toasts'),panel:$('comms'),na
   onView:({province,country:id})=>{if(province)showProvince(province);else if(id)openCard('country',id,{focus:true});},
   onAct:async(action)=>{const r=await command(action);if(r)toast(action.type==='accept'?(r.status==='pending'?`Alliance agreed: it starts at ${time(r.activateAt)}.`:'Terms accepted; waiting for the others.'):action.type==='decline'?'Offer declined.':'Vote recorded.');return r;},
   onSend:async(channel,to,text)=>Boolean(await command({type:'chat',channel,...(channel==='dm'?{to}:{}),text})),
+  onPropose:id=>{if(!id){comms.openThread('alliance');return;}if(compact.matches)comms.close();openCard('country',id,{focus:true});if(active())perform('propose').catch(e=>toast(e.message,true));},
   onNotice:async(act,arg)=>{try{if(act==='show-army')showArmy(arg);else await perform(act,arg);}catch(e){toast(e.message,true);}}});
 standings=new LeaderboardPanel({root:$('leaderboard'),rows:$('lb-rows'),toggle:$('lb-toggle'),summary:$('lb-summary'),modes:[...document.querySelectorAll('[data-lb-mode]')],fronts:$('lb-fronts'),frontCount:$('lb-front-count'),powers:$('lb-powers'),
   onFocus:id=>{if(card?.kind!=='country')atlas?.setRelationFocus?.(id);},
