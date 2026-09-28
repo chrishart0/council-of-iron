@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { CouncilClient } from './client.js';
 import { strategicOptions } from './strategic-options.js';
+import { boardView } from './board.js';
 
 const help=`Council of Iron CLI (Node 22.13+)
 
@@ -12,6 +13,7 @@ const help=`Council of Iron CLI (Node 22.13+)
   opening LEADER MESSAGE             Lock leader name and world introduction
   bots                               Fill empty seats with practice bots
   state [EVENT_CURSOR]              Observe board and your diplomatic inbox
+  board                             Compact current map and legal neighboring marches
   options                           Compare public victory routes and adjacent targets
   feed [FEED_CURSOR]                 World feed: headlines + world chat (untrusted)
   leaderboard [teams|players|alliances] Ranked land share and total troops; teams nests members (public)
@@ -73,7 +75,8 @@ try {
     case 'leaderboard':result=await client.leaderboard(args[0] || 'teams');break;
     case 'wars':result=await client.wars();break;
     case 'options':result=strategicOptions(await client.observe(0),await client.map());break;
-    case 'map':result=await client.map();break;
+    case 'board':result=boardView(await client.observe(0),await client.map());break;
+    case 'map':{const map=await client.map();result={...map,provinces:map.provinces.map(({path,...province})=>province)};break;}
     case 'move':result=await client.action({type:'move',from:args[0],to:args[1],amount:Number(args[2]),...war});break;
     case 'move-percent':result=await client.action({type:'move',from:args[0],to:args[1],percent:Number(args[2]),...war});break;
     case 'attack': case 'plan': {

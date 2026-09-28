@@ -149,7 +149,7 @@ export function join(g, map, { profileId, name, country, kind = 'human', model =
     event(g, 'seat_claimed', { country, name: occupied.name });
     return occupied;
   }
-  requireRule(!occupied, 'That country is taken.', 409);
+  requireRule(!occupied, 'That country is taken. Choose a different unoccupied country.', 409);
   const p = { id: country, profileId, name: text(name, 'Player name', 40), kind,
     model: String(model).slice(0, 100), persona: String(persona).slice(0, 100), visibility,
     side: `solo:${country}:0`, joinedAt: 0, eliminatedAt: null, orderTicks: [], lastChat: null };

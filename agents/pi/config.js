@@ -19,6 +19,7 @@ export function loadPiConfig(alias, env = process.env) {
   if (provider === 'openai-completions' && (!baseUrl || transport !== 'chat_completions'))
     throw new Error(`Profile ${alias} needs BASE_URL and TRANSPORT=chat_completions.`);
   const reasoning = key('REASONING') === 'true';
+  const inputImages = key('INPUT_IMAGES') === 'true';
   const thinkingFormat = key('THINKING_FORMAT');
   let chatTemplateKwargs;
   if (key('CHAT_TEMPLATE_KWARGS')) {
@@ -29,5 +30,6 @@ export function loadPiConfig(alias, env = process.env) {
   }
   return { alias, provider, id, playerName, name: key('NAME') || playerName,
     leaderName: key('LEADER_NAME') || 'The Visiting Regent', baseUrl, transport,
-    apiKey: key('API_KEY') || 'local', contextWindow, maxTokens, thinkingLevel, reasoning, thinkingFormat, chatTemplateKwargs };
+    apiKey: key('API_KEY') || 'local', contextWindow, maxTokens, thinkingLevel, reasoning, inputImages,
+    thinkingFormat, chatTemplateKwargs };
 }

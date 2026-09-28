@@ -40,6 +40,10 @@ test('HTTP lobby: human and agent identities, occupied countries, host controls,
   const f=await fixture(t),{a,b,id,sa,sb}=await f.boot();
   assert.equal((await f.call('/api/games','POST',{name:'Obsolete',scenario:'classic-64'},a.token)).status,400);
   assert.equal((await f.call(`/api/games/${id}`)).data.players.length,2);
+  const third=await f.register('Third player');
+  const taken=await f.call(`/api/games/${id}/join`,'POST',{country:'usa'},third.token);
+  assert.equal(taken.status,409);
+  assert.match(taken.data.error,/Choose a different unoccupied country/);
   assert.equal((await f.call(`/api/games/${id}/join`,'POST',{country:'usa'},b.token)).status,409);
   assert.equal((await f.call(`/api/games/${id}/start`,'POST',{},sb.token)).status,403);
   assert.equal((await f.call(`/api/games/${id}/start`,'POST',{},sa.token)).status,200);
@@ -220,6 +224,13 @@ test('real CLI subprocess joins, observes, sends orders, reconnects from a priva
   await f.launch(id,sa.token);
   const moved=await run('move','england','north-france','5');assert.equal(moved.code,0,moved.stderr);
   const state=JSON.parse((await run('state')).stdout);assert.equal(state.you,'britain');assert.equal(state.commandBudget.reserved.length,1);
+  const compact=JSON.parse((await run('board')).stdout);
+  assert.equal(compact.you,'britain');
+  assert.equal(compact.provinces.length,state.provinces.length);
+  assert.ok(compact.own.find(p=>p.id==='england').neighbors.some(p=>p.id==='low-countries'));
+  const agentMap=JSON.parse((await run('map')).stdout);
+  assert.equal(agentMap.provinces.length,state.provinces.length);
+  assert.ok(agentMap.provinces.every(p=>!Object.hasOwn(p,'path')));
   const invalid=await run('move','west-us','mexico','5');assert.equal(invalid.code,1);assert.match(invalid.stderr,/not own/);
   const chat=await run('chat','dm','usa','Private diplomacy');assert.equal(chat.code,0,chat.stderr);
   assert.equal((await f.call(`/api/games/${id}`,'GET',undefined,sa.token)).data.events.filter(e=>e.type==='message').at(-1).text,'Private diplomacy');
@@ -240,10 +251,14 @@ test('stdio MCP negotiates, validates schemas, joins an agent, calls real HTTP, 
     {jsonrpc:'2.0',id:9,method:'tools/call',params:{name:'alliance_victory_share',arguments:{}}},
     {jsonrpc:'2.0',id:10,method:'tools/call',params:{name:'strategic_options',arguments:{}}},
     {jsonrpc:'2.0',id:11,method:'tools/call',params:{name:'situation',arguments:{}}},
+    {jsonrpc:'2.0',id:12,method:'tools/call',params:{name:'board',arguments:{}}},
+    {jsonrpc:'2.0',id:13,method:'tools/call',params:{name:'view_map',arguments:{}}},
+    {jsonrpc:'2.0',id:14,method:'tools/call',params:{name:'news',arguments:{}}},
+    {jsonrpc:'2.0',id:15,method:'tools/call',params:{name:'move',arguments:{from:'england',to:'low-countries',amount:5}}},
   ].map(x=>JSON.stringify(x)).join('\n')+'\n';
   const result=await subprocess('agents/mcp.js',[],env,input);assert.equal(result.code,0,result.stderr);
-  const output=result.stdout.trim().split('\n').map(x=>JSON.parse(x));assert.equal(output.length,11);
-  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,39);
+  const output=result.stdout.trim().split('\n').map(x=>JSON.parse(x));assert.equal(output.length,15);
+  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,42);
   assert.ok(output[1].result.tools.some(t=>t.name==='turn_around')&&output[1].result.tools.some(t=>t.name==='preview_turn_around'));
   assert.ok(['lock_opening','situation','strategic_options','world_feed','leaderboard','wars','rally'].every(name=>output[1].result.tools.some(t=>t.name===name)));
   assert.equal(JSON.parse(output[2].result.content[0].text).country,'britain');
@@ -262,6 +277,35 @@ test('stdio MCP negotiates, validates schemas, joins an agent, calls real HTTP, 
   assert.equal(brief.provinces.length,JSON.parse(output[3].result.content[0].text).provinces.length);
   assert.equal(Object.hasOwn(brief,'travelTimes'),false);
   assert.equal(Object.hasOwn(brief,'insights'),false);
+  const compact=JSON.parse(output[11].result.content[0].text);
+  assert.equal(compact.you,'britain');
+  assert.equal(compact.provinces.length,brief.provinces.length);
+  assert.ok(compact.own.find(p=>p.id==='england').neighbors.some(p=>p.id==='low-countries'));
+  const view=output[12].result.content;
+  assert.equal(JSON.parse(view[0].text).you,'britain');
+  assert.equal(view[1].mimeType,'image/png');
+  assert.equal(Buffer.from(view[1].data,'base64').subarray(0,8).toString('hex'),'89504e470d0a1a0a');
+  const news=JSON.parse(output[13].result.content[0].text);
+  assert.equal(news.you,'britain');
+  assert.equal(Object.hasOwn(news,'provinces'),false);
+  assert.equal(Object.hasOwn(news,'armies'),false);
+  const failedMove=JSON.parse(output[14].result.content[0].text);
+  assert.equal(output[14].result.isError,true);
+  assert.match(failedMove.error,/match is not running/i);
+  assert.equal(failedMove.hint.sources[0].id,'england');
+  assert.ok(failedMove.hint.sources[0].available>0);
+
+  const other=await f.register('Other envoy');
+  const conflictInput=[
+    {jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-06-18'}},
+    {jsonrpc:'2.0',method:'notifications/initialized'},
+    {jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'join_match',arguments:{match:id,country:'britain',name:'Other envoy'}}},
+  ].map(x=>JSON.stringify(x)).join('\n')+'\n';
+  const conflict=await subprocess('agents/mcp.js',[],{COUNCIL_URL:f.url,COUNCIL_SESSION:pathJoin(f.dir,'other.session.json'),COUNCIL_TOKEN:other.token,COUNCIL_MATCH:''},conflictInput);
+  assert.equal(conflict.code,0,conflict.stderr);
+  const response=JSON.parse(conflict.stdout.trim().split('\n').at(-1));
+  assert.equal(response.result.isError,true);
+  assert.match(JSON.parse(response.result.content[0].text).error,/Choose a different unoccupied country/);
 });
 
 test('new rooms use the current rules; rally plans and orders go over HTTP',async t=>{

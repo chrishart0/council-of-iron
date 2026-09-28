@@ -27,33 +27,57 @@ export function summarizeRun(raw, modelGroup) {
   if (!raw.runId || !raw.startedAt || !raw.match || raw.status !== 'finished' || !Number.isFinite(raw.score?.prestige))
     throw new Error(`Run ${raw.runId || '(unknown)'} has no authoritative finished score.`);
   const client = raw.client === 'codex' ? 'Codex' : 'Pi';
-  const access = client === 'Codex' ? raw.access : 'MCP';
+  const commands = client === 'Codex' ? (raw.events || []).filter(event =>
+    event.itemType === 'command_execution' && typeof event.command === 'string').map(event => event.command) : [];
+  const usedDirectHttp = commands.some(command => /\/api\/games\/[^\s'"?]+\/actions\b/.test(command));
+  const usedCli = commands.some(command => command.includes('/game/agents/cli.js'));
+  const access = client !== 'Codex' ? 'MCP' : raw.access === 'cli' && usedDirectHttp
+    ? usedCli ? 'CLI + direct HTTP' : 'shell HTTP' : raw.access;
   const completed = (raw.events || []).filter(event => event.type === 'item.completed' &&
     ['mcp_tool_call', 'command_execution'].includes(event.itemType));
   const calls = client === 'Pi' ? raw.toolCalls || [] : completed;
   const failed = client === 'Pi' ? calls.filter(call => call.ok === false).length : calls.filter(codexToolFailure).length;
   const acceptedActions = client === 'Pi' ? (raw.actions || []).filter(action => action.ok).length
-    : raw.httpActions?.length ? raw.httpActions.filter(action => action.status === 200).length : null;
+    : Array.isArray(raw.httpActions) ? raw.httpActions.filter(action => action.status === 200).length : null;
   const rejectedActions = client === 'Pi' ? (raw.actions || []).filter(action => action.ok === false).length
-    : raw.httpActions?.length ? raw.httpActions.filter(action => action.status !== 200).length : null;
+    : Array.isArray(raw.httpActions) ? raw.httpActions.filter(action => action.status !== 200).length : null;
   const firstAcceptedAt = client === 'Pi' ? (raw.actions || []).find(action => action.ok && action.at)?.at
     : raw.httpActions?.find(action => action.status === 200)?.at;
   const turns = raw.turnLog || [];
+  const timedOutTurns = client === 'Pi'
+    ? turns.length && turns.every(turn => typeof turn.timedOut === 'boolean')
+      ? turns.filter(turn => turn.timedOut).length : null
+    : number(raw.timedOutTurns);
   const usedSituation = client === 'Pi' ? calls.some(call => call.name === 'situation')
-    : completed.some(event => event.name === 'situation');
-  const tokenUsage = raw.usage;
+    : completed.some(event => event.name === 'situation' || event.name?.endsWith('__situation'));
+  const usedNews = client === 'Pi' ? calls.some(call => call.name === 'news')
+    : completed.some(event => event.name === 'news' || event.name?.endsWith('__news'));
+  const usedBoard = client === 'Pi' ? calls.some(call => call.name === 'board')
+    : completed.some(event => event.name === 'board' || event.name?.endsWith('__board'));
+  const usedView = client === 'Pi' ? calls.some(call => call.name === 'view_map')
+    : completed.some(event => event.name === 'view_map' || event.name?.endsWith('__view_map'));
+  // Resumed Codex turns report cumulative thread usage. Historical raw files
+  // summed those snapshots in raw.usage, so use the last completed snapshot.
+  const lastTurn = turns.at(-1);
+  const tokenUsage = raw.usageIncomplete ? null : client === 'Codex' && lastTurn && raw.usageAccounting !== 'per_turn'
+    ? { input: lastTurn.inputTokens, output: lastTurn.outputTokens,
+      cacheRead: lastTurn.cacheReadTokens } : raw.usage;
   const inputTokens = number(tokenUsage?.input);
   const outputTokens = number(tokenUsage?.output);
   const cacheReadTokens = number(tokenUsage?.cacheRead);
   const totalTokens = number(tokenUsage?.total) ?? (inputTokens === null || outputTokens === null ? null : inputTokens + outputTokens);
-  const totalTurnMs = turns.length ? finiteSum(turns, 'wallMs') : null;
+  const totalTurnMs = turns.length && !raw.usageIncomplete ? finiteSum(turns, 'wallMs') : null;
   const durationSeconds = raw.finishedAt ? (Date.parse(raw.finishedAt) - Date.parse(raw.startedAt)) / 1000 : null;
   return {
     id: raw.runId, match: raw.match, combatSeed: raw.combatSeed || null,
     startedAt: raw.startedAt, modelGroup, client, access, country: raw.country || 'britain',
-    strategy: usedSituation ? 'concise situation' : raw.maxTurnSeconds ? 'full observation, capped' : 'full observation',
+    interfaceVersion: raw.interfaceVersion || null,
+    strategy: raw.embeddedBoard ? usedView ? 'board prompt + visual' : 'board in prompt'
+      : usedView ? 'visual map' : usedBoard ? usedNews ? 'compact board + news' : 'compact board'
+      : usedSituation ? 'concise situation' : usedNews ? 'news' : raw.maxTurnSeconds ? 'full observation, capped' : 'full observation',
     maxTurnSeconds: number(raw.maxTurnSeconds),
-    sessionMode: raw.sessionMode || (client === 'Pi' ? 'persistent' : null),
+    decisionIntervalTicks: number(raw.decisionIntervalTicks),
+    sessionMode: raw.sessionMode || raw.turnMode || (client === 'Pi' ? 'persistent' : null),
     preset: raw.preset, status: raw.status, resultReason: raw.outcome?.reason || null,
     finalTick: number(raw.finalTick), prestige: round(raw.score.prestige),
     acceptedActions, rejectedActions, toolCalls: calls.length, failedToolCalls: failed,
@@ -64,6 +88,7 @@ export function summarizeRun(raw, modelGroup) {
       : Math.max(0, inputTokens - (client === 'Codex' ? cacheReadTokens || 0 : 0)) + outputTokens,
     tokensPerAction: totalTokens !== null && acceptedActions ? round(totalTokens / acceptedActions) : null,
     turns: turns.length || null,
+    timedOutTurns,
     meanTurnSeconds: totalTurnMs !== null ? round(totalTurnMs / turns.length / 1000) : null,
     durationSeconds: round(durationSeconds),
   };
