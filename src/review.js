@@ -24,20 +24,15 @@ function terminalProjection(g) {
     wars:g.wars,battles:g.battles };
 }
 function summary(game) {
-  const players = game.players.map(p => ({ country: p.id, name: p.name, displayName: displayName(p), leaderName:p.leaderName, kind: p.kind,
+  const players = game.players.map(p => ({ country: p.id, name: p.name, displayName: displayName(p), kind: p.kind,
     model: p.model, persona: p.persona, visibility: p.visibility || 'private', side: p.side, eliminatedAt: p.eliminatedAt,
     land: game.provinces.filter(v => v.owner === p.id).length,
     economy: sum(game.provinces.filter(v => v.owner === p.id).map(v => v.development)),
     troops: sum(game.provinces.filter(v => v.owner === p.id).map(v => v.troops)) + sum(game.armies.filter(a => a.country === p.id).map(a => a.amount)),
     ...game.outcome.scores.find(s => s.country === p.id) }));
-  const alliances = sides(game).map(s => ({ ...s, won: s.id === game.outcome.winningSide,
-    payout: sum(players.filter(p => s.members.includes(p.country)).map(p => p.payout)),
-    prestige: sum(players.filter(p => s.members.includes(p.country)).map(p => p.prestige)) }));
-  return { id: game.id, name: game.name, scenario: game.scenario, eligible: game.eligible,
+  const alliances = sides(game).map(s => ({ ...s, won: s.id === game.outcome.winningSide }));
+  return { id: game.id, name: game.name, scenario: game.scenario,
     duration: game.tick, rules: clone(gameRules(game)), outcome: clone(game.outcome), players, alliances,
-    maximumPrize: 100 * game.players.length,
-    unawardedPrize: Math.max(0, 100 * game.players.length - sum(players.map(p => p.payout))),
-    allianceScoreDefinition: 'Sum of final roster members’ individual match Prestige. Not a second reward or a separate rating.',
     privacy: 'Public military history and formal alliance changes. After completion, world dispatches from public AI agents, direct messages between public AI agents, and chat within fully public AI alliances are shown. Other messages, unexecuted orders and private offers stay hidden.' +
       (gameRules(game).revealAllianceChatAfterMatch === true ? ' This room announced at join that alliance chat becomes public after the match; direct messages stay private.' : '') };
 }
@@ -50,7 +45,7 @@ export function buildReview(game, map) {
   // becomes public after the match; public AI agents' eligible messages are archived (archiveEligible).
   // Never DMs between humans, offers, orders or event IDs.
   const revealAllianceChat = gameRules(game).revealAllianceChatAfterMatch === true;
-  const report = { ...summary(game), historyAvailable: true, series: [], events: [], messages: [], battles: [], tenures: [],
+  const report = { ...summary(game), historyAvailable: true, series: [], events: [], messages: [], battles: [],
     allianceChatRevealed: revealAllianceChat, allianceChat: [],
     totals: { battles: 0, casualties: 0, interned: 0, recruited: 0, invested: 0, upgrades: 0 } };
   const g = freshGame(game), rules = gameRules(g), ids = g.players.map(p => p.id);
@@ -58,7 +53,6 @@ export function buildReview(game, map) {
     captures: 0, provincesLost: 0, battles: 0, peakLand: 0, peakTroops: 0 }]));
   const replay = { version: 1, duration: game.tick, scenario: report.scenario, rules: clone(rules), map: clone(map), frames: [] };
   let previousBoard = null, eventIndex = g.events.length, actionIndex = 0;
-  const tenures = new Map(ids.map(id => [id, { country: id, side: g.players.find(p => p.id === id).side, start: 0 }]));
   function record() {
     const board = publicBoard(g), patch = { tick: g.tick };
     patch.provinces = board.provinces.filter((p, i) => !previousBoard || !isDeepStrictEqual(p, previousBoard.provinces[i]));
@@ -75,14 +69,12 @@ export function buildReview(game, map) {
       sample.countries.push({ country: id, land: land.length, troops,
         production: sum(land.map(p => p.development)) * 60 / rules.recruit,
         recruited: m.recruited, invested: m.invested });
-      const current = tenures.get(id), side = g.players.find(p => p.id === id).side;
-      if (side !== current.side) { report.tenures.push({ ...current, end: g.tick }); tenures.set(id, { country: id, side, start: g.tick }); }
     }
     if (g.tick % 10 === 0 || g.status === 'finished') report.series.push(sample);
   }
   function addEvent(e) { report.events.push(e); }
   for(const e of g.events)if(e.type==='message' && e.archiveEligible===true){
-    report.messages.push({id:e.id,tick:e.tick,from:e.from,to:e.to,side:e.side,channel:e.channel,text:e.text,leaderName:e.leaderName});
+    report.messages.push({id:e.id,tick:e.tick,from:e.from,to:e.to,side:e.side,channel:e.channel,text:e.text});
     addEvent({tick:e.tick,type:'dispatch',from:e.from,channel:e.channel});
   }
   record();
@@ -107,7 +99,7 @@ export function buildReview(game, map) {
           sideName: g.coalitions.find(c => c.id === side)?.name ?? null, text: e.text, untrusted: true });
       }
       if(e.type==='message' && e.archiveEligible===true) {
-        report.messages.push({id:e.id,tick:e.tick,from:e.from,to:e.to,side:e.side,channel:e.channel,text:e.text,leaderName:e.leaderName});
+        report.messages.push({id:e.id,tick:e.tick,from:e.from,to:e.to,side:e.side,channel:e.channel,text:e.text});
         addEvent({tick:e.tick,type:'dispatch',from:e.from,channel:e.channel});
         continue;
       }
@@ -116,7 +108,7 @@ export function buildReview(game, map) {
         const casualties = e.casualties;
         const battle = { tick: e.tick, type: e.type, province: e.province, previousOwner: e.previousOwner,
           owner: e.owner, before: e.before, troops: e.troops, arrivals: clone(e.arrivals), casualties,
-          duration:e.duration||0,industryLost:e.industryLost||0 };
+          duration:e.duration };
         report.battles.push(battle); report.totals.battles++; report.totals.casualties += casualties;
         const participants = new Set(e.arrivals.filter(a => a.amount > 0).map(a => a.country));
         if (e.previousOwner && e.before > 0) participants.add(e.previousOwner);
@@ -132,8 +124,6 @@ export function buildReview(game, map) {
       } else if (e.type === 'development_completed') {
         metrics.get(e.country).upgrades++; report.totals.upgrades++;
         addEvent({ tick: e.tick, type: e.type, country: e.country, province: e.province, level: e.level });
-      } else if (e.type === 'industry_damaged') {
-        addEvent({tick:e.tick,type:e.type,province:e.province,owner:e.owner,level:e.level});
       } else if (e.type === 'alliance_activated') {
         addEvent({ tick: e.tick, type: e.type, side: e.side, name: e.name, roster: [...e.roster] });
       } else if (e.type === 'coalition_dissolved') {
@@ -150,8 +140,6 @@ export function buildReview(game, map) {
       } else if (e.type === 'army_recalled') {
         addEvent({ tick: e.tick, type: e.type, country: e.country, to: e.to, amount: e.amount, arrivesAt: e.arrivesAt,
           ...(e.reason?{reason:e.reason}:{}) });
-      } else if (e.type === 'army_turned_around') {
-        addEvent({ tick: e.tick, type: e.type, country: e.country, to: e.to, amount: e.amount, arrivesAt: e.arrivesAt });
       } else if (e.type === 'army_interned') {
         report.totals.interned += e.amount;
         addEvent({ tick: e.tick, type: e.type, country: e.country, province: e.province, amount: e.amount });
@@ -169,10 +157,9 @@ export function buildReview(game, map) {
   requireRule(actionIndex === game.actionLog.length && isDeepStrictEqual(JSON.parse(JSON.stringify(terminalProjection(g))), JSON.parse(JSON.stringify(terminalProjection(game)))),
     'This match cannot be reproduced exactly by the current rules. Final scores remain available; replay is withheld.', 409);
   report.metrics = [...metrics.values()];
-  report.tenures.push(...[...tenures.values()].map(t => ({ ...t, end: game.tick })));
   report.sideNames = [...new Map([...g.coalitions.map(c => [c.id, c.name]), ...ids.map(id => [`solo:${id}:0`, id])])]
     .map(([id, name]) => ({ id, name }));
-  report.totals.casualties=g.economy.casualties||0;
+  report.totals.casualties=g.economy.casualties;
   report.totals.initialTroops = sum(replay.frames[0].provinces.map(p => p.troops)) + sum((replay.frames[0].armies || []).map(a => a.amount));
   report.totals.remainingTroops = sum(g.provinces.map(p => p.troops)) + sum(g.armies.map(a => a.amount));
   requireRule(report.totals.initialTroops + report.totals.recruited - report.totals.invested - report.totals.casualties - report.totals.interned === report.totals.remainingTroops,

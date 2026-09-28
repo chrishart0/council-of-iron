@@ -1,6 +1,6 @@
 import { troopAvailability } from './board.js';
 
-const supported = new Set(['move', 'coordinated_attack', 'transit', 'preview', 'develop']);
+const supported = new Set(['march', 'preview', 'develop']);
 
 /** Small repair facts from the same authenticated observation as the read tools. */
 export function repairHint(observation, map, toolName, args) {
@@ -8,8 +8,7 @@ export function repairHint(observation, map, toolName, args) {
   const available = troopAvailability(observation);
   const provinces = new Map(observation.provinces.map(p => [p.id, p]));
   const geometry = new Map(map.provinces.map(p => [p.id, p]));
-  const sourceIds = toolName === 'coordinated_attack' ? (args.sources || []).map(s => s.from)
-    : args.from ? [args.from] : [];
+  const sourceIds = args.sources ? args.sources.map(s => s.from) : args.from ? [args.from] : [];
   const sources = [...new Set(sourceIds)].slice(0, 16).map(id => {
     const province = provinces.get(id), place = geometry.get(id);
     if (!province || !place) return null;
@@ -21,5 +20,6 @@ export function repairHint(observation, map, toolName, args) {
   }).filter(Boolean);
   const target = args.to && provinces.get(args.to);
   return { observedAtTick: observation.tick, status: observation.status, sources,
-    ...(target ? { target: { id: target.id, owner: target.owner } } : {}) };
+    ...(target ? { target: { id: target.id, owner: target.owner, attackReady: !target.owner || target.owner === observation.you ||
+      observation.wars.includes([observation.you, target.owner].sort().join(':')) } } : {}) };
 }

@@ -76,7 +76,7 @@ function run(seed) {
   const legs = [], lastDeparture = new Map(), battleDurations = [], seenLegs = new Set();
   let idleSamples = 0, idleShare = 0, interiorIdleShare = 0, firstLevel2 = null, firstLevel3 = null;
   const command = (id, action) => {
-    try { act(g, map, id, action, `s-${++serial}`); if (['move','attack'].includes(action.type)) moves++; if (action.type==='develop') developments++; if (action.type==='recall') recalls++; if(action.type==='attack'&&action.sources.length>1)synchronized++; }
+    try { act(g, map, id, action, `s-${++serial}`); if (action.type==='march') moves++; if (action.type==='develop') developments++; if (action.type==='recall') recalls++; if(action.type==='march'&&action.sources?.length>1)synchronized++; }
     catch (e) { if (!(e instanceof RuleError)) throw e; rejected++; }
   };
   while (g.status === 'running') {
@@ -138,13 +138,13 @@ function run(seed) {
     invariant(g.tick<=1800, 'deadline overrun',g);
     if ([300,600,1200].includes(g.tick)) checkpoints[g.tick] = Object.fromEntries(g.players.map(p=>[p.id,g.provinces.filter(v=>v.owner===p.id).length]));
   }
-  invariant(g.outcome.scores.every(s=>Number.isFinite(s.prestige)), 'invalid score',g);
-  invariant(g.outcome.scores.reduce((n,s)=>n+s.payout,0)<=g.players.length*100+.00001, 'inflated prize pool',g);
+  invariant(g.outcome.scores.every(s=>['win','draw','loss'].includes(s.result) && Number.isSafeInteger(s.industry)), 'invalid result',g);
+  invariant(g.outcome.draw === g.outcome.scores.every(s=>s.result==='draw'), 'inconsistent draw',g);
+  invariant(g.players.every(p=>g.players.filter(q=>q.side===p.side).length<=Math.max(1,Math.floor(g.players.length/2))), 'alliance over the size cap',g);
   const outcome = structuredClone(g.outcome), endTick = g.tick; tick(g);
   invariant(g.tick===endTick && JSON.stringify(g.outcome)===JSON.stringify(outcome), 'nonterminal outcome',g);
   return {seed,reason:outcome.reason,draw:outcome.draw,tick:endTick,winningCountries:g.players.filter(p=>p.side===outcome.winningSide).map(p=>p.id),
     land:Object.fromEntries(g.players.map(p=>[p.id,g.provinces.filter(v=>v.owner===p.id).length])),
-    prestige:Object.fromEntries(outcome.scores.map(s=>[s.country,s.prestige])),
     eliminatedAt:Object.fromEntries(g.players.map(p=>[p.id,p.eliminatedAt])),
     styles:Object.fromEntries(g.players.map((p,i)=>[p.id,STYLES[(i+seed)%STYLES.length].name])),
     legs,battleDurations,unresolvedBattles:g.battles.length,idleShare:idleSamples?idleShare/idleSamples:0,
@@ -178,10 +178,9 @@ const logistics = {
 for (const r of results) delete r.legs;
 const summary = {rounds,mode,variant,policy,seedStart,seedEnd:seedStart+rounds-1,
   mapSha256:createHash('sha256').update(mapBytes).digest('hex'), engineSha256:createHash('sha256').update(readFileSync(enginePath)).digest('hex'),
-  draws:results.filter(r=>r.draw).length,meanDuration:mean(results.map(r=>r.tick)),meanFirstBattle:mean(results.filter(r=>r.firstBattle!==null).map(r=>r.firstBattle)),
+  draws:results.filter(r=>r.draw).length,decisive:results.filter(r=>r.reason==='domination').length,meanDuration:mean(results.map(r=>r.tick)),meanFirstBattle:mean(results.filter(r=>r.firstBattle!==null).map(r=>r.firstBattle)),
   meanMoves:mean(results.map(r=>r.moves)),meanDevelopments:mean(results.map(r=>r.developments)),meanRecalls:mean(results.map(r=>r.recalls)),meanSynchronized:mean(results.map(r=>r.synchronized)),meanBattles:mean(results.map(r=>r.battles)),
   meanFirstElimination:mean(results.filter(r=>r.firstElimination!==null).map(r=>r.firstElimination)),
-  meanPrestige:Object.fromEntries(map.countries.map(c=>[c.id,mean(results.map(r=>r.prestige[c.id]))])),
   eliminatedByMinute5:Object.fromEntries(map.countries.map(c=>[c.id,results.filter(r=>r.eliminatedAt[c.id]!==null && r.eliminatedAt[c.id]<=300).length])),
   countryWins:Object.fromEntries(map.countries.map(c=>[c.id,results.filter(r=>r.winningCountries.includes(c.id)).length])),
   averageLand:Object.fromEntries(map.countries.map(c=>[c.id,mean(results.map(r=>r.land[c.id]))])),

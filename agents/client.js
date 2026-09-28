@@ -1,8 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { leaderboard, warsOf } from '../public/leaderboard.js';
-import { relationsOf } from '../public/relations.js';
 
 export class CouncilClient {
   constructor({ url = process.env.COUNCIL_URL || 'http://127.0.0.1:3107', token = process.env.COUNCIL_TOKEN || '',
@@ -51,37 +49,15 @@ export class CouncilClient {
   observe(after=0) { return this.request(this.gamePath(`?after=${after}`)); }
   /** Public World feed (world chat + engine headlines), oldest first. Reply with chat on channel world. */
   feed(after=0,limit=100) { return this.request(this.gamePath(`/feed?${new URLSearchParams({after,limit})}`)); }
-  /** Same ranking as the browser panel, computed from a public observation (no event backlog). */
-  async leaderboard(mode='teams',limit=Infinity) {
-    const view=await this.observe(Number.MAX_SAFE_INTEGER);
-    return {tick:view.tick,status:view.status,you:view.you,...leaderboard(view,{mode,you:view.you,limit})};
-  }
-  /** Active wars as side-vs-side fronts plus your own allies/enemies — the browser's Wars view, from public data. */
-  async wars() {
-    const view=await this.observe(Number.MAX_SAFE_INTEGER);
-    return {tick:view.tick,status:view.status,you:view.you,wars:warsOf(view),
-      relations:view.you?relationsOf(view,view.you):null,rule:'Public data only: the war list and coalition sides every spectator receives.'};
-  }
   review() {return this.request(this.gamePath('/review'));}
   replay(tick) {return this.request(this.gamePath(`/replay?tick=${encodeURIComponent(tick)}`));}
-  /** Any action object is sent as-is; move/attack/transit accept optional declareWar:true (solo, atomic). */
+  /** Any action object is sent as-is; a march accepts optional declareWar:true (atomic declare-and-march). */
   action(action,opId=randomUUID()) { return this.request(this.gamePath('/actions'),'POST',{action,opId}); }
-  /** Reverse one of your moving armies (next tick, one command). Advancing: a recall. Returning: resume toward
-   * the province it had been heading for, from its actual position. Same opId = safe retry. */
-  turnAround(armyId,opId=randomUUID()) { return this.action({type:'turn_around',armyId},opId); }
-  /** Read-only preview of turnAround: mode (recall|resume), destination, arrival tick, any battle already there. */
-  turnAroundPreview(armyId) { return this.request(this.gamePath(`/turn-around?${new URLSearchParams({army:armyId})}`)); }
-  /** Standing rally point: `from` is one province or up to 16; `to` your own province, or null to clear.
-   * keep omitted = forward each new recruitment; keep N = forward everything above N. One command. */
-  rally(from,to,keep,opId=randomUUID()) { return this.action({type:'rally',from,to,...(keep!==undefined&&keep!==null?{keep}:{})},opId); }
-  /** Read-only rally preview: the fastest friendly path and ETA per source, validated like the action. */
-  rallyPlan(from,to,keep) { return this.plan({type:'rally',from,to,...(keep!==undefined&&keep!==null?{keep}:{})}); }
-  preview(from,to,amount) {return this.request(this.gamePath(`/preview?${new URLSearchParams({from,to,amount})}`));}
+  /** Read-only forecast of a march ({to, from, amount|percent} or {to, sources}) or a rally ({type:'rally', from, to}). */
+  plan(action) {return this.request(this.gamePath('/plan'),'POST',action);}
   list() {return this.request('/api/games','GET',undefined,'');}
   map() {return this.request(this.match ? this.gamePath('/map') : '/map.json','GET',undefined,'');}
-  plan(action) {return this.request(this.gamePath('/plan'),'POST',action);}
   start() {return this.request(this.gamePath('/start'),'POST',{});}
-  opening(leaderName,openingMessage) {return this.request(this.gamePath('/opening'),'POST',{leaderName,openingMessage});}
   bots() {return this.request(this.gamePath('/bots'),'POST',{});}
   standings() {return this.request('/api/standings','GET',undefined,'');}
 }

@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { Store } from './store.js';
-import { RULES, act, attackPlan, beginOpening, rallyPlan, turnAroundPlan, createGame, displayName, join, lockOpening, observe, preview, start, tick, worldFeed, RuleError, requireRule, text } from './engine.js';
+import { RULES, act, rallyPlan, createGame, displayName, join, observe, preview, start, tick, worldFeed, RuleError, requireRule, text } from './engine.js';
 import { buildReview, unavailableReview } from './review.js';
 import { replayReader } from '../public/replay-model.js';
 import { operationalInsights } from '../public/insights.js';
@@ -17,14 +17,15 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 import { MAP, mapFor } from './maps.js';
 export { MAP };
 const PRESETS = { standard: 1, quick: 6 };
-/** A stored room is loaded only when it was created on the current map and rules: every current rule
- * key is present, or it is a finished match with a materialized public record. Rooms from earlier
- * versions of the game are skipped at startup (logged), never migrated. */
+/** A stored room is loaded only when it was created on the current map and rules (every current rule
+ * key is present, and none that has been removed); a finished one also needs its public record.
+ * Rooms from earlier versions of the game are skipped at startup (logged), never migrated. */
 export function loadable(g) {
-  if (!g || typeof g !== 'object' || g.scenario !== MAP.id) return false;
-  if (g.status === 'finished') return Boolean(g.afterAction && g.outcome);
-  return Boolean(g.rules && Object.keys(RULES).every(key => Object.hasOwn(g.rules, key)) && g.internalTravelTimes);
+  if (!g || typeof g !== 'object' || g.scenario !== MAP.id || !g.rules) return false;
+  if (!same(Object.keys(RULES), Object.keys(g.rules).filter(key => key !== 'revealAllianceChatAfterMatch'))) return false;
+  return g.status !== 'finished' || Boolean(g.afterAction && g.outcome);
 }
+const same = (a, b) => a.length === b.length && [...a].sort().every((key, i) => key === [...b].sort()[i]);
 export const ALLIANCE_CHAT_NOTICE = 'Alliance chat becomes public in the replay after the match ends.';
 const staticFiles = new Map([
   ['/', ['public/index.html', 'text/html; charset=utf-8']],
@@ -78,7 +79,7 @@ async function body(req) {
 function json(res, status, data) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); }
 /** `clockScale` accelerates ALL game timing in local tests; no HTTP endpoint can advance time. */
 export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScale = 1,
-  publicOrigin = process.env.PUBLIC_ORIGIN || '', league = process.env.LEAGUE_MODE === '1', automatic = true,
+  publicOrigin = process.env.PUBLIC_ORIGIN || '', automatic = true,
   sttUrl = process.env.STT_URL || '', tls = null, gameIdFactory = () => randomUUID().slice(0,8) } = {}) {
   // PUBLIC_ORIGIN may list several comma-separated origins (e.g. LAN http plus an HTTPS name for phones).
   const publicOrigins = publicOrigin.split(',').map(o=>o.trim()).filter(Boolean);
@@ -152,35 +153,28 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
       if(path==='/api/players' && req.method==='POST') {
         const data=await body(req); return json(res,201,store.register(text(data.name,'Player name',40)));
       }
-      if(path==='/api/me' && req.method==='GET') {
-        const me=auth(); return json(res,200,{id:me.id,name:me.name,history:store.history(me.id)});
-      }
-      if(path==='/api/standings' && req.method==='GET') {
-        requireRule(!url.searchParams.has('scenario') || url.searchParams.get('scenario')===MAP.id,'Unknown scenario.');
-        const eligible=url.searchParams.get('eligible')==='true'; return json(res,200,{eligible,standings:store.standings(eligible,MAP.id)});
-      }
+      if(path==='/api/standings' && req.method==='GET') return json(res,200,{standings:store.standings()});
       if(path==='/api/games' && req.method==='GET') {
         const all=[...games.values()],active=all.filter(g=>g.status!=='finished').reverse();
         const listed=[...active,...all.filter(g=>g.status==='finished').reverse().slice(0,50-active.length)];
         return json(res,200,{games:listed.map(g=>({
           id:g.id,name:g.name,status:g.status,tick:g.tick,speed:g.speed,
           you:identity && (!identity.gameId || identity.gameId===g.id) ? g.players.find(p=>p.profileId===identity.id)?.id || null : null,
-          players:g.players.map(p=>({id:p.id,name:p.name,displayName:displayName(p),kind:p.kind,model:p.model})),eligible:g.eligible}))});
+          players:g.players.map(p=>({id:p.id,name:p.name,displayName:displayName(p),kind:p.kind,model:p.model}))}))});
       }
       if(path==='/api/games' && req.method==='POST') {
         const me=auth(), data=await body(req);
         requireRule(Object.hasOwn(PRESETS,data.preset || 'standard'),'Unknown time preset.');
-        requireRule([...games.values()].filter(g=>g.status!=='finished').length<32,'This prototype supports 32 active rooms.',429);
-        requireRule(data.scenario===undefined || data.scenario===MAP.id,'Unknown scenario.');
+        requireRule([...games.values()].filter(g=>g.status!=='finished').length<32,'This server is full: 32 rooms are already active.',429);
         const gameId=gameIdFactory();
         requireRule(typeof gameId==='string' && /^[a-zA-Z0-9-]{1,32}$/.test(gameId) && !games.has(gameId),'Invalid or duplicate room ID.');
         const g=createGame({id:gameId,name:data.name || 'Council chamber',hostId:me.id,
-          speed:PRESETS[data.preset || 'standard'],eligible:league},MAP);
+          speed:PRESETS[data.preset || 'standard']},MAP);
         // New rooms only (never inside createGame): alliance chat is published in the finished replay.
         g.rules.revealAllianceChatAfterMatch=true;
         games.set(g.id,g);save(g);return json(res,201,{id:g.id});
       }
-      const match=path.match(/^\/api\/games\/([a-zA-Z0-9-]+)(?:\/(join|start|opening|bots|actions|preview|plan|turn-around|map|review|replay|feed|stt))?$/);
+      const match=path.match(/^\/api\/games\/([a-zA-Z0-9-]+)(?:\/(join|start|bots|actions|plan|map|review|replay|feed|stt))?$/);
       if(match) {
         const g=games.get(match[1]);requireRule(g,'Room not found.',404);
         const endpoint=match[2], gameMap=mapFor(g);
@@ -220,16 +214,9 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         }
         if(endpoint==='plan' && req.method==='POST') {
           const p=seat(), data=await body(req);
-          // Read-only: a rally plan (fastest friendly path + ETA) or a one-target attack plan.
-          return json(res,200,data.type==='rally'?rallyPlan(g,p.id,data):attackPlan(g,gameMap,p.id,data));
-        }
-        if(endpoint==='turn-around' && req.method==='GET') {
-          // Read-only: what "Turn around" would do for one of your moving armies if sent now.
-          const p=seat();return json(res,200,turnAroundPlan(g,p.id,url.searchParams.get('army')));
-        }
-        if(endpoint==='preview' && req.method==='GET') {
-          if(identity) auth(g.id);
-          return json(res,200,preview(g,gameMap,url.searchParams.get('from'),url.searchParams.get('to'),Number(url.searchParams.get('amount')),g.players.find(p=>p.profileId===identity?.id)?.id || null));
+          // Read-only: a rally plan (quickest friendly paths + ETAs) or a march forecast (paths, arrival, odds).
+          requireRule(g.status==='running','The match is not running.',409);
+          return json(res,200,data.type==='rally'?rallyPlan(g,p.id,data):preview(g,gameMap,p.id,data));
         }
         if(endpoint==='join' && req.method==='POST') {
           const me=auth(g.id),data=await body(req);
@@ -241,13 +228,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
           save(g);return json(res,200,{country:data.country,token:store.credential(me.id,g.id),match:g.id,
             notices:g.rules?.revealAllianceChatAfterMatch===true?[ALLIANCE_CHAT_NOTICE]:[]});
         }
-        if(endpoint==='start' && req.method==='POST') {host();seat();await body(req);beginOpening(g);fractions.set(g.id,0);save(g);return json(res,200,{ok:true,status:g.status,openingSeconds:g.rules.openingSeconds});}
-        if(endpoint==='opening' && req.method==='POST') {
-          const p=seat(),data=await body(req);
-          const result=lockOpening(g,p.id,data);
-          if(g.status==='opening' && g.players.every(member=>member.openingLocked))start(g);
-          save(g);return json(res,200,{...result,status:g.status});
-        }
+        if(endpoint==='start' && req.method==='POST') {host();seat();await body(req);start(g);fractions.set(g.id,0);save(g);return json(res,200,{ok:true,status:g.status});}
         if(endpoint==='bots' && req.method==='POST') {
           host();const data=await body(req);requireRule(g.status==='lobby','Cannot add seats during play.',409);
           if (!g.players.some(p=>p.profileId===identity.id)) {
@@ -256,7 +237,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
           }
           for(const c of gameMap.countries.filter(c=>!g.players.some(p=>p.id===c.id))) {
             const profile=store.register(`${c.name.split(' ')[0]} automaton`);
-            join(g,gameMap,{profileId:profile.id,name:profile.name,country:c.id,kind:'bot',model:'heuristic-industrial-v3',persona:'expansion-first'});
+            join(g,gameMap,{profileId:profile.id,name:profile.name,country:c.id,kind:'bot',model:'practice-bot',persona:'expansion-first'});
           }
           save(g);return json(res,200,{ok:true,players:g.players.length});
         }
@@ -282,12 +263,6 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
   const interval=automatic ? setInterval(()=>{
     const now=performance.now(), elapsed=(now-previous)*clockScale;previous=now;
     try {
-      for(const g of games.values()) if(g.status==='opening') {
-        const before=Math.ceil((g.openingRemainingMs||0)/1000);
-        g.openingRemainingMs=Math.max(0,(g.openingRemainingMs||0)-elapsed*g.speed);
-        if(g.openingRemainingMs===0){start(g);save(g);fractions.set(g.id,0);}
-        else if(Math.ceil(g.openingRemainingMs/1000)!==before)save(g);
-      }
       for(const g of games.values()) if(g.status==='running') {
         const accumulated=(fractions.get(g.id)||0)+elapsed*g.speed;
         const count=Math.floor(accumulated/1000);fractions.set(g.id,accumulated%1000);
