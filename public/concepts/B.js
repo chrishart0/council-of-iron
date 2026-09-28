@@ -3,7 +3,7 @@
  * a spike of telegrams. Player text (chat, alliance names, room names) goes through esc() only and never
  * into SVG markup. Buttons carry data-sfx hooks for the existing sound system.
  */
-import { load, mountAtlas, screen, reviewerNav, clock, esc, insignia, faction, replayState, historyTo } from '/concepts/kit/concept.js';
+import { load, mountAtlas, mountComms, screen, reviewerNav, clock, esc, insignia, faction, replayState, historyTo } from '/concepts/kit/concept.js';
 
 const m = await load();
 const S = screen(), L = m.live, you = m.you;
@@ -68,9 +68,8 @@ function tape({ mode = 'live', tick = L.tick } = {}) {
     <div class="tape-title"><b class="fell">Replay · ${esc(m.review.name)}</b><small>${esc(winnerName())} prevailed</small></div>
     <div class="tape-clock"><b>${clock(tick)}</b><small>of ${clock(m.review.duration)}</small></div>
   </header>`;
-  const bell = m.offer ? 1 : 0;
   return `<header class="tape" data-region="tape">
-    <button class="tape-std" type="button" ${sfx('press')} aria-label="Your country: British Empire">${std(you)}<span class="tape-name"><b class="fell">${esc(cname(you))}</b><small>Independent · at war with ${enemies.length}</small></span></button>
+    <button class="tape-std" type="button" ${sfx('press')} aria-label="Your country: British Empire">${std(you)}<span class="tape-name"><b class="fell"><span class="long">${esc(cname(you))}</span><span class="short">${esc(short(you))}</span></b><small>Independent · at war with ${enemies.length}</small></span></button>
     <div class="tape-clock" title="Match clock"><b>${clock(L.tick)}</b><small>of ${clock(L.rules.duration)}</small></div>
     <p class="tape-wire">${esc(victoryLine)}</p>
     <dl class="tape-forces">
@@ -78,7 +77,7 @@ function tape({ mode = 'live', tick = L.tick } = {}) {
       <div title="Provinces held">${ic('land')}<dt>Land</dt><dd>${m.stats.land}<small>/${m.stats.provinces}</small></dd></div>
       <div class="hide-phone" title="Industry">${ic('industry')}<dt>Industry</dt><dd>${m.stats.industry}</dd></div>
     </dl>
-    <button class="tape-bell${bell ? ' ringing' : ''}" type="button" ${sfx('press')} aria-label="In-tray: ${bell} decision waiting">${ic('bell')}${bell ? `<i>${bell}</i>` : ''}</button>
+    <button class="tape-bell" id="cx-button" type="button"></button>
     <button class="tape-menu" type="button" ${sfx('press')} aria-label="Standing orders (menu)">${ic('ledger')}</button>
   </header>`;
 }
@@ -96,7 +95,7 @@ function orderOfBattle(state = L, viewer = you, { title = 'Order of battle', col
   const fronts = b.fronts.map(f => { const mine = f.pairs.some(p => p.includes(viewer)); return `<li class="${mine ? 'mine' : ''}"><span>${esc(sideName(f.sides[0]))}</span>${ic('war', 'x')}<span>${esc(sideName(f.sides[1]))}</span></li>`; }).join('');
   return `<section class="oob${collapsed ? ' collapsed' : ''}${full ? ' full' : ''}" data-region="order-of-battle" aria-label="${esc(title)}">
     <header class="drawer-head"><h2 class="fell">${esc(title)}</h2><span class="sub">${esc(sub)}</span><button class="caret" type="button" aria-expanded="${!collapsed}" ${sfx('press')} aria-label="${collapsed ? 'Open' : 'Fold'} the order of battle">${collapsed ? '▸' : '▾'}</button></header>
-    ${collapsed ? `<p class="oob-peek">${b.rows.slice(0, 3).map(r => `<span>${r.rank}. ${esc(rowLabel(r))} <b>${r.troops}</b></span>`).join('')}</p>` : `
+    <p class="oob-peek">${b.rows.slice(0, 4).map(r => `<span>${r.rank}. ${esc(rowLabel(r))} <b>${r.troops}</b></span>`).join('')}</p>${collapsed ? '' : `
     <div class="ob-cols" aria-hidden="true"><span>#</span><span>Power</span><span></span><span>Land</span><span>Troops</span></div>
     <ol class="ob-rows">${rows}</ol>
     <h3 class="wars-head">${ic('war')} Wars <small>${b.fronts.length} fronts · ${total} provinces</small></h3>
@@ -136,8 +135,8 @@ function standardsStrip() {
   return `<nav class="strip" data-region="standards" aria-label="Powers: open a dossier">${others.map(r => `<button type="button" class="${r.relation || ''}" ${sfx('press')} aria-label="${esc(cname(r.id))}${r.relation === 'enemy' ? ', at war with you' : ''}">${std(r.id, 'mini')}<span>${esc(short(r.id).split(' ')[0])}</span>${r.relation === 'enemy' ? ic('war', 'x') : ''}</button>`).join('')}</nav>`;
 }
 function deskTabs(active) {
-  const tabs = [['map', 'Map', 'map'], ['powers', 'Battle', 'troops'], ['chat', 'Wires', 'telegram'], ['menu', 'Orders', 'ledger']];
-  return `<nav class="desk-tabs" data-region="tabs" aria-label="Desk">${tabs.map(([id, label, i]) => `<button type="button" aria-pressed="${id === active}" ${sfx('press')}>${ic(i)}<span>${label}</span>${id === 'chat' ? '<i>2</i>' : ''}</button>`).join('')}</nav>`;
+  const tabs = [['map', 'Map', 'map'], ['powers', 'Order of battle', 'troops'], ['menu', 'Standing orders', 'ledger']];
+  return `<nav class="desk-tabs" data-region="tabs" aria-label="Desk">${tabs.map(([id, label, i]) => `<button type="button" aria-pressed="${id === active}" ${sfx('press')}>${ic(i)}<span>${label}</span></button>`).join('')}</nav>`;
 }
 
 /* ── Dossiers (the context card) ── */
@@ -216,7 +215,7 @@ function ledger() {
     <header class="drawer-head"><h2 id="ledger-title" class="fell">Standing orders</h2><span class="sub">${esc(L.name)} · standard pace</span><button class="caret" type="button" ${sfx('press')} aria-label="Close">${ic('close')}</button></header>
     <div class="ledger-body">
       <h3>Map</h3>
-      <div class="keys wide" role="group" aria-label="Map view"><button class="key" type="button" aria-pressed="true" ${sfx('type')}>World</button><button class="key" type="button" aria-pressed="false" ${sfx('type')}>Europe</button><button class="key" type="button" aria-pressed="false" ${sfx('type')}>Home</button><button class="key" type="button" aria-pressed="false" ${sfx('type')}>Relations <small>M</small></button></div>
+      <div class="keys wide" role="group" aria-label="Map view"><button class="key" type="button" aria-pressed="true" ${sfx('type')}>World</button><button class="key" type="button" aria-pressed="false" ${sfx('type')}>Europe</button><button class="key" type="button" aria-pressed="false" ${sfx('type')}>Home</button><button class="key" type="button" aria-pressed="false" ${sfx('type')} aria-keyshortcuts="M">Relations</button></div>
       <h3>Map key</h3>
       <ul class="map-key">${blocs.map(s => `<li><i style="--team:${m.colors[s.id]}"></i>${esc(s.name)}</li>`).join('')}<li><i class="front"></i>War front</li><li><i class="threat"></i>Province under threat</li></ul>
       <h3>Sound</h3>
@@ -237,44 +236,42 @@ function mapScreen({ cls = '', parts, atlas = {} }) {
   desk.className = `desk map-screen ${phone ? 'phone' : 'wide'} ${cls}`;
   desk.innerHTML = `<svg id="map" viewBox="0 0 1280 680" role="group" aria-label="World province map"></svg><div class="well" aria-hidden="true"></div>${parts.join('')}`;
   const well = desk.querySelector('.well');
-  const insets = () => { const r = well.getBoundingClientRect(); return { top: r.top + 6, left: r.left + 6, right: innerWidth - r.right + 6, bottom: innerHeight - r.bottom + 6 }; };
+  // Camera insets = the framed well, minus a dossier lying on the map (desktop) so targets stay beside it.
+  const insets = () => { const r = well.getBoundingClientRect(), d = !phone && desk.querySelector('.dossier')?.getBoundingClientRect();
+    return { top: r.top + 6, left: Math.max(r.left, d ? d.right : 0) + 6, right: innerWidth - r.right + 6, bottom: innerHeight - r.bottom + 6 }; };
   return mountAtlas(desk.querySelector('#map'), m, { insets, ...atlas });
 }
 
+/** The shared comms model (kit/comms.js) in B's regions: the in-tray key on the tape, one toast slot at the
+ * top of the map well, and the Messages spike in the right column (docked list on desktop, sheet on phones). */
+const commsParts = () => ['<div class="toasts" id="cx-toasts" data-region="toasts"></div>', '<section class="comms" id="cx-panel" data-region="comms" style="--cx-composer-h:112px"></section>'];
+const inMatch = (cls, desktop, phoneParts, atlas) => {
+  const a = mapScreen({ cls, parts: phone ? [tape(), standardsStrip(), ...phoneParts, ...commsParts()] : [tape(), ...desktop, ...commsParts(), camera()], atlas });
+  return a;
+};
 const screens = {
-  hud() {
-    mapScreen({ cls: 'idle', parts: phone ? [tape(), standardsStrip(), camera(), deskTabs('map')] : [tape(), orderOfBattle(), spike(), camera()], atlas: { focus: 'world' } });
-  },
+  hud() { inMatch('idle', [orderOfBattle()], [camera(), deskTabs('map')], { focus: 'world' }); },
+  walk() { inMatch('idle', [orderOfBattle()], [camera(), deskTabs('map')], { focus: 'world' }); },
+  offer() { inMatch('idle', [orderOfBattle()], [camera(), deskTabs('map')], { focus: 'world' }); },
+  chat() { inMatch('idle', [orderOfBattle()], [camera(), deskTabs('map')], { focus: 'world' }); },
   province() {
     const o = m.order, amount = Math.round((o.free - 1) * .5);
     const draft = { sources: [o.from], to: o.to, label: `${amount} · ${(o.eta ?? 0) + 1}s` };
-    const a = mapScreen({ cls: 'has-dossier', parts: phone ? [tape(), standardsStrip(), provinceDossier(), camera()] : [tape(), provinceDossier(), orderOfBattle(), spike(), camera()],
-      atlas: { selected: o.from, target: o.to, draft, focus: o.to, width: phone ? 150 : 330 } });
+    const a = inMatch('has-dossier', [provinceDossier(), orderOfBattle()], [provinceDossier(), camera()], { selected: o.from, target: o.to, draft, focus: o.to, width: phone ? 150 : 330 });
     // The draft label is sized for the zoom at paint time: repaint it once the camera has framed the target.
     requestAnimationFrame(() => requestAnimationFrame(() => a.setDraft(draft)));
     desk.querySelector('#map').classList.add('targeting');
   },
   country() {
-    const a = mapScreen({ cls: 'has-dossier', parts: phone ? [tape(), standardsStrip(), countryDossier(), camera()] : [tape(), countryDossier(), orderOfBattle(), spike(), camera()],
-      atlas: { focus: 'brandenburg', width: phone ? 260 : 520 } });
+    const a = inMatch('has-dossier', [countryDossier(), orderOfBattle()], [countryDossier(), camera()], { focus: 'brandenburg', width: phone ? 260 : 520 });
     a.setRelationFocus?.('germany');
   },
-  offer() {
-    mapScreen({ cls: 'idle has-notice', parts: phone ? [tape(), standardsStrip(), offerTelegram(), deskTabs('map')] : [tape(), offerTelegram(), orderOfBattle(), spike(), camera()], atlas: { focus: 'world' } });
-  },
-  chat() {
-    mapScreen({ cls: 'focus-spike', parts: phone ? [tape(), standardsStrip(), spike({ tab: 'dm', to: 'French Republic' }), deskTabs('chat')] : [tape(), orderOfBattle(L, you, { collapsed: true }), spike({ tab: 'dm', to: 'French Republic' }), camera()], atlas: { focus: 'world' } });
-  },
-  menu() {
-    mapScreen({ cls: 'focus-menu', parts: phone ? [tape(), standardsStrip(), ledger(), deskTabs('menu')] : [tape(), ledger(), camera()], atlas: { focus: 'world' } });
-  },
-  powers() {
-    mapScreen({ cls: 'focus-oob', parts: phone ? [tape(), standardsStrip(), orderOfBattle(L, you, { full: true }), deskTabs('powers')] : [tape(), orderOfBattle(L, you, { full: true }), spike({ collapsed: true }), camera()], atlas: { focus: 'world' } });
-  },
+  menu() { inMatch('focus-menu', [ledger()], [ledger(), deskTabs('menu')], { focus: 'world' }); },
+  powers() { inMatch('focus-oob', [orderOfBattle(L, you, { full: true })], [orderOfBattle(L, you, { full: true }), deskTabs('powers')], { focus: 'world' }); },
   replay() {
     const tick = 300, state = replayState(m, tick), history = historyTo(m, tick).slice(-40);
     const rows = history.map((h, i) => ({ kind: 'headline', id: i, tick: h.tick, title: h.title, detail: h.detail, tone: h.tone }));
-    const oob = orderOfBattle(state, null, { title: `Standings at ${clock(tick)}`, sub: 'land · troops at this moment' });
+    const oob = orderOfBattle(state, null, { title: `Standings at ${clock(tick)}`, sub: 'land · troops' });
     const hist = spike({ rows, title: `Dispatches to ${clock(tick)}`, composer: false });
     mapScreen({ cls: 'replay', parts: phone ? [tape({ mode: 'replay', tick }), oob, timeline(tick)] : [tape({ mode: 'replay', tick }), oob, hist, camera(), timeline(tick)], atlas: { state, focus: 'world' } });
   },
@@ -311,7 +308,7 @@ function titleScreen() {
     <label class="field f-name"><span>Your name</span><input value="Chris" maxlength="40"></label>
     <label class="field"><span>Room name</span><input value="The evening council" maxlength="80"></label>
     <div class="field"><span>Pace</span><div class="keys" role="group" aria-label="Pace"><button class="key" type="button" aria-pressed="true" ${sfx('type')}>Standard · 30 min</button><button class="key" type="button" aria-pressed="false" ${sfx('type')}>Quick · 5 min</button></div></div>
-    <p class="small">Invite by room link, attach an agent, or fill empty seats with practice bots.</p>
+    <p class="small">Invite by room link, seat an agent, or fill empty chairs with computer generals.</p>
     <button class="stamp violet primary" type="submit" ${sfx('stamp')}>${ic('telegram')}<span>Open the council</span></button>
   </form>`;
   mountAtlas(desk.querySelector('#map'), m, { focus: 'world', insets: () => ({}) });
@@ -333,7 +330,8 @@ function factionScreen() {
     <footer class="dossier-foot"><label class="field"><span>Commander</span><input value="Chris" maxlength="40"></label><button class="stamp violet primary" type="button" ${sfx('stamp')}>${ic('seal')}<span>Take this seat</span></button></footer></div></aside>
   <section class="board" data-region="board" aria-label="Choose an empire">${cards}</section>`;
   const well = desk.querySelector('.well');
-  const a = mountAtlas(desk.querySelector('#map'), m, { focus: 'world', insets: () => { const r = well.getBoundingClientRect(); return { top: r.top, left: r.left, right: innerWidth - r.right, bottom: innerHeight - r.bottom }; } });
+  const a = mountAtlas(desk.querySelector('#map'), m, { focus: 'world', insets: () => { const r = well.getBoundingClientRect(), d = desk.querySelector('.dossier').getBoundingClientRect(), bd = desk.querySelector('.board').getBoundingClientRect();
+    return phone ? { top: r.top, left: 0, right: 0, bottom: innerHeight - r.bottom } : { top: r.top, left: d.right, right: innerWidth - r.right, bottom: innerHeight - bd.top }; } });
   a.setRelationFocus?.(pick);
 }
 
@@ -368,10 +366,10 @@ let plotData = [];
 /** Pen plot: each final alliance's share of provinces over the match. Ink line (dash = identity) over a
  * highlighter stroke in the alliance colour; direct labels at the line end; hover shows a crosshair readout. */
 function landPlot(r, alliances, provinces) {
-  const W = 560, H = 220, pad = { l: 36, r: 118, t: 12, b: 26 }, iw = W - pad.l - pad.r, ih = H - pad.t - pad.b, top = .7;
+  const W = 600, H = 230, pad = { l: 36, r: 168, t: 12, b: 26 }, iw = W - pad.l - pad.r, ih = H - pad.t - pad.b, top = .7;
   const x = t => pad.l + t / r.duration * iw, y = v => pad.t + (1 - v / top) * ih;
   const dashes = ['', '7 5', '2 4'], colors = ['#c8ff00', '#00ffd0', '#ff8cff', '#3d5cff'];
-  const colorOf = (a, i) => m.colors[a.id] || colors[i % 4];
+  const finalColors = m.powers(replayState(m, r.duration), null).colors, colorOf = (a, i) => finalColors[a.id] || colors[i % 4];
   const series = alliances.map((a, i) => ({ a, i, pts: r.series.map(s => [s.tick, s.countries.filter(c => a.members.includes(c.country)).reduce((n, c) => n + c.land, 0) / provinces]) }));
   const path = pts => pts.map(([t, v], k) => `${k ? 'L' : 'M'}${x(t).toFixed(1)},${y(v).toFixed(1)}`).join('');
   const grid = [0, .2, .4, .6].map(v => `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(v)}" y2="${y(v)}"/><text x="${pad.l - 6}" y="${y(v) + 4}" text-anchor="end">${v * 100}%</text>`).join('');
@@ -379,7 +377,7 @@ function landPlot(r, alliances, provinces) {
   // Labels at the right end, nudged apart so they never collide.
   const ends = series.map(s => ({ s, y: y(s.pts.at(-1)[1]) })).sort((a, b) => a.y - b.y);
   for (let k = 1; k < ends.length; k++) ends[k].y = Math.max(ends[k].y, ends[k - 1].y + 30);
-  const labels = ends.map(({ s, y: ly }) => `<g class="lbl" transform="translate(${W - pad.r + 8} ${ly})"><rect x="0" y="-7" width="10" height="10" fill="${colorOf(s.a, s.i)}" stroke="#1d2530"/><text x="15" y="2">${esc(s.a.name.length > 16 ? s.a.name.slice(0, 15) + '…' : s.a.name)}</text><text x="15" y="16" class="v">${Math.round(s.pts.at(-1)[1] * 100)}%</text></g>`).join('');
+  const labels = ends.map(({ s, y: ly }) => `<g class="lbl" transform="translate(${W - pad.r + 8} ${ly})"><rect x="0" y="-7" width="10" height="10" fill="${colorOf(s.a, s.i)}" stroke="#1d2530"/><text x="15" y="2">${esc(s.a.name.length > 20 ? s.a.name.slice(0, 19) + '…' : s.a.name)}</text><text x="15" y="16" class="v">${Math.round(s.pts.at(-1)[1] * 100)}%</text></g>`).join('');
   plotData = series.map(s => ({ name: s.a.name, pts: s.pts }));
   return `<figure class="plot"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Share of provinces held by each final alliance over the match"><g class="grid">${grid}${xt}</g>
     ${series.map(s => `<path class="hl" d="${path(s.pts)}" stroke="${colorOf(s.a, s.i)}"/>`).join('')}
@@ -391,7 +389,7 @@ function landPlot(r, alliances, provinces) {
 function wirePlot() {
   const fig = desk.querySelector('.plot'); if (!fig) return;
   const svg = fig.querySelector('svg'), hit = svg.querySelector('.hit'), cross = svg.querySelector('.cross'), out = fig.querySelector('.readout');
-  const data = plotData, W = 560, l = 36, iw = W - 36 - 118, d = m.review.duration;
+  const data = plotData, W = 600, l = 36, iw = W - 36 - 168, d = m.review.duration;
   hit.addEventListener('pointermove', e => {
     const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; const u = p.matrixTransform(svg.getScreenCTM().inverse());
     const t = Math.max(0, Math.min(d, (u.x - l) / iw * d)); cross.setAttribute('x1', u.x); cross.setAttribute('x2', u.x); cross.setAttribute('visibility', 'visible');
@@ -413,8 +411,18 @@ function tileScreen() {
     <section class="tcard"><h2 class="fell">Buttons</h2><div class="row"><button class="stamp violet primary" type="button">${ic('pact')}<span>Propose alliance</span></button><button class="stamp violet primary is-hover" type="button"><span>Hover</span></button><button class="stamp violet primary is-pressed" type="button"><span>Pressed</span></button></div><div class="row"><button class="stamp red" type="button">${ic('war')}<span>Declare war</span></button><button class="stamp red outline" type="button">${ic('war')}<span>Secondary</span></button><button class="stamp violet primary" type="button" disabled><span>Disabled</span></button></div><div class="row"><button class="pencil" type="button">${ic('pen')}Pencil link</button><button class="seal-btn" type="button">${seal('britain', 'violet')}<span>Accept &amp; seal</span></button></div></section>
     <section class="tcard"><h2 class="fell">Keys, slide, tabs</h2><div class="keys"><button class="key" type="button" aria-pressed="false">25%</button><button class="key" type="button" aria-pressed="true">50%</button><button class="key" type="button" aria-pressed="false">75%</button><button class="key" type="button" role="switch" aria-checked="true">On</button></div><input class="slide" type="range" min="0" max="100" value="60" style="--pct:60%" aria-label="Example slide"><nav class="folder-tabs demo"><button type="button" aria-pressed="true">All</button><button type="button" aria-pressed="false">World</button><button type="button" aria-pressed="false">Paris<i>2</i></button></nav></section>
     <section class="tcard wide2"><h2 class="fell">Order of battle lines</h2>${orderOfBattle(L, you, { title: 'Order of battle' }).replace('data-region="order-of-battle"', '')}</section>
-    <section class="tcard"><h2 class="fell">Telegram (dialog)</h2>${offerTelegram().replace('data-region="notice"', '').replace('notice-lane', 'notice-demo')}</section>
-    <section class="tcard"><h2 class="fell">Toast · chat · bulletin</h2><ol class="slips demo"><li class="toast-slip">${ic('bell')}<span><b>Order sent.</b> 7 troops march on Low Countries.</span></li>${head ? slip(head) : ''}${sample ? slip(sample) : ''}</ol></section>
+    <section class="tcard"><h2 class="fell">Dialog (telegram form)</h2>${offerTelegram().replace('data-region="notice"', '').replace('notice-lane', 'notice-demo')}</section>
+    <section class="tcard wide2"><h2 class="fell">Messages (shared comms model)</h2><div class="cx-demo">
+      <div class="cx-toast" data-tier="action"><span class="cx-standard">${insignia('france')}</span><p><b>French Republic</b> offers you the <b>Channel Entente</b></p><button type="button" class="cx-primary">Accept</button><button type="button" class="cx-secondary">Read</button><button type="button" class="cx-dismiss" aria-label="Dismiss">${ic('close')}</button><span class="cx-more">+1</span></div>
+      <div class="cx-toast" data-tier="personal"><span class="cx-standard">${insignia('germany')}</span><p><b>German Empire</b> <span>Our quarrel is with France alone.</span></p><button type="button" class="cx-secondary">Open</button><button type="button" class="cx-dismiss" aria-label="Dismiss">${ic('close')}</button></div>
+      <ol class="cx-list demo"><li><button type="button" class="cx-conv" data-state="action"><span class="cx-standard">${insignia('france')}</span><span class="cx-conv-main"><b>French Republic</b><span class="cx-preview">Alliance offer: Channel Entente</span></span><span class="cx-conv-meta"><time>00:58</time><span class="cx-chip">Offer</span></span></button></li>
+        <li><button type="button" class="cx-conv" data-state="unread"><span class="cx-standard">${insignia('germany')}</span><span class="cx-conv-main"><b>German Empire</b><span class="cx-preview">Our quarrel is with France alone.</span></span><span class="cx-conv-meta"><time>00:12</time><i class="cx-count" data-tier="personal">1</i></span></button></li></ol>
+      <ol class="cx-rows demo"><li class="cx-sep"><span>00:00</span></li>${sample ? `<li class="cx-msg" data-mine="false"><header><span class="cx-standard">${insignia(sample.from)}</span><b>${esc(cname(sample.from))}</b><time>${clock(sample.tick)}</time></header><p class="cx-text">${esc(sample.text)}</p></li>` : ''}
+        <li class="cx-divider"><span>Unread</span></li>
+        <li class="cx-sys" data-tier="action" data-state="open"><header>${ic('seal')}<b>Alliance offer · Channel Entente</b><time>00:58</time></header><p>French Republic invites British Empire into Channel Entente.</p><p class="cx-expiry">Open until 02:58</p><div class="cx-actions"><button type="button" class="cx-primary">Accept</button><button type="button" class="cx-secondary">Decline</button></div></li>
+        <li class="cx-marker" data-tone="war"><p><b>War declared</b> British Empire declared war on United States.</p><time>00:00</time></li></ol>
+      <form class="cx-composer"><input class="cx-input" placeholder="Message France…" aria-label="Message"><button type="button" class="cx-mic" aria-pressed="false" aria-label="Voice input">${ic('mic')}</button><button type="button" class="cx-send">${ic('send')}<span>Send</span></button></form>
+    </div></section>
     <section class="tcard"><h2 class="fell">Icons</h2><ul class="icons">${Object.keys(PATHS).map(n => `<li>${ic(n)}<span>${n}</span></li>`).join('')}</ul></section>
     <section class="tcard"><h2 class="fell">Motion &amp; sound</h2><ul class="notes"><li><b>Telegram</b> slides out of the slot under the tape (240 ms), <code>data-sfx="type"</code>.</li><li><b>Stamp</b> lands: scale 1.5→1 with a 2° settle (200 ms), <code>stamp</code>.</li><li><b>Seal</b> presses: wax spreads, <code>seal</code>.</li><li><b>Dossier</b> slides in from the left edge, the map keeps its place.</li><li><b>Cursor</b>: a pen nib over valid targets.</li><li>Reduced motion: every transition becomes an instant change.</li></ul></section>
   </div></main>`;
@@ -423,6 +431,8 @@ function tileScreen() {
 /* ── Boot ── */
 desk.addEventListener('submit', e => e.preventDefault());
 (screens[S] || screens.hud)();
+if (desk.querySelector('#cx-panel')) await mountComms(m, { button: desk.querySelector('#cx-button'), toasts: desk.querySelector('#cx-toasts'), panel: desk.querySelector('#cx-panel'),
+  docked: () => !matchMedia('(max-width: 699px)').matches && S !== 'menu' });
 for (const list of desk.querySelectorAll('.slips')) list.scrollTop = list.scrollHeight;
 reviewerNav('B · Field Telegraph', 'Paperwork on the desk around a live map');
 await document.fonts.ready;

@@ -2,7 +2,7 @@
  * One anchored-region shell (CSS grid) per screen; every panel is a [data-region]. Player text (chat,
  * alliance names) goes through esc() only. Icons are original inline SVG line drawings.
  */
-import { load, mountAtlas, screen, reviewerNav, clock, esc, insignia, faction, replayState, historyTo } from '/concepts/kit/concept.js';
+import { load, mountAtlas, mountComms, screen, reviewerNav, clock, esc, insignia, faction, replayState, historyTo } from '/concepts/kit/concept.js';
 
 const m = await load();
 const S = screen(), phone = innerWidth < 700, you = m.you;
@@ -77,17 +77,13 @@ function topbar() {
   if (phone) return `<header class="topbar" data-region="topbar" data-inset="top">
     <button type="button" class="nation" data-sfx="press" aria-label="Your country: ${esc(full(you))}">${insignia(you)}<span><b>${esc(short(you))}</b><small>${rel.enemies.length} wars</small></span></button>
     <div class="clock-plaque"><b>${clock(st.tick)}</b><small>of ${clock(st.duration)}</small></div>
-    <div class="stats">${stat('troops', st.troops, 'troops')}${stat('land', st.land, 'provinces')}</div>
-    ${bezel('gear', 'Menu', { cls: S === 'menu' ? 'on' : '' })}</header>`;
+    <div class="stats">${stat('troops', st.troops, 'troops')}</div>
+    <button id="cx-button"></button>${bezel('gear', 'Menu', { cls: S === 'menu' ? 'on' : '' })}</header>`;
   return `<header class="topbar" data-region="topbar" data-inset="top">
     <button type="button" class="nation" data-sfx="press" title="Your country and alliance">${insignia(you)}<span><b>${esc(full(you))}</b><small>${esc(status)}</small></span></button>
     <div class="stats">${stat('troops', st.troops, 'troops')}${stat('land', `${st.land}<em>/${st.provinces}</em>`, 'provinces')}${stat('industry', `${st.industry}<em>/${st.threshold}</em>`, 'industry to win', gauge)}</div>
     <div class="clock-plaque"><span class="clock-face">${ic('clock')}<b>${clock(st.tick)}</b><small>/ ${clock(st.duration)}</small></span><small class="victory">${esc(victoryLine)}</small></div>
-    <div class="alert-row" role="group" aria-label="Needs your attention">
-      ${bezel('seal', 'Alliance offer from France', { cls: `alert-offer ${S === 'offer' ? 'on' : ''}`, badge: '1' })}
-      ${bezel('battle', '2 battles in progress', { cls: 'alert-battle', badge: '2' })}
-      ${bezel('dispatch', 'Unread dispatch from France', { cls: 'alert-mail', badge: '1' })}
-    </div>
+    <div class="alert-row" role="group" aria-label="Messages and decisions"><button id="cx-button"></button></div>
     ${bezel('gear', 'Menu (Esc)', { cls: `menu-btn ${S === 'menu' ? 'on' : ''}` })}</header>`;
 }
 
@@ -110,27 +106,6 @@ function powersList(b, { detailed = false, viewer = you } = {}) {
 
 /* Dispatches: history + chat rows. */
 const toneIcon = { war: 'war', alliance: 'ally', peace: 'seal', broken: 'close', industry: 'industry', victory: 'laurel', neutral: 'dispatch' };
-function dispatchRow(r) {
-  const t = `<time>${clock(r.tick)}</time>`;
-  if (r.kind === 'chat') return `<li class="dp dp-chat${r.from === you ? ' mine' : ''}"><header>${insignia(r.from)}<b>${esc(short(r.from))}</b><span class="ch">${r.channel === 'dm' ? 'Private' : r.channel === 'alliance' ? 'Alliance' : 'World'}</span>${t}</header><p>${esc(r.text)}</p></li>`;
-  if (r.kind === 'system' && r.system === 'offer') return `<li class="dp dp-offer">${ic('seal', 'wax')}<div><header><b>${esc(r.title)}</b>${t}</header><p>${esc(r.detail.replace(/Maximum share ([\d.]+) points each/, (_, n) => `Up to ${+(+n).toFixed(1)} Prestige each`))}</p><div class="row">${btn('Accept', { kind: 'primary', sfx: 'seal', icon: 'seal' })}${btn('Decline')}</div></div></li>`;
-  return `<li class="dp dp-news tone-${r.tone}">${ic(toneIcon[r.tone] || 'dispatch')}<div><header><b>${esc(r.title)}</b>${t}</header><p>${esc(r.detail || '')}</p></div></li>`;
-}
-function composer(placeholder) {
-  return `<form class="composer" onsubmit="return false"><label class="slot"><span class="sr">${placeholder}</span><input maxlength="500" placeholder="${placeholder}" autocomplete="off"></label>${bezel('mic', 'Hold to speak', { cls: 'mic' })}${btn('Send', { kind: 'primary', icon: 'send', cls: 'send' })}</form>`;
-}
-function outliner({ powersOpen = true, dispatchOpen = true, tab = 'world', detailed = false } = {}) {
-  const dm = m.dm('france');
-  const list = tab === 'dm' ? dm : m.world;
-  const threadHead = tab === 'dm' ? `<div class="thread-head">${insignia('france')}<b>${esc(full('france'))}</b><small>Neutral · offered an alliance</small>${bezel('right', 'Open France', {})}</div>` : '';
-  return `<aside class="outliner" data-region="outliner" data-inset="right">
-    <section class="ol ol-powers ${powersOpen ? '' : 'shut'}">${plaque('Powers', `${tabs([['teams', 'Teams'], ['players', 'Players']], 'teams')}<button type="button" class="fold" data-sfx="press" aria-expanded="${powersOpen}" aria-label="Fold">${ic(powersOpen ? 'up' : 'down')}</button>`)}
-      ${powersOpen ? `<div class="ol-body">${powersList(board, { detailed })}</div>` : `<p class="folded">${board.rows.length} blocs · ${board.fronts.length} war fronts</p>`}</section>
-    <section class="ol ol-dispatch ${dispatchOpen ? '' : 'shut'}">${plaque('Dispatches', `${tabs([['world', 'World'], ['dm', 'Direct', dm.length], ['alliance', 'Alliance']], tab)}<button type="button" class="fold" data-sfx="press" aria-expanded="${dispatchOpen}" aria-label="Fold">${ic(dispatchOpen ? 'up' : 'down')}</button>`)}
-      ${dispatchOpen ? `${threadHead}<ol class="dp-list" data-scroll-end>${list.map(dispatchRow).join('')}</ol>${composer(tab === 'dm' ? 'Write to France…' : 'Address the world…')}` : `<p class="folded">${m.world.length} dispatches · 1 unread</p>`}</section>
-  </aside>`;
-}
-
 /* Context cards (left column on desktop, bottom plate on phones). One primary, in a fixed footer. */
 function provinceCard() {
   const o = m.order, target = L.provinces.find(p => p.id === o.to), source = L.provinces.find(p => p.id === o.from);
@@ -182,31 +157,15 @@ function allianceCard() {
     <footer class="card-foot">${btn('Review the offer from France', { kind: 'primary', icon: 'seal', sfx: 'seal', cls: 'wide', attrs: 'id="primary"' })}</footer></section>`;
 }
 
-/* The event letter (HoI-style): the notification lane holds at most one open letter. */
-function letter() {
-  const q = m.offer, lastDm = m.dm('france').filter(r => r.kind === 'chat' && r.from === 'france').at(-1);
-  const share = +(100 * L.players.length / q.roster.length).toFixed(1);
-  return `<article class="letter" data-region="letter" role="dialog" aria-labelledby="letter-title">
-    <div class="letter-seal">${ic('seal')}</div>
-    <header><small>Alliance offer · ${clock(L.tick)}</small><h2 id="letter-title">${esc(q.name)}</h2><p>From ${esc(full(q.creator))}</p></header>
-    <div class="letter-body">
-      <p>${esc(full(q.creator))} invites the ${esc(full(you))} into the <b>${esc(q.name)}</b>: ${q.roster.map(x => esc(short(x))).join(' + ')}.</p>
-      <ul class="terms-list"><li>${ic('laurel')}Up to <b>${share}</b> Prestige each if the alliance wins</li><li>${ic('clock')}Active ${L.rules.notice}s after you accept</li><li>${ic('war')}You join France's war with the ${esc(full('germany'))} and the ${esc(full('ottoman'))}</li><li>${ic('seal')}Open until ${clock(q.expiresAt)}</li></ul>
-      ${lastDm ? `<blockquote><span>${esc(short('france'))} wrote:</span> “${esc(lastDm.text)}”</blockquote>` : ''}
-    </div>
-    <footer>${btn('Decline', { sfx: 'press' })}${btn('Accept alliance', { kind: 'primary', icon: 'seal', sfx: 'seal', attrs: 'id="primary"' })}</footer>
-  </article>`;
-}
-
 function camera() {
   return `<div class="camera" data-region="camera" role="group" aria-label="Map view">${phone ? '' : bezel('plus', 'Zoom in (Q)') + bezel('minus', 'Zoom out (E)')}${bezel('home', 'My country (C)')}${bezel('globe', 'World view')}</div>`;
 }
-function strip() { // phones: every other power, one tap into diplomacy, plus the attention seal
+function strip() { // phones: every other power, one tap into diplomacy
   const others = board.rows.flatMap(r => r.kind === 'alliance' ? r.members : [r]).filter(r => r.id !== you);
-  return `<nav class="strip" data-region="strip" data-inset="top" aria-label="Powers">${bezel('seal', 'Alliance offer from France', { cls: `alert-offer ${S === 'offer' ? 'on' : ''}`, badge: '1' })}<div class="standards">${others.map(r => `<button type="button" class="std${r.relation ? ` is-${r.relation}` : ''}" data-sfx="press" aria-label="${esc(full(r.id))}">${insignia(r.id)}${r.relation === 'enemy' ? `<i>${ic('war')}</i>` : ''}</button>`).join('')}</div></nav>`;
+  return `<nav class="strip" data-region="strip" data-inset="top" aria-label="Powers"><div class="standards">${others.map(r => `<button type="button" class="std${r.relation ? ` is-${r.relation}` : ''}" data-sfx="press" aria-label="${esc(full(r.id))}">${insignia(r.id)}${r.relation === 'enemy' ? `<i>${ic('war')}</i>` : ''}</button>`).join('')}</div></nav>`;
 }
 function dock(active = 'map') {
-  return `<nav class="dock" data-region="dock" data-inset="bottom" aria-label="Game">${[['map', 'globe', 'Map'], ['powers', 'powers', 'Powers'], ['chat', 'dispatch', 'Dispatches', 1], ['menu', 'gear', 'Menu']].map(([id, icon, label, n]) => `<button type="button" class="dock-btn" data-sfx="press" aria-pressed="${id === active}">${ic(icon)}<span>${label}</span>${n ? `<b class="badge">${n}</b>` : ''}</button>`).join('')}</nav>`;
+  return `<nav class="dock" data-region="dock" data-inset="bottom" aria-label="Game">${[['map', 'globe', 'Map'], ['powers', 'powers', 'Powers'], ['menu', 'gear', 'Menu']].map(([id, icon, label, n]) => `<button type="button" class="dock-btn" data-sfx="press" aria-pressed="${id === active}">${ic(icon)}<span>${label}</span>${n ? `<b class="badge">${n}</b>` : ''}</button>`).join('')}</nav>`;
 }
 
 /* Menu plate: replaces the outliner on desktop (stable place: the gear sits above it). */
@@ -226,16 +185,17 @@ function menu() {
 
 /* ── Screens ── */
 const shells = {
-  hud() { return topbar() + (phone ? strip() + mapArea() + dock() : mapArea() + outliner()); },
-  province() { return topbar() + (phone ? strip() + mapArea({ cam: false }) + provinceCard() : `<div class="left">${provinceCard()}</div>` + mapArea() + outliner()); },
-  country() { return topbar() + (phone ? strip() + mapArea({ cam: false }) + countryCard() : `<div class="left">${countryCard()}</div>` + mapArea() + outliner()); },
-  offer() { return topbar() + (phone ? strip() + mapArea({ lane: letter(), cam: false }) + dock() : mapArea({ lane: letter() }) + outliner()); },
-  chat() { return topbar() + (phone ? strip() + `<div class="sheet-slot">${outliner({ powersOpen: false, tab: 'dm' })}</div>` + dock('chat') : `<div class="left">${allianceCard()}</div>` + mapArea() + outliner({ powersOpen: false, tab: 'dm' })); },
-  menu() { return topbar() + (phone ? strip() + `<div class="sheet-slot">${menu()}</div>` + dock('menu') : mapArea() + menu()); },
-  powers() { return topbar() + (phone ? strip() + `<div class="sheet-slot">${outliner({ dispatchOpen: false, detailed: true })}</div>` + dock('powers') : mapArea() + outliner({ dispatchOpen: false, detailed: true })); },
+  hud() { return topbar() + (phone ? strip() + mapArea() + dock() + panel() : mapArea() + rightcol()); },
+  province() { return topbar() + (phone ? strip() + mapArea({ cam: false }) + provinceCard() + panel() : `<div class="left">${provinceCard()}</div>` + mapArea() + rightcol()); },
+  country() { return topbar() + (phone ? strip() + mapArea({ cam: false }) + countryCard() + panel() : `<div class="left">${countryCard()}</div>` + mapArea() + rightcol()); },
+  offer() { return shells.hud(); },
+  walk() { return shells.hud(); },
+  chat() { return topbar() + (phone ? strip() + mapArea() + dock() + panel() : `<div class="left">${allianceCard()}</div>` + mapArea() + rightcol()); },
+  menu() { return topbar() + (phone ? strip() + `<div class="sheet-slot">${menu()}</div>` + dock('menu') + panel() : mapArea() + menu() + panel()); },
+  powers() { return topbar() + (phone ? strip() + `<div class="sheet-slot"><aside class="rightcol">${powersSection({ detailed: true })}</aside></div>` + dock('powers') + panel() : mapArea() + rightcol({ detailed: true })); },
 };
-function mapArea({ lane = '', cam = true } = {}) {
-  return `<div class="maparea">${lane ? `<div class="lane">${lane}</div>` : ''}${cam ? camera() : ''}</div>`;
+function mapArea({ cam = true } = {}) {
+  return `<div class="maparea">${toasts()}${cam ? camera() : ''}</div>`;
 }
 
 function title() {
@@ -352,8 +312,7 @@ function tileScreen() {
       <section><h3>Tabs, slider, toggle</h3>${tabs([['a', 'World'], ['b', 'Direct', 2], ['c', 'Alliance']], 'b')}<div class="spec-row">${slider(11, 15, 'Amount')}</div><div class="presets">${[25, 50, 75, 100].map(p => `<button type="button" class="chip" aria-pressed="${p === 75}">${p}%</button>`).join('')}</div>${toggle(true, 'Battle cues')}${toggle(false, 'Read letters aloud')}<div class="seg">${['Political', 'Diplomacy'].map((x, i) => `<button type="button" aria-pressed="${i === 0}">${x}</button>`).join('')}</div></section>
       <section><h3>Leaderboard rows</h3><div class="ol-body spec-board">${powersList({ ...board, rows: [sample, board.rows.find(r => r.kind === 'country')], fronts: board.fronts.slice(0, 1) })}</div></section>
       <section><h3>Panel frame & plaque</h3><div class="plate mini-plate">${plaque('Orders', bezel('close', 'Close', { cls: 'mini' }))}<div class="card-body"><p class="note">Brass rim, dark inner line, corner brackets and studs. Plaques are engraved brass with dark Alegreya SC.</p></div><footer class="card-foot">${btn('Send 11 → Netherlands', { kind: 'primary', icon: 'march', cls: 'wide' })}</footer></div></section>
-      <section><h3>Letter (event dialog)</h3><div class="mini-letter"><div class="letter-seal">${ic('seal')}</div><header><small>Alliance offer</small><h2>Channel Entente</h2><p>From the French Republic</p></header><footer>${btn('Decline')}${btn('Accept', { kind: 'primary', icon: 'seal' })}</footer></div></section>
-      <section><h3>Toast · dispatch · chat</h3><div class="toast">${ic('battle')}<span><b>Battle at Alpine France</b> Germany attacks with 11. 12 defenders.</span></div><ol class="dp-list spec-dp">${[m.world.find(r => r.kind === 'headline'), m.dm('france').find(r => r.kind === 'chat' && r.from === 'france'), m.dm('france').find(r => r.from === you)].map(dispatchRow).join('')}</ol></section>
+      <section class="tile-comms"><h3>Messages · badge, toasts, thread</h3><div class="spec-row">${'<button id="tile-cx-button"></button>'}<small class="t-small">Badge: oxblood = decisions, brass = unread</small></div><div id="tile-cx-static" class="cx-toasts static-toasts"></div><div id="tile-cx-toasts" hidden></div><section id="tile-cx-panel" class="comms tile-panel"></section></section>
       <section><h3>Icons (original, engraved line)</h3><ul class="icon-set">${icons.map(n => `<li title="${n}">${ic(n)}<small>${n}</small></li>`).join('')}</ul></section>
       <section><h3>Motion & sound</h3><ul class="motion"><li><b>Letters unfold</b> from the seal (220 ms, ease-out), the one orchestrated moment per state.</li><li><b>Plates slide</b> 12 px from their anchored edge; nothing moves the camera by itself.</li><li><b>Press</b> sinks 1 px with an inner shadow; hover warms the brass.</li><li><b>Sound hooks</b> <code>data-sfx</code>: hover · press · confirm · war · seal.</li><li><b>Cursor</b>: brass crosshair over valid targets.</li><li>Reduced motion: all transitions become instant.</li></ul></section>
     </div></section>`;
@@ -376,7 +335,7 @@ const insets = () => {
   return r;
 };
 const mapOpts = {
-  hud: { focus: 'world' }, offer: { focus: 'world' }, chat: { focus: 'world' }, menu: { focus: 'world' }, powers: { focus: 'world' }, title: { focus: 'world' }, tile: { focus: 'world' },
+  hud: { focus: 'world' }, walk: { focus: 'world' }, offer: { focus: 'world' }, chat: { focus: 'world' }, menu: { focus: 'world' }, powers: { focus: 'world' }, title: { focus: 'world' }, tile: { focus: 'world' },
   province: { focus: 'low-countries', selected: m.order.from, target: m.order.to, width: phone ? 150 : 230, draft: { sources: [m.order.from], to: m.order.to, label: `${Math.round(m.order.free * .75)} · ${m.order.eta}s` } },
   country: { focus: 'rhineland', width: phone ? 260 : 420 },
   faction: { focus: 'england', width: phone ? 200 : 360 },
@@ -387,4 +346,13 @@ const atlas = mountAtlas(svg, m, { ...mapOpts, insets });
 if (mapOpts.draft) requestAnimationFrame(() => requestAnimationFrame(() => atlas.setDraft(mapOpts.draft)));
 if (S === 'country') atlas.setRelationFocus('germany');
 if (S === 'powers') atlas.setRelationFocus(you);
+const $ = id => document.getElementById(id);
+if (['hud', 'province', 'country', 'offer', 'chat', 'menu', 'powers', 'walk'].includes(S))
+  await mountComms(m, { button: $('cx-button'), toasts: $('cx-toasts') || document.createElement('div'), panel: $('cx-panel'), docked: () => innerWidth >= 700 && !['menu', 'powers'].includes(S) });
+if (S === 'tile') {
+  const c = await mountComms(m, { button: $('tile-cx-button'), toasts: $('tile-cx-toasts'), panel: $('tile-cx-panel'), docked: () => true }, 'offer');
+  await new Promise(r => requestAnimationFrame(r));
+  const offerRow = c.box.rows.find(r => r.pending); $('tile-cx-static').innerHTML = c.actionToast(offerRow, 1) + c.personalToast({ from: 'france', count: 1, rows: [c.box.rows.find(r => r.item.type === 'message' && r.item.from === 'france')] });
+  c.openThread('dm:france');
+}
 requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => { document.body.dataset.ready = '1'; }, 260)));

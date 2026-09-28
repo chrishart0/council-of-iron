@@ -1,6 +1,6 @@
 /** Concept C — "Modern minimal game". Prototype over the real atlas and recorded public data.
  * Every piece of player/room text goes through esc(); SVG markup here is authored constants only. */
-import { load, mountAtlas, SCREENS, screen, reviewerNav, clock, esc, insignia, faction, replayState, historyTo } from '/concepts/kit/concept.js';
+import { load, mountAtlas, mountComms, SCREENS, screen, reviewerNav, clock, esc, insignia, faction, replayState, historyTo } from '/concepts/kit/concept.js';
 import { ic, ICONS } from '/concepts/C/icons.js';
 
 const m = await load();
@@ -52,17 +52,11 @@ const clockChip = (t = m.stats.tick, total = m.stats.duration, status) => `<div 
 const menuBtn = () => `<div class="menu-slot" data-region="menu-button">${round('menu', 'Menu', { key: 'Esc', cls: 'round-dark' })}</div>`;
 
 const armyToTarget = live.armies.find(a => a.country === you && a.to === m.order.to);
-const notes = [
-  m.offer && { id: 'offer', icon: 'alliance', tone: 'teal', label: `Alliance offer from ${short(m.offer.creator)}`, urgent: true },
-  { id: 'dm', icon: 'mail', tone: 'blue', label: `Message from ${short('france')}`, badge: 1 },
-  armyToTarget && { id: 'army', icon: 'target', tone: 'gold', label: `${armyToTarget.amount} arriving at ${prov(armyToTarget.to)} in ${armyToTarget.arrivesAt - live.tick}s` },
-  { id: 'war', icon: 'war', tone: 'red', label: `At war with ${m.relations.enemies.map(short).join(', ')}` },
-].filter(Boolean);
-const lane = (open) => `<nav class="lane" data-region="lane" aria-label="Notifications">${notes.map(n => round(n.icon, n.label, { badge: n.badge, tone: `tone-${n.tone} ${n.urgent ? 'urgent' : ''}`, pressed: n.id === open, sfx: 'hover' })).join('')}</nav>`;
-const laneBadge = () => `<div class="lane-badge" data-region="lane">${round('bell', `${notes.length} notifications`, { badge: notes.length, tone: 'tone-teal urgent' })}</div>`;
+/* Comms: ONE shared model (kit/comms.js). C places its badge button, a single toast lane and the Messages panel. */
+const cxButton = () => `<button type="button" id="cx-btn" class="round cx-round"${tip('Messages', 'C')}></button>`;
 const dock = (open) => `<nav class="dock" data-region="dock" aria-label="Panels and camera">
-  ${round('trophy', 'Powers', { key: 'P', pressed: open === 'powers' })}${round('chat', 'Chat', { key: 'T', badge: 1, pressed: open === 'chat' })}
-  <span class="dock-gap"></span>${round('home', 'My country', { key: 'C' })}${phone() ? '' : round('plus', 'Zoom in', { key: 'E', cls: 'round-sm' }) + round('minus', 'Zoom out', { key: 'Q', cls: 'round-sm' })}</nav>`;
+  ${round('trophy', 'Powers', { key: 'P', pressed: open === 'powers' })}${phone() ? '' : cxButton()}
+  <span class="dock-gap"></span>${round('home', 'My country', { key: 'H' })}${phone() ? '' : round('plus', 'Zoom in', { key: 'E', cls: 'round-sm' }) + round('minus', 'Zoom out', { key: 'Q', cls: 'round-sm' })}</nav>`;
 
 /* ── panels ── */
 function powersPanel(pw = powers, { title = 'Powers', viewer = you, region = 'panel', sub = '', close = true, compact = false } = {}) {
@@ -82,22 +76,6 @@ function powersPanel(pw = powers, { title = 'Powers', viewer = you, region = 'pa
     <div class="lb-cols" aria-hidden="true"><span>#</span><span>Power</span><span>${ic('land')}</span><span>${ic('troops')}</span></div>
     <div class="lb-scroll"><ol class="lb">${rows}</ol>
     ${fronts ? `<h3 class="sub-h">${ic('war')} Wars <small>${pw.fronts.length}</small></h3><ul class="fronts">${fronts}</ul>` : ''}</div>
-  </section>`;
-}
-function bubble(r, { inline = true } = {}) {
-  if (r.kind === 'chat') { const mine = r.from === you;
-    return `<li class="msg ${mine ? 'mine' : ''}">${mine ? '' : std(r.from, 'std-sm')}<div class="bub"><header><b>${esc(short(r.from))}</b><time>${clock(r.tick)}</time></header><p>${esc(r.text)}</p></div></li>`; }
-  if (r.kind === 'system' && r.system === 'offer' && inline && m.offer) return `<li class="sys sys-offer"><div class="sys-card">${ic('alliance', 'sys-ic')}<div><b>${esc(r.title)} · ${esc(r.name)}</b><p>${esc(r.detail.replace(/Maximum share ([\d.]+) points each\./, (_, n) => `Up to ${Math.round(Number(n))} Prestige each.`))}</p><div class="row">${btn('Accept', { kind: 'primary', icon: 'check', sfx: 'seal' })}${btn('Decline', { kind: 'ghost' })}</div></div></div></li>`;
-  return `<li class="sys tone-${esc(r.tone)}"><span class="sys-line">${ic(r.tone === 'war' ? 'war' : r.tone === 'alliance' ? 'alliance' : 'flag')}<b>${esc(r.title)}</b> ${esc(r.detail)}</span><time>${clock(r.tick)}</time></li>`;
-}
-function chatPanel(tab = 'dm', region = 'panel') {
-  const contacts = live.players.filter(p => p.id !== you).map(p => `<button type="button" class="contact" aria-pressed="${p.id === 'france'}" data-sfx="press"${tip(name(p.id))}>${std(p.id, 'std-sm')}${p.id === 'france' ? '<b class="badge">1</b>' : ''}</button>`).join('');
-  const list = tab === 'world' ? m.world.slice(-12) : tab === 'dm' ? m.dm('france') : [];
-  return `<section class="panel chat sticker" data-region="${region}" aria-label="Chat">
-    ${panelHead('chat', 'Chat', seg([['world', 'World'], ['alliance', 'Alliance'], ['dm', 'Direct', 1]], tab, 'Channel'))}
-    ${tab === 'dm' ? `<div class="contacts" role="group" aria-label="Conversations">${contacts}</div><div class="thread-head">${std('france', 'std-sm')}<b>${esc(name('france'))}</b><span class="tag">Neutral</span><span class="tag tag-war">At war with Germany</span></div>` : ''}
-    ${tab === 'alliance' ? `<div class="empty">${ic('alliance', 'empty-ic')}<b>No alliance yet</b><p>You are independent. Open a country and propose an alliance to get a private channel.</p></div>` : `<ol class="thread">${list.map(r => bubble(r)).join('')}</ol>`}
-    <form class="composer"><label class="field"><span class="sr">Message</span><input maxlength="500" placeholder="${tab === 'dm' ? 'Message France…' : 'Message everyone…'}" autocomplete="off"></label>${round('mic', 'Voice input', { key: 'V', cls: 'round-sm round-light' })}${round('send', 'Send', { key: 'Enter', cls: 'round-sm round-gold', sfx: 'confirm' })}</form>
   </section>`;
 }
 function provinceCard() {
@@ -136,36 +114,25 @@ function countryCard(id = 'germany') {
     <div class="c-actions two">${btn('Declare war', { kind: 'danger', icon: 'war', sfx: 'war' })}${btn('Propose alliance', { kind: 'primary', icon: 'alliance', sfx: 'seal', key: 'Enter', attrs: 'id="primary"' })}</div>
   </section>`;
 }
-function offerNote() {
-  const q = m.offer, left = q.expiresAt - live.tick, share = (100 * live.players.length / q.roster.length).toFixed(0);
-  const quote = m.dm('france').filter(r => r.kind === 'chat' && r.from === q.creator).at(-1);
-  return `<section class="note sticker" data-region="note" role="alertdialog" aria-labelledby="note-title">
-    <header class="n-head"><span class="n-ic tone-teal">${ic('alliance')}</span><div><small>Alliance offer · ${clock(left)} left</small><h2 id="note-title">${esc(q.name)}</h2></div><button type="button" class="x" aria-label="Later" data-sfx="press"${tip('Later', 'Esc')}>${ic('close')}</button></header>
-    <div class="roster">${q.roster.map(id => `<span class="mini">${std(id, 'std-sm')}<b>${esc(short(id))}</b>${q.accepted.includes(id) ? `<i class="ok">${ic('check')}</i>` : '<i class="wait">?</i>'}</span>`).join('<span class="plus">+</span>')}</div>
-    ${quote ? `<blockquote>${std(q.creator, 'std-xs')}<p>${esc(quote.text)}</p></blockquote>` : ''}
-    <ul class="facts"><li>${ic('star')} Up to <b>${share}</b> Prestige each if you win together</li><li>${ic('clock')} Active ${live.rules.notice}s after you accept</li><li>${ic('war')} ${esc(short(q.creator))} is at war with ${esc((memberOf(q.creator)?.member.atWarWith || []).map(short).join(' + ') || 'no one')}</li></ul>
-    <div class="c-actions two">${btn('Decline', { kind: 'ghost', icon: 'close' })}${btn('Accept alliance', { kind: 'primary', icon: 'check', sfx: 'seal', key: 'Enter', attrs: 'id="primary"' })}</div>
-  </section>`;
-}
-
 /* ── screens ── */
-const hudBase = ({ card = '', panel = '', note = '', open = '', sheet = false } = {}) => `
-  <div class="top">${playerChip()}${clockChip()}${menuBtn()}</div>
-  ${phone() ? laneBadge() : lane(note ? 'offer' : '')}
-  ${note}${card}${panel}${sheet ? '' : dock(open)}`;
+const hudBase = ({ card = '', panel = '', open = '', sheet = false } = {}) => `
+  <div class="top">${playerChip()}${phone() ? `<div class="cx-slot" data-region="messages">${cxButton()}</div>` : ''}${clockChip()}${menuBtn()}</div>
+  <div class="toasts-slot" id="cx-toasts" data-region="toasts"></div>
+  ${card}${panel}<section id="cx-panel" class="comms sticker" data-region="comms" hidden></section>${sheet ? '' : dock(open)}`;
 const R = {
   hud: () => hudBase({ panel: phone() ? '' : powersPanel(), open: phone() ? '' : 'powers' }),
   province: () => hudBase({ card: provinceCard(), panel: phone() ? '' : powersPanel(), open: 'powers', sheet: phone() }),
   country: () => hudBase({ card: countryCard(), panel: phone() ? '' : powersPanel(), open: 'powers', sheet: phone() }),
-  offer: () => hudBase({ note: offerNote(), panel: phone() ? '' : powersPanel(powers, { compact: true }), open: phone() ? '' : 'powers' }),
-  chat: () => hudBase({ panel: chatPanel('dm'), open: 'chat', sheet: phone() }),
+  offer: () => hudBase({ panel: phone() ? '' : powersPanel(), open: phone() ? '' : 'powers' }),
+  chat: () => hudBase({}),
+  walk: () => hudBase({ panel: phone() ? '' : powersPanel(), open: phone() ? '' : 'powers' }),
   powers: () => hudBase({ panel: powersPanel(), open: 'powers', sheet: phone() }),
-  menu: () => `${menuPanel()}`,
+  menu: () => hudBase({ panel: phone() ? '' : powersPanel(), open: phone() ? '' : 'powers' }),
   replay: replayScreen, report: reportScreen, title: titleScreen, faction: factionScreen, tile: tileScreen,
 };
 
 function menuPanel() {
-  const keys = [['Drag', 'Send troops'], ['Enter', 'Confirm'], ['Esc', 'Close / menu'], ['C', 'My country'], ['Q / E', 'Zoom'], ['M', 'Diplomacy colours'], ['P', 'Powers'], ['T', 'Chat'], ['V', 'Voice']];
+  const keys = [['Drag', 'Send troops'], ['Enter', 'Confirm'], ['Esc', 'Close / menu'], ['H', 'My country'], ['C', 'Messages'], ['Q / E', 'Zoom'], ['M', 'Diplomacy colours'], ['P', 'Powers'], ['V', 'Voice']];
   return `<section class="menu-panel sticker" data-region="menu" role="dialog" aria-labelledby="menu-title">
     <header class="p-head big">${ic('gear', 'p-ic')}<div><h2 id="menu-title">Menu</h2><p class="p-sub">${esc(live.name)} · the match keeps running</p></div><button type="button" class="x" aria-label="Close menu" data-sfx="press"${tip('Resume', 'Esc')}>${ic('close')}</button></header>
     <div class="menu-grid">
@@ -227,7 +194,7 @@ function reportScreen() {
   const def = `<p class="def">${ic('info')} Alliance score: its final members' Prestige added together.</p>`;
   const actions = `<div class="c-actions two r-actions">${btn('All rooms', { kind: 'ghost', icon: 'exit' })}${btn('Watch replay', { kind: 'primary', icon: 'play', key: 'R', attrs: 'id="primary"' })}</div>`;
   if (phone()) return `<section class="report sticker" data-region="report">${hero}${seg([['podium', 'Podium'], ['table', 'Scores'], ['chart', 'Timeline']], 'podium', 'Report section')}
-    <div class="r-body"><div class="podium">${podium}</div>${def}${momentList}</div>${actions}</section>`;
+    <div class="r-body"><div data-pane="podium"><div class="podium">${podium}</div>${sums}${def}</div><div data-pane="table" hidden>${table}</div><div data-pane="chart" hidden>${chart}${momentList}</div></div>${actions}</section>`;
   return `<section class="report sticker" data-region="report">${hero}
     <div class="r-grid"><section class="r-box"><h3>${ic('trophy')} Alliances</h3><div class="podium">${podium}</div>${sums}${def}</section>
     <section class="r-box"><h3>${ic('star')} Countries</h3>${table}</section>
@@ -248,7 +215,7 @@ function titleScreen() {
       <div class="profile"><span class="avatar">${ic('troops')}</span><div><b>Chris</b><small>Prestige +166 · 4 matches</small></div>${round('gear', 'Settings', { cls: 'round-sm round-light' })}</div></section>
     <section class="panel rooms sticker" data-region="rooms">${panelHead('flag', 'Rooms', seg([['all', 'All'], ['open', 'Open'], ['live', 'Live']], 'all', 'Filter'), false)}
       <ul class="room-list">${rooms.map(x => `<li class="room"><div class="room-main"><span class="state st-${x.tone}">${esc(x.state)}</span><b>${esc(x.name)}</b><small>${x.meta}</small><div class="room-stds">${x.stds.map(id => std(id, 'std-xs')).join('')}</div></div>${x.action}</li>`).join('')}</ul>
-      <form class="create"><h3>${ic('plus')} New room</h3><label class="field"><span class="sr">Room name</span><input value="The evening council" maxlength="80"></label>
+      <form class="create"><h3>${ic('plus')} New room</h3><label class="field"><span class="sr">Room name</span><input value="Friday council" maxlength="80"></label>
         ${seg([['standard', 'Standard · 30 min'], ['quick', 'Quick · 5 min']], 'standard', 'Pace')}${btn('Create room', { kind: 'secondary', icon: 'arrow', cls: 'wide' })}</form></section>`;
 }
 
@@ -276,19 +243,20 @@ function tileScreen() {
     ${box('Type · Rubik', `<p class="ts d">Victory 44/800</p><p class="ts h">Panel heading 20/700</p><p class="ts u">Interface text 16/500, the size of every label.</p><p class="ts n num">1,532 · 08:00</p><p class="ts s">Small print 13/500 for times and hints</p>`)}
     ${box('Buttons', `<div class="stack">${btn('Propose alliance', { kind: 'primary', icon: 'alliance' })}<div class="row">${btn('Hover', { kind: 'primary', cls: 'is-hover' })}${btn('Pressed', { kind: 'primary', cls: 'is-down' })}</div>${btn('Secondary', { icon: 'eye' })}${btn('Declare war', { kind: 'danger', icon: 'war' })}${btn('Decline', { kind: 'ghost', icon: 'close' })}<div class="row">${round('trophy', 'Powers')}${round('chat', 'Chat', { badge: 2 })}${round('home', 'Home', { pressed: true })}${round('plus', 'Zoom', { cls: 'round-sm' })}</div></div>`)}
     ${box('Tabs · slider · toggle', `${seg([['world', 'World'], ['alliance', 'Alliance'], ['dm', 'Direct', 3]], 'dm', 'Tabs')}<div class="amount"><div class="amount-line"><span>Troops</span><output class="num">8<small> / 15</small></output></div>${slider(8, 15, 'Troops')}<div class="chips">${[25, 50, 75, 100].map(p => `<button type="button" class="chip-btn" aria-pressed="${p === 50}">${p}%</button>`).join('')}</div></div>${toggle(true, 'Voice input')}${toggle(false, 'Battle stingers')}`)}
-    ${box('HUD chips', `<div class="stack">${pill('troops', '192', 'Troops')}${pill('land', '9<small>/79</small>', 'Provinces')}${ring(22, m.stats.threshold, 'Industry')}<div class="notes-demo">${notes.map(n => round(n.icon, n.label, { badge: n.badge, tone: `tone-${n.tone}` })).join('')}</div></div>`)}
+    ${box('HUD chips', `<div class="stack">${pill('troops', '192', 'Troops')}${pill('land', '9<small>/79</small>', 'Provinces')}${ring(22, m.stats.threshold, 'Industry')}<div class="notes-demo"><button type="button" class="round cx-round cx-button">${ic('chat')}<b class="cx-count" data-tier="action">1</b><i class="cx-count" data-tier="personal">2</i></button><small class="hint">Messages: red = decide, blue = unread</small></div></div>`)}
     ${box('Leaderboard row', `<ol class="lb">${`<li class="lb-group" style="--team:${hex(powers.colors[sample.id])}"><div class="lb-row lb-total"><span class="rk">${sample.rank}</span><span class="swatch"></span><b class="nm">${esc(sample.name)}</b><span class="n">${sample.provinces}</span><span class="n">${fmt(sample.troops)}</span></div><ul>${sample.members.map(x => `<li class="lb-row lb-member"><span class="rk"></span>${std(x.id, 'std-xs')}<span class="nm">${esc(short(x.id))}</span><span class="bar"><i style="width:${pct(x.shareOfAlliance)}"></i></span><span class="n">${x.provinces}</span><span class="n">${fmt(x.troops)}</span></li>`).join('')}</ul></li>`}</ol>`)}
-    ${box('Chat & diplomacy', `<ol class="thread">${m.dm('france').map(r => bubble(r)).join('')}</ol>`, 'wide2')}
-    ${box('Toast', `<div class="toast">${ic('war', 'toast-ic')}<div><b>Battle at Low Countries</b><p>Your 8 troops arrive in 7 s.</p></div>${btn('Show', { kind: 'ghost' })}</div><div class="toast t-ally">${ic('alliance', 'toast-ic')}<div><b>Alliance formed</b><p>Pacific Pact is active.</p></div></div>`)}
+    ${box('Messages · toast · thread', `<div class="cx-toasts demo"><div class="cx-toast" data-tier="action"><span class="cx-standard">${insignia('france')}</span><p><b>French Republic</b> offers you the <b>Channel Entente</b></p><button type="button" class="cx-primary">Accept</button><button type="button" class="cx-secondary">Read</button><button type="button" class="cx-dismiss" aria-label="Dismiss">${ic('close')}</button><span class="cx-more">+1</span></div><div class="cx-toast" data-tier="personal"><span class="cx-standard">${insignia('germany')}</span><p><b>German Empire</b> <span class="cx-line">Our quarrel is with France alone.</span></p><button type="button" class="cx-secondary">Open</button><button type="button" class="cx-dismiss" aria-label="Dismiss">${ic('close')}</button></div></div>
+      <div class="cx-panel demo"><ol class="cx-rows">${m.dm('france').filter(r => r.kind === 'chat').map(r => `<li class="cx-msg" data-mine="${r.from === you}"><header><span class="cx-standard">${insignia(r.from)}</span><b>${r.from === you ? 'You' : esc(name(r.from))}</b><time>${clock(r.tick)}</time></header><p class="cx-text">${esc(r.text)}</p></li>`).join('')}<li class="cx-divider"><span>Unread</span></li><li class="cx-sys" data-tier="action" data-state="open"><header>${ic('alliance', 'cx-icon')}<b>Alliance offer · Channel Entente</b><time>00:58</time></header><p>French Republic invites British Empire into Channel Entente.</p><div class="cx-actions"><button type="button" class="cx-primary">Accept</button><button type="button" class="cx-secondary">Decline</button></div></li><li class="cx-marker" data-tone="war"><p><b>War declared</b> German Empire declared war on French Republic.</p><time>00:00</time></li></ol></div>`, 'wide2')}
+    ${box('Event banner (one per big moment)', `<div class="toast t-ally">${ic('alliance', 'toast-ic')}<div><b>Alliance formed</b><p>Pacific Pact: United States + Japan.</p></div></div><div class="toast">${ic('war', 'toast-ic')}<div><b>War declared</b><p>German Empire on French Republic.</p></div></div>`)}
     ${box('Dialog', `<div class="dialog"><b class="d-t">Declare war on Germany?</b><p>You will also be at war with the Ottoman Empire (Central Compact).</p><div class="row">${btn('Cancel', { kind: 'ghost' })}${btn('Declare war', { kind: 'danger', icon: 'war' })}</div></div>`)}
     ${box(`Icons · ${ICONS.length} original glyphs`, `<div class="icons">${ICONS.map(n => `<span${tip(n)}>${ic(n)}</span>`).join('')}</div>`, 'wide2')}
-    ${box('Motion & sound', `<ul class="motion"><li><b>Press</b> offset shadow collapses 4→0 px in 90 ms, spring back 180 ms · <code>data-sfx="press"</code></li><li><b>Panels</b> slide 24 px from their anchored edge, 220 ms ease-out; never over another panel</li><li><b>Notifications</b> pop in the right lane (scale 0.6→1, spring); urgent ones pulse twice, then rest</li><li><b>Commit</b> the primary flashes gold→white once · <code>confirm / war / seal</code> cues</li><li>Reduced motion: fades only.</li></ul>`)}
+    ${box('Motion & sound', `<ul class="motion"><li><b>Press</b> offset shadow collapses 4→0 px in 90 ms, spring back 180 ms · <code>data-sfx="press"</code></li><li><b>Panels</b> slide 24 px from their anchored edge, 220 ms ease-out; never over another panel</li><li><b>Toasts</b> one lane, one visible (+N): drop in 16 px with a spring; a decision stays until handled, a message leaves after 4 s</li><li><b>Commit</b> the primary flashes gold→white once · <code>confirm / war / seal</code> cues</li><li>Reduced motion: fades only.</li></ul>`)}
   </div></div>`;
 }
 
 /* ── render + map ── */
 shell.innerHTML = R[S]();
-if (S === 'menu') { document.getElementById('scrim').hidden = false; }
+if (S === 'menu') document.getElementById('scrim').hidden = false;
 const regionInsets = () => {
   const vw = innerWidth, vh = innerHeight, ins = { top: 0, right: 0, bottom: 0, left: 0 };
   for (const e of shell.querySelectorAll('[data-region]')) {
@@ -302,7 +270,7 @@ const regionInsets = () => {
   return ins;
 };
 const mapOpts = {
-  hud: { focus: 'world' }, offer: { focus: 'world' }, powers: { focus: 'world' }, chat: { focus: 'world' }, menu: { focus: 'world' }, tile: { focus: 'world' },
+  hud: { focus: 'world' }, walk: { focus: 'world' }, offer: { focus: 'world' }, powers: { focus: 'world' }, chat: { focus: 'world' }, menu: { focus: 'world' }, tile: { focus: 'world' },
   title: { focus: 'world' }, report: { focus: 'world', state: replayState(m, m.review.duration) },
   province: { focus: 'england', width: phone() ? 150 : 260, selected: m.order.from, target: m.order.to, draft: { sources: [m.order.from], to: m.order.to, label: `${Math.round(m.order.free / 2)} · ${m.order.eta}s` } },
   country: { focus: 'rhineland', width: 330, mode: 'diplomacy' },
@@ -315,10 +283,15 @@ if (S === 'country') atlas.setRelationFocus?.('germany');
 if (S === 'faction') atlas.setRelationFocus?.(PICK);
 if (['province'].includes(S)) document.body.classList.add('cursor-target');
 
+const inMatch = ['hud', 'province', 'country', 'offer', 'chat', 'menu', 'powers', 'walk'].includes(S);
+if (inMatch) await mountComms(m, { button: document.getElementById('cx-btn'), toasts: document.getElementById('cx-toasts'), panel: document.getElementById('cx-panel') });
+if (S === 'menu') document.getElementById('overlay').innerHTML = menuPanel();
+
 /* ── light interaction (prototype) ── */
 for (const f of document.querySelectorAll('form')) f.addEventListener('submit', e => e.preventDefault());
 document.addEventListener('pointerdown', e => { const b = e.target.closest('[data-sfx]'); if (b) dispatchEvent(new CustomEvent('council:sfx', { detail: b.dataset.sfx })); });
 for (const s of document.querySelectorAll('.seg')) s.addEventListener('click', e => { const b = e.target.closest('[role=tab]'); if (!b) return; for (const x of s.querySelectorAll('[role=tab]')) x.setAttribute('aria-selected', String(x === b)); });
+for (const r of document.querySelectorAll('.report')) r.addEventListener('click', e => { const b = e.target.closest('[role=tab]'); if (b) for (const p of r.querySelectorAll('[data-pane]')) p.hidden = p.dataset.pane !== b.dataset.tab; });
 for (const t of document.querySelectorAll('.toggle')) t.addEventListener('click', () => t.setAttribute('aria-checked', String(t.getAttribute('aria-checked') !== 'true')));
 for (const c of document.querySelectorAll('.chips')) c.addEventListener('click', e => { const b = e.target.closest('.chip-btn'); if (!b) return; for (const x of c.querySelectorAll('.chip-btn')) x.setAttribute('aria-pressed', String(x === b));
   const k = parseInt(b.textContent) / 100, sl = c.parentElement.querySelector('.slider'), max = Number(sl.dataset.max), v = Math.max(1, Math.round(max * k)); setSlider(sl, v); });
