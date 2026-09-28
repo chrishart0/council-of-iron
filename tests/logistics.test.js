@@ -160,6 +160,12 @@ test('a rally column is an ordinary army: recallable, and the source under attac
   const a = rallyArmies(g)[0]; advance(g, 3);
   send(g, 'usa', { type: 'recall', id: a.id }); tick(g);
   assert.equal(a.returning, true); assert.equal(a.to, 'mexico');
+  assert.throws(() => turnAroundPlan(g, 'usa', a.id), /rally column heading home/);
+  // turn_around on an advancing rally column is the same recall.
+  until(g, () => rallyArmies(g).some(x => !x.returning));
+  const b = rallyArmies(g).find(x => !x.returning);
+  assert.equal(send(g, 'usa', { type: 'turn_around', armyId: b.id }).mode, 'recall'); tick(g);
+  assert.equal(b.returning, true);
   // Source captured: the rally point is cleared and its owner told why.
   own(g, 'mexico', 'japan', 5); tick(g);
   assert.equal(g.rallies.length, 0);

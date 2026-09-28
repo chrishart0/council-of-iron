@@ -658,5 +658,24 @@
         180
       ]
     }
+  },
+  "logistics-a": {
+    "rules": {
+      "moveSpeedPercent": 150,
+      "battleSlowdownPercent": 125
+    }
+  },
+  "logistics-b": {
+    "rules": {
+      "internalSpeedPercent": 200,
+      "battleSlowdownPercent": 120
+    }
+  },
+  "logistics-1-movement-only": {
+    "rules": {
+      "moveSpeedPercent": 120,
+      "internalSpeedPercent": 200,
+      "battleSlowdownPercent": 125
+    }
   }
 }

@@ -471,7 +471,8 @@ export function turnAroundPlan(g, country, armyId, at = g.tick + 1) {
     arrivesAt: army.transit ? at + Math.max(1, at - army.originDepartedAt) :
       army.turnArounds ? turnAroundArrival(army, g.travelTimes, at) :
       at + Math.max(1, Math.min(army.arrivesAt - army.departedAt, at - army.departedAt)) };
-  requireRule(!army.transit, 'A transit column cannot turn around; let it return home, then send a new order.', 409);
+  requireRule(!army.transit, army.rally ? 'A rally column heading home cannot turn around; its rally point sends troops again at the next recruitment.' :
+    'A transit column cannot turn around; let it return home, then send a new order.', 409);
   const limit = gameRules(g).maxTurnArounds ?? RULES.maxTurnArounds;
   requireRule((army.turnArounds || 0) < limit, `An army can turn back toward its target at most ${limit} times.`, 409);
   const target = province(g, army.from);
