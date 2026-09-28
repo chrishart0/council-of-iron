@@ -38,10 +38,12 @@ const warOrders={0:[['britain',{type:'declare_war',country:'usa'}],['russia',{ty
   40:[['britain',{type:'march',from:'england',to:'low-countries',amount:8}],['france',{type:'march',from:'south-france',to:'iberia',amount:8}],['germany',{type:'march',from:'bavaria',to:'danube',amount:8}]]};
 // Tick 50: an approved alliance still inside its activation delay (a "forming" bloc).
 const pact=room=>{const q=act(room,map,'usa',{type:'propose',country:'japan',name:'Pacific Pact'},`${room.id}-pact`);act(room,map,'japan',{type:'accept',proposalId:q.proposalId},`${room.id}-pact-accept`);};
-// 'ui-turn' (turned-back notice): Britain also goes to war with France; Germany's 12 from Bavaria reach Île-de-France (north-france)
-// at 01:28 and Britain's 5 from England at 01:33, while Germany's battle is still under way, so Britain's are turned back.
-const roomOrders={'ui-turn':{55:[['britain',{type:'declare_war',country:'france'}],['germany',{type:'march',from:'bavaria',to:'north-france',amount:12}]],
-  71:[['britain',{type:'march',from:'england',to:'north-france',amount:5}]]}};
+// 'ui-turn' (turned-back notice): Britain also goes to war with France; Germany (through the Southern France it took at 01:14)
+// reaches Northern France at 02:11 and Britain's 5 from Great Britain at 02:12, while Germany's battle is still under way,
+// so Britain's are turned back.
+const roomOrders={'ui-turn':{55:[['britain',{type:'declare_war',country:'france'}]],
+  75:[['germany',{type:'march',to:'north-france',sources:[{from:'ruhr',percent:100},{from:'bavaria',percent:100},{from:'prussia',percent:100}]}]],
+  104:[['britain',{type:'march',from:'england',to:'north-france',amount:5}]]}};
 const stepRoom=(room,to)=>{while(room.tick<to){for(const [country,action] of [...warOrders[room.tick]||[],...roomOrders[room.id]?.[room.tick]||[]])act(room,map,country,action,`${room.id}-${room.tick}-${country}-${action.type}`);if(room.tick===50)pact(room);tick(room);}};
 const stepWar=to=>stepRoom(w,to);
 for(const room of [w,...Object.values(taskRooms)]){stepRoom(room,55);app.games.set(room.id,room);app.store.save(room);}
