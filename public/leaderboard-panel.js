@@ -6,14 +6,14 @@
  */
 import { leaderboard, warsOf } from './leaderboard.js';
 import { allianceColors } from './relations.js';
-import { insignia } from './presentation.js';
+import { insignia, icon } from './presentation.js';
 
 const ARROW_MS = 4000;
 const node = (tag, className) => { const e = document.createElement(tag); e.className = className; return e; };
 const setText = (element, value) => { if (element.textContent !== value) element.textContent = value; };
-const RELATION = { enemy: ['⚔', 'at war with you'], ally: ['⛓', 'allied with you'] };
+const RELATION = { enemy: ['war', 'at war with you'], ally: ['ally', 'allied with you'] };
 const percent = n => `${Math.round(n * 100)}%`;
-const seatType = player => player?.kind === 'bot' || player?.model?.startsWith('heuristic-') ? 'BOT' : player?.kind === 'agent' ? 'AI' : 'HUMAN';
+const seatType = player => player?.kind === 'bot' || player?.model?.startsWith('heuristic-') ? 'Bot' : player?.kind === 'agent' ? 'AI' : 'Human';
 
 export class LeaderboardPanel {
   /** `fronts` lists bloc-vs-bloc wars in the teams view; `onFocus(country|null)` fires when a row is
@@ -21,8 +21,8 @@ export class LeaderboardPanel {
   /** v0.8: `onSelect(country)` opens diplomacy for a row (click or Enter); `powers` is a strip of standards
    * shown while collapsed (phones), one button per other country, marked with its relation to you;
    * `onFront(front)` frames a war front on the map. */
-  constructor({ root, rows, toggle, summary, modes, fronts, powers, onFocus, onSelect, onFront }, names) {
-    Object.assign(this, { root, list: rows, toggle, summary, modes, fronts, powers, onFocus, onSelect, onFront, names });
+  constructor({ root, rows, toggle, summary, modes, fronts, frontCount, powers, onFocus, onSelect, onFront }, names) {
+    Object.assign(this, { root, list: rows, toggle, summary, modes, fronts, frontCount, powers, onFocus, onSelect, onFront, names });
     this.mode = 'teams'; this.previous = new Map(); this.arrows = new Map(); this.lastMode = null; this.collapsed = new Set();
     const focusRow = event => { const li = event.target.closest?.('.lb-row'); this.onFocus?.(li ? li.dataset.focus || null : null); };
     rows.addEventListener('mouseover', focusRow); rows.addEventListener('focusin', focusRow);
@@ -50,7 +50,7 @@ export class LeaderboardPanel {
     this.toggle.setAttribute('aria-expanded', String(open));
     this.root.classList.toggle('collapsed', !open);
   }
-  /** 'teams' | 'players' | 'wars' (the war fronts, a tab instead of a list stacked under the rows). */
+  /** 'teams' | 'players'. v0.9: the war fronts are always listed under the rows (sized for 8 seats, 4 blocs). */
   setMode(mode) {
     this.mode = mode; this.root.dataset.mode = mode;
     for (const b of this.modes) b.setAttribute('aria-pressed', String(b.dataset.lbMode === mode));
@@ -58,7 +58,7 @@ export class LeaderboardPanel {
   label(row) { return row.kind === 'alliance' ? row.name : (this.names.short ?? this.names.country)(row.id); }
   update(state, limit = 5) {
     this.state = state; this.limit = limit;
-    const board = leaderboard(state, { mode: this.mode === 'wars' ? 'teams' : this.mode, you: state.you, limit });
+    const board = leaderboard(state, { mode: this.mode, you: state.you, limit });
     const now = Date.now(), sameMode = this.lastMode === this.mode;
     for (const row of board.rows) {
       const before = this.previous.get(row.id);
@@ -127,11 +127,12 @@ export class LeaderboardPanel {
     if (standards.dataset.key !== key) { standards.dataset.key = key; standards.innerHTML = shown.map(insignia).join(''); } // authored SVG only
     const player = type === 'group' ? null : state.players.find(p => p.id === row.id);
     const role = player ? seatType(player) : '';
-    setText(label, `${role ? `${role} · ` : ''}${this.label(row)}${row.eliminated ? ' · fallen' : ''}${type === 'group' && row.forming ? ' · forming' : ''}`); // alliance name: text
+    setText(label, `${this.label(row)}${row.eliminated ? ' · fallen' : ''}${type === 'group' && row.forming ? ' · forming' : ''}`); // alliance name: text
     bar.hidden = pct.hidden = type !== 'member';
     if (type === 'member') { bar.firstChild.style.width = percent(row.shareOfAlliance); setText(pct, percent(row.shareOfAlliance)); }
     const [mark, words] = RELATION[row.relation] || ['', ''];
-    setText(rel, mark); rel.className = `lb-rel${row.relation ? ` ${row.relation}` : ''}`;
+    if (rel.dataset.mark !== mark) { rel.dataset.mark = mark; rel.innerHTML = mark ? icon(mark) : ''; } // authored SVG only
+    rel.className = `lb-rel${row.relation ? ` ${row.relation}` : ''}`;
     const membership = type === 'group' ? `${row.forming ? 'Forming alliance' : 'Alliance'} of ${row.countries.map(this.names.country).join(', ')}`
       : type === 'member' ? `${percent(row.shareOfAlliance)} of ${group.name}'s troops` : active ? `Member of ${active.name}` : pending ? `Forming ${pending.name}` : row.kind === 'alliance' ? '' : 'Independent';
     const enemies = row.atWarWith.map(this.names.country).join(', ');
@@ -166,9 +167,7 @@ export class LeaderboardPanel {
   renderFronts(state) {
     if (!this.fronts) return;
     const fronts = warsOf(state); // every active war, side vs side
-    this.fronts.hidden = this.mode !== 'wars';
-    const tab = this.modes.find(b => b.dataset.lbMode === 'wars');
-    if (tab) tab.textContent = fronts.length ? `Wars ${fronts.length}` : 'Wars';
+    if (this.frontCount) setText(this.frontCount, fronts.length ? String(fronts.length) : '');
     const key = JSON.stringify([state.you, fronts.map(f => f.sides.map(s => [s.side, s.name, s.countries]))]);
     if (this.fronts.dataset.key === key) return;
     this.fronts.dataset.key = key;
@@ -178,7 +177,7 @@ export class LeaderboardPanel {
       const [a, b] = f.sides.map(s => s.name || s.countries.map(this.names.country).join(' + '));
       const button = node('button', 'lb-front-button'); button.type = 'button'; button.title = 'Show this front on the map';
       button.dataset.front = JSON.stringify(f.sides.map(s => s.countries));
-      const left = node('span', ''), right = node('span', ''), swords = node('b', ''); swords.textContent = '⚔';
+      const left = node('span', ''), right = node('span', ''), swords = node('b', ''); swords.innerHTML = icon('war'); swords.setAttribute('aria-label', 'at war with');
       left.textContent = a; right.textContent = b; button.append(left, swords, right); li.append(button);
       return li;
     }));

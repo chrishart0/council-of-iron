@@ -26,7 +26,11 @@ const staticFiles = new Map([
   ['/feed-model.js', ['public/feed-model.js', 'text/javascript; charset=utf-8']],
   ['/leaderboard.js', ['public/leaderboard.js', 'text/javascript; charset=utf-8']],
   ['/leaderboard-panel.js', ['public/leaderboard-panel.js', 'text/javascript; charset=utf-8']],
-  ['/feed.css', ['public/feed.css', 'text/css; charset=utf-8']],
+  ['/comms.css', ['public/comms.css', 'text/css; charset=utf-8']],
+  ['/comms.js', ['public/comms.js', 'text/javascript; charset=utf-8']],
+  ['/comms-model.js', ['public/comms-model.js', 'text/javascript; charset=utf-8']],
+  // v0.9 War Room type (SIL OFL 1.1; licences in public/fonts).
+  ...['alegreya-sc-regular', 'alegreya-sc-bold', 'barlow-condensed-medium', 'barlow-condensed-semibold'].map(f => [`/fonts/${f}.woff2`, [`public/fonts/${f}.woff2`, 'font/woff2']]),
   ['/ui.js', ['public/ui.js', 'text/javascript; charset=utf-8']],
   ['/style.css', ['public/style.css', 'text/css; charset=utf-8']],
   ['/review.js', ['public/review.js', 'text/javascript; charset=utf-8']],
@@ -39,14 +43,12 @@ const staticFiles = new Map([
   ['/movement.js', ['public/movement.js', 'text/javascript; charset=utf-8']],
   ['/sound.js', ['public/sound.js', 'text/javascript; charset=utf-8']],
   ['/sound-model.js', ['public/sound-model.js', 'text/javascript; charset=utf-8']],
-  ['/sound.css', ['public/sound.css', 'text/css; charset=utf-8']],
   ['/audio/manifest.json', ['public/audio/manifest.json', 'application/json']],
   ...['theme', 'tension', 'effects'].flatMap(stem => [['ogg', 'audio/ogg'], ['mp3', 'audio/mpeg']]
     .map(([ext, type]) => [`/audio/${stem}.${ext}`, [`public/audio/${stem}.${ext}`, type]])),
   ['/map.json', ['public/imperial-map.json', 'application/json']],
   ['/expand.js', ['public/expand.js', 'text/javascript; charset=utf-8']],
   ['/voice.js', ['public/voice.js', 'text/javascript; charset=utf-8']],
-  ['/voice.css', ['public/voice.css', 'text/css; charset=utf-8']],
   // Installable web app: "Add to Home Screen" opens a chrome-free full-screen game (manifest-src falls under default-src 'self').
   ['/manifest.webmanifest', ['public/manifest.webmanifest', 'application/manifest+json']],
   ['/icon.svg', ['public/icon.svg', 'image/svg+xml']],
@@ -126,7 +128,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
       if(req.method==='GET' && staticFiles.has(path)) {
         const [file,type]=staticFiles.get(path);
         // Audio is large and versioned by ?v=<manifest hash>; let browsers keep it for a day.
-        if(type.startsWith('audio/'))res.setHeader('Cache-Control','public, max-age=86400');
+        if(type.startsWith('audio/') || type==='font/woff2')res.setHeader('Cache-Control','public, max-age=86400');
         res.writeHead(200,{'Content-Type':type}); res.end(readFileSync(resolve(root,file))); return;
       }
       if(req.method==='GET' && path==='/favicon.ico') {res.writeHead(204);res.end();return;}

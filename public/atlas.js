@@ -301,11 +301,11 @@ export class Atlas {
     const covered = Math.min(rect.width * .6, (this.insets?.left || 0) + (this.insets?.right || 0));
     return [rect.width > 0 ? Math.min(WORLD, rect.width / MAX_PX_PER_UNIT) : 135, rect.width > 0 ? WORLD * rect.width / (rect.width - covered) : WORLD];
   }
-  /** Optional (v0.8.1): screen px permanently covered by the host's panels ({left,right}). World view,
+  /** Optional (v0.8.1, v0.9 adds top): screen px permanently covered by the host's panels ({left,right,top}). World view,
    * the zoom-out limit and the copy chosen for counters and names use the uncovered part of the map. */
   setInsets(insets) {
-    const next = { left: Math.max(0, insets?.left || 0), right: Math.max(0, insets?.right || 0) };
-    if (this.insets && next.left === this.insets.left && next.right === this.insets.right) return;
+    const next = { left: Math.max(0, insets?.left || 0), right: Math.max(0, insets?.right || 0), top: Math.max(0, insets?.top || 0) };
+    if (this.insets && next.left === this.insets.left && next.right === this.insets.right && next.top === this.insets.top) return;
     this.insets = next; this.applyView();
   }
   applyView() {
@@ -340,8 +340,9 @@ export class Atlas {
     this.applyView();
   }
   world() {
-    const rect = this.svg.getBoundingClientRect(), [, maxW] = this.widthLimits(rect), l = this.insets?.left || 0;
-    this.view = { x: -l * maxW / (rect.width || 1), y: 0, w: maxW, h: 680 * maxW / WORLD }; this.applyView();
+    const rect = this.svg.getBoundingClientRect(), [, maxW] = this.widthLimits(rect), l = this.insets?.left || 0, t = this.insets?.top || 0;
+    // v0.9: the HUD frame's top bar (insets.top) is kept clear too, so the Arctic is not under the bar.
+    this.view = { x: -l * maxW / (rect.width || 1), y: -t * maxW / (rect.width || 1), w: maxW, h: 680 * maxW / WORLD }; this.applyView();
   }
   europe() { this.view = { x: 595, y: 105, w: 210, h: 111.6 }; this.applyView(); }
   /** Optional trailing `{ insets: {top,right,bottom,left} px, width: map units }`: centre the target in the

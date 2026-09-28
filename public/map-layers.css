@@ -13,7 +13,7 @@
 .bloc-band{fill:none;stroke-width:11;stroke-opacity:.42;stroke-linejoin:round;vector-effect:non-scaling-stroke}
 .atlas-v6[data-lod=far] .bloc-band{stroke-width:8}
 .bloc-line{fill:none;stroke-width:2;stroke-linejoin:round;stroke-opacity:.95;vector-effect:non-scaling-stroke}
-.alliance-label{font:700 15px var(--serif,Georgia,serif);letter-spacing:3.4px;text-anchor:middle;dominant-baseline:central;paint-order:stroke;stroke:#0d1c22;stroke-width:4;stroke-linejoin:round}
+.alliance-label{font:700 15px var(--map-serif,Georgia,serif);letter-spacing:3.4px;text-anchor:middle;dominant-baseline:central;paint-order:stroke;stroke:#0d1c22;stroke-width:4;stroke-linejoin:round}
 .alliance-pip{stroke:#0d1c22;stroke-width:1}
 .counter-bloc{pointer-events:none;stroke:#0d1c22;stroke-width:.6}
 /* War fronts: a crimson hatched band over the owner border; sea links only when no land contact. */
@@ -36,13 +36,13 @@
 .atlas-modes.at-top-left{left:calc(var(--atlas-map-left,0px) + var(--atlas-legend-inset));top:calc(var(--atlas-map-top,0px) + var(--atlas-legend-inset));flex-direction:column-reverse}
 .atlas-modes.at-top-right{right:calc(var(--atlas-map-right,0px) + var(--atlas-legend-inset));top:calc(var(--atlas-map-top,0px) + var(--atlas-legend-inset));align-items:flex-end;flex-direction:column-reverse}
 .atlas-modes.at-bottom-left,.atlas-modes.at-top-left{align-items:flex-start}
-.atlas-key-toggle{font:600 10px var(--sans,system-ui,sans-serif);letter-spacing:.6px;min-height:24px;padding:3px 9px;background:#0e222aee;color:#c9b27f;border:1px solid #5f716290;border-radius:12px;cursor:pointer}
+.atlas-key-toggle{font:600 10px var(--map-sans,system-ui,sans-serif);letter-spacing:.6px;min-height:24px;padding:3px 9px;background:#0e222aee;color:#c9b27f;border:1px solid #5f716290;border-radius:12px;cursor:pointer}
 .atlas-key-toggle[hidden]{display:none}
 .atlas-modes.collapsed .atlas-legend,.atlas-modes.collapsed:not(.empty) .atlas-mode-toggle{display:none}
 .atlas-modes>*{pointer-events:auto}
-.atlas-mode-toggle{font:600 11px var(--sans,system-ui,sans-serif);min-height:28px;padding:4px 10px;background:#0e222aee;color:#efe3c2;border:1px solid #b99d64a0;border-radius:2px;cursor:pointer}
+.atlas-mode-toggle{font:600 11px var(--map-sans,system-ui,sans-serif);min-height:28px;padding:4px 10px;background:#0e222aee;color:#efe3c2;border:1px solid #b99d64a0;border-radius:2px;cursor:pointer}
 .atlas-mode-toggle[aria-pressed=true]{background:#e2c993;color:#132831}
-.atlas-legend{display:flex;flex-direction:column;gap:3px;background:#0e222ae8;border:1px solid #5f716260;padding:7px 9px;font:11px var(--sans,system-ui,sans-serif);color:#e5dfca}
+.atlas-legend{display:flex;flex-direction:column;gap:3px;background:#0e222ae8;border:1px solid #5f716260;padding:7px 9px;font:11px var(--map-sans,system-ui,sans-serif);color:#e5dfca}
 .atlas-legend[hidden]{display:none}
 .atlas-legend b{font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:#c9b27f;margin-top:2px}
 .legend-item{display:flex;align-items:center;gap:7px;min-width:0}.legend-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -62,9 +62,9 @@
 .map-armies .hostile .army-arrow{stroke:#ffb49c;stroke-width:1.6}
 .map-armies .returning .army-arrow{stroke-dasharray:2 1.5}
 .map-armies .army-pill{fill:#0e1f26;stroke-width:1.4}
-.map-armies .army-count{font:750 10.5px var(--sans,system-ui,sans-serif);text-anchor:middle;fill:#fff3d2;stroke:none;paint-order:normal}
+.map-armies .army-count{font:750 10.5px var(--map-sans,system-ui,sans-serif);text-anchor:middle;fill:#fff3d2;stroke:none;paint-order:normal}
 .map-armies .moving-army:focus{outline:none}.map-armies .moving-army:focus .army-halo{stroke:#ffe1a0}
-.country-name{font:600 12.5px var(--serif,Georgia,serif);letter-spacing:2.6px;text-anchor:middle;dominant-baseline:central;fill:#fbf1d6;fill-opacity:.9;paint-order:stroke;stroke:#10252d;stroke-width:3.2;stroke-linejoin:round;stroke-opacity:.85}
+.country-name{font:600 12.5px var(--map-serif,Georgia,serif);letter-spacing:2.6px;text-anchor:middle;dominant-baseline:central;fill:#fbf1d6;fill-opacity:.9;paint-order:stroke;stroke:#10252d;stroke-width:3.2;stroke-linejoin:round;stroke-opacity:.85}
 .counter-leader{fill:none;stroke:#f3e2b5;stroke-opacity:.7;stroke-width:1;vector-effect:non-scaling-stroke}
 .map-counter.counter-merged{display:none}
 .map-cluster .counter-body{fill:#172b34;stroke-width:1.6}
@@ -72,7 +72,7 @@
 .map-cluster:focus{outline:none}.map-cluster:focus .counter-body{stroke:#ffe1a0}
 .map-cluster.owned .counter-body{stroke-width:2}
 .cluster-badge rect{fill:#d8b46a;stroke:#132831;stroke-width:1}
-.cluster-badge text{font:700 8.5px var(--sans,system-ui,sans-serif);fill:#132831;text-anchor:middle;dominant-baseline:central}
+.cluster-badge text{font:700 8.5px var(--map-sans,system-ui,sans-serif);fill:#132831;text-anchor:middle;dominant-baseline:central}
 .moving-army.engaged{display:none}
 /* Country view: small foreign columns keep their arrow; their numbers return when zoomed in. */
 .atlas-v6[data-lod=far] .moving-army.minor :is(text,.army-pill){display:none}
@@ -87,13 +87,13 @@
 .battle-attack-bar{transform-box:fill-box;transform-origin:left center}
 .battle-divider{fill:#10181b;transition:transform .4s ease}
 .battle-counter.resolved .battle-pulse{display:none}
-.battle-name{display:none;font:11px var(--serif,Georgia,serif);fill:#ffe3cf;text-anchor:middle;paint-order:stroke;stroke:#2a110e;stroke-width:3;stroke-linejoin:round;pointer-events:none}
+.battle-name{display:none;font:11px var(--map-serif,Georgia,serif);fill:#ffe3cf;text-anchor:middle;paint-order:stroke;stroke:#2a110e;stroke-width:3;stroke-linejoin:round;pointer-events:none}
 .battle-counter.named .battle-name{display:inline}
-.battle-value{font:750 12px var(--sans,system-ui,sans-serif);fill:#fffaf0;text-anchor:middle;dominant-baseline:central;pointer-events:none;paint-order:stroke;stroke:#10181b;stroke-width:3.2;stroke-linejoin:round}
+.battle-value{font:750 12px var(--map-sans,system-ui,sans-serif);fill:#fffaf0;text-anchor:middle;dominant-baseline:central;pointer-events:none;paint-order:stroke;stroke:#10181b;stroke-width:3.2;stroke-linejoin:round}
 .battle-swords{fill:none;stroke:#fff3d6;stroke-width:1.7;stroke-linecap:round;pointer-events:none;filter:drop-shadow(0 0 1px #10181b) drop-shadow(0 0 1px #10181b)}
 .battle-pulse{fill:none;stroke:#ff8a63;stroke-width:1.5;opacity:.55;transform-box:fill-box;transform-origin:center;animation:battle-pulse 1.4s ease-out infinite}
 .battle-counter.battle-hit .battle-body{animation:battle-hit .5s ease-out 2}
-.round-loss{font:800 11px var(--sans,system-ui,sans-serif);fill:#ff9a7a;text-anchor:middle;paint-order:stroke;stroke:#1b0d0b;stroke-width:2.5;animation:round-loss 1.2s ease-out forwards}
+.round-loss{font:800 11px var(--map-sans,system-ui,sans-serif);fill:#ff9a7a;text-anchor:middle;paint-order:stroke;stroke:#1b0d0b;stroke-width:2.5;animation:round-loss 1.2s ease-out forwards}
 @keyframes battle-pulse{from{transform:scale(1);opacity:.75}to{transform:scale(1.35,1.9);opacity:0}}
 @keyframes battle-hit{0%{fill-opacity:.55}100%{fill-opacity:0}}
 @keyframes round-loss{from{transform:translateY(4px);opacity:1}to{transform:translateY(-8px);opacity:0}}
@@ -108,7 +108,7 @@
 .fx-industry-down .fx-ring{stroke:#e0553b}
 .fx-smoke{fill:#6d5b55;opacity:.5;transform-box:fill-box;transform-origin:center;animation:fx-smoke 2.1s ease-out forwards}
 .fx-crack{fill:none;stroke:#ff6b4f;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;animation:fx-fade 2.1s ease-in forwards}
-.fx-level{font:800 11px var(--sans,system-ui,sans-serif);text-anchor:middle;paint-order:stroke;stroke:#10232b;stroke-width:3;fill:#f6dfa3;animation:fx-fade 2.1s ease-in forwards}
+.fx-level{font:800 11px var(--map-sans,system-ui,sans-serif);text-anchor:middle;paint-order:stroke;stroke:#10232b;stroke-width:3;fill:#f6dfa3;animation:fx-fade 2.1s ease-in forwards}
 .fx-industry-down .fx-level{fill:#ff9a82}
 .fx-fill{fill-opacity:.55;stroke:none;animation:fx-fill 2.2s ease-out forwards}
 .fx-outline{fill:none;stroke-width:3.2;stroke-linejoin:round;vector-effect:non-scaling-stroke;animation:fx-fade 2.2s ease-in forwards}
@@ -137,3 +137,17 @@
 .map-effect.still .fx-ring.fx-late,.map-effect.still .fx-smoke{display:none}
 @media(prefers-reduced-motion:reduce){.war-front-glow,.battle-pulse,.round-loss,.battle-counter.battle-hit .battle-body{animation:none!important}.battle-attack-bar,.battle-divider{transition:none!important}.battle-pulse{opacity:.5}}
 .atlas-v6:focus{outline:none}.atlas-v6:focus-visible{outline:2px solid #e2c993;outline-offset:-2px}
+
+/* Map rules moved from the v0.8 style.css (v0.9): the atlas keeps its own type, independent of the HUD theme. */
+:root{--map-serif:Georgia,'Times New Roman',serif;--map-sans:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+.province{cursor:pointer;stroke:#e7dfbd82;stroke-width:.75;vector-effect:non-scaling-stroke;fill-opacity:.88}.province:hover{fill-opacity:1}.province.selected{stroke:#ffe1a0;stroke-width:2.3;fill-opacity:1}.province.destination{stroke:#ffb896;stroke-width:2.5;fill-opacity:1}.province.neighbor{stroke:#f2e2b8;stroke-width:1.4}
+.atlas-grid path{stroke:#c4cfaa0d;stroke-width:.8;fill:none;vector-effect:non-scaling-stroke}.ocean-names text{fill:#c3cba64d;font:italic 12px var(--map-serif);letter-spacing:4px;text-anchor:middle}.sea-connections path{fill:none;stroke:#e0d5a444;stroke-width:1;stroke-dasharray:2 8;vector-effect:non-scaling-stroke}.sea-connections .selected-connection{stroke:#e8d8a496}
+.adjacent-connection{stroke:#ead8a56a;stroke-width:1;stroke-dasharray:3 5;fill:none;vector-effect:non-scaling-stroke}.target-connection{stroke:#ffe0a1;stroke-width:2;fill:none;vector-effect:non-scaling-stroke}.recruit-connection{stroke:#b6d0a6b0;stroke-width:1;stroke-dasharray:2 5;fill:none;vector-effect:non-scaling-stroke}
+.map-counter{cursor:pointer}.counter-body{fill:#172b34;stroke-width:1}.counter-stripe{pointer-events:none}.counter-value{font:650 11px var(--map-sans);fill:#fff0cd;text-anchor:middle;dominant-baseline:central;pointer-events:none}.map-counter.selected .counter-body{fill:#e2c993;stroke:#fff0b5;stroke-width:1.6}.map-counter.selected .counter-value{fill:#172730}.map-counter.destination .counter-body{stroke:#ffb396;stroke-width:2}.map-counter .province-name{font:11px var(--map-serif);fill:#f6ebcf;text-anchor:middle;paint-order:stroke;stroke:#16313a;stroke-width:3;stroke-linejoin:round;pointer-events:none}.industry-label{fill:#e5cf9e;font:700 9px var(--map-sans);paint-order:stroke;stroke:#132b34;stroke-width:2;pointer-events:none;text-anchor:middle}.map-counter.counter-hidden{visibility:hidden}.map-counter.counter-hidden:focus{visibility:visible}
+.moving-army path{stroke:#ffe0aa;stroke-width:1}.moving-army text{font:700 10px var(--map-sans);text-anchor:middle;fill:#fff0cb;paint-order:stroke;stroke:#16313a;stroke-width:2.5}.moving-army.hostile path{stroke:#ffd4b2;stroke-width:1.6}.army-trail{fill:none;stroke:#ead19d;stroke-opacity:.32;stroke-width:1;stroke-dasharray:4 6;vector-effect:non-scaling-stroke}.army-trail.returning{stroke:#c6d8b9;stroke-dasharray:2 5}
+@keyframes signal-arrive{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
+.atlas-tooltip{position:absolute;z-index:8;pointer-events:none;background:#0e222af5;border:1px solid #b99d64a0;padding:11px 14px;box-shadow:0 5px 25px #0004;max-width:255px;color:#eae6d4}.atlas-tooltip strong{display:block;font:19px var(--map-serif);margin-bottom:4px}.atlas-tooltip span{font-size:11px;color:#bfc8b5}
+.draft-arrow{fill:none;stroke:#ffe0a1;stroke-width:3;stroke-dasharray:7 5;vector-effect:non-scaling-stroke;filter:drop-shadow(0 0 2px #0009)}.draft-arrow.snapped{stroke-dasharray:none}
+.draft-label rect{fill:#10242bf2;stroke:#e0bc7c;stroke-width:1;vector-effect:non-scaling-stroke}.draft-label text{fill:#ffe9bd;font:700 11px var(--map-sans);text-anchor:middle}
+#map.command-drag .province:not(.neighbor):not(.selected){fill-opacity:.4}#map.command-drag .province.neighbor{stroke:#fff3cf;stroke-width:2.2;fill-opacity:1}
+.province.threatened{stroke:#ff6a4d;stroke-width:2}.map-counter.threatened .counter-body{stroke:#ff5a3c!important;stroke-width:2.6}

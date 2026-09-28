@@ -4,15 +4,17 @@ import { developmentForecast, coalitionForecast } from './insights.js';
 import { faction, insignia, icon, battleSignal } from './presentation.js';
 import { Atlas } from './atlas.js';
 import { escapeHTML as esc, syncOptions, setHTML, operationId, confirmAction } from './ui.js';
-import { WorldFeed, Herald, Notifier, presentHeadline } from './feed.js';
-import { viewerOf, commsItems, systemCopy, threadOf, countryThread, allianceThread, decisionsFor, attentionFor } from './feed-model.js';
+import { Herald, presentHeadline } from './feed.js';
+import { viewerOf, decisionsFor } from './feed-model.js';
+import { Comms } from './comms.js';
 import { LeaderboardPanel } from './leaderboard-panel.js';
 import { ExpandableMap } from './expand.js';
 // Relations and alliance colours: the same DOM-free helpers the atlas and agent tools use.
 import { relationsOf, allianceColors, threatening } from './relations.js';
 import { SoundBoard } from './sound.js';
-/* v0.8 — one map, two nouns. A PROVINCE (troops) opens the order card; a COUNTRY (diplomacy) opens the
- * country card; your own standard opens your alliance card. Each card has one primary action. */
+/* v0.9 — the War Room. One map, two nouns: a PROVINCE (troops) opens the order card; a COUNTRY (diplomacy)
+ * opens the country card; your own standard opens your alliance card. Each card has one primary action.
+ * Everything addressed to you arrives through Messages (comms.js): one button, one toast lane, one panel. */
 const time = n => `${Math.floor(Math.max(0,n)/60).toString().padStart(2,'0')}:${Math.floor(Math.max(0,n)%60).toString().padStart(2,'0')}`;
 const signed = n => `${n>=0?'+':''}${n.toFixed(1)}`;
 let identity;try{identity=JSON.parse(localStorage.getItem('coi.identity'));}catch{identity=null;}
@@ -22,13 +24,12 @@ let atlas, generation=0, pendingCommand=false, pollController=null, previewKey='
 let spectating=false, mapReadyFor=null;
 let messageCatchupComplete=false;
 const pastSides=new Set(); // coalitions this seat belonged to ("your alliance dissolved" still affects you)
-let worldFeed, herald, standings, expander, notifier;
+let comms, herald, standings, expander;
 // Selection: one or more of your provinces (sources) and a target province; or a moving army.
 let sources=[], target=null, armyId=null;
 // The one context card: { kind: 'province' | 'army' | 'country' | 'alliance', id }.
-let card=null, cardSize='peek', cardOpener=null, proposing=false, railItems=[];
+let card=null, cardSize='peek', cardOpener=null, proposing=false;
 let fraction=.5;try{const f=Number(localStorage.getItem('coi.fraction'));if(f>0 && f<=1)fraction=f;}catch{}
-const seenThreats=new Set();
 const compact=matchMedia('(max-width:1023px), (max-height:499px)');
 const country = id => map.countries.find(c=>c.id===id);
 const place = id => map.provinces.find(p=>p.id===id);
@@ -37,14 +38,18 @@ const sideName = id => state?.sides.find(s=>s.id===id)?.name || id;
 const namedSide = id => country(sideName(id))?.name || sideName(id);
 const myPlayer = () => state?.players.find(p=>p.id===state.you);
 const playerOf = id => state?.players.find(p=>p.id===id);
-const seatType = p => !p ? 'Unclaimed' : p.kind==='bot' || p.model?.startsWith('heuristic-') ? 'BOT' : p.kind==='agent' ? 'AI' : 'HUMAN';
+const seatType = p => !p ? 'Open' : p.kind==='bot' || p.model?.startsWith('heuristic-') ? 'Bot' : p.kind==='agent' ? 'AI' : 'Human';
 const atWar = (a,b) => Boolean(a && b && a!==b && (state?.wars || []).includes([a,b].sort().join(':')));
 const sameSide = (a,b) => Boolean(a && b && playerOf(a)?.side===playerOf(b)?.side);
 const mayEnter = (a,b) => !b || sameSide(a,b) || !state.rules.warRequired || atWar(a,b);
 const seated = () => Boolean(state?.you) && !spectating;
 const active = () => seated() && state.status==='running' && myPlayer()?.eliminatedAt===null;
 const neighbours = id => place(id)?.neighbors || [];
-function toast(message,error=false){$('toast').textContent=message;$('toast').className=error?'error':'';$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,6500);}
+/** ONE toast region: in a match the comms lane (a decision always wins the slot); elsewhere #toast. */
+function toast(message,error=false){
+  if(matchId && comms?.state && document.body.dataset.screen==='match' && !$('game').querySelector('#lobby:not([hidden])')){comms.flash(message,{error});return;}
+  $('toast').textContent=message;$('toast').className=`toast${error?' error':''}`;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,6500);
+}
 /** DOM helper: player text (alliance names, chat) only ever reaches textContent. */
 function el(tag,className,text){const e=document.createElement(tag);if(className)e.className=className;if(text!==undefined)e.textContent=text;return e;}
 function button(label,data={},className=''){const b=el('button',className,label);b.type='button';for(const [k,v] of Object.entries(data))b.dataset[k]=v;return b;}
@@ -73,81 +78,23 @@ function renderLeaderboard(){
   if(!box.hidden)standings.update(state,8); // v0.8: every power (≤8 seats) is one click from its country card
 }
 
-/* ── Read state: per item (a set of seqs per match and seat), never a single cursor. ── */
-const readKey=()=>`coi.read.${matchId}.${state?.you}`;
-function loadRead(){try{return new Set(JSON.parse(localStorage.getItem(readKey()) || '[]').filter(Number.isSafeInteger));}catch{return new Set();}}
-function saveRead(){try{localStorage.setItem(readKey(),JSON.stringify([...worldFeed.read].slice(-800)));}catch{}}
-const attention=()=>seated() && state.status!=='lobby'?attentionFor(state,railItems,worldFeed.read):[];
-
-/* ── History rail ── */
-function threatItems(){
-  const me=myPlayer();if(!me || spectating || state.status!=='running')return [];
-  return state.armies.filter(a=>threatening(state,a,state.you))
-    .map(a=>({id:`t-${a.id}`,seq:cursor,tick:a.departedAt ?? state.tick,type:'threat',country:a.country,to:a.to,amount:a.amount,arrivesAt:a.arrivesAt,threads:['mine'],army:a.id}));
+/* ── Read state: per item (a set of row keys per match and seat), never a single cursor. ── */
+const readKey=()=>`coi.comms.${matchId}.${state?.you || 'spectator'}`;
+function loadRead(){try{return new Set(JSON.parse(localStorage.getItem(readKey()) || '[]').map(String));}catch{return new Set();}}
+function saveRead(keys){try{localStorage.setItem(readKey(),JSON.stringify([...keys].slice(-1200)));}catch{}}
+/** Messages: the inbox, threads and toasts for this seat (spectators: the World thread, read-only). */
+function renderComms(live){
+  if(!state || state.status==='lobby'){comms.panel.hidden=true;comms.button.hidden=true;return;}
+  const room=`${matchId}:${state.you}`;
+  if(comms.room!==room){comms.reset();comms.room=room;comms.read=loadRead();}
+  comms.update(state,history,{live,readOnly:!seated() || state.status!=='running'});
 }
-function renderFeed(live){
-  const box=$('world-feed');box.hidden=!state || state.status==='lobby';
-  if(box.hidden)return;
-  if(worldFeed.room!==`${matchId}:${state.you}`){worldFeed.room=`${matchId}:${state.you}`;worldFeed.read=loadRead();}
-  railItems=commsItems(history,state.dominanceBreaks||[],{you:state.you});
-  const threats=threatItems(),fresh=worldFeed.update([...railItems,...threats.filter(t=>!worldFeed.keys.has(`e${t.id}`))],{live,you:state.you});
-  if(live)for(const item of fresh)noticeFor(item);
-  // A threat that turned back, was destroyed or arrived is withdrawn: no stale toast or "Incoming" row.
-  const current=new Set(threats.map(t=>t.army));
-  for(const army of seenThreats)if(!current.has(army)){notifier.withdraw(`et-${army}`);worldFeed.withdraw(`et-${army}`);seenThreats.delete(army);}
-  for(const t of threats)seenThreats.add(t.army);
-  renderReply();renderAttention();
-  // Collapsed rail = a one-line ticker of the latest row (text only; chat is player text).
-  const last=[...$('feed-list').children].reverse().find(li=>!li.classList.contains('feed-empty'));
-  const words=last?.querySelector('.feed-words b,.feed-chat b');
-  $('feed-ticker').textContent=words?`${words.textContent}: ${last.querySelector('.feed-detail,.feed-text')?.textContent || ''}`:'Headlines · chat · diplomacy';
-}
-function renderReply(){
-  const canSend=seated() && state.status==='running';
-  $('feed-form').hidden=!canSend;
-  const delay=Math.max(0,(state.commandBudget?.chatReadyAt || 0)-state.tick);
-  $('feed-send').disabled=!canSend || delay>0 || pendingCommand;
-  $('feed-cooldown').textContent=canSend && delay?`Chat ready in ${delay} game s (shared across channels)`:'';
-}
-/** The single HUD badge: decisions waiting plus unread private messages. */
-function renderAttention(){
-  const items=attention(),b=$('attention');b.hidden=!items.length;
-  $('attention-count').textContent=items.length?String(items.length):'';
-  const first=items[0];
-  b.setAttribute('aria-label',items.length?`${items.length} ${items.length===1?'thing needs':'things need'} you: open ${first.kind==='message'?`the message from ${first.card.kind==='alliance'?'your alliance':country(first.item.from).name}`:first.kind==='offer'?`the alliance offer from ${country(first.country).name}`:first.kind==='peace_offer'?'the peace offer':'the vote'}`:'Nothing needs you');
-  $('hud-standard').dataset.attention=String(items.length);
-}
-function openAttention(){
-  const first=attention()[0];
-  if(!first){openCard('alliance',null,{focus:true});return;}
-  if(first.card.kind==='country')openCard('country',first.card.id,{size:'full',focus:true,compose:first.kind==='message'});
-  else openCard('alliance',null,{size:'full',focus:true,compose:first.kind==='message'});
-}
-/** A compact notice for something addressed to this seat (never for catch-up items). */
-function noticeFor(item){
-  if(!seated())return;
-  if(item.type==='threat'){
-    if(item.arrivesAt-state.tick<=20)notifier.push({key:`e${item.id}`,kind:'decision',standard:item.country,title:`Incoming: ${item.amount} troops → ${place(item.to).name}`,
-      detail:`${country(item.country).name} arrives in ${Math.max(0,item.arrivesAt-state.tick)}s.`,buttons:[{label:'View',data:{feedProvince:item.to}}]});
-    return;
-  }
-  if(item.type==='message' && item.channel!=='world' && item.from!==state.you){
-    notifier.push({key:`e${item.id}`,kind:item.channel,standard:item.from,title:`${country(item.from).name}${item.channel==='alliance'?' · alliance':''}`,detail:String(item.text).split('\n')[0],
-      buttons:[item.channel==='dm'?{label:'Reply',data:{openCountry:item.from,compose:'1'},primary:true}:{label:'Open',data:{openAlliance:'1',compose:'1'},primary:true}]});
-    return;
-  }
-  if(!item.system || item.from===state.you)return;
-  const decision=decisionsFor(state).find(d=>d.id===(item.proposalId || item.motionId));
-  if(!decision)return;
-  const copy=systemCopy(item,{...feedNames,players:state.players.length});
-  const buttons=decision.kind==='offer'?[{label:'Accept',data:{act:'accept',arg:decision.id},primary:true},{label:'Decline',data:{act:'decline',arg:decision.id}},{label:'View',data:{openCountry:decision.country}}]
-    :decision.kind==='peace_offer'?[{label:'Accept peace',data:{act:'vote-peace',arg:decision.id},primary:true},{label:'View',data:{openCountry:decision.country}}]
-    :[{label:decision.kind==='war_vote'?'Approve war':'Approve peace',data:{act:decision.kind==='war_vote'?'vote-war':'vote-peace',arg:decision.id},primary:true},{label:'View',data:{openAlliance:'1'}}];
-  notifier.push({key:`e${item.id}`,kind:'decision',sticky:true,standard:item.from || item.fromRoster?.[0],title:decision.kind==='offer'?`Alliance offer from ${country(decision.country).name}: ${decision.proposal.name}`:copy.title,detail:copy.detail,buttons});
-}
-function openRail(){ // phones: the history is a sheet; it takes over from the card
-  if(compact.matches && card)closeCard();
-  if(!worldFeed.open)worldFeed.setOpen(true);
+/** Completed battles of this seat (Secured, Lost, Line held): a PERSONAL notice, never replayed on reconnect. */
+function battleNotices(){
+  const signal=signalCursor===null?null:battleSignal(state,history.filter(e=>e.id>signalCursor));
+  signalCursor=cursor;
+  if(signal && seated())comms.notify({key:`battle-${signal.tick}-${signal.province}`,standard:signal.tone==='lost'?null:state.you,title:`${signal.title} · ${place(signal.province).name}`,
+    detail:`${signal.troops} troops remain · ${time(signal.tick)}`,view:{province:signal.province}});
 }
 
 /* ── Transport ── */
@@ -158,33 +105,34 @@ async function request(path,method='GET',data,token=identity?.token){
 async function ensureIdentity(name, force=false){
   name=name.trim();if(!force && identity?.name===name)return;
   const profile=await request('/api/players','POST',{name},null);
-  generation++;pollController?.abort();review?.destroy();review=null;resetPresentation();identity=profile;cursor=0;history=[];worldFeed.reset();notifier.reset();messageCatchupComplete=false;localStorage.setItem('coi.identity',JSON.stringify(identity));showIdentity();
+  generation++;pollController?.abort();review?.destroy();review=null;resetPresentation();identity=profile;cursor=0;history=[];comms.reset();comms.room=null;messageCatchupComplete=false;localStorage.setItem('coi.identity',JSON.stringify(identity));showIdentity();
 }
 function startingSummary(c){
   if(!c)return 'All countries are taken. You can still observe.';
   const troops=c.start.reduce((n,id)=>n+(c.garrisons?.[id] ?? c.startTroops ?? 10),0);
   const production=c.start.reduce((n,id)=>n+(c.development?.[id] ?? 1),0)*3;
-  return `${c.start.length} holdings · ${troops} troops · ${production} recruits/min · ${c.colonies?.length || 0} colonial footholds. ${c.start.map(id=>place(id).name).join(' · ')}`;
+  return `${c.start.length} holdings · ${troops} troops · ${production} recruits a minute · ${c.colonies?.length || 0} colonies. ${c.start.map(id=>place(id).name).join(', ')}.`;
 }
 function setConnection(text){$('connection').textContent=text;$('hud-connection').textContent=text;}
 function showIdentity(){ $('identity').textContent=identity?.name || 'Observer';$('hud-identity').textContent=identity?.name || 'Observer';$('display-name').value=identity?.name || '';$('join-name').value=identity?.name || ''; }
 function options(id,values,current){syncOptions($(id),values,current);}
 async function rooms(){
   const data=await request('/api/games');
-  const sections=[['running','Games in progress','Spectate'],['lobby','Open rooms','Enter'],['finished','Completed games','Review']];
+  const sections=[['running','In progress','Watch'],['lobby','Open rooms','Enter'],['finished','Concluded','Review']];
+  const seats=g=>`${g.players.length}/8 seats · ${g.speed===1?'30 min':'5 min'}`;
   $('rooms').innerHTML=data.games.length?sections.map(([status,title,label])=>{
     const found=data.games.filter(g=>g.status===status);
-    return found.length?`<section class="room-group"><h3>${title} <small>${found.length}</small></h3>${found.map(g=>`<div class="room-card"><div><p>${esc(g.name)}</p><small>${g.players.length}/8 SEATS · ${g.speed===1?'30 MIN':'5 MIN'} · ${status==='running'?`${time(g.tick)} elapsed · `:''}${esc(g.id)}</small></div><div class="room-entry-actions">${status==='running' && g.you?`<button data-room="${esc(g.id)}" data-resume="true">Resume</button>`:''}<button data-room="${esc(g.id)}" data-spectate="${status==='running'}">${label} →</button></div></div>`).join('')}</section>`:'';
-  }).join(''):'<p class="muted">The chamber is empty. Open the first council.</p>';
+    return found.length?`<section class="room-group"><h3>${title} <small>${found.length}</small></h3>${found.map(g=>`<div class="room-card${status==='running'?' live':''}"><div><p>${esc(g.name)}</p><small>${seats(g)}${status==='running'?` · ${time(g.tick)} played`:''}</small></div><div class="room-entry-actions">${status==='running' && g.you?`<button class="btn btn-primary" data-room="${esc(g.id)}" data-resume="true" data-sfx="confirm">Resume</button>`:''}<button class="btn${status==='lobby'?' btn-primary':''}" data-room="${esc(g.id)}" data-spectate="${status==='running'}" data-sfx="press">${label}</button></div></div>`).join('')}</section>`:'';
+  }).join(''):'<p class="empty-note">No rooms yet. Open the first council.</p>';
   const standingsData=await request('/api/standings');
-  $('standings').innerHTML=standingsData.standings.length?standingsData.standings.map(p=>`<div class="standing-row"><span>${esc(p.name)} <small class="muted">${p.matches} ${p.matches===1?'match':'matches'}</small></span><b>${signed(p.prestige)}</b></div>`).join(''):'<p class="muted small">No decisive matches recorded yet. Results persist on this server.</p>';
+  $('standings').innerHTML=standingsData.standings.length?standingsData.standings.map(p=>`<div class="standing-row"><span>${esc(p.name)} <small class="muted">${p.matches} ${p.matches===1?'match':'matches'}</small></span><b>${signed(p.prestige)}</b></div>`).join(''):'<p class="empty-note">No results yet. Finish a match to earn Prestige.</p>';
 }
 function clearSelection(){sources=[];target=null;armyId=null;proposing=false;}
 async function openRoom(id,watch=false){
   generation++;pollController?.abort();review?.destroy();review=null;document.body.classList.remove('reviewing');
-  closeCard();closeMenu();pastSides.clear();seenThreats.clear();spectating=watch;messageCatchupComplete=false;herald.reset();worldFeed.reset();
-  resetPresentation();matchId=id;mapReadyFor=null;state=null;cursor=0;history=[];clearSelection();previewKey='';notifier.reset();
-  document.body.classList.add('in-game');atlas.world();
+  closeCard();closeMenu();pastSides.clear();spectating=watch;messageCatchupComplete=false;herald.reset();comms.reset();comms.room=null;
+  resetPresentation();matchId=id;mapReadyFor=null;state=null;cursor=0;history=[];clearSelection();previewKey='';
+  document.body.classList.add('in-game');document.body.dataset.screen='match';atlas.world();
   $('home').hidden=true;$('game').hidden=false;$('result').hidden=true;
   const url=new URL(location);url.searchParams.set('match',id);if(watch)url.searchParams.set('spectate','1');else url.searchParams.delete('spectate');url.hash='';window.history.replaceState({},'',url);
   const epoch=generation,loaded=await request(`/api/games/${id}/map`,'GET',undefined,watch?null:identity?.token);
@@ -211,7 +159,7 @@ async function poll(){
     }
     if(!state.hasMore)messageCatchupComplete=true;
     announce(liveDeclarations);sounds.update(state,liveDeclarations,live);
-    setConnection(state.status==='finished'?'Review':'Live');render();renderFeed(live);renderCard();coach();syncInsets();
+    setConnection(state.status==='finished'?'Review':'Live');render();renderComms(live);renderCard();coach();syncInsets();
   }catch(e){if(e.name!=='AbortError' && epoch===generation){setConnection('Reconnecting');toast(e.message,true);}}
   finally{if(polling===epoch)polling=false;}
 }
@@ -234,8 +182,7 @@ const safely=fn=>async event=>{if(event?.type==='submit')event.preventDefault();
 
 /* ── Map ── */
 function initMap(){
-  $('faction-parade').innerHTML=map.countries.map(c=>`<span>${insignia(c.id)}<b>${esc(faction(c.id).short)}</b></span>`).join('');
-  $('faction-choices').innerHTML=map.countries.map(c=>`<button type="button" data-country-seat="${c.id}" aria-pressed="false">${insignia(c.id)}<b>${esc(faction(c.id).short)}</b><small>${c.start.length} holdings</small></button>`).join('');
+  $('faction-choices').innerHTML=map.countries.map(c=>`<button type="button" data-country-seat="${c.id}" aria-pressed="false" data-sfx="press">${insignia(c.id)}<b>${esc(faction(c.id).short)}</b><small>${c.start.length} holdings</small></button>`).join('');
   atlas?.destroy();
   const previous=$('map'),replacement=previous.cloneNode(false);previous.replaceWith(replacement);
   // The map key (legend + Political/Diplomacy toggle) lives in the ☰ menu.
@@ -247,23 +194,23 @@ function initMap(){
     onArmy:id=>{const a=state?.armies.find(a=>a.id===id);if(!a)return false;armyId=id;sources=[];target=null;openCard('army',id);paintMap();return true;}});
   $('landing-map').innerHTML=map.provinces.map(p=>`<path d="${p.path}"/>`).join('');
 }
-/** Screen insets (px) covered by the HUD, rail and open card, so a camera move centres the target in the
- * map area that is actually visible (passed as the atlas's optional trailing argument). */
+/** Screen insets (px) covered by the HUD frame and open panels, so a camera move centres the target in the
+ * map area that is actually visible (the atlas's optional trailing argument). */
 function view(){
-  const stage=$('stage').getBoundingClientRect(),box=sel=>{const e=document.querySelector(sel);return e?.checkVisibility()?e.getBoundingClientRect():null;};
-  const hud=box('.hud-bar'),board=box('#leaderboard'),rail=compact.matches?null:box('.right-rail'),panel=box('#card'),ticker=box('#world-feed');
-  const sheet=panel && panel.width>stage.width*.8;
-  const top=Math.max(hud?hud.bottom-stage.top:0,compact.matches && board?board.bottom-stage.top:0);
-  const bottom=Math.max(sheet?stage.bottom-panel.top:0,compact.matches && ticker && ticker.top>stage.height/2?stage.bottom-ticker.top:0);
-  return {insets:{top,right:rail && rail.left>stage.width/2?stage.right-rail.left:0,left:panel && !sheet?panel.right-stage.left:0,bottom}};
+  const stage=$('stage').getBoundingClientRect(),vis=sel=>{const e=document.querySelector(sel);return e?.checkVisibility()?e.getBoundingClientRect():null;};
+  const hud=vis('#hud'),strip=vis('.strip'),panel=vis('#card'),dock=vis('.dock');
+  const side=[vis('#leaderboard'),vis('#comms'),vis('#hud-menu'),vis('#war-journal')].filter(r=>r && r.height>stage.height*.3);
+  const sheet=panel && panel.width>stage.width*.7,sideDock=dock && dock.height>dock.width;
+  const top=Math.max(0,...[hud,strip].filter(Boolean).map(r=>r.bottom-stage.top));
+  const right=Math.max(sideDock?stage.right-dock.left:0,...side.filter(r=>r.left>stage.left+stage.width/2).map(r=>stage.right-r.left));
+  const left=Math.max(panel && !sheet?panel.right-stage.left:0,...side.filter(r=>r.right<stage.left+stage.width/2).map(r=>r.right-stage.left));
+  const bottom=Math.max(sheet?stage.bottom-panel.top:0,dock && !sideDock?stage.bottom-dock.top:0);
+  return {insets:{top,right,left,bottom}};
 }
-/** Home: your country, close enough on phones to drag from a province counter. */
-/** Panels that stay over the map on wide screens (the right column): the atlas keeps the map beside them. */
+/** Panels that stay beside the map (the right column, the phone bars): world view and zoom-out use the rest. */
 function syncInsets(){
-  if(!atlas)return;const stage=$('stage').getBoundingClientRect(),rail=document.querySelector('.right-rail');
-  const box=!compact.matches && rail?.checkVisibility()?[...rail.children].filter(e=>e.checkVisibility()).map(e=>e.getBoundingClientRect()):[];
-  const left=box.length?Math.min(...box.map(r=>r.left)):stage.right;
-  atlas.setInsets({left:0,right:box.length?Math.max(0,stage.right-left):0});
+  if(!atlas)return;const {insets}=view();
+  atlas.setInsets({left:0,right:insets.right,top:insets.top});
 }
 function focusCountry(){if(state?.you)atlas.home(state.you,{...view(),width:compact.matches?Math.max(120,$('stage').clientWidth/2.8):undefined});}
 /** Phones: if the bottom sheet now covers the chosen province, pan (no zoom) so it sits above the sheet. */
@@ -397,10 +344,10 @@ function openCard(kind,id=null,{size,focus=false,compose=false}={}){
   if(coachStep===0 && kind==='province' || coachStep===1 && kind==='country'){coachStep++;showCoach();}
   const allied=myPlayer() && !myPlayer().side.startsWith('solo:');
   cardSize=size || (same?cardSize:kind==='country' || kind==='alliance' && allied?'full':'peek');
-  if(compact.matches && worldFeed.open)worldFeed.setOpen(false); // phones: one sheet at a time
+  if(compact.matches){setSheet(null);if(comms.view!=='closed')comms.close();} // phones: one sheet at a time
   renderCard();
   if(kind==='country' || kind==='alliance')atlas?.setRelationFocus?.(kind==='country'?id:state?.you || null);
-  if(compose && !$('composer').hidden)$('composer-text').focus({preventScroll:true});
+  if(compose)openMessages(kind==='country'?`dm:${id}`:'alliance');
   else if(focus)$('card-title').focus({preventScroll:true});
 }
 function closeCard({restoreFocus=false}={}){
@@ -440,6 +387,8 @@ function renderCard(){
   box.dataset.kind=card.kind;box.dataset.size=cardSize;box.dataset.relation='';
   $('card-size').setAttribute('aria-expanded',String(cardSize==='full'));$('card-size').setAttribute('aria-label',cardSize==='full'?'Show less':'Show more');
   const view={province:provinceCard,army:armyCard,country:countryCard,alliance:allianceCard}[card.kind]();
+  const kind=card.kind==='province'?(view.order?'Orders':'Province'):{army:'Army',country:'Country',alliance:'Your alliance'}[card.kind];
+  if($('card-kind').textContent!==kind){$('card-kind').textContent=kind;$('card-kind-icon').innerHTML=icon({province:view.order?'march':'land',army:'march',country:'seal',alliance:'ally'}[card.kind]);}
   part('card-flag',JSON.stringify(view.flag),()=>view.flag?flag(view.flag):null);
   $('card-title').textContent=view.title;
   part('card-sub',JSON.stringify(view.subKey ?? view.sub),()=>view.sub);
@@ -460,18 +409,11 @@ function renderCard(){
   }
   $('order-preview').hidden=!order || !(order.preview || order.why);
   if(order)$('order-preview').textContent=order.why || order.preview;
-  const composer=view.composer;
-  $('composer').hidden=!composer || cardSize!=='full';
-  if(composer){
-    $('composer').dataset.channel=composer.channel;$('composer').dataset.to=composer.to || '';
-    $('composer-text').placeholder=composer.placeholder;$('composer-label').textContent=composer.placeholder;
-    const delay=Math.max(0,(state.commandBudget?.chatReadyAt || 0)-state.tick);
-    $('composer-send').disabled=delay>0 || pendingCommand;$('composer-note').textContent=delay?`Chat ready in ${delay} game s`:composer.note || '';
-  }
   part('card-actions',JSON.stringify(view.actions.map(a=>[a.label,a.act,a.arg,a.primary,a.danger,a.disabled,a.id])),()=>view.actions.map(a=>{
     const b=button(a.label,{act:a.act,...(a.arg!==undefined?{arg:a.arg}:{})},`${a.primary?'primary':''}${a.danger?' danger':''}`);
     if(a.id)b.id=a.id;b.disabled=Boolean(a.disabled);return b;}));
-  $('card-dock').hidden=$('sources').hidden && $('amount-control').hidden && $('order-preview').hidden && $('composer').hidden && !view.actions.length;
+  $('card-dock').hidden=$('sources').hidden && $('amount-control').hidden && $('order-preview').hidden && !view.actions.length;
+  if(order){const pct=Math.round(fraction*100);$('amount-slider').style.setProperty('--fill',`${pct}%`);}
   if(card.kind==='province')paintMapDraftOnly();
 }
 function paintMapDraftOnly(){const plan=target && sources.length?orderPlan():null;atlas.setDraft(plan?{sources,to:target,label:plan.arrowLabel}:null);}
@@ -600,9 +542,10 @@ function countryCard(){
   }
   if(note)status.append(el('small','card-note',note));
   const sub=[el('span','card-meta',p?`${seatType(p)} · ${p.displayName || p.name}`:'Unclaimed')];
+  // Talking lives in Messages: a secondary "Message" opens the thread with this country.
+  if(can && !actions.some(a=>a.act==='compose'))actions.push({label:'Message',act:'compose'});
   return {flag:id,title:c.name,sub,subKey:[p?.displayName,p?.name,seatType(p)],status,statusKey:[rel,troops,land.length,side?.id,side?.name,side?.members,enemies,note],relation:rel,
-    composer:can?{channel:'dm',to:id,placeholder:`Message ${c.name}…`,note:'Only you and they can read this.'}:null,
-    more:seated() && id!==state.you?()=>renderThread(countryThread(railItems,id),`No messages with ${c.name} yet.${can?' Say hello below.':''}`,proposing?proposalForm(id):null):null,actions};
+    more:proposing && can?()=>renderProposal(id):null,actions};
 }
 function proposalForm(id){
   const me=myPlayer(),joining=me.side.startsWith('solo:');
@@ -634,30 +577,14 @@ function allianceCard(){
   const votes=decisionsFor(state).filter(d=>d.kind.endsWith('_vote'));
   const actions=votes.map((d,i)=>({label:`${d.kind==='war_vote'?'Approve war on':'Approve peace with'} ${d.motion.toRoster.map(id=>country(id).name).join(' + ')}`,act:d.kind==='war_vote'?'vote-war':'vote-peace',arg:d.id,primary:i===0,id:i===0?'primary':undefined,danger:d.kind==='war_vote',disabled:pendingCommand}));
   if(side && active())actions.push({label:'Leave alliance',act:'leave',danger:true,disabled:pendingCommand || state.departures?.some(d=>d.country===state.you)});
-  const empty=side?'No alliance messages yet.':'You are independent. Select a country — on the leaderboard or a province’s owner — to propose an alliance.';
   return {flag:state.you,title:side?side.name:country(state.you).name,sub:[el('span','card-meta',side?`${side.members.length} members · your alliance`:'Your country · no alliance')],subKey:[side?.id,side?.members.length],
     status,statusKey:[side?.id,side?.name,members,team?.economy,state.economyThreshold,projection?.projectedPrestige,forming?.id,enemies,state.projections.map(p=>p.maturity)],relation:side?'ally':'',
-    composer:side && active()?{channel:'alliance',placeholder:'Message your alliance…',note:state.rules.revealAllianceChatAfterMatch?'Alliance chat becomes public in the replay after the match ends.':'Only members can read this.'}:null,
-    more:side?()=>renderThread(allianceThread(railItems,side.id),empty):null,actions};
+    more:null,actions:[...(side && active()?[{label:'Alliance chat',act:'compose',primary:!actions.some(a=>a.primary),id:actions.some(a=>a.primary)?undefined:'primary'}]:[]),...actions]};
 }
-/** A conversation inside a card: chat and diplomatic rows (text only). Shown rows count as read. */
-function renderThread(items,empty,extra=null){
-  const body=$('card-body'),key=JSON.stringify([items.map(i=>i.seq),empty,Boolean(extra),card?.id]);
-  if(body.dataset.key!==key){
-    body.dataset.key=key;
-    const list=el('ol','thread');
-    for(const item of items.slice(-40)){
-      const li=el('li',`thread-row${item.from===state.you?' mine':''}`);li.dataset.seq=String(item.seq);
-      if(item.type==='message'){const head=el('header');head.append(flag(item.from),el('b','',item.from===state.you?'You':country(item.from).name),el('time','',time(item.tick)));li.append(head,el('p','thread-text',item.text));}
-      else{const copy=systemCopy(item,{...feedNames,players:state.players.length});li.classList.add('thread-system');li.append(el('b','',copy.title),el('span','',` · ${time(item.tick)} · ${copy.detail}`));}
-      list.append(li);
-    }
-    body.replaceChildren(...(extra?[extra]:[]),...(items.length?[list]:[el('p','thread-empty',empty)]));
-    list.scrollTop=list.scrollHeight;
-  }
-  // Seen in an open, expanded card = read (per item).
-  const fresh=worldFeed.markRead(items.filter(i=>i.from!==state.you).map(i=>i.seq));
-  if(fresh.length){renderAttention();if(fresh.some(seq=>notifier.current?.key===`e${seq}`))notifier.dismiss();}
+/** The alliance-offer form (name + terms) in the expanded country card. */
+function renderProposal(id){
+  const body=$('card-body'),key=`proposal:${id}`;if(body.dataset.key===key)return;
+  body.dataset.key=key;body.replaceChildren(proposalForm(id));
 }
 
 /* ── HUD ── */
@@ -665,21 +592,24 @@ function renderHud(){
   const me=myPlayer(),team=state.sides.find(s=>s.id===me?.side);
   const land=state.provinces.filter(p=>p.owner===state.you && state.you);
   const troops=land.reduce((n,p)=>n+p.troops,0)+state.armies.filter(a=>a.country===state.you).reduce((n,a)=>n+a.amount,0);
+  const enemies=me?relationsOf(state,state.you).enemies.length:0;
   $('commander-title').textContent=country(state.you)?.name || (state.status==='running'?'Spectating':'Observer');
   setHTML($('commander-insignia'),insignia(state.you));
-  $('commander-side').textContent=me?(me.eliminatedAt!==null?'Eliminated':me.side.startsWith('solo:')?'Independent':namedSide(me.side)):'';
+  $('commander-side').textContent=me?(me.eliminatedAt!==null?'Fallen':`${me.side.startsWith('solo:')?'Independent':namedSide(me.side)}${enemies?` · at war with ${enemies}`:''}`):'Watching';
   $('hud-standard').disabled=!me || spectating;
   $('hud-standard').setAttribute('aria-label',me && !spectating?`${country(state.you).name}: your alliance and diplomacy`:'Spectating');
-  const stat=(name,label,value,title)=>`<span class="stat" title="${esc(title)}">${icon(name)}<span class="sr-only">${esc(label)} </span><b>${value}</b></span>`;
+  const economy=team?.economy ?? 0,threshold=state.economyThreshold || 1;
+  const stat=(name,label,value,title,extra='')=>`<span class="stat" title="${esc(title)}">${icon(name)}<span><b>${value}</b><small>${esc(label)}</small></span>${extra}</span>`;
   const holdings=state.you?land.length:state.provinces.filter(p=>p.owner).length,forces=state.you?troops:state.provinces.reduce((n,p)=>n+p.troops,0);
-  setHTML($('operations'),stat('military',state.you?'Forces':'Troops on the map',forces,state.you?'Your troops: garrisons and armies':'All garrisoned troops')+
-    stat('land',state.you?'Holdings':'Provinces held',`${holdings}<small>/${state.provinces.length}</small>`,`${state.you?'Your holdings':'Provinces held by all powers'}: ${holdings} of ${state.provinces.length}`));
+  setHTML($('operations'),stat('troops',state.you?'troops':'troops on the map',forces,state.you?'Your troops: garrisons and armies':'All garrisoned troops')+
+    stat('land','provinces',`${holdings}<small>/${state.provinces.length}</small>`,`${state.you?'Your provinces':'Provinces held'}: ${holdings} of ${state.provinces.length}`)+
+    (me?stat('industry','industry to win',`${economy}<small>/${threshold}</small>`,`Your side's industry: ${economy} of the ${threshold} needed`,`<i class="gauge"><i style="width:${Math.min(100,Math.round(100*economy/threshold))}%"></i></i>`):''));
   const dominant=Object.entries(state.dominance)[0];
-  document.querySelector('.campaign-bar').classList.toggle('victory-warning',Boolean(dominant) && state.status==='running');
+  document.querySelector('.clock-plaque').classList.toggle('victory-warning',Boolean(dominant) && state.status==='running');
   $('victory-status').setAttribute('role','timer');$('victory-status').setAttribute('aria-live','off');
-  const economy=team?.economy ?? 0;
+  const leader=[...state.sides].sort((a,b)=>b.economy-a.economy)[0];
   $('victory-status').textContent=dominant && state.status==='running'?`${namedSide(dominant[0])} wins in ${state.rules.hold-(state.tick-dominant[1])}s unless stopped`:
-    me?`Industry ${economy}/${state.economyThreshold} · hold ${state.rules.hold}s to win`:`${state.economyThreshold} industry held ${state.rules.hold}s wins`;
+    leader?`Win: ${threshold} industry for ${state.rules.hold}s · ${namedSide(leader.id)} leads with ${leader.economy}`:`${threshold} industry held ${state.rules.hold}s wins`;
 }
 
 /* ── Rendering ── */
@@ -722,30 +652,23 @@ function resetPresentation(){
   signalCursor=null;clearTimeout(toastTimer);$('toast').hidden=true;
   toggleJournal(false);
 }
-function toggleJournal(open){
-  $('war-journal').hidden=!open;$('journal-toggle').setAttribute('aria-expanded',String(open));
-}
-/** Fresh completed battles of this seat (Secured, Lost, Line held): a compact toast, never replayed. */
-function battleNotices(){
-  const signal=signalCursor===null?null:battleSignal(state,history.filter(e=>e.id>signalCursor));
-  signalCursor=cursor;
-  if(signal && seated())notifier.push({key:`battle-${signal.tick}-${signal.province}`,kind:signal.tone==='lost'?'decision':'battle',title:`${signal.title} · ${place(signal.province).name}`,
-    detail:`${signal.troops} troops remain after the battle · ${time(signal.tick)}`,buttons:[{label:'View',data:{feedProvince:signal.province}}]});
-}
 function renderLobby(){
+  const chosen=$('country-choice').value;
   for(const b of $('faction-choices').querySelectorAll('button')){
     const id=b.dataset.countrySeat,occupant=state.players.find(p=>p.id===id);
-    b.disabled=Boolean(occupant);b.setAttribute('aria-pressed',String($('country-choice').value===id));
+    b.disabled=Boolean(occupant);b.setAttribute('aria-pressed',String(chosen===id || occupant?.id===state.you && Boolean(state.you)));
     b.title=occupant?`${seatType(occupant)} · ${occupant.displayName || occupant.name}`:startingSummary(country(id));
     b.querySelector('small').textContent=occupant?`${seatType(occupant)} · ${occupant.displayName || occupant.name}`:`${country(id).start.length} holdings`;
   }
   $('lobby').hidden=state.status!=='lobby';$('join-form').hidden=Boolean(state.you);
-  options('country-choice',map.countries.filter(c=>!state.players.some(p=>p.id===c.id)).map(c=>({value:c.id,label:c.name})),$('country-choice').value);
+  if(chosen && state.players.some(p=>p.id===chosen))$('country-choice').value='';
   $('host-controls').hidden=!state.isHost;$('fill-bots').disabled=state.players.length===8;$('start-match').disabled=state.players.length<2 || !state.you;
-  const selected=country($('country-choice').value);
-  $('starting-holdings').textContent=state.you?'':startingSummary(selected);
-  $('join-form').querySelector('button').disabled=!selected;
-  $('lobby-note').textContent=state.you?`You command ${country(state.you).name}. ${state.isHost?'Invite players, attach agents, or add bots. You control when play begins.':'Waiting for the host to start.'}`:'You are observing. Choose an open country above to join.';
+  const selected=country(state.you || $('country-choice').value);
+  const head=selected?`${insignia(selected.id)}<div><h3>${esc(selected.name)}</h3><p>${state.you?'Your country':`${selected.start.length} holdings · ${selected.homeland?.length || 0} homeland, ${selected.colonies?.length || 0} colonies`}</p></div>`:`${insignia(null)}<div><h3>Pick a standard</h3><p>Choose an open country from the rack.</p></div>`;
+  if($('dossier-head').dataset.key!==head){$('dossier-head').dataset.key=head;setHTML($('dossier-head'),head);} // country names are authored map data
+  $('starting-holdings').textContent=selected?startingSummary(selected):'Industrial homelands, colonial footholds. Unequal strengths, the same rules.';
+  $('join-form').querySelector('button').disabled=!country($('country-choice').value);
+  $('lobby-note').textContent=state.you?`You command ${country(state.you).name}. ${state.isHost?'Invite players, attach agents or add bots, then start.':'Waiting for the host to start.'}`:`${state.players.length}/8 seats taken. Choose an open country to join.`;
 }
 /** One sound control: in the ☰ menu during a live room, in the masthead on the home page and in review. */
 function placeSound(){
@@ -758,20 +681,20 @@ function render(){
   document.body.dataset.status=state.status;
   if(state.status!=='running' && card)closeCard();
   document.querySelector('.scenario-note').textContent=map.notice;
-  $('game-name').textContent=state.name;$('lobby-room').textContent=state.name;$('room-label').textContent=`COUNCIL ${state.id.toUpperCase()} · ${state.eligible?'LEAGUE · ':''}${state.players.length}/8 SEATS`;
+  $('game-name').textContent=state.name;$('lobby-room').textContent=state.name;$('room-label').textContent=`${state.eligible?'League · ':''}${state.players.length}/8 seats`;
   renderLobby();
-  $('phase').textContent=state.status==='lobby'?'ASSEMBLING':state.status==='finished'?'CONCLUDED':seated()?'IN SESSION':'SPECTATING';
-  $('clock').textContent=`${time(state.tick)} / 30:00`;$('pace-badge').textContent=state.speed===1?'STANDARD · 1×':`QUICK · ${state.speed}×`;
+  $('phase').textContent=state.status==='lobby'?'Assembling':state.status==='finished'?'Concluded':seated()?'In session':'Watching';
+  $('clock').textContent=time(state.tick);$('clock-total').textContent=`/ ${time(state.rules.duration ?? 1800)}`;$('pace-badge').textContent=state.speed===1?'Standard pace':`Quick · ${state.speed}×`;
   placeSound();battleNotices();
   paintMap();renderHud();renderResult();renderLeaderboard();
   $('events').innerHTML=history.map(e=>({e,description:describe(e)})).filter(x=>x.description).slice(-30).reverse().map(({e,description})=>`<div class="event"><time>${time(e.tick)}</time>${esc(description)}</div>`).join('');
 }
-async function home(){resetPresentation();sounds.leave();review?.destroy();review=null;closeCard();closeMenu();expander.set(false,{fromBrowser:true});document.body.classList.remove('reviewing','spectating');generation++;pollController?.abort();document.body.classList.remove('in-game');matchId=null;state=null;spectating=false;herald.reset();worldFeed.reset();notifier.reset();messageCatchupComplete=false;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');placeSound();await rooms();}
+async function home(){resetPresentation();sounds.leave();review?.destroy();review=null;closeCard();closeMenu();setSheet(null);expander.set(false,{fromBrowser:true});document.body.classList.remove('reviewing','spectating');generation++;pollController?.abort();document.body.classList.remove('in-game');document.body.dataset.screen='home';delete document.body.dataset.status;matchId=null;state=null;spectating=false;herald.reset();comms.reset();comms.room=null;messageCatchupComplete=false;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');placeSound();await rooms();}
 
 /* ── First-match coach marks: three tips, dismissible, stored per browser. ── */
 const COACH=[['card-anchor','Drag from your province to a neighbour to attack — or tap your province, then the target. One button sends.'],
-  ['leaderboard','Tap a country — a standard here, a leaderboard row or a province’s owner — to talk, ally or declare war.'],
-  ['hud-standard','Your standard opens your alliance. The ⚑ beside it counts what needs you: tap it to answer.']];
+  ['leaderboard','Tap a country — a standard on the Powers list or a province’s owner — to talk, ally or declare war.'],
+  ['hud-standard','The Messages button counts what needs you: red for decisions, brass for unread. Press C to open it.']];
 let coachStep=-1;
 function coachDone(){try{return localStorage.getItem('coi.coach')==='done';}catch{return true;}}
 function coach(){
@@ -801,7 +724,7 @@ async function perform(act,arg,b){
     case 'route':{const r=await command({type:'route',from:sources[0],to:arg || null});if(r)toast(arg?'Recruitment arrow queued.':'Arrow removal queued.');return;}
     case 'route-clear':{const r=await command({type:'route',from:arg,to:null});if(r)toast('Arrow removal queued.');return;}
     case 'draft':{sources=[arg];target=b.dataset.to;fraction=1;openCard('province',target);paintMap();toast('Transfer drafted; review the garrison before sending.');return;}
-    case 'compose':setCardSize('full');$('composer-text').focus();return;
+    case 'compose':openMessages(card?.kind==='country'?`dm:${card.id}`:'alliance');return;
     case 'propose':proposing=true;setCardSize('full');$('card-body').dataset.key='';renderCard();$('coalition-name')?.focus();$('coalition-name')?.select();return;
     case 'send-offer':{
       const id=card.id,name=$('coalition-name')?.value || `${faction(state.you).short}–${faction(id).short} Pact`;
@@ -827,74 +750,89 @@ $('create-form').addEventListener('submit',safely(async()=>{await ensureIdentity
 $('join-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('join-name').value);await request(`/api/games/${matchId}/join`,'POST',{country:$('country-choice').value,kind:'human'});await poll();toast('Your seat is reserved.');}));
 $('fill-bots').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/bots`,'POST',{});await poll();}));
 $('start-match').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/start`,'POST',{});await poll();toast('The council is in session.');}));
-$('country-choice').addEventListener('change',()=>{const c=country($('country-choice').value);$('starting-holdings').textContent=startingSummary(c);if(state)renderLobby();});
 $('amount-slider').addEventListener('input',()=>{fraction=Math.max(.01,Math.min(1,Number($('amount-slider').value)/100));try{localStorage.setItem('coi.fraction',String(fraction));}catch{}if(state){renderCard();paintMapDraftOnly();}});
-$('feed-form').addEventListener('submit',safely(async()=>{
-  const text=$('feed-text').value;if(!text.trim())return;
-  const r=await command({type:'chat',channel:'world',text});if(r)$('feed-text').value='';
-}));
-$('composer').addEventListener('submit',safely(async()=>{
-  const text=$('composer-text').value,channel=$('composer').dataset.channel;if(!text.trim() || !channel)return;
-  const r=await command({type:'chat',channel,...(channel==='dm'?{to:$('composer').dataset.to}:{}),text});if(r)$('composer-text').value='';
-}));
-$('feed-toggle').addEventListener('click',()=>{
-  const open=!worldFeed.open;if(open)openRail();else worldFeed.setOpen(false);
-  try{localStorage.setItem('coi.feed',open?'open':'collapsed');}catch{}
-});
 $('lb-toggle').addEventListener('click',()=>{
   const open=!standings.open;standings.setOpen(open);
   try{localStorage.setItem('coi.leaderboard',open?'open':'collapsed');}catch{}
 });
 for(const b of document.querySelectorAll('[data-lb-mode]'))b.addEventListener('click',()=>{standings.setMode(b.dataset.lbMode);if(state)renderLeaderboard();});
 $('back').addEventListener('click',safely(home));$('refresh-rooms').addEventListener('click',safely(rooms));
-for(const b of document.querySelectorAll('[data-share]'))b.addEventListener('click',safely(async()=>{closeMenu();try{await navigator.clipboard.writeText(location.href);toast('Room link copied. It contains no credentials.');}catch{prompt('Copy this room link. It contains no credentials:',location.href);}}));
-const changeIdentity=safely(async()=>{closeMenu();const name=prompt('Create a separate local player identity. Existing results stay with the old identity. Enter a new display name:');if(name?.trim()){await ensureIdentity(name,true);if(matchId)await poll();}});
+for(const b of document.querySelectorAll('[data-share]'))b.addEventListener('click',safely(async()=>{closeMenu();try{await navigator.clipboard.writeText(location.href);toast('Room link copied.');}catch{prompt('Copy this room link:',location.href);}}));
+const changeIdentity=safely(async()=>{closeMenu();const name=prompt('Play under a new name? Your results stay with the old one. New display name:');if(name?.trim()){await ensureIdentity(name,true);if(matchId)await poll();}});
 $('account-button').addEventListener('click',changeIdentity);$('menu-identity').addEventListener('click',changeIdentity);
 $('zoom-in').onclick=()=>atlas.zoom(.7);$('zoom-out').onclick=()=>atlas.zoom(1.4);
-$('world-view').onclick=()=>{closeMenu();atlas.world();};$('europe-view').onclick=()=>{closeMenu();atlas.europe();};$('home-view').onclick=focusCountry;
+$('world-view').onclick=()=>{closeMenu();atlas.world();};$('europe-view').onclick=()=>{closeMenu();atlas.europe();};$('home-view').onclick=focusCountry;$('world-button').onclick=()=>atlas.world();
 // Expand map: real fullscreen where available, a CSS pseudo-fullscreen otherwise (iPhone Safari).
 expander=new ExpandableMap($('stage'),$('map-expand'),{label:'map',target:document.documentElement,escape:false,iconOnly:true,onChange:on=>{
-  $('fullscreen-toggle').setAttribute('aria-pressed',String(on));$('fullscreen-toggle').textContent=on?'Exit expanded map':'Expand map (full screen)';
-  requestAnimationFrame(()=>atlas?.layout());
+  $('fullscreen-toggle').setAttribute('aria-pressed',String(on));$('fullscreen-toggle').textContent=on?'Exit expanded map':'Expand map';
+  requestAnimationFrame(()=>{atlas?.layout();syncInsets();});
 }});
 $('fullscreen-toggle').addEventListener('click',()=>{closeMenu();expander.toggle();});
+/* Menu, war log and the phones' Powers sheet share one place (the right column / the sheet): one at a time. */
 function closeMenu(focus=false){
   if($('hud-menu').hidden)return;
-  $('hud-menu').hidden=true;$('menu-button').setAttribute('aria-expanded','false');if(focus)$('menu-button').focus();
+  $('hud-menu').hidden=true;$('menu-button').setAttribute('aria-expanded','false');syncDock();if(focus)$('menu-button').focus();
+  requestAnimationFrame(syncInsets);
 }
-function openMenu(){$('hud-menu').hidden=false;$('menu-button').setAttribute('aria-expanded','true');$('hud-menu').querySelector('button').focus();}
+function openMenu(){setSheet(null);if(compact.matches && comms.view!=='closed')comms.close();$('hud-menu').hidden=false;$('menu-button').setAttribute('aria-expanded','true');syncDock();$('hud-menu').querySelector('button').focus();}
+function toggleJournal(open){
+  $('war-journal').hidden=!open;$('journal-toggle').setAttribute('aria-expanded',String(open));
+  if(open)$('journal-close').focus();requestAnimationFrame(syncInsets);
+}
+/** Phones: the Powers list is a sheet opened from the dock (null closes it). */
+function setSheet(which){
+  $('leaderboard').classList.toggle('sheet',which==='powers');
+  if(which==='powers')standings.setOpen(true);
+  syncDock();requestAnimationFrame(syncInsets);
+}
+function syncDock(){
+  const sheet=$('leaderboard').classList.contains('sheet')?'powers':!$('hud-menu').hidden?'menu':'map';
+  for(const b of document.querySelectorAll('[data-dock]'))b.setAttribute('aria-pressed',String(b.dataset.dock===sheet));
+}
+/** Open Messages on one conversation (a country card's "Message", your alliance chat). */
+function openMessages(key){if(compact.matches){closeCard();setSheet(null);closeMenu();}comms.openThread(key,{focusComposer:true});}
 $('menu-button').addEventListener('click',()=>{if($('hud-menu').hidden)openMenu();else closeMenu(true);});
+$('menu-close').addEventListener('click',()=>closeMenu(true));
 $('card-close').addEventListener('click',()=>closeCard({restoreFocus:true}));
 $('card-size').addEventListener('click',()=>setCardSize(cardSize==='full'?'peek':'full'));
 $('hud-standard').addEventListener('click',()=>{if(card?.kind==='alliance')closeCard({restoreFocus:true});else openCard('alliance',null,{focus:true});});
-$('attention').addEventListener('click',openAttention);
+for(const b of document.querySelectorAll('[data-dock]'))b.addEventListener('click',()=>{
+  const which=b.dataset.dock;closeCard();if(comms.view!=='closed')comms.close();
+  if(which==='menu'){if($('hud-menu').hidden)openMenu();else closeMenu();return;}
+  closeMenu();setSheet(which==='powers' && !$('leaderboard').classList.contains('sheet')?'powers':null);
+});
 // Phones: drag the sheet's head down to close it, up to expand it.
 let sheetDrag=null;
-$('card').querySelector('.card-head').addEventListener('pointerdown',event=>{if(!compact.matches || event.target.closest('button'))return;sheetDrag={y:event.clientY};});
-$('card').querySelector('.card-head').addEventListener('pointerup',event=>{if(!sheetDrag)return;const dy=event.clientY-sheetDrag.y;sheetDrag=null;if(dy>40){if(cardSize==='full')setCardSize('peek');else closeCard();}else if(dy<-40)setCardSize('full');});
+$('card').querySelector('.card-plaque').addEventListener('pointerdown',event=>{if(!compact.matches || event.target.closest('button'))return;sheetDrag={y:event.clientY};});
+$('card').querySelector('.card-plaque').addEventListener('pointerup',event=>{if(!sheetDrag)return;const dy=event.clientY-sheetDrag.y;sheetDrag=null;if(dy>40){if(cardSize==='full')setCardSize('peek');else closeCard();}else if(dy<-40)setCardSize('full');});
 document.addEventListener('keydown',event=>{
   if(!state || document.body.classList.contains('reviewing') || event.ctrlKey || event.metaKey || event.altKey || $('confirm-dialog').open)return;
   const typing=event.target.closest('input,select,textarea,dialog');
-  // Escape closes the top-most layer: coach tip, banner, menu, war log, card (and its selection), expanded map.
+  // Escape closes the top-most layer: coach tip, banner, menu, war log, Messages thread/panel, card, Powers sheet, expanded map.
   if(event.key==='Escape' && (!typing || event.target.closest('#card'))){
+    if(event.target.closest('.cx-toast'))return; // the toast handles its own Escape (dismiss)
     if(!$('coach').hidden)endCoach();
     else if(herald.dismiss()){}
     else if(!$('hud-menu').hidden)closeMenu(true);
     else if(!$('war-journal').hidden){toggleJournal(false);$('menu-button').focus();}
+    else if(comms.view==='thread' || comms.view==='list' && !comms.docked()){comms.key(event);}
     else if(card)closeCard({restoreFocus:true});
+    else if($('leaderboard').classList.contains('sheet'))setSheet(null);
     else if(expander.on)expander.set(false);
     else{clearSelection();paintMap();}
     return;
   }
   if(typing)return;
-  if(event.key.toLowerCase()==='j'){toggleJournal($('war-journal').hidden);return;}
-  if(event.key.toLowerCase()==='c')focusCountry();
+  const key=event.key.toLowerCase();
+  if(['c','j','k'].includes(key) && !event.shiftKey){if(key!=='c' && comms.view==='closed')return;if(comms.key(event))event.preventDefault();return;}
+  if(key==='l'){toggleJournal($('war-journal').hidden);return;}
+  if(key==='h')focusCountry();
   if(event.key==='m')atlas.setMapMode(atlas.mode==='diplomacy'?'political':'diplomacy');  // Shift+M is the sound mute
-  if(event.key.toLowerCase()==='q')atlas.zoom(1.25);
-  if(event.key.toLowerCase()==='e')atlas.zoom(.8);
+  if(key==='q')atlas.zoom(1.25);
+  if(key==='e')atlas.zoom(.8);
 });
 document.addEventListener('pointerdown',event=>{
-  if(!$('hud-menu').hidden && !event.target.closest('#hud-menu,#menu-button'))closeMenu();
+  if(!$('hud-menu').hidden && !compact.matches && !event.target.closest('#hud-menu,#menu-button,.sound-control'))closeMenu();
 });
 document.addEventListener('change',event=>{
   if(event.target.id==='destination' && event.target.value){selectProvince(event.target.value,{keyboard:true});}
@@ -903,47 +841,43 @@ document.addEventListener('click',safely(async event=>{
   const b=event.target.closest('button');if(!b)return;
   if(b.id==='journal-toggle'){closeMenu();toggleJournal($('war-journal').hidden);}
   if(b.id==='journal-close'){toggleJournal(false);$('menu-button').focus();}
-  if(b.dataset.countrySeat){$('country-choice').value=b.dataset.countrySeat;$('country-choice').dispatchEvent(new Event('change'));atlas.home(b.dataset.countrySeat);}
+  if(b.dataset.homeTab){for(const t of document.querySelectorAll('[data-home-tab]'))t.setAttribute('aria-selected',String(t===b));$('rooms').hidden=b.dataset.homeTab!=='rooms';$('standings').hidden=b.dataset.homeTab!=='standings';}
+  if(b.dataset.preset){$('preset').value=b.dataset.preset;for(const t of document.querySelectorAll('[data-preset]'))t.setAttribute('aria-checked',String(t===b));}
+  if(b.dataset.countrySeat){$('country-choice').value=b.dataset.countrySeat;if(state)renderLobby();atlas.home(b.dataset.countrySeat);}
   if(b.dataset.room)await openRoom(b.dataset.room,b.dataset.spectate==='true');
   if(b.dataset.home)await home();
   if(b.dataset.fraction){fraction=Number(b.dataset.fraction);try{localStorage.setItem('coi.fraction',String(fraction));}catch{}renderCard();paintMapDraftOnly();}
   if(b.dataset.removeSource){sources=sources.filter(s=>s!==b.dataset.removeSource);renderCard();paintMap();}
-  if(b.dataset.feedProvince && state){const id=b.dataset.feedProvince;atlas.focus(id,view());if(state.status==='running'){armyId=null;proposing=false;const mine=active() && prov(id)?.owner===state.you;sources=mine?[id]:[];target=mine?null:id;if(!mine)selectProvince(id);else{openCard('province',id);paintMap();}}}
-  if(b.dataset.feedCountry && state)openCard('country',b.dataset.feedCountry);
-  if(b.dataset.openCountry && state){openCard('country',b.dataset.openCountry,{focus:!b.closest('#card'),compose:b.dataset.compose==='1',size:b.dataset.compose==='1'?'full':undefined});}
-  if(b.dataset.openAlliance && state)openCard('alliance',null,{focus:true,compose:b.dataset.compose==='1',size:'full'});
+  if(b.dataset.feedProvince && state)showProvince(b.dataset.feedProvince);
+  if(b.dataset.openCountry && state){openCard('country',b.dataset.openCountry,{focus:!b.closest('#card'),compose:b.dataset.compose==='1'});}
+  if(b.dataset.openAlliance && state)openCard('alliance',null,{focus:true,compose:b.dataset.compose==='1'});
   if(b.dataset.recall)await perform('recall',b.dataset.recall,b);
   if(b.dataset.act)await perform(b.dataset.act,b.dataset.arg,b);
-  if(b.dataset.feedFilter){worldFeed.setFilter(b.dataset.feedFilter);for(const chip of document.querySelectorAll('[data-feed-filter]'))chip.setAttribute('aria-pressed',String(chip===b));}
 }));
+/** A province from Messages, a notice or the orders list: frame it and open its card. */
+function showProvince(id){
+  if(!state || !place(id))return;
+  if(compact.matches && comms.view!=='closed')comms.close();
+  atlas.focus(id,view());
+  if(state.status==='running'){armyId=null;proposing=false;const mine=active() && prov(id)?.owner===state.you;sources=mine?[id]:[];target=mine?null:id;if(!mine)selectProvince(id);else{openCard('province',id);paintMap();}}
+}
 for(const element of document.querySelectorAll('[data-icon]'))element.innerHTML=icon(element.dataset.icon);
-worldFeed=new WorldFeed({list:$('feed-list'),unread:$('feed-unread'),toggle:$('feed-toggle'),body:$('feed-body'),jump:$('feed-jump')},feedNames);
-// Private rows link to the card that answers them.
-worldFeed.link=item=>{
-  if(!state?.you || spectating)return null;
-  const thread=threadOf(item);if(!thread)return null;
-  if(thread.kind==='country')return {key:'openCountry',value:thread.id,label:'Open ›',aria:`Open ${country(thread.id)?.name || 'country'}`};
-  return {key:'openAlliance',value:'1',label:'Open ›',aria:'Open your alliance'};
-};
-worldFeed.onRead=()=>{saveRead();if(state)renderAttention();};
-standings=new LeaderboardPanel({root:$('leaderboard'),rows:$('lb-rows'),toggle:$('lb-toggle'),summary:$('lb-summary'),modes:[...document.querySelectorAll('[data-lb-mode]')],fronts:$('lb-fronts'),powers:$('lb-powers'),
+comms=new Comms({button:$('comms-button'),toasts:$('toasts'),panel:$('comms'),names:feedNames,docked:()=>!compact.matches,
+  onRead:keys=>saveRead(keys),
+  onOpen:view=>{if(compact.matches && view!=='closed'){closeCard();setSheet(null);closeMenu();}requestAnimationFrame(syncInsets);},
+  onView:({province,country:id})=>{if(province)showProvince(province);else if(id)openCard('country',id,{focus:true});},
+  onAct:async(action)=>{const r=await command(action);if(r)toast(action.type==='accept'?(r.status==='pending'?`Alliance agreed: it starts at ${time(r.activateAt)}.`:'Terms accepted; waiting for the others.'):action.type==='decline'?'Offer declined.':'Vote recorded.');return r;},
+  onSend:async(channel,to,text)=>Boolean(await command({type:'chat',channel,...(channel==='dm'?{to}:{}),text}))});
+standings=new LeaderboardPanel({root:$('leaderboard'),rows:$('lb-rows'),toggle:$('lb-toggle'),summary:$('lb-summary'),modes:[...document.querySelectorAll('[data-lb-mode]')],fronts:$('lb-fronts'),frontCount:$('lb-front-count'),powers:$('lb-powers'),
   onFocus:id=>{if(card?.kind!=='country')atlas?.setRelationFocus?.(id);},
-  onSelect:id=>{if(!state)return;if(id===state.you && seated())openCard('alliance',null,{focus:true});else openCard('country',id,{focus:true});if(compact.matches)standings.setOpen(false);},
-  onFront:([a,b])=>{const ids=state.provinces.filter(p=>a.includes(p.owner) && place(p.id).neighbors.some(n=>b.includes(prov(n)?.owner)) || b.includes(p.owner) && place(p.id).neighbors.some(n=>a.includes(prov(n)?.owner))).map(p=>p.id);
+  onSelect:id=>{if(!state)return;if(compact.matches)setSheet(null);if(id===state.you && seated())openCard('alliance',null,{focus:true});else openCard('country',id,{focus:true});},
+  onFront:([a,b])=>{if(compact.matches)setSheet(null);const ids=state.provinces.filter(p=>a.includes(p.owner) && place(p.id).neighbors.some(n=>b.includes(prov(n)?.owner)) || b.includes(p.owner) && place(p.id).neighbors.some(n=>a.includes(prov(n)?.owner))).map(p=>p.id);
     atlas.fit(ids.length?ids:[...a,...b].map(id=>state.provinces.find(p=>p.owner===id)?.id).filter(Boolean),view());}},feedNames);
 {let saved=null;try{saved=localStorage.getItem('coi.leaderboard');}catch{}
-  standings.setOpen(saved?saved==='open':!compact.matches);}
+  standings.setOpen(saved!=='collapsed');}
 herald=new Herald({declaration:$('declaration'),alliance:$('alliance-seal'),fallen:$('fallen-seal')});
-notifier=new Notifier($('notice'));
-{const push=notifier.push.bind(notifier);notifier.push=n=>{$('toast').hidden=true;push(n);};} // a notice about something new replaces an older toast
 const sounds=new SoundBoard($('sound-control'));
-{let saved=null;try{saved=localStorage.getItem('coi.feed');}catch{}
-  worldFeed.setOpen(saved?saved==='open':!compact.matches);}
-compact.addEventListener('change',event=>{
-  if(event.matches){standings.setOpen(false);if(card)worldFeed.setOpen(false);return;}
-  // Back to a wide screen: the rail returns (the leaderboard and history are side panels again).
-  let saved=null;try{saved=localStorage.getItem('coi.leaderboard');}catch{}standings.setOpen(saved!=='collapsed');
-});
+compact.addEventListener('change',()=>{setSheet(null);if(state)comms.update(state,history);requestAnimationFrame(syncInsets);});
 try{map=await request('/map.json','GET',undefined,null);initMap();showIdentity();const params=new URL(location).searchParams,initial=params.get('match');if(initial)await openRoom(initial,params.get('spectate')==='1');else await rooms();setConnection(state?.status==='finished'?'Review':'Live');}catch(e){toast(e.message,true);}
 addEventListener('resize',()=>requestAnimationFrame(syncInsets));
 setInterval(()=>{if(matchId)poll();},750);
