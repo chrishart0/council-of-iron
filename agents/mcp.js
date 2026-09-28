@@ -9,6 +9,7 @@ import { situation } from './situation.js';
 import { news } from './news.js';
 import { repairHint } from './mcp-hints.js';
 import { boardView } from './board.js';
+import { decisionView } from './decision-view.js';
 import { mapViewPng } from './map-view.js';
 import { createInterface } from 'node:readline';
 const client=new CouncilClient();
@@ -51,6 +52,14 @@ tool('news','Read delivered messages and major war/alliance events plus current 
   },true);
 tool('board','Read one compact map-like snapshot: all province ownership, troops and industry; your available troops and directly connected neighbors; currently payable readyDevelopments; the 60% victory hold, deadline prize and alliance share rules; active wars, command budget, side win ticks, and pending diplomacy. Use this to choose a legal march or development. Use preview only for a chosen battle and news for delivered messages.',
   {},[],async()=>boardView(await client.observe(0),await client.map()),true);
+let decisionCursor=0,decisionMatch=null;
+tool('decision_view','Read the current compact board with your industry gap, reachable frontier, potential independent partners and delivered non-chat outcomes. Omit after to continue from this MCP session’s event cursor; use after=0 to reread from the start. Drain hasMoreEvents before treating outcomes as recent. Source troops are uncommitted, not a combat forecast; preview a chosen attack. Player speech is excluded; use news for delivered messages.',
+  {after:{type:'integer',minimum:0}},[],async a=>{
+    let o=await client.observe(a.after ?? decisionCursor);
+    if(decisionMatch && decisionMatch!==o.id)o=await client.observe(a.after ?? 0);
+    decisionMatch=o.id;decisionCursor=o.cursor;
+    return decisionView(o,await client.map());
+  },true);
 tool('view_map','See the current colored world map with your provinces outlined and nearby troop counts. The first content block also has the exact compact board data. Use this only with a vision-capable model; no private player text is drawn.',
   {},[],async()=>{
     const observation=await client.observe(0),map=await client.map();

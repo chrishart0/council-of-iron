@@ -5,6 +5,7 @@ import { MAP } from '../src/server.js';
 import { boardView } from '../agents/board.js';
 import { mapViewSvg } from '../agents/map-view.js';
 import { strategicOptions } from '../agents/strategic-options.js';
+import { decisionView } from '../agents/decision-view.js';
 
 test('compact board shows only observed state and legal direct connections', () => {
   const game = createGame({ id: 'board-test', name: 'Board', hostId: 'britain' }, MAP);
@@ -39,6 +40,29 @@ test('compact board shows only observed state and legal direct connections', () 
   assert.equal('events' in board, false);
   assert.equal('travelTimes' in board, false);
   assert.throws(() => boardView(observe(game), MAP), /Join a country/);
+});
+
+test('decision view adds feasible frontier and filters delivered outcomes', () => {
+  const game = createGame({ id: 'decision-test', name: 'Decision', hostId: 'britain' }, MAP);
+  join(game, MAP, { profileId: 'britain', name: 'Britain', country: 'britain' });
+  join(game, MAP, { profileId: 'france', name: 'France', country: 'france' });
+  start(game);
+  game.provinces.find(p => p.id === 'england').troops = 200;
+  const seen = observe(game, 'britain');
+  seen.events = [
+    { id: 1, tick: 2, type: 'battle', country: 'britain', to: 'france',
+      text: 'private player speech', reason: 'untrusted reason' },
+    { id: 2, tick: 3, type: 'chat', text: 'private player speech' },
+  ];
+  const view = decisionView(seen, MAP);
+  const england = view.own.find(p => p.id === 'england');
+  assert.ok(view.frontier.some(p => p.id === 'low-countries' &&
+    p.sources.some(source => source.id === 'england' && source.available === england.available)));
+  assert.equal(view.position.industryGap, strategicOptions(seen, MAP).industryGap);
+  assert.equal(view.eventCursor, seen.cursor);
+  assert.deepEqual(view.recentOutcomes, [{ tick: 2, type: 'battle', country: 'britain', to: 'france' }]);
+  assert.doesNotMatch(JSON.stringify(view), /private player speech|untrusted reason/);
+  assert.ok(JSON.stringify(view).length < 14000);
 });
 
 test('map image uses public geometry and never inserts player text', () => {
