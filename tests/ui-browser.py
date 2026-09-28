@@ -926,6 +926,36 @@ def turn_notice_checks(browser,url,identity,server,report,out):
         assert not errors,(name,errors);context.close()
     report['assertions'].append('A real automatic turn-back (Britain’s 5 reach Île-de-France (north-france) during Germany’s battle; engine reason battle_in_progress) arrives live as a sticky notice naming the cause with March again and Show army (44 px on touch); Show army opens the returning army’s card with one enabled primary “March again → Île-de-France (arrives mm:ss)” and the server’s warning that another side’s battle is under way (region, primary and contrast checks at 1536×864 and 390×844); the notice’s March again queues a turn_around the server executes (army_turned_around, no longer returning, 1 of the room’s maxTurnArounds used).')
 
+def truce_checks(browser,url,identity,report,out):
+    """Recorded position 'ui-truce': Britain and France made peace at tick 0 (truce until 02:00). The country card says so and
+    offers no war; the order card's primary is the disabled truce; Powers lists the truce; a short province's Develop says what it lacks."""
+    folder=out/'truce';folder.mkdir(parents=True,exist_ok=True)
+    context=browser.new_context(viewport={'width':1366,'height':768})
+    context.add_init_script('localStorage.setItem("coi.identity",'+json.dumps(json.dumps(identity))+');'+COACH_DONE)
+    page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+    page.goto(f'{url}/?match=ui-truce');expect(page.locator('#phase')).to_have_text('In session');page.wait_for_timeout(800)
+    state=page.evaluate("fetch('/api/games/ui-truce').then(r=>r.json())")
+    assert state['truces']==[{'countries':['britain','france'],'since':0,'until':120}],state['truces']
+    close_comms(page)
+    truce=page.locator('#lb-fronts .lb-truce');expect(truce).to_have_count(1);expect(truce).to_contain_text('Truce until 02:00')
+    expect(truce).to_have_class(re.compile('involved'))
+    page.locator('#lb-rows .lb-row[data-id="france"]').click();expect(page.locator('#card')).to_have_attribute('data-kind','country')
+    expect(page.locator('#card-status')).to_contain_text('Truce until 02:00')
+    declare=page.locator('#card-actions button',has_text='Truce until 02:00');expect(declare).to_be_disabled()
+    expect(page.locator('#card-actions button',has_text='Declare war')).to_have_count(0)
+    check_layout(page,'truce country card');page.screenshot(path=str(folder/'country-card.png'));page.keyboard.press('Escape')
+    select(page,'england','north-france')
+    expect(page.locator('#primary')).to_have_text('Truce until 02:00');expect(page.locator('#primary')).to_be_disabled()
+    expect(page.locator('#card-status')).to_contain_text('no war with')
+    check_layout(page,'truce order card');page.keyboard.press('Escape')
+    s=page.evaluate("fetch('/api/games/ui-truce',{headers:{Authorization:'Bearer '+JSON.parse(localStorage.getItem('coi.identity')).token}}).then(r=>r.json())")
+    short=next(p for p in s['provinces'] if p['id']=='scotland');assert short['owner']=='britain' and short['development']==1 and short['troops']-1<24,short
+    select(page,short['id'])
+    develop=page.locator('#develop-province');expect(develop).to_have_text(f"Needs 24 · you have {short['troops']-1}");expect(develop).to_be_disabled()
+    page.screenshot(path=str(folder/'develop-short.png'));page.keyboard.press('Escape')
+    assert not errors,errors;context.close()
+    report['assertions'].append('Truce (recorded position ui-truce, Britain–France peace at 00:00): Powers lists the truce under the war fronts (“Truce until 02:00”, marked as involving you); the French country card states the truce and offers a disabled “Truce until 02:00” instead of Declare war; the order card’s one primary is the disabled truce; a province short of troops shows “Needs 24 · you have N” on its disabled Develop button.')
+
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--bridge',action='store_true')
@@ -1243,6 +1273,7 @@ def main():
             if not args.bridge:
                 coach_and_drag_checks(browser,url,identity,report,out)
                 turn_notice_checks(browser,url,identity,server,report,out)
+                truce_checks(browser,url,identity,report,out)
                 # v0.8 core tasks, scripted like a player, with measured interaction counts (bounds in ui_tasks.BOUNDS).
                 report['tapCounts']={'390x844 touch':walkthrough(browser,url,identity,server,report,out,'ui-tasks-m',390,844,True),
                     '1366x768 mouse':walkthrough(browser,url,identity,server,report,out,'ui-tasks-d',1366,768,False)}
