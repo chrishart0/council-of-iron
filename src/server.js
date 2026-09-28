@@ -118,7 +118,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
   }
   function step(g, count) {
     for (let i=0;i<count && g.status==='running';i++) { tick(g); if(g.status==='running') runBots(g); }
-    if (g.status === 'finished') afterAction(g);
+    if (g.status === 'finished') { afterAction(g); for (const p of g.players) botMemory.delete(`${g.id}:${p.id}`); }
     else save(g);
   }
   const handler = async (req,res) => {
