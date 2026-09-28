@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { createServer as createTlsServer } from 'node:https';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -268,13 +268,13 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
 }
 if(process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
   const port=Number(process.env.PORT || 3107),host=process.env.HOST || '0.0.0.0';
-  // Optional HTTPS listener (TLS_CERT/TLS_KEY PEM paths) so phones get a secure context for the microphone.
-  const tls=process.env.TLS_CERT && process.env.TLS_KEY ? {cert:readFileSync(process.env.TLS_CERT),key:readFileSync(process.env.TLS_KEY)} : null;
-  const tlsPort=Number(process.env.TLS_PORT || 3443);
-  const publicOrigin=process.env.PUBLIC_ORIGIN || [`http://192.168.1.216:${port}`,...(tls?[`https://192.168.1.216:${tlsPort}`]:[])].join(',');
+  // One listener. HTTPS whenever a certificate is available (TLS_CERT/TLS_KEY, or data/tls from scripts/dev-cert.sh),
+  // because phones only grant the microphone to a secure context. TLS=off forces plain HTTP.
+  const certPath=process.env.TLS_CERT || resolve(root,'data/tls/cert.pem'),keyPath=process.env.TLS_KEY || resolve(root,'data/tls/key.pem');
+  const tls=process.env.TLS!=='off' && existsSync(certPath) && existsSync(keyPath) ? {cert:readFileSync(certPath),key:readFileSync(keyPath)} : null;
+  const publicOrigin=process.env.PUBLIC_ORIGIN || `${tls?'https':'http'}://192.168.1.216:${port}`;
   const app=makeServer({publicOrigin,tls});
-  app.server.listen(port,host,()=>console.log(`Council of Iron: ${publicOrigin} (SQLite; single process)`));
-  app.tlsServer?.listen(tlsPort,host,()=>console.log(`HTTPS listener on port ${tlsPort}`));
+  (tls?app.tlsServer:app.server).listen(port,host,()=>console.log(`Council of Iron: ${publicOrigin} (SQLite; single process)`));
   if(process.env.STT_URL) console.log('Voice input: proxying to the configured STT sidecar.');
   for(const signal of ['SIGTERM','SIGINT']) process.once(signal,()=>app.close().then(()=>process.exit(0)));
 }

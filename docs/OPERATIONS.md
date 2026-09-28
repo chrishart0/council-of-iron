@@ -78,17 +78,16 @@ Privacy and limits: the route is `POST /api/games/ROOM/stt` for seated players o
 
 ## HTTPS for phones (needed for the microphone)
 
-Mobile browsers only allow microphone access in a secure context, so `http://192.168.1.216:PORT` shows "Voice input needs HTTPS" on a phone. Two ways to serve HTTPS; the server can listen on HTTP and HTTPS at once (`TLS_CERT`, `TLS_KEY` PEM paths, `TLS_PORT` default 3443). `PUBLIC_ORIGIN` accepts a comma-separated list of origins.
+Mobile browsers only allow microphone access in a secure context, so `http://192.168.1.216:PORT` shows "Voice input needs HTTPS" on a phone. The server runs a single listener on `PORT`: HTTPS whenever a certificate is available (`TLS_CERT`/`TLS_KEY` PEM paths, defaulting to `data/tls/cert.pem`/`key.pem`), otherwise plain HTTP. `TLS=off` forces HTTP. `PUBLIC_ORIGIN` accepts a comma-separated list of origins.
 
 **Self-signed LAN certificate** (works now, no account changes):
 
 ```sh
 scripts/dev-cert.sh 192.168.1.216       # writes data/tls/{ca.pem,ca.crt,cert.pem,key.pem}; never commit data/
-STT_URL=http://127.0.0.1:3190 TLS_CERT=data/tls/cert.pem TLS_KEY=data/tls/key.pem PORT=3109 TLS_PORT=3443 \
-  PUBLIC_ORIGIN=http://192.168.1.216:3109,https://192.168.1.216:3443 npm start
+STT_URL=http://127.0.0.1:3190 PORT=3444 npm start   # picks up data/tls automatically and serves HTTPS only
 ```
 
-Open `https://192.168.1.216:3443` on the phone. Either tap through the certificate warning once (browsers still treat an accepted-certificate https page as a secure context; not yet verified on a physical phone here), or install `data/tls/ca.crt` on the phone to avoid the warning (iOS: open the file, install the profile, then enable it in Settings → General → About → Certificate Trust Settings; Android: Settings → Security → Install a certificate → CA certificate). Only install a CA you generated yourself; remove it when done.
+Open `https://192.168.1.216:3444` on the phone. Either tap through the certificate warning once (browsers still treat an accepted-certificate https page as a secure context; not yet verified on a physical phone here), or install `data/tls/ca.crt` on the phone to avoid the warning (iOS: open the file, install the profile, then enable it in Settings → General → About → Certificate Trust Settings; Android: Settings → Security → Install a certificate → CA certificate). Only install a CA you generated yourself; remove it when done.
 
 **Tailscale (valid certificate, tailnet-only).** On this host the tailnet name is `x58.tailc34d54.ts.net`, but **Serve and HTTPS certificates are not enabled on the tailnet**; enabling them is an admin-console change (`tailscale serve` prints the enable link) and was not done. After an admin enables them:
 

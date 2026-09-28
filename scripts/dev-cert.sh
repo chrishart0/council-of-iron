@@ -1,7 +1,7 @@
 #!/bin/sh
 # Self-signed HTTPS for phones on the LAN (the microphone needs a secure context).
 # Creates a tiny local CA and a server certificate for this machine's LAN IP in data/tls/ (never committed).
-# Usage: scripts/dev-cert.sh [LAN_IP]   then   TLS_CERT=data/tls/cert.pem TLS_KEY=data/tls/key.pem npm start
+# Usage: scripts/dev-cert.sh [LAN_IP]   then   npm start   (serves HTTPS automatically when data/tls exists)
 set -eu
 IP="${1:-$(hostname -I | awk '{print $1}')}"
 DIR="$(dirname "$0")/../data/tls"
