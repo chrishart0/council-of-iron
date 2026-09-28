@@ -46,7 +46,7 @@ export class Store {
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
-  standings(eligible = false, scenario = 'imperial-1910-v3') {
+  standings(eligible = false, scenario = 'imperial-1910-v4') {
     return this.db.prepare(`WITH recent AS (
       SELECT *, ROW_NUMBER() OVER (PARTITION BY profile_id ORDER BY finished_at DESC,game_id) AS n
       FROM results WHERE eligible=? AND scenario=? AND draw=0

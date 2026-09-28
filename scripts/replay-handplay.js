@@ -12,7 +12,8 @@ import { createGame, join, start, act, tick, sides } from '../src/engine.js';
 import { travelTicks } from '../public/movement.js';
 
 export const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../tests/fixtures/handplay-20260927.json.gz', import.meta.url))));
-export const map = JSON.parse(readFileSync(new URL('../public/imperial-map.json', import.meta.url)));
+// The recording was played on the v3 board; later map revisions must not rewrite its history.
+export const map = JSON.parse(readFileSync(new URL('../tests/fixtures/imperial-map-v3.json', import.meta.url)));
 export const projection = g => ({ tick:g.tick, status:g.status, provinces:g.provinces, armies:g.armies, sides:sides(g), outcome:g.outcome });
 export const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const troopTotal = g => g.provinces.reduce((n,p)=>n+p.troops,0)+g.armies.reduce((n,a)=>n+a.amount,0);
@@ -62,7 +63,7 @@ export function replay() {
 }
 export async function replayHttp() {
   const {makeServer}=await import('../src/server.js');
-  const app=makeServer({dbPath:':memory:',automatic:false,league:false});
+  const app=makeServer({dbPath:':memory:',automatic:false,league:false,board:map});
   await new Promise(r=>app.server.listen(0,'127.0.0.1',r));
   const origin=`http://127.0.0.1:${app.server.address().port}`,profiles={},tokens={};
   async function request(path,method='GET',data,token) {

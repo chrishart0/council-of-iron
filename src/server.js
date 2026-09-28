@@ -42,9 +42,10 @@ function json(res, status, data) { res.writeHead(status, { 'Content-Type': 'appl
 /** `clockScale` accelerates ALL game timing in local tests; no HTTP endpoint can advance time. */
 export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScale = 1,
   publicOrigin = process.env.PUBLIC_ORIGIN || '', league = process.env.LEAGUE_MODE === '1', automatic = true,
-  gameIdFactory = () => randomUUID().slice(0,8) } = {}) {
+  gameIdFactory = () => randomUUID().slice(0,8), board = MAP } = {}) {
   const store = new Store(dbPath), games = new Map(store.load()
-    .filter(g=>g.scenario===MAP.id && (g.rules?.economyShare===.6 || g.status==='finished' && g.afterAction))
+    // Finished rooms with a materialized review carry their own map, so earlier scenarios stay readable.
+    .filter(g=>g.status==='finished' && g.afterAction || g.scenario===board.id && g.rules?.economyShare===.6)
     .map(g=>[g.id,g]));
   const fractions = new Map(), ipBudgets = new Map();
   let previous = performance.now();
@@ -52,7 +53,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
   function afterAction(g) {
     requireRule(g.status === 'finished' && g.outcome, 'After-action review is available only when the match is finished.', 409);
     if (!g.afterAction) {
-      try { g.afterAction = buildReview(g, MAP); }
+      try { g.afterAction = buildReview(g, board); }
       catch (error) {
         console.error('Review reconstruction withheld:', g.id, error.message);
         g.afterAction = unavailableReview(g, 'This match could not be reconstructed exactly. Final scores are intact; no approximate replay is shown.');
@@ -65,8 +66,8 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
   function runBots(g) {
     if (g.tick % 5 !== 0) return;
     for (const p of g.players.filter(p=>p.kind==='bot')) {
-      const action=choose(observe(g,p.id,g.sequence),MAP,p.id);
-      if (action) try { act(g,MAP,p.id,action,`bot-${g.tick}-${p.id}`); }
+      const action=choose(observe(g,p.id,g.sequence),board,p.id);
+      if (action) try { act(g,board,p.id,action,`bot-${g.tick}-${p.id}`); }
       catch (e) { if (!(e instanceof RuleError)) throw e; }
     }
   }
@@ -112,8 +113,8 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         const me=auth(); return json(res,200,{id:me.id,name:me.name,history:store.history(me.id)});
       }
       if(path==='/api/standings' && req.method==='GET') {
-        requireRule(!url.searchParams.has('scenario') || url.searchParams.get('scenario')===MAP.id,'Unknown scenario.');
-        const eligible=url.searchParams.get('eligible')==='true'; return json(res,200,{eligible,standings:store.standings(eligible,MAP.id)});
+        requireRule(!url.searchParams.has('scenario') || url.searchParams.get('scenario')===board.id,'Unknown scenario.');
+        const eligible=url.searchParams.get('eligible')==='true'; return json(res,200,{eligible,standings:store.standings(eligible,board.id)});
       }
       if(path==='/api/games' && req.method==='GET') {
         const all=[...games.values()],active=all.filter(g=>g.status!=='finished').reverse();
@@ -127,17 +128,17 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         const me=auth(), data=await body(req);
         requireRule(Object.hasOwn(PRESETS,data.preset || 'standard'),'Unknown time preset.');
         requireRule([...games.values()].filter(g=>g.status!=='finished').length<32,'This prototype supports 32 active rooms.',429);
-        requireRule(data.scenario===undefined || data.scenario===MAP.id,'Unknown scenario.');
+        requireRule(data.scenario===undefined || data.scenario===board.id,'Unknown scenario.');
         const gameId=gameIdFactory();
         requireRule(typeof gameId==='string' && /^[a-zA-Z0-9-]{1,32}$/.test(gameId) && !games.has(gameId),'Invalid or duplicate room ID.');
         const g=createGame({id:gameId,name:data.name || 'Council chamber',hostId:me.id,
-          speed:PRESETS[data.preset || 'standard'],eligible:league},MAP);
+          speed:PRESETS[data.preset || 'standard'],eligible:league},board);
         games.set(g.id,g);save(g);return json(res,201,{id:g.id});
       }
       const match=path.match(/^\/api\/games\/([a-zA-Z0-9-]+)(?:\/(join|start|opening|bots|actions|preview|plan|map|review|replay))?$/);
       if(match) {
         const g=games.get(match[1]);requireRule(g,'Room not found.',404);
-        const endpoint=match[2], gameMap=MAP;
+        const endpoint=match[2], gameMap=board;
         function seat() { const me=auth(g.id),p=g.players.find(p=>p.profileId===me.id);requireRule(p,'Join a country first.',403);return p; }
         function host() { const me=auth(g.id);requireRule(me.id===g.hostId,'Only the host can do that.',403); }
         if(!endpoint && req.method==='GET') {
