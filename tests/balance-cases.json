@@ -1,3 +1,7 @@
 {
-  "v01": {}
+  "v01": {},
+  "v6-open-manchuria": {
+    "note": "Candidate (not published): Manchuria starts neutral, a contested neutral for Japan (via Korea), Russia and Qing.",
+    "starts": { "qing": ["north-china", "south-china", "tibet"] }
+  }
 }

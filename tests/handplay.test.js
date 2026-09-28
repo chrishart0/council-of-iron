@@ -7,14 +7,14 @@ import { map, fixture, replay, replayHttp } from '../scripts/replay-handplay.js'
 // The golden hashes are the current rules' result; they change whenever a rule changes, and are re-baselined then.
 const { game, report } = replay();
 test('recorded decisions conserve manpower, end exactly once and reproduce the golden log',()=>{
-  assert.equal(report.acceptedActions,263);
-  assert.equal(report.simulatedTicks,553);
-  assert.equal(report.eventLogSha256,'a09040e609dc383a556dc69bd948f3d087c8c56acfe280fe7aabc2b65c16e72d');
-  assert.equal(report.finalStateSha256,'d7fb542fe06c6ef344039464edefc21be5eb5195327a8e297adf2bce8b5fe789');
-  assert.deepEqual(report.ledger,{initial:661,recruited:3195,invested:0,casualties:1272,interned:0,remaining:2584,tickChecks:554});
+  assert.equal(report.acceptedActions,204);
+  assert.equal(report.simulatedTicks,1800);
+  assert.equal(report.eventLogSha256,'7593ccf35acc98137055fd02346da6a2bcb6a0dde73c72eb3ad61e8e886ca91b');
+  assert.equal(report.finalStateSha256,'200e1bb93752974bc9be97030ec5ac91e341dfe0891296789ff2e88e7df83a8a');
+  assert.deepEqual(report.ledger,{initial:509,recruited:7964,invested:24,casualties:994,interned:0,remaining:7455,tickChecks:1801});
   assert.equal(game.events.filter(e=>e.type==='finished').length,1);
-  assert.equal(game.outcome.reason,'domination');
-  assert.equal(game.outcome.winningSide,'coalition-81');
+  assert.equal(game.outcome.reason,'deadline');
+  assert.equal(game.outcome.winningSide,'coalition-72');
 });
 test('the replay is deterministic: same recording, same log',()=>{
   const again=replay().report;
