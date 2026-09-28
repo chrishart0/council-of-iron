@@ -858,11 +858,12 @@ def coach_and_drag_checks(browser,url,identity,report,out):
     assert page.evaluate("localStorage.getItem('coi.coach')")=='done'
     page.reload();expect(page.locator('#commander-title')).to_have_text('Britain');page.wait_for_timeout(1200);expect(coach).to_be_hidden()
     menu(page);page.locator('#coach-replay').click();expect(coach).to_be_visible();page.keyboard.press('Escape');expect(coach).to_be_hidden()
-    # Drag with a real touch point from Great Britain's counter to Ireland.
+    # Drag with a real touch point from Ireland's counter to Great Britain (in battle by now: its clash marker is the target).
     page.locator('#home-view').click();page.wait_for_timeout(250)
     def centre(sel):
         b=page.locator(sel).bounding_box();return b['x']+b['width']/2,b['y']+b['height']/2
-    (x0,y0),(x1,y1)=centre('#marker-england .counter-body'),centre('#marker-ireland .counter-body')
+    target='#marker-england .counter-body' if page.locator('#marker-england .counter-body').is_visible() else '#map .battle-counter[data-province="england"]'
+    (x0,y0),(x1,y1)=centre('#marker-ireland .counter-body'),centre(target)
     cdp=context.new_cdp_session(page)
     cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':x0,'y':y0,'id':1}]})
     for i in range(1,13):cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':x0+(x1-x0)*i/12,'y':y0+(y1-y0)*i/12,'id':1}]})
@@ -871,8 +872,8 @@ def coach_and_drag_checks(browser,url,identity,report,out):
     assert re.fullmatch(r'\d+ · \d+s',page.locator('#map .draft-label text').text_content()),page.locator('#map .draft-label text').text_content()  # troops · ETA
     page.screenshot(path=str(out/'22-touch-drag.png'))
     cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
-    expect(page.locator('#card')).to_have_attribute('data-kind','province');expect(page.locator('#card-title')).to_have_text('Ireland')
-    expect(page.locator('#card-sub')).to_contain_text('from Great Britain');check_commit(page,'390 after drag')
+    expect(page.locator('#card')).to_have_attribute('data-kind','province');expect(page.locator('#card-title')).to_have_text('Great Britain')
+    expect(page.locator('#card-sub')).to_contain_text('from Ireland');check_commit(page,'390 after drag')
     assert page.locator('#map .draft-arrow').count()==1  # the order arrow stays while the card is open
     page.screenshot(path=str(out/'23-after-drag.png'))
     assert not errors,errors
