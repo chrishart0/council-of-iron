@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, join, start, observe } from '../src/engine.js';
+import { createGame, join, start, act, observe } from '../src/engine.js';
 import { MAP } from '../src/server.js';
 import { boardView } from '../agents/board.js';
 import { mapViewSvg } from '../agents/map-view.js';
@@ -53,6 +53,8 @@ test('decision view adds feasible frontier and filters delivered outcomes', () =
     { id: 1, tick: 2, type: 'battle', country: 'britain', to: 'france',
       text: 'private player speech', reason: 'untrusted reason' },
     { id: 2, tick: 3, type: 'chat', text: 'private player speech' },
+    { id: 3, tick: 4, type: 'message', from: 'france', to: 'britain', channel: 'dm',
+      text: '<b>player speech</b>' },
   ];
   const view = decisionView(seen, MAP);
   const england = view.own.find(p => p.id === 'england');
@@ -63,8 +65,40 @@ test('decision view adds feasible frontier and filters delivered outcomes', () =
     seen.leaderboard.players.find(p => p.country === 'britain').victoryShare);
   assert.equal(view.eventCursor, seen.cursor);
   assert.deepEqual(view.recentOutcomes, [{ tick: 2, type: 'battle', country: 'britain', to: 'france' }]);
+  assert.deepEqual(view.deliveredMessages, [{ id: 3, tick: 4, from: 'france', to: 'britain',
+    channel: 'dm', text: '<b>player speech</b>', untrusted: true }]);
+  assert.equal(view.omittedDeliveredMessages, 0);
   assert.doesNotMatch(JSON.stringify(view), /private player speech|untrusted reason/);
-  assert.ok(JSON.stringify(view).length < 14000);
+  assert.ok(JSON.stringify(view).length < 15000);
+});
+
+test('decision view preserves recipient filtering for delivered messages', () => {
+  const game = createGame({ id: 'decision-mail', name: 'Mail', hostId: 'britain' }, MAP);
+  for (const country of ['britain', 'france', 'usa'])
+    join(game, MAP, { profileId: country, name: country, country });
+  start(game);
+  act(game, MAP, 'france', { type: 'chat', channel: 'dm', to: 'usa', text: 'Hidden dispatch' }, 'private-us');
+  act(game, MAP, 'usa', { type: 'chat', channel: 'dm', to: 'britain', text: 'Visible dispatch' }, 'private-britain');
+  const seen = decisionView(observe(game, 'britain'), MAP);
+  assert.deepEqual(seen.deliveredMessages.map(message => [message.from, message.text, message.untrusted]),
+    [['usa', 'Visible dispatch', true]]);
+  assert.doesNotMatch(JSON.stringify(seen), /Hidden dispatch/);
+});
+
+test('decision view bounds delivered player speech in a busy event batch', () => {
+  const game = createGame({ id: 'decision-busy-mail', name: 'Busy mail', hostId: 'britain' }, MAP);
+  join(game, MAP, { profileId: 'britain', name: 'Britain', country: 'britain' });
+  join(game, MAP, { profileId: 'france', name: 'France', country: 'france' });
+  start(game);
+  const seen = observe(game, 'britain');
+  seen.events = Array.from({ length: 10 }, (_, index) => ({
+    id: index + 1, tick: index + 1, type: 'message', from: 'france',
+    to: 'britain', channel: 'dm', text: `Dispatch ${index + 1}`,
+  }));
+  const view = decisionView(seen, MAP);
+  assert.equal(view.deliveredMessages.length, 8);
+  assert.equal(view.deliveredMessages[0].id, 3);
+  assert.equal(view.omittedDeliveredMessages, 2);
 });
 
 test('map image uses public geometry and never inserts player text', () => {

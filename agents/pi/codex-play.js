@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** Model through Codex CLI, playing an isolated Council seat. */
-import { mkdirSync, writeFileSync, copyFileSync, chmodSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, copyFileSync, chmodSync, rmSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
@@ -10,8 +10,10 @@ import { CouncilClient } from '../client.js';
 import { boardView } from '../board.js';
 import { decisionView } from '../decision-view.js';
 import { FIXED_TASK_ID, FIXED_TASK_PROMPT, evaluateFixedTask } from './fixed-task.js';
+import { loadPiConfig } from './config.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
+if (existsSync(resolve(root, '.env'))) process.loadEnvFile(resolve(root, '.env'));
 const arg = (name, fallback) => { const at = process.argv.indexOf(name); return at < 0 ? fallback : process.argv[at + 1]; };
 const playerModel = arg('--model', 'qwen');
 if (!['qwen', 'luna'].includes(playerModel)) throw new Error('Use --model qwen|luna.');
@@ -46,8 +48,9 @@ if (playerModel === 'luna') {
 }
 const runId = new Date().toISOString().replace(/[:.]/g, '-');
 const file = resolve(output, `${runId}-codex.json`);
-const modelId = playerModel === 'luna' ? 'gpt-6-luna' : 'qwen3.8-27b-unsloth-q4';
-const label = playerModel === 'luna' ? 'Luna x-high Codex' : 'Qwen3.8-27B Unsloth Q4 Codex';
+const qwenConfig = playerModel === 'qwen' ? loadPiConfig('qwen') : null;
+const modelId = playerModel === 'luna' ? 'gpt-6-luna' : qwenConfig.id;
+const label = playerModel === 'luna' ? 'Luna x-high Codex' : `${qwenConfig.name.slice(0, 33)} Codex`;
 const record = { runId, client: 'codex', access, model: modelId, country, preset, combatSeed: combatSeed || null,
   turnMode, turnView, embeddedBoard: turnMode === 'episodic' && taskMode === 'match' && turnView !== 'tools',
   interfaceVersion: taskMode === 'fixed' ? 'fixed-v1' : turnMode === 'episodic'
@@ -84,8 +87,9 @@ try {
     ...(access === 'mcp' || turnMode === 'episodic' ? ['--dangerously-bypass-approvals-and-sandbox'] : ['--sandbox', 'danger-full-access']),
     '-C', '/workspace', '-m', modelId,
     '-c', `model_reasoning_effort=${playerModel === 'luna' ? 'xhigh' : 'none'}`,
-    ...(playerModel === 'qwen' ? ['-c', 'model_provider=council_local', '-c', 'model_context_window=262144', '-c', 'model_auto_compact_token_limit=200000',
-      '-c', 'model_providers.council_local={name="Local Qwen",base_url="http://127.0.0.1:18082/v1",wire_api="responses"}'] : []),
+    ...(playerModel === 'qwen' ? ['-c', 'model_provider=council_local', '-c', `model_context_window=${qwenConfig.contextWindow}`,
+      '-c', `model_auto_compact_token_limit=${Math.min(200000, Math.floor(qwenConfig.contextWindow * 0.8))}`,
+      '-c', `model_providers.council_local={name="Local Qwen",base_url=${JSON.stringify(qwenConfig.baseUrl)},wire_api="responses"}`] : []),
     ...(access === 'mcp' ? ['-c', `mcp_servers.council=${serverConfig}`] : []),
     taskMode === 'fixed'
       ? `${FIXED_TASK_PROMPT}\n${access === 'mcp' ? 'Use the Council MCP tools directly, including mcp__council__move and mcp__council__declare_war. If needed, discover them with tool_search. Do not use shell commands for gameplay.' : 'Use the game CLI through shell commands: node /game/agents/cli.js help, then its move and war commands. Do not send HTTP requests directly.'}`
