@@ -12,7 +12,7 @@
 4. **Battle.** Arriving attackers fight dice rounds until one side is gone. Defenders win ties, and a factory (industry II or III) gives them +1. Send help, **recall** an army to bring it home, or send a returning army back to its target (**march again**, twice per army).
 5. **Rally.** Pick provinces and a rally point: their new troops march there automatically.
 6. **Build.** Spend troops to raise a province's industry: I→II costs 24 (2 min), II→III costs 48 (3 min). A capture takes the factory; unfinished work is lost.
-7. **War and peace.** Declare war before attacking another country; both whole alliances go to war. Anyone can offer peace; anyone on the other side can accept.
+7. **War and peace.** Declare war before attacking another country; both whole alliances go to war. Anyone can offer peace; anyone on the other side can accept. Peace brings a **2-minute truce**: neither side can declare war on the other until it ends.
 8. **Alliances.** Propose to a country; the alliance starts 30 s after everyone accepts, and leaving also takes 30 s. An alliance holds at most half the countries. Promises in chat are not orders.
 
 Everything starts from the map. Tap a province for its card: one button says exactly what will happen (`Attack Normandy with 5`, `Declare war on France & send 9`, `Rally troops here`). Tap a country (a standard or a Powers row) to ally, declare war, make peace or talk. The Messages button (**C**) shows what needs you first; offers are accepted right in the message.
