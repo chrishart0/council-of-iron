@@ -183,7 +183,8 @@ try {
   }
   const modelRuntime = await ModelRuntime.create({ credentials, modelsPath: null, allowModelNetwork: false, refreshOnCreate: false });
   if (config.provider !== 'openai-codex') modelRuntime.registerProvider('council-local', { baseUrl: endpoint, api: 'openai-completions', apiKey: config.apiKey, models: [{ id: modelId, name: config.name,
-    reasoning: config.reasoning, ...(config.thinkingFormat ? { compat: { thinkingFormat: config.thinkingFormat } } : {}),
+    reasoning: config.reasoning, ...(config.thinkingFormat ? { compat: { thinkingFormat: config.thinkingFormat,
+      ...(config.chatTemplateKwargs ? { chatTemplateKwargs: config.chatTemplateKwargs } : {}) } } : {}),
     input: ['text'], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow, maxTokens: config.maxTokens }] });
   const model = modelRuntime.getModel(config.provider === 'openai-codex' ? 'openai-codex' : 'council-local', modelId);
   if (!model) throw new Error(`Pi could not resolve ${modelId}`);

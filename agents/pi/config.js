@@ -20,7 +20,14 @@ export function loadPiConfig(alias, env = process.env) {
     throw new Error(`Profile ${alias} needs BASE_URL and TRANSPORT=chat_completions.`);
   const reasoning = key('REASONING') === 'true';
   const thinkingFormat = key('THINKING_FORMAT');
+  let chatTemplateKwargs;
+  if (key('CHAT_TEMPLATE_KWARGS')) {
+    try { chatTemplateKwargs = JSON.parse(key('CHAT_TEMPLATE_KWARGS')); }
+    catch { throw new Error(`Profile ${alias} has invalid CHAT_TEMPLATE_KWARGS JSON.`); }
+    if (!chatTemplateKwargs || typeof chatTemplateKwargs !== 'object' || Array.isArray(chatTemplateKwargs) || thinkingFormat !== 'chat-template')
+      throw new Error(`Profile ${alias} needs THINKING_FORMAT=chat-template with object CHAT_TEMPLATE_KWARGS.`);
+  }
   return { alias, provider, id, playerName, name: key('NAME') || playerName,
     leaderName: key('LEADER_NAME') || 'The Visiting Regent', baseUrl, transport,
-    apiKey: key('API_KEY') || 'local', contextWindow, maxTokens, thinkingLevel, reasoning, thinkingFormat };
+    apiKey: key('API_KEY') || 'local', contextWindow, maxTokens, thinkingLevel, reasoning, thinkingFormat, chatTemplateKwargs };
 }
