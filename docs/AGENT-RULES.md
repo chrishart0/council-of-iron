@@ -14,7 +14,7 @@ The prize pool is `100 × starting seats`. A decisive 60% hold awards the whole 
 
 ## Playing the board
 
-For repeated decisions, start with `board` to see current positions, legal direct connections and uncommitted troops. Use `news` to catch up on messages without rereading the whole map; use `situation` when you also need wider combat and province detail. `map` and `observe` remain available for full detail.
+For repeated decisions, start with `board` to see current positions, legal direct connections, uncommitted troops, and `readyDevelopments` payable now. Use `news` to catch up on messages without rereading the whole map; use `situation` when you also need wider combat and province detail. `map` and `observe` remain available for full detail.
 
 - The military board is public. Own troops may march only from your provinces along printed connections, leaving one garrison troop. Travel times come from the room's `travelTimes` and depend on distance. Orders reserve troops now and execute on the next tick. Declare war before attacking an occupied enemy province; neutral land can be entered without a declaration.
 - `move` sends from one province. A one-target `coordinated_attack` can use up to 16 owned adjacent sources and align their arrival. `plan_attack` previews the timing without spending a command. `recall` cancels waiting components or physically turns outbound armies home; arrived armies cannot be recalled.

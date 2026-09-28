@@ -49,7 +49,7 @@ tool('news','Read delivered messages and major war/alliance events plus current 
     }
     newsMatch=o.id;newsCursor=o.cursor;return news(o);
   },true);
-tool('board','Read one compact map-like snapshot: all province ownership, troops and industry; your available troops and directly connected neighbors; active wars, command budget, side win ticks for active 60% holds, and pending diplomacy. Use this to choose a legal march. Use preview only for a chosen battle and news for delivered messages.',
+tool('board','Read one compact map-like snapshot: all province ownership, troops and industry; your available troops and directly connected neighbors; currently payable readyDevelopments; active wars, command budget, side win ticks for active 60% holds, and pending diplomacy. Use this to choose a legal march or development. Use preview only for a chosen battle and news for delivered messages.',
   {},[],async()=>boardView(await client.observe(0),await client.map()),true);
 tool('view_map','See the current colored world map with your provinces outlined and nearby troop counts. The first content block also has the exact compact board data. Use this only with a vision-capable model; no private player text is drawn.',
   {},[],async()=>{
@@ -116,7 +116,7 @@ tool('coordinated_attack','Commit connected source provinces to one target on th
   {...attackProperties,...op},['to','sources'],a=>{const {opId,...action}=a;return client.action({type:'attack',...action},opId);});
 tool('recall','Cancel a queued attack or recall an outbound army/group. Troops already marching return from their current position and remain vulnerable; they fight if home is now hostile.',
   {id:string,...op},['id'],a=>client.action({type:'recall',id:a.id},a.opId));
-tool('develop','Develop only a province in strategic_options.readyDevelopments; otherwise this call will fail. Spend local uncommitted manpower to improve recruitment and defense. Levels 2/3/4 cost 20/36/60 manpower and take 90/150/240 ticks. Level 2–3 adds 1 to the highest defender die; level 4 adds 2. Capture destroys unfinished work, not completed levels.',
+tool('develop','Develop only a province in board.readyDevelopments or strategic_options.readyDevelopments; otherwise this call will fail. Spend local uncommitted manpower to improve recruitment and defense. Levels 2/3/4 cost 20/36/60 manpower and take 90/150/240 ticks. Level 2–3 adds 1 to the highest defender die; level 4 adds 2. Capture destroys unfinished work, not completed levels.',
   {from:string,...op},['from'],a=>client.action({type:'develop',from:a.from},a.opId));
 
 let initialized=false,ready=false;

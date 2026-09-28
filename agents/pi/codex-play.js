@@ -48,7 +48,7 @@ const modelId = playerModel === 'luna' ? 'gpt-6-luna' : 'qwen3.8-27b-unsloth-q4'
 const label = playerModel === 'luna' ? 'Luna x-high Codex' : 'Qwen3.8-27B Unsloth Q4 Codex';
 const record = { runId, client: 'codex', access, model: modelId, country, preset, combatSeed: combatSeed || null,
   turnMode, embeddedBoard: turnMode === 'episodic' && taskMode === 'match',
-  interfaceVersion: taskMode === 'fixed' ? 'fixed-v1' : turnMode === 'episodic' ? 'board-turn-v2' : 'continuous-v1',
+  interfaceVersion: taskMode === 'fixed' ? 'fixed-v1' : turnMode === 'episodic' ? 'board-turn-v3' : 'continuous-v1',
   ...(turnMode === 'episodic' ? { maxTurnSeconds, decisionIntervalTicks, maxTurns } : {}),
   taskId: taskMode === 'fixed' ? FIXED_TASK_ID : null,
   startedAt: new Date().toISOString(), events: [], actions: [], httpActions: [], turnLog: [], usage: null,

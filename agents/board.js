@@ -1,3 +1,5 @@
+import { developmentForecast } from '../public/insights.js';
+
 /** Uncommitted troops after queued departures and one home garrison. */
 export function troopAvailability(o) {
   const reservations = new Map();
@@ -28,6 +30,12 @@ export function boardView(observation, map) {
       }),
     };
   });
+  const readyDevelopments = o.status === 'running' && (o.commandBudget?.remaining || 0) > 0
+    ? own.flatMap(p => {
+      const forecast = developmentForecast(o, p.id);
+      return forecast && !forecast.alreadyInvested && !forecast.queued && p.available >= forecast.cost
+        ? [{ from: p.id, cost: forecast.cost, paysBackBeforeDeadline: forecast.paysBackBeforeDeadline }] : [];
+    }) : [];
   return {
     status: o.status, tick: o.tick, deadline: o.rules?.duration, you: o.you, side,
     commandBudget: { remaining: o.commandBudget?.remaining ?? 0,
@@ -39,10 +47,10 @@ export function boardView(observation, map) {
         ? { winsAt: a.dominanceStartedAt + o.rules.hold } : {}) })),
     wars: o.wars, diplomacy: o.diplomacy, proposals: o.proposals,
     provinces: o.provinces.map(p => [p.id, p.owner, p.troops, p.development]),
-    own,
+    own, readyDevelopments,
     armies: o.armies.filter(a => a.country === o.you || own.some(p => p.id === a.to))
       .map(a => ({ id: a.id, country: a.country, to: a.to, amount: a.amount, arrivesAt: a.arrivesAt })),
     outcome: o.outcome,
-    note: 'Province rows are [id, owner, troops, industry]. Own neighbors are direct legal connections; attackReady means a war is active. Available troops account for current reservations and one home garrison. A side with winsAt will win at that tick if its industry hold persists. Check preview for battle odds and news for messages.',
+    note: 'Province rows are [id, owner, troops, industry]. Own neighbors are direct legal connections; attackReady means a war is active. Available troops account for current reservations and one home garrison. Develop only from readyDevelopments. A side with winsAt will win at that tick if its industry hold persists. Check preview for battle odds and news for messages.',
   };
 }
