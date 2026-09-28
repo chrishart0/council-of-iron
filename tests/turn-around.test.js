@@ -125,3 +125,15 @@ test('turn-around counts toward the anti-spam limit, survives save/load and is d
   assert.throws(() => send(g, 'usa', { type: 'turn_around', armyId: id }), e => e.status === 429);
   assert.equal(observe(g, 'usa').rules.maxTurnArounds, 2);
 });
+
+test('march again into land you no longer border is refused', () => {
+  const g = game();
+  const sent = send(g, 'usa', { type: 'march', from: 'west-us', to: 'mexico', amount: 6 });
+  advance(g, 8);
+  const army = g.armies.find(a => a.groupId === sent.groupId);
+  send(g, 'usa', { type: 'recall', id: army.id }); tick(g);
+  assert.equal(army.returning, true);
+  // Every USA province bordering Mexico changes hands (fixture): no border of your own, no attack.
+  for (const id of ['west-us', 'central-us']) Object.assign(at(g, id), { owner: 'germany', troops: 30 });
+  assert.throws(() => turnAroundPlan(g, 'usa', army.id), /You have no province bordering mexico\. Take or hold a province next to it first\./);
+});
