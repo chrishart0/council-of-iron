@@ -18,6 +18,8 @@ The harness starts a private loopback server with a separate SQLite file, regist
 
 `decision-turn-v9` adds a public shared-border count to each possible partner and asks the model to weigh reinforcement access alongside projected industry and score. Russia's v8 opening alliance with Britain had no shared starting border, while adjacent coalition pairings in completed wins did. This is a geographic hint, not a bonus or rule change; the evidence does not establish that partner distance caused Russia's early industry losses.
 
+`decision-turn-v10` makes the opening-alliance instruction more specific: when projected score is worthwhile, prefer a partner sharing a border that can help defend a threatened front. France's v9 opening with distant Russia preceded a sharp early loss of French industry. This remains a model strategy hint, not a game rule; a paired run is needed before attributing any outcome change to it.
+
 For a short interface check, `--task fixed` starts that isolated room with its clock paused and asks the model to issue the same three legal orders. It uses the ordinary Council HTTP validation and does not add a public time-control endpoint. The task measures order accuracy, failed calls, reported tokens, and time to the third accepted order. It does not measure strategic playing strength.
 
 ```bash
