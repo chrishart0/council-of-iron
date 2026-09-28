@@ -100,10 +100,10 @@ Heuristic self-play is only used for invariants and "matches still resolve", nev
 1. **Goal.** Hold **60% of the world's industry** with your alliance for **90 seconds**. If nobody does by
    **30:00**, the side with the most industry wins. A tie is a draw. Everyone on the winning side wins.
 2. **Troops.** Each province makes troops every 20 s: 1, 2 or 3 by its industry level.
-3. **March.** Drag from your province to any province you can reach: a neighbour, or anywhere across your own
-   and your allies' land plus one step beyond it (the quickest way, twice as fast inside friendly land,
-   re-routed if part of it is lost). Add more of your provinces to attack together — they arrive at the same
-   moment. Always leave one troop at home.
+3. **March.** Drag from your province to another. An attack goes only from provinces bordering the target;
+   a move to your own or allied land may cross all of it (the quickest way, twice as fast inside friendly
+   land, re-routed if part of it is lost). Select several of your provinces to attack together — they
+   arrive at the same moment. Always leave one troop at home.
 4. **Battle.** Arriving attackers fight dice rounds until one side is gone. Defenders win ties, and a
    factory (industry II or III) gives them +1. Send help or **recall** to pull back.
 5. **Rally.** Pick provinces and a rally point: their new troops march there automatically.
@@ -148,3 +148,7 @@ Gates: `npm test` 161/161, `npm run check`, full `python tests/browser.py` (live
 ### Follow-up (same day): turn-around restored, long marches made explicit
 
 At the user's request turn-around is back as one concept (M3 above): recall an advancing army, or send a returning one back to its target ("march again", at most twice per army, counts toward the order limit); MCP `turn_around` (replacing `recall`) and CLI `turn-around` take a march group or army ID, `POST /plan {type:'turn_around'}` previews it. The user also asked that "movement between any connected provinces the player owns, or connected through an ally, should just work, via the GUI or MCP": the single march already routed through own and allied land; it now also re-routes a column around land lost mid-way (or turns it back with a reason), re-routes waiting sources at departure, returns an actionable no-route error, and the GUI lights every reachable destination and draws the actual route. MCP gained `decision_view` from master (27 tools).
+
+### Follow-up: attacks only from bordering provinces, multi-select
+
+At the user's request ("make sure enemies can only attack provinces they are adjacent to"), a march to land that is not yours or an ally's is an **attack** and every source must border the target (a land border or a sea link in the map `neighbors`); the long route through friendly land is kept only for moves to your own or allied provinces. This sharpens core decision 1 (where to fight): fronts are real, and a surprise strike needs visible staging on the border. The error names the far sources and the provinces of yours and your allies bordering the target. A friendly multi-leg march whose destination changes hands before it leaves fails at departure; a returning attack can march again only on its last leg (it always is now). Second request ("select 4 provinces at once and order an attack from all"): `march` takes `fromAllBordering: true` (every province of yours bordering the target with free troops, `amount`/`percent` per source; CLI `--all-bordering`, `--from a,b,c`), and the browser has an explicit multi-select (Shift/Ctrl-click, Shift-drag lasso, "Select all bordering X" on a target card, a Select mode and long-press on phones, a chip bar of sources). No new action type.
