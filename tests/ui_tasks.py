@@ -36,6 +36,8 @@ class Walk:
     def tap(self, locator, label=None):
         """One tap (touch) or click (mouse) at the element's centre, hit-tested like a real finger."""
         expect(locator).to_be_visible(); expect(locator).to_be_enabled()
+        # A banner for news that affects you (e.g. your alliance forming) sits over the map for a few seconds: wait, as a player would.
+        expect(self.page.locator('.herald:visible')).to_have_count(0, timeout=12000)
         x, y = self.at(locator)
         hit = locator.evaluate('(el,[x,y])=>{const e=document.elementFromPoint(x,y);return el.contains(e)||e?.closest("[data-army]")===el.closest("[data-army]")&&Boolean(e?.closest("[data-army]"))?true:(e?(e.closest("[id]")?.id||e.className||e.tagName):null)}', [x, y])
         assert hit is True, ('covered', label, hit)
@@ -83,7 +85,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     context = browser.new_context(viewport={'width': width, 'height': height}, is_mobile=touch, has_touch=touch, device_scale_factor=2 if touch else 1)
     context.add_init_script('localStorage.setItem("coi.identity",' + json.dumps(json.dumps(identity)) + ');localStorage.setItem("coi.coach","done");')
     page = context.new_page(); errors = []; page.on('pageerror', lambda e: errors.append(str(e)))
-    page.goto(f'{url}/?match={room}'); expect(page.locator('#commander-title')).to_have_text('British Empire')
+    page.goto(f'{url}/?match={room}'); expect(page.locator('#commander-title')).to_have_text('Britain' if width < 1024 else 'British Empire')
     w = Walk(page, server, room, touch, folder, report)
     page.locator('#home-view').click(); page.wait_for_timeout(300)
     primary = page.locator('#primary')
@@ -198,8 +200,9 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
 
     # (e) Reply to a DM: the Messages button opens the sender's thread with the composer focused → type → Send.
     w.begin('reply')
+    base = int(page.locator('#comms-button').get_attribute('data-unread') or 0)  # earlier notices may still be unread
     w.stdin('dm usa britain Will you stand down in the Atlantic?')
-    expect(page.locator('#comms-button')).to_have_attribute('data-unread', '1', timeout=5000)
+    expect(page.locator('#comms-button')).to_have_attribute('data-unread', str(base + 1), timeout=5000)
     w.tap(page.locator('#comms-button'), 'thread')
     expect(page.locator('#comms .cx-title')).to_have_text('United States'); expect(page.locator('#comms .cx-rows')).to_contain_text('Will you stand down in the Atlantic?')
     expect(page.locator('#cx-text')).to_be_focused()
@@ -207,7 +210,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     page.keyboard.type('Only if you recall your fleet.'); w.snap('typed')
     w.tap(page.locator('#comms .cx-send'), 'sent')
     expect(page.locator('#comms .cx-msg[data-mine="true"]').last).to_contain_text('Only if you recall your fleet.', timeout=5000)
-    expect(page.locator('#comms-button')).to_have_attribute('data-unread', '0')
+    expect(page.locator('#comms-button')).to_have_attribute('data-unread', str(base))
     w.end()
     close_comms(page)
 
@@ -231,9 +234,9 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     w.tap(w.counter('scotland'), 'source')
     rally = page.locator('#rally-province'); expect(rally).to_have_text('Rally troops to…'); expect(rally).to_be_enabled(timeout=5000)
     w.tap(rally, 'pick')
-    expect(page.locator('#toast')).to_contain_text('Tap one of your provinces')
+    expect(lane(page)).to_contain_text('Tap one of your provinces')
     w.tap(w.counter('england'), 'set')
-    expect(page.locator('#toast')).to_contain_text('Rally set', timeout=5000)
+    expect(lane(page)).to_contain_text('Rally set', timeout=5000)
     s = w.state(); order = next(o for o in s['commandBudget']['reserved'] if o['type'] == 'rally')
     assert order['sources'] == ['scotland'] and order['to'] == 'england' and order['keep'] is None, order
     w.stdin('war 162'); page.wait_for_timeout(1500)

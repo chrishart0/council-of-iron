@@ -122,6 +122,7 @@ def check_layout(page,label,match=True):
     assert not result['outside'],(label,result['outside'])
     return result
 def check_commit(page,label):
+    page.evaluate('()=>Promise.race([Promise.all(document.getAnimations().filter(a=>a.effect?.getTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>0))),new Promise(r=>setTimeout(r,1500))])')
     result=page.evaluate(COMMIT)
     assert result['visible'] and result['inView'] and result['hit'] and result['scroller'] is None and result['primaries']==1,(label,result)
 def click_at(page,locator):

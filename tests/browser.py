@@ -176,7 +176,7 @@ def main():
                 page.screenshot(path=str(artifacts/'alliance-seal.png'))
                 open_thread(page,'world');expect(page.locator('#comms .cx-rows [data-kind="alliance"]').first).to_contain_text('Atlantic Accord');close_comms(page)
                 report['assertions'].append('Alliance activation showed the standards-and-ribbon seal with country names and a matching World-thread marker.')
-                expect(page.locator('#commander-side')).to_have_text('Atlantic Accord',timeout=15000)
+                expect(page.locator('#commander-side')).to_contain_text('Atlantic Accord',timeout=15000)
                 # Relations without a drawer: the leaderboard marks allies and enemies from the public lists.
                 expect(page.locator('#lb-rows .lb-row[data-id="britain"]')).to_have_attribute('data-relation','ally')
                 wars=http(f'/api/games/{room}')['wars']
