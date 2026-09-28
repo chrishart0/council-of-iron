@@ -19,15 +19,15 @@ const help=`Council of Iron CLI (Node 22.13+)
   map                                Province IDs, connections and countries
   march TO AMOUNT|N% --from FROM[,FROM...] [--declare-war]
   march TO AMOUNT|N% --all-bordering [--declare-war]
-                                     Send troops from one or several of your provinces; they all
-                                     arrive together. AMOUNT or N% applies to EACH source (N% of its
-                                     free troops). --all-bordering uses every province of yours next
-                                     to TO with free troops (AMOUNT: at most that many from each).
-                                     An attack (a target not yours or an ally's) goes only from
-                                     provinces bordering it; a move to your own or allied land may
-                                     travel far through it. --declare-war declares war on the
-                                     target's owner in the same action (nothing happens if the
-                                     march is invalid). FROM may also be listed without --from.
+                                     Send troops from one or several of your provinces (anywhere in
+                                     your empire); each takes the quickest path through your own and
+                                     allied land and all arrive together. AMOUNT or N% applies to EACH
+                                     source (N% of its free troops). --all-bordering uses every
+                                     province of yours next to TO with free troops (AMOUNT: at most
+                                     that many from each). You can attack any province that borders
+                                     your own territory. --declare-war declares war on the target's
+                                     owner in the same action (nothing happens if the march is
+                                     invalid). FROM may also be listed without --from.
   preview TO AMOUNT|N% --from FROM[,FROM...] | --all-bordering
                                      Forecast that march: paths, arrival, battle odds
   turn-around ID [--preview]         Bring a march (group or army ID) home from where it is; a returning

@@ -202,7 +202,8 @@ test('real CLI subprocess joins, observes, sends orders, reconnects from a priva
   assert.equal(JSON.parse(both.stdout).sources.length,2);
   const bordering=await run('preview','north-france','50%','--all-bordering');assert.equal(bordering.code,0,bordering.stderr);
   assert.deepEqual(JSON.parse(bordering.stdout).sources.map(s=>s.from).sort(),['england','ireland']);
-  const far=await run('preview','north-france','50%','--from','scotland');assert.equal(far.code,1);assert.match(far.stderr,/scotland does not border north-france.*yours: ireland, england/);assert.ok(JSON.parse(both.stdout).combatAtArrival);
+  const far=await run('preview','north-france','50%','--from','scotland');assert.equal(far.code,0,far.stderr);assert.ok(JSON.parse(far.stdout).sources[0].path.length>1,'from anywhere in your empire');
+  const loose=await run('preview','mexico','50%','--from','england');assert.equal(loose.code,1);assert.match(loose.stderr,/You have no province bordering mexico\. Take or hold a province next to it first\./);assert.ok(JSON.parse(both.stdout).combatAtArrival);
   const state=JSON.parse((await run('state')).stdout);assert.equal(state.you,'britain');assert.equal(state.orders.length,1);
   const compact=JSON.parse((await run('board')).stdout);
   assert.equal(compact.you,'britain');
@@ -478,7 +479,7 @@ test('a long march has the same path and arrival for the browser (HTTP /plan), M
   const sent=JSON.parse((await subprocess('agents/cli.js',['march','alaska','20','mexico'],env)).stdout);
   assert.deepEqual(sent.orders[0].path,http.sources[0].path);assert.equal(sent.arrivesAt,http.arrivesAt);
 });
-test('attack from every bordering province: HTTP, MCP and CLI agree; percent per source; a clear error when none',async t=>{
+test('attack from every bordering province: HTTP, MCP and CLI agree; percent per source; a clear error with no border',async t=>{
   const f=await fixture(t),host=await f.register('Host'),other=await f.register('Other');
   const id=await f.room(host),usa=await f.seat(id,host,'usa');await f.seat(id,other,'britain');
   await f.launch(id,usa.token);
@@ -492,19 +493,27 @@ test('attack from every bordering province: HTTP, MCP and CLI agree; percent per
     {jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'preview',arguments:action}},
     {jsonrpc:'2.0',id:3,method:'tools/call',params:{name:'march',arguments:{to:'andes',fromAllBordering:true,percent:50}}},
     {jsonrpc:'2.0',id:4,method:'tools/call',params:{name:'march',arguments:{to:'mexico',fromAllBordering:false,percent:50}}},
-    {jsonrpc:'2.0',id:5,method:'tools/call',params:{name:'march',arguments:{to:'mexico',from:'east-us',amount:3}}},
+    {jsonrpc:'2.0',id:5,method:'tools/call',params:{name:'march',arguments:{to:'central-america',from:'east-us',amount:3}}},
   ].map(x=>JSON.stringify(x)).join('\n')+'\n');
   const out=mcp.stdout.trim().split('\n').map(x=>JSON.parse(x));
   assert.deepEqual(JSON.parse(out[1].result.content[0].text).sources,http.sources);
-  assert.equal(out[2].result.isError,true);assert.match(out[2].result.content[0].text,/None of your provinces bordering andes has free troops/);
+  assert.equal(out[2].result.isError,true);assert.match(out[2].result.content[0].text,/You have no province bordering andes/);
   assert.equal(out[3].error.code,-32602,'only true is accepted');
   const far=JSON.parse(out[4].result.content[0].text);
-  assert.match(far.error,/east-us does not border mexico.*yours: west-us, central-us/);
-  assert.deepEqual(far.hint.target.yourBorderingProvinces.map(p=>p.id).sort(),['central-us','west-us']);
+  assert.match(far.error,/You have no province bordering central-america\. Take or hold a province next to it first\. Your nearest: /);
+  assert.deepEqual(far.hint.target.yourBorderingProvinces,[]);
   const cli=await subprocess('agents/cli.js',['preview','mexico','50%','--all-bordering'],env);assert.equal(cli.code,0,cli.stderr);
   assert.deepEqual(JSON.parse(cli.stdout).sources,http.sources);
   const sent=JSON.parse((await subprocess('agents/cli.js',['march','mexico','50%','--all-bordering'],env)).stdout);
   assert.deepEqual(sent.sources.map(s=>[s.from,s.amount]),http.sources.map(s=>[s.from,s.amount]));
   assert.equal(sent.total,http.total);assert.equal(sent.arrivesAt,http.arrivesAt);
   assert.equal(g.orders.filter(o=>o.to==='mexico').length,2);
+});
+test('all_bordering with no free troops on the border: a clear error',async t=>{
+  const f=await fixture(t),host=await f.register('Host'),other=await f.register('Other');
+  const id=await f.room(host),usa=await f.seat(id,host,'usa');await f.seat(id,other,'britain');
+  await f.launch(id,usa.token);
+  const g=f.app.games.get(id);for(const p of ['west-us','central-us'])g.provinces.find(v=>v.id===p).troops=1;
+  const r=await f.call(`/api/games/${id}/plan`,'POST',{to:'mexico',fromAllBordering:true,percent:100},usa.token);
+  assert.equal(r.status,409);assert.match(r.data.error,/None of your provinces bordering mexico has free troops to send/);
 });
