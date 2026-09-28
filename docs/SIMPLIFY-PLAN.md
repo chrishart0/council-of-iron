@@ -120,4 +120,26 @@ Heuristic self-play is only used for invariants and "matches still resolve", nev
 | CUT NOW | −2–3k lines (map/fixtures/scripts, dead UI, duplicate tools) | −1.3k lines (historical design docs, records) | −74 KB fixture, legacy cases |
 | Mechanics | −1.5–2.5k lines across engine, UI, agents | rules sections shrink to one screen | −25–35 tests of removed mechanics |
 
-Actual numbers are recorded at the end of this file when the pass is complete.
+Actual numbers are in "Result" below.
+
+## Result (2026-09-28)
+
+Implemented on branch `simplify` (from the merge a148680): all CUT NOW items and mechanic changes M1–M9 as recommended above; M10–M12 kept.
+
+Text lines (and bytes) per area, before → after (`git ls-files` text files; audio, fonts and images excluded):
+
+| Area | Before | After |
+|---|---:|---:|
+| Engine + server (`src/`) | 1,826 (124 KB) | 1,482 (98 KB) — `engine.js` 1,173 → 875 lines, 81 → 58 KB |
+| Browser (`public/`) | 6,353 (666 KB) | 6,153 (577 KB) — incl. the 58 KB legacy map removed |
+| Agents (`agents/`, incl. Pi harness) | 3,930 (218 KB) | 1,717 (132 KB) — MCP tools 42 → 26; benchmark ledgers reset (−1.7k lines) |
+| Scripts | 1,324 (93 KB) | 870 (60 KB) |
+| Tests | 10,324 (539 KB) | 5,384 (421 KB) — Node tests 185 → 161; 74 KB dead fixture removed |
+| Docs (`docs/`, README, AGENTS.md) | 8,384 (547 KB) | 1,072 (126 KB) |
+| **Total** | **32,627 (2.21 MB)** | **17,164 (1.43 MB)** |
+
+Player-facing concepts removed: transit, long-march-only-through-own-land, arrival scheduling, recruitment arrows, rally "keep", turn-around/resume, war votes, peace votes, the opening council, the command budget, the chat cooldown, Prestige, prize pool, strength shares, maturity/tenure, 50/25/25 deadline prizes, negotiated draws, league eligibility, capture damage. Orders a player can give: 12 action types → 12, but movement is one order (was five) and diplomacy has no votes.
+
+Tap counts (tests/ui_tasks.py, 390×844 touch / 1366×768 mouse): declare 3/3 (bound 4 → 3), attack 3/3, recall 2/2, propose 3/3, respond 2/2, reply 2/2 (bound 3 → 2), develop 3/3, rally 3/3, converse 7/6; the turn-around task is gone. None got worse.
+
+Gates: `npm test` 161/161, `npm run check`, full `python tests/browser.py` (live match, review, UI layout/overlap/contrast audits at 7 viewports, task walkthroughs, voice; no page errors), `npm run test:balance -- --rounds 32 --mode diplomacy` (0 invariant failures, 25 decisive, 7 deadline wins, 0 draws), and 256+256 same-seed before/after runs in `docs/BALANCE.md`. The handplay golden hashes were re-baselined (the recording now ends at tick 553). No human has played the simplified rules yet.
