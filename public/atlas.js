@@ -35,6 +35,27 @@ export const WORLD = 1280;
 let instances = 0;
 /** Shortest horizontal offset from a to b across the wrap. */
 export const wrapDelta = dx => dx - WORLD * Math.round(dx / WORLD);
+/** 'M..L..' runs of a border path as point lists. */
+function polylines(d) {
+  return String(d).split('M').filter(Boolean).map(run => run.split('L').map(xy => xy.split(',').map(Number)));
+}
+/** Small upright mountain chevrons along border runs, spaced and sized in screen pixels at `px` per map unit. */
+function peaks(runs, px) {
+  const step = 12 / px, w = 4.2 / px, h = 4.6 / px, out = [];
+  for (const run of runs) {
+    let carry = step / 2, k = 0;
+    for (let i = 0; i < run.length - 1; i++) {
+      const [ax, ay] = run[i], [bx, by] = run[i + 1], len = Math.hypot(bx - ax, by - ay);
+      let t = carry;
+      for (; t < len; t += step, k++) {
+        const x = ax + (bx - ax) * t / len, y = ay + (by - ay) * t / len, s = k % 3 === 1 ? .78 : 1;
+        out.push(`M${(x - w * s).toFixed(2)},${(y + h * s / 2).toFixed(2)}L${x.toFixed(2)},${(y - h * s / 2).toFixed(2)}L${(x + w * s).toFixed(2)},${(y + h * s / 2).toFixed(2)}`);
+      }
+      carry = t - len;
+    }
+  }
+  return out.join('');
+}
 export class Atlas {
   /** options.legend: { placement: one of LEGEND_PLACEMENTS (default 'bottom-left'),
    *  container: element to mount the key in instead of the map container, collapsed: boolean }. */
@@ -106,7 +127,21 @@ export class Atlas {
     this.provinceBorders = node('g', { class: 'province-borders', 'pointer-events': 'none' });
     this.countryBorders = node('g', { class: 'country-borders', 'pointer-events': 'none' });
     this.alliedBorders = node('g', { class: 'allied-borders', 'pointer-events': 'none' });
-    this.borders = network.borders.map(b => { const el = node('path', { d: b.d, 'data-border': `${b.a}|${b.b}` }); this.provinceBorders.append(el); return { ...b, el, kind: 'province' }; });
+    // Impassable terrain (map.barriers): a shared border without a link, drawn as mountains or desert instead of a border line.
+    const barrierOf = new Map((map.barriers || []).map(b => [[b.a, b.b].sort().join('|'), b]));
+    this.borders = []; this.barriers = [];
+    for (const b of network.borders) {
+      const barrier = barrierOf.get(`${b.a}|${b.b}`);
+      if (barrier) { this.barriers.push({ ...b, barrier, runs: polylines(b.d) }); continue; }
+      const el = node('path', { d: b.d, 'data-border': `${b.a}|${b.b}` }); this.provinceBorders.append(el); this.borders.push({ ...b, el, kind: 'province' });
+    }
+    this.terrain = node('g', { class: 'terrain-barriers', 'aria-hidden': 'true' });
+    for (const b of this.barriers) {
+      const g = node('g', { class: `terrain terrain-${b.barrier.terrain}`, 'data-barrier': `${b.a}|${b.b}` });
+      if (b.barrier.terrain === 'desert') g.append(node('path', { d: b.d, class: 'terrain-band' }), node('path', { d: b.d, class: 'terrain-edge' }), node('path', { d: b.d, class: 'terrain-dots' }));
+      else { b.peaks = [node('path', { class: 'terrain-peaks-casing' }), node('path', { class: 'terrain-peaks' })]; g.append(node('path', { d: b.d, class: 'terrain-ridge' }), node('path', { d: b.d, class: 'terrain-edge' }), ...b.peaks); }
+      g.append(node('path', { d: b.d, class: 'terrain-hit' })); this.terrain.append(g);
+    }
     // Alliance blocs, war fronts and hover relations sit above borders, below routes.
     this.blocs = node('g', { class: 'alliance-blocs', 'pointer-events': 'none', 'aria-hidden': 'true' });
     this.fronts = node('g', { class: 'war-fronts', 'pointer-events': 'none', 'aria-hidden': 'true' });
@@ -114,7 +149,7 @@ export class Atlas {
     this.relationPaths = Object.fromEntries(['ally', 'enemy', 'focus'].map(kind => [kind, node('path', { class: `relation-${kind}` })]));
     this.relationLines.append(...Object.values(this.relationPaths));
     // Coastline: a light casing under a dark line reads as an engraved double line at every zoom.
-    this.base.append(this.provinceBorders, this.alliedBorders, this.countryBorders,
+    this.base.append(this.provinceBorders, this.alliedBorders, this.countryBorders, this.terrain,
       node('path', { d: coast, class: 'coastline-casing', 'pointer-events': 'none' }), node('path', { d: coast, class: 'coastline', 'pointer-events': 'none' }), regions);
     const compass = node('g', { 'aria-hidden': 'true', 'pointer-events': 'none', transform: 'translate(110 560)', opacity: .38, stroke: '#ddc591', fill: 'none' });
     compass.append(node('circle', { r: 27, 'stroke-width': .7 }), node('circle', { r: 22, 'stroke-width': .4 }), node('path', { d: 'M0-40L6-6 40 0 6 6 0 40-6 6-40 0-6-6Z', 'stroke-width': .8 }), node('path', { d: 'M0-40V0H-40L-6-6Z', fill: '#ddc591', 'stroke-width': .4 }));
@@ -247,15 +282,17 @@ export class Atlas {
     if (!this.dragged && gesture?.army && this.onArmy?.(gesture.army)) { this.tooltip.hidden = true; }
     else if (!this.dragged && gesture?.army) this.showArmy(gesture.army, { left: event.clientX - 14, top: event.clientY + 65, width: 0 });
     else if (!this.dragged && gesture?.cluster) this.fit(gesture.cluster.split(','));
+    else if (!this.dragged && gesture?.barrier) this.showBarrier(gesture.barrier, event.clientX, event.clientY);
     else if (!this.dragged && gesture?.id) this.onSelect(gesture.id, { shiftKey: gesture.shiftKey, target: gesture.target });
     if (!this.pointers.size) this.gesture = null;
   }
   /** What a pointer event is on. A click on a repeated world copy resolves to the same province. */
   hit(event) {
     const el = event.target, cluster = el.closest?.('[data-cluster]')?.dataset.cluster, army = el.closest?.('[data-army]')?.dataset.army;
+    const barrier = el.closest?.('[data-barrier]')?.dataset.barrier;
     let id = el.closest?.('[data-province]')?.dataset.province;
-    if (!id && !cluster && !army && el.closest?.('use.world-copy')) id = this.provinceAt(this.coordinates(event.clientX, event.clientY));
-    return { cluster, id, army };
+    if (!id && !cluster && !army && !barrier && el.closest?.('use.world-copy')) id = this.provinceAt(this.coordinates(event.clientX, event.clientY));
+    return { cluster, id, army, barrier };
   }
   provinceAt(point) {
     const x = ((point.x % WORLD) + WORLD) % WORLD;
@@ -270,7 +307,8 @@ export class Atlas {
   }
   pan(dx, dy) { this.view.x += dx; this.view.y += dy; this.applyView(); }
   hover(event) {
-    const { cluster, id, army } = this.hit(event);
+    const { cluster, id, army, barrier } = this.hit(event);
+    if (barrier) { this.showBarrier(barrier, event.clientX, event.clientY); return; }
     const p = this.byId?.get(id);
     this.hoverCountry(cluster ? this.byId?.get(cluster.split(',')[0])?.owner || null : p?.owner || null);
     if (army) { this.showArmy(army, { left: event.clientX - 14, top: event.clientY + 65, width: 0 }); return; }
@@ -296,6 +334,12 @@ export class Atlas {
     this.tooltip.style.left = `${clamp(clientX - rect.left + 14, 8, rect.width - 260)}px`;
     this.tooltip.style.top = `${Math.max(8, clientY - rect.top - 65)}px`;
   }
+  /** Why a drawn border is not a way through (authored map text only). */
+  barrierText(key) {
+    const b = this.barriers.find(b => `${b.a}|${b.b}` === key)?.barrier;
+    return b ? { title: `The ${b.name}: impassable`, detail: `${b.terrain === 'desert' ? 'Desert' : 'Mountains'} between ${this.places.get(b.a)?.name} and ${this.places.get(b.b)?.name}. ${b.around}` } : null;
+  }
+  showBarrier(key, clientX, clientY) { const t = this.barrierText(key); if (t) this.tip(t.title, t.detail, clientX, clientY); }
   showArmy(id, at) {
     const a = this.state?.armies.find(a => a.id === id);
     if (!a) return;
@@ -461,6 +505,9 @@ export class Atlas {
     this.svg.dataset.lod = level; this.svg.classList.toggle('atlas-zoomed', level === 'near');
     // Region names are drawn in map units: shown only between legible and crowded sizes.
     this.svg.dataset.world = String(px >= LOD.regionMin && px < LOD.world);
+    // Mountain peaks are drawn in screen pixels: regenerate them when the zoom changes by more than ~10%.
+    const bucket = Math.round(Math.log(px) * 10);
+    if (bucket !== this.peakBucket) { this.peakBucket = bucket; for (const b of this.barriers) if (b.peaks) { const d = peaks(b.runs, px); for (const el of b.peaks) el.setAttribute('d', d); } }
     // Keep the mode chip inside the visible map, whatever else shares the container.
     // Expose the visible map's insets so CSS can place the key inside it, whatever shares the container.
     const box = this.svg.getBoundingClientRect(), host = this.chip.parentElement?.getBoundingClientRect();
@@ -859,6 +906,10 @@ export class Atlas {
       if (wars.length) heading('At war');
       for (const pair of wars.slice(0, 4)) item('#d8342a', pair.split(':').map(id => faction(id).short).join(' – '), 'war');
       if (wars.length > 4) heading(`+${wars.length - 4} more wars`);
+      // Impassable terrain, by kind: the names drawn on the map.
+      const names = kind => [...new Set(this.barriers.filter(b => b.barrier.terrain === kind).map(b => b.barrier.name))];
+      if (this.barriers.length) heading('Impassable');
+      for (const kind of ['mountains', 'desert']) if (names(kind).length) item(kind === 'desert' ? '#d9b777' : '#8a6a45', names(kind).join(' · '), kind);
     }
     this.legend.hidden = !this.legend.childElementCount;
     this.keyButton.hidden = this.legend.hidden; this.chip.classList.toggle('empty', this.legend.hidden);
@@ -1021,7 +1072,7 @@ export class Atlas {
   outline(ids) {
     const network = networks.get(this.map), parts = [];
     for (const id of ids) parts.push(...(network.coast.get(id) || []));
-    for (const b of this.borders) if (ids.has(b.a) !== ids.has(b.b)) parts.push(b.d);
+    for (const b of [...this.borders, ...this.barriers]) if (ids.has(b.a) !== ids.has(b.b)) parts.push(b.d);
     return parts.join('');
   }
   /** The contact line between two groups of countries: land borders, else sea links, else capitals. */
@@ -1095,15 +1146,21 @@ export class Atlas {
     const cluster = el?.closest?.('[data-cluster]')?.dataset.cluster;
     if (!to && cluster) to = cluster.split(',').find(id => neighbors.includes(id)) || null;
     if (!to && this.svg.contains(el)) to = this.provinceAt(point);
+    const under = to;
     if (!neighbors.includes(to)) {
       to = null; let best = 28 / px;
       for (const id of neighbors) { const q = this.places.get(id), d = Math.hypot(point.x - (point.x + wrapDelta(q.x - point.x)), point.y - q.y); if (d < best) { best = d; to = id; } }
     }
-    this.dragging = { from, to, point, label: to ? this.dragHooks?.label?.(from, to) || '' : '' };
+    // Over a province across impassable terrain from your land: say why instead of snapping.
+    const mine = id => id === from || (this.byId?.get(id)?.owner && this.byId.get(id).owner === this.state?.you);
+    const wall = !to && under ? this.barriers.find(b => (b.a === under && mine(b.b)) || (b.b === under && mine(b.a))) : null;
+    if (wall) this.showBarrier(`${wall.a}|${wall.b}`, clientX, clientY); else if (this.dragging?.wall) this.tooltip.hidden = true;
+    this.dragging = { from, to, point, wall: Boolean(wall), label: to ? this.dragHooks?.label?.(from, to) || '' : wall ? `${wall.barrier.name} · impassable` : '' };
     this.paintDraft();
   }
   endDraft(from, to = null) {
     const was = this.dragging; this.dragging = null; this.paintDraft();
+    if (was?.wall) this.tooltip.hidden = true;
     if (from && was) this.dragHooks?.end?.(from, to);
   }
   destroy() {

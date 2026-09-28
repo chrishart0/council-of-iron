@@ -16,6 +16,19 @@
 .country-borders path{fill:none;stroke:#0e1e25;stroke-opacity:.95;stroke-width:1.9;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
 .atlas-v6[data-lod=far] .country-borders path{stroke-width:1.5}
 .atlas-v6[data-lod=near] .country-borders path{stroke-width:2.6}
+/* Impassable terrain (map.barriers): the border is drawn as mountains or desert, not as a border line. */
+.terrain path{fill:none;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.terrain-edge{stroke:#10232b;stroke-opacity:.55;stroke-width:.8}
+.terrain-ridge{stroke:#6b4f2e;stroke-opacity:.45;stroke-width:5}
+.terrain-peaks-casing{stroke:#2a1d10;stroke-opacity:.55;stroke-width:3}
+.terrain-peaks{stroke:#f3e4bd;stroke-width:1.3}
+.terrain-band{stroke:#e2c07d;stroke-opacity:.42;stroke-width:9}
+.terrain-dots{stroke:#7a5626;stroke-opacity:.85;stroke-width:1.9;stroke-dasharray:0 4.5}
+.terrain-hit{stroke:transparent;stroke-width:10;pointer-events:stroke;cursor:help}
+.atlas-v6[data-lod=far] .terrain-band{stroke-width:7}.atlas-v6[data-lod=far] .terrain-ridge{stroke-width:4}
+.atlas-v6[data-lod=near] .terrain{opacity:.6}
+.legend-mountains i{height:0!important;width:14px;border:0!important;border-top:5px solid transparent!important;background:none!important;clip-path:polygon(0 100%,50% 0,100% 100%);height:8px!important;background:#8a6a45!important}
+.legend-desert i{background:radial-gradient(#7a5626 1px,transparent 1.3px) 0 0/4px 4px,#e2c07d!important}
 /* Region (continent) names at world zoom only: large, spaced, quiet; they sit in open sea or empty land. */
 .region-names text{display:none;font:italic 600 13px var(--map-serif);letter-spacing:5px;text-anchor:middle;fill:#efe2b9;fill-opacity:.5;paint-order:stroke;stroke:#0f2530;stroke-opacity:.55;stroke-width:2.5;stroke-linejoin:round}
 .atlas-v6[data-world=true] .region-names text{display:inline}
