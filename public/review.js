@@ -67,6 +67,7 @@ export class AfterAction {
     return allianceColors({ players: r.players.map(p => ({ id: p.country, side: p.side })), sides: r.alliances.map(a => ({ id: a.id, name: a.name, members: a.members })) });
   }
   render() {
+    this.report.events ||= []; this.report.series ||= [];
     const r = this.report, economic = r.rules.economyShare !== undefined;
     const winner = r.alliances.find(s => s.won) || null, solo = !winner && r.outcome.winningSide ? r.players.find(p => p.side === r.outcome.winningSide) : null;
     const headline = r.outcome.draw ? (r.outcome.reason === 'negotiated_draw' ? 'A negotiated peace' : 'The council ends in a draw')
@@ -109,7 +110,7 @@ ${medal ? `<div class="v-medal">${icon('laurel')}<b>${signed(medal.value)}</b><s
     const W = 520, H = 150, total = this.map.provinces.length || 1, scale = .7;
     const series = r.series || [];
     const lines = alliances.map(a => `<polyline points="${series.map(s => { const n = s.countries.filter(c => a.members.includes(c.country)).reduce((x, c) => x + c.land, 0); return `${(s.tick / Math.max(1, r.duration) * W).toFixed(1)},${(H - Math.min(1, n / total / scale) * H).toFixed(1)}`; }).join(' ')}" style="--c:${colors[a.id] || NEUTRAL}"><title>${esc(this.side(a.id))}</title></polyline>`).join('');
-    const turning = r.events.filter(e => KEY_EVENTS.includes(e.type));
+    const turning = (r.events || []).filter(e => KEY_EVENTS.includes(e.type));
     const totals = r.totals || {};
     this.el('aar-overview').innerHTML = `<div class="report-body">
 <section class="r-table"><h2 class="r-head">Final standings</h2><div class="r-scroll"><table id="aar-standings"><caption class="sr-only">Final standings by alliance: provinces, ${economic ? 'industry, ' : ''}forces, share earned and Prestige</caption><thead><tr><th scope="col">Alliance / country</th><th scope="col">Land</th>${economic ? '<th scope="col">Industry</th>' : ''}<th scope="col">Forces</th><th scope="col">Earned</th><th scope="col">Prestige</th></tr></thead>${body}</table></div>
@@ -195,8 +196,7 @@ ${medal ? `<div class="v-medal">${icon('laurel')}<b>${signed(medal.value)}</b><s
 <p id="replay-loading" class="replay-loading" role="status" data-region="replay-loading">Open the replay to load the recorded map.</p>
 <div id="replay-stage" class="replay-stage" data-tick="0" hidden>
 <svg id="review-map" class="replay-map" viewBox="0 0 1280 680" role="group" aria-label="Replay map; select a province to inspect it"></svg>
-<div class="replay-overlay"><div class="camera replay-camera" data-region="replay-camera" role="group" aria-label="Replay map view"><button type="button" class="bezel-btn" data-aar-map="in" aria-label="Zoom replay in" data-sfx="press">${icon('plus')}</button><button type="button" class="bezel-btn" data-aar-map="out" aria-label="Zoom replay out" data-sfx="press">${icon('minus')}</button><button type="button" class="bezel-btn" data-aar-map="europe" aria-label="Europe" title="Europe" data-sfx="press">${icon('land')}</button><button type="button" class="bezel-btn" data-aar-map="world" aria-label="World view" title="World view" data-sfx="press">${icon('globe')}</button></div>
-<section id="replay-inspector" class="plate replay-inspector" data-region="replay-inspector" aria-live="polite" hidden></section></div></div>
+<div class="replay-overlay"><div class="replay-left"><div id="replay-key" class="replay-key" data-region="replay-key"></div><section id="replay-inspector" class="plate replay-inspector" data-region="replay-inspector" aria-live="polite" hidden></section></div><div class="camera replay-camera" data-region="replay-camera" role="group" aria-label="Replay map view"><button type="button" class="bezel-btn" data-aar-map="in" aria-label="Zoom replay in" data-sfx="press">${icon('plus')}</button><button type="button" class="bezel-btn" data-aar-map="out" aria-label="Zoom replay out" data-sfx="press">${icon('minus')}</button><button type="button" class="bezel-btn" data-aar-map="europe" aria-label="Europe" title="Europe" data-sfx="press">${icon('land')}</button><button type="button" class="bezel-btn" data-aar-map="world" aria-label="World view" title="World view" data-sfx="press">${icon('globe')}</button></div></div></div>
 <aside class="replay-side" aria-label="Standings and history at this moment">
 <section class="replay-leaderboard" data-region="replay-standings" aria-label="Standings at this moment"><header class="plaque"><h2><button class="lb-toggle" type="button" aria-expanded="true"><span id="replay-standings-title">Standings at 00:00</span></button></h2><span class="lb-summary plaque-note"></span><div class="tabs lb-modes" role="group" aria-label="Rank"><button type="button" data-lb-mode="teams" aria-pressed="true">Teams</button><button type="button" data-lb-mode="players" aria-pressed="false">Players</button></div></header>
 <div class="lb-body"><div class="lb-columns" aria-hidden="true"><span>#</span><span>Power</span><span>Land</span><span>Troops</span></div><ol class="lb-rows"></ol><h3 class="lb-fronts-title">${icon('war')}War fronts <small class="lb-front-count"></small></h3><ul class="lb-fronts" aria-label="Wars between blocs"></ul></div></section>
@@ -275,7 +275,7 @@ ${medal ? `<div class="v-medal">${icon('laurel')}<b>${signed(medal.value)}</b><s
         if (this.controller.signal.aborted) return;
         this.reader = replayReader(replay); this.map = replay.map;
         this.el('replay-stage').hidden = false; this.el('replay-loading').hidden = true;
-        this.atlas = new Atlas(this.el('review-map'), this.map, id => { this.inspected = id; this.paint(); });
+        this.atlas = new Atlas(this.el('review-map'), this.map, id => { this.inspected = id; this.paint(); }, { legend: { placement: 'top-left', container: this.el('replay-key'), collapsed: true } });
         // The same team leaderboard as the live match, fed the board at the scrubbed tick (public data only).
         const box = this.root.querySelector('.replay-leaderboard');
         this.standings = new LeaderboardPanel({ root: box, rows: box.querySelector('.lb-rows'), toggle: box.querySelector('.lb-toggle'), summary: box.querySelector('.lb-summary'),

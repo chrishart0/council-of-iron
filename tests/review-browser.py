@@ -12,6 +12,10 @@ from playwright.sync_api import sync_playwright, expect
 from browser_helpers import load_bridge
 
 ROOT = Path(__file__).resolve().parents[1]
+# Anchored-region audit: visible [data-region] boxes inside #result never overlap (>4 px), leave the viewport, or scroll the page.
+AUDIT='''() => {const b=[];for(const e of document.querySelectorAll('#result [data-region]')){if(!e.checkVisibility())continue;const r=e.getBoundingClientRect();if(r.width<1||r.height<1)continue;b.push([e.dataset.region,r.left,r.top,r.right,r.bottom]);}
+const o=[];for(let i=0;i<b.length;i++)for(let j=i+1;j<b.length;j++){const x=b[i],y=b[j];if(x[1]<y[3]-4&&y[1]<x[3]-4&&x[2]<y[4]-4&&y[2]<x[4]-4)o.push(x[0]+' x '+y[0]);}
+const d=document.scrollingElement;return {overlaps:o,outside:b.filter(x=>x[1]<-4||x[2]<-4||x[3]>innerWidth+4||x[4]>innerHeight+4).map(x=>x[0]),scroll:d.scrollWidth>innerWidth+1||d.scrollHeight>innerHeight+1||scrollY>0,regions:b.map(x=>x[0])};}'''
 
 def main():
     parser=argparse.ArgumentParser()
@@ -44,15 +48,17 @@ def main():
             page.on('pageerror',lambda e:report['pageErrors'].append(str(e)))
             if args.bridge:load_bridge(page,url)
             else:page.goto(url)
-            expect(page.locator('[data-room="review-fixture"]')).to_have_text('Review →')
+            expect(page.locator('[data-room="review-fixture"]')).to_contain_text('Review')
             page.locator('[data-room="review-fixture"]').click()
-            expect(page.locator('#aar-player-scores tbody tr')).to_have_count(8)
-            expect(page.locator('#aar-alliances article')).to_have_count(3)
+            expect(page.locator('#aar-standings tr[data-result-country]')).to_have_count(8)
+            expect(page.locator('#aar-standings tr[data-result-alliance]')).to_have_count(3)
             expect(page.locator('[data-result-country="usa"]')).to_contain_text('+73.33')
-            expect(page.locator('#aar-alliances')).to_contain_text('+406.67')
-            expect(page.locator('.war-room')).to_be_hidden()
+            expect(page.locator('#aar-standings tr[data-result-alliance]').first).to_contain_text('+406.67')  # alliance = sum of member Prestige
+            # The report covers the finished match: no live command surface is reachable under it.
+            assert page.evaluate('''() => { const r=document.querySelector('#result').getBoundingClientRect(); return r.width>=innerWidth-1 && r.height>=innerHeight-1 && document.querySelector('#result').contains(document.elementFromPoint(innerWidth/2, innerHeight/2)); }''')
+            assert page.locator('#result [data-act], #result #primary, #result .cx-composer').count()==0
             capture(page,'01-overview.png',1000)
-            report['assertions'].append('Finished room opens Overview: all eight player scores and three alliance aggregates; live commands are hidden.')
+            report['assertions'].append('Finished room opens the after-action report: all eight player scores grouped under three alliance totals (sum of member Prestige); the report covers every live command surface.')
             page.locator('#aar-tab-replay').click()
             expect(page.locator('#replay-stage')).to_be_visible()
             expect(page.locator('#replay-stage')).to_have_attribute('data-tick','0')
@@ -78,7 +84,7 @@ def main():
             ids=page.locator('[id]').evaluate_all('(nodes)=>nodes.map(n=>n.id)')
             assert len(ids)==len(set(ids)),'Live and replay maps have conflicting element IDs'
             page.locator('[data-aar-transport="start"]').click()
-            page.locator('#replay-speed').select_option('64')
+            page.locator('#replay-speed [data-speed="64"]').click()
             page.locator('#replay-play').click();page.wait_for_timeout(400);page.locator('#replay-play').click()
             paused=page.locator('#replay-slider').input_value();assert int(paused)>0
             page.wait_for_timeout(160);assert page.locator('#replay-slider').input_value()==paused
@@ -90,20 +96,22 @@ def main():
             page.locator('[data-aar-transport="end"]').click()
             expect(page.locator('#replay-stage')).to_have_attribute('data-tick','530')
             page.locator('#replay-slider').fill('529');page.locator('#replay-play').click()
-            expect(page.locator('#replay-play')).to_have_text('Play')
+            expect(page.locator('#replay-play')).to_have_attribute('aria-label','Play replay')
             expect(page.locator('#replay-stage')).to_have_attribute('data-tick','530')
             report['assertions'].append('Play, pause, rate change, keyboard slider, event jumps, opening/final controls and automatic end-of-replay stop work.')
+            page.locator('#replay-exit').click()
             for kind in ['military','economy']:
                 page.locator('#aar-tab-'+kind).click()
                 expect(page.locator('#aar-'+kind)).to_be_visible()
-                page.locator('#'+kind+'-country').select_option('germany')
+                page.locator(f'[data-chart="{kind}"][data-compare="germany"]').click()
                 assert page.locator('#'+kind+'-chart polyline').count()==1
-                page.locator('#'+kind+'-country').select_option('all')
+                page.locator(f'[data-chart="{kind}"][data-compare="all"]').click()
                 capture(page,'04-'+kind+'.png')
             expect(page.locator('.aar-accounting')).to_contain_text('2,524')
             page.locator('#aar-tab-military').click()
             page.locator('.aar-ledger [data-aar-seek]').first.click()
             assert int(page.locator('#replay-stage').get_attribute('data-tick')) <= 530
+            page.locator('#replay-exit').click()
             page.locator('#aar-tab-diplomacy').click()
             expect(page.locator('.aar-tenure-row')).to_have_count(8)
             expect(page.locator('#aar-diplomacy')).to_contain_text('countdown stops')
@@ -118,28 +126,36 @@ def main():
             page.locator('#aar-tab-replay').click();page.locator('#replay-slider').fill('363')
             capture(page,'07-mobile-replay.png')
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1')
+            page.locator('#replay-exit').click()
+            for size in [(1920,1080),(1536,864),(1440,900),(1366,768),(1280,800),(390,844),(844,390)]:
+                page.set_viewport_size({'width':size[0],'height':size[1]})
+                for view,control in [('replay','#aar-tab-replay'),('report','#replay-exit')]:
+                    page.locator(control).click();page.wait_for_timeout(150);audit=page.evaluate(AUDIT)
+                    assert not audit['overlaps'] and not audit['outside'] and not audit['scroll'],(size,view,audit)
+                    if size in [(1536,864),(390,844)]:page.screenshot(path=str(out/f'08-{view}-{size[0]}x{size[1]}.png'))
             page.set_viewport_size({'width':1500,'height':1200})
-            report['assertions'].append('Keyboard tab navigation and 390px layouts pass; tables scroll within their panels, not the document.')
+            report['assertions'].append('Keyboard tab navigation passes; report and replay regions never overlap, leave the viewport or scroll the page at 1920×1080, 1536×864, 1440×900, 1366×768, 1280×800, 390×844 and 844×390.')
             if args.gif:
-                page.locator('[data-aar-map="world"]').click()
+                page.locator('#aar-tab-replay').click();page.locator('[data-aar-map="world"]').click()
                 page.evaluate('''() => {const n=document.createElement('div');n.textContent='RECORDED MATCH REPLAY · ACTUAL BROWSER CAPTURE · SINGLE-CONTROLLER TEST';n.style.cssText='position:fixed;right:15px;bottom:10px;background:#203942;color:#f1eddd;padding:7px 12px;font:10px system-ui;z-index:20';document.body.append(n);}''')
                 for tick in range(0,531,18):
                     page.locator('#replay-slider').fill(str(tick));capture(page,delay=140)
+                page.locator('#replay-exit').click()
             before=api('/api/games/review-fixture/review')
-            page.locator('#back').click()
+            page.locator('#aar-back').click()
             page.locator('[data-room="draw-fixture"]').click()
-            expect(page.locator('#aar-player-scores tbody tr')).to_have_count(2)
+            expect(page.locator('#aar-standings tr[data-result-country]')).to_have_count(2)
             expect(page.locator('#result')).to_contain_text('A negotiated peace')
             assert page.locator('#result img').count()==0
             assert not page.evaluate('Boolean(window.REVIEW_XSS)')
             page.locator('#aar-tab-replay').click();expect(page.locator('#replay-stage')).to_be_visible()
             assert page.locator('#review-map .province').count()==79
-            page.locator('#back').click();page.locator('[data-room="old-fixture"]').click()
-            expect(page.locator('#aar-player-scores tbody tr')).to_have_count(8)
+            page.locator('#replay-exit').click();page.locator('#aar-back').click();page.locator('[data-room="old-fixture"]').click()
+            expect(page.locator('#aar-standings tr[data-result-country]')).to_have_count(8)
             page.locator('#aar-tab-replay').click();expect(page.locator('#aar-replay')).to_contain_text('History unavailable')
             report['assertions'].append('Negotiated draw renders correctly, malicious coalition name stays inert, and unverifiable legacy history fails closed while scores remain visible.')
-            page.locator('#back').click();page.locator('[data-room="review-fixture"]').click()
-            expect(page.locator('#aar-player-scores tbody tr')).to_have_count(8)
+            page.locator('#replay-exit').click();page.locator('#aar-back').click();page.locator('[data-room="review-fixture"]').click()
+            expect(page.locator('#aar-standings tr[data-result-country]')).to_have_count(8)
             assert api('/api/games/review-fixture/review')==before
             report['assertions'].append('Leaving and reopening reviews releases playback state; watching history does not alter the match or scores.')
             assert not report['pageErrors'],report['pageErrors']

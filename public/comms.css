@@ -152,8 +152,7 @@
 .cx-composer .voice{display:contents}
 .voice-mic{display:grid;place-items:center;width:42px;height:42px;min-width:42px;border-radius:50%;border:2px solid var(--brass);background:radial-gradient(circle at 50% 35%,#3c4548,#1f2527 70%);color:var(--brass-hi)}
 @media (max-width:1023px){
-  .comms{grid-column:1;grid-row:2/5;z-index:6;border-top:2px solid;border-image:var(--rim) 1}
-  .comms{grid-area:auto}
+  .comms{grid-area:auto;grid-column:1;grid-row:2/5;z-index:6;border-top:2px solid;border-image:var(--rim) 1;border-left:0}
   .war-room:has(#comms:not([hidden])) :is(.strip,.dock,.left,.maparea,.powers){visibility:hidden}
   .comms{--cx-safe-b:var(--safe-b)}
   .cx-toast{font-size:15px;gap:6px;min-height:50px}

@@ -652,7 +652,7 @@ function renderHud(){
   const land=state.provinces.filter(p=>p.owner===state.you && state.you);
   const troops=land.reduce((n,p)=>n+p.troops,0)+state.armies.filter(a=>a.country===state.you).reduce((n,a)=>n+a.amount,0);
   const enemies=me?relationsOf(state,state.you).enemies.length:0;
-  $('commander-title').textContent=country(state.you)?.name || (state.status==='running'?'Spectating':'Observer');
+  $('commander-title').textContent=state.you?(compact.matches?faction(state.you).short:country(state.you).name):(state.status==='running'?'Spectating':'Observer');
   setHTML($('commander-insignia'),insignia(state.you));
   $('commander-side').textContent=me?(me.eliminatedAt!==null?'Fallen':`${me.side.startsWith('solo:')?'Independent':namedSide(me.side)}${enemies?` · at war with ${enemies}`:''}`):'Watching';
   $('hud-standard').disabled=!me || spectating;

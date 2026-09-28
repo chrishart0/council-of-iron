@@ -137,7 +137,7 @@ body[data-screen=match] .toast{position:absolute}
 .identity-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;width:100%;padding-top:10px;border-top:1px solid #c29a5233}
 .who{display:flex;flex-direction:column;align-items:flex-start;margin-right:auto;text-align:left}.who small{color:var(--muted);font-size:13px}.who b{font:700 19px var(--title);color:var(--ivory)}
 .gate-foot{margin:0;color:var(--muted);font-size:14px}
-.rooms{grid-area:rooms;max-height:calc(100vh - 380px);min-height:220px}
+.rooms{grid-area:rooms;max-height:calc(100vh - 440px);min-height:200px}
 .rooms .plaque{padding-right:6px}
 .ledger{overflow:auto;min-height:0;padding:4px 12px 10px;scrollbar-width:thin;scrollbar-color:var(--brass-lo) transparent}
 .room-group h3{display:flex;align-items:center;gap:8px;margin:10px 0 2px;font:700 16px var(--title);color:var(--brass)}.room-group h3 small{font:600 13px var(--ui);color:var(--muted)}
@@ -231,7 +231,7 @@ body[data-screen=match] #home{display:none}
 .amount-control{display:flex;flex-direction:column;gap:4px}
 .amount-line{display:flex;align-items:baseline;justify-content:space-between;color:var(--muted);font-size:15px}
 .amount-line label{color:var(--muted)}
-.amount-line output{font:700 22px/1 var(--title);color:var(--brass-hi)}
+.amount-line output{font:600 20px/1 var(--ui);color:var(--brass-hi)}
 .presets{display:flex;gap:6px}.presets .chip{flex:1}
 .order-preview{margin:0;color:var(--text-2);font-size:15px;text-align:center}
 .order-preview:empty{display:none}
@@ -296,11 +296,11 @@ body[data-comms=thread] .powers .lb-summary{display:block}
 .lb-expand{display:grid;place-items:center;width:22px;height:22px;color:var(--brass-hi);font-size:13px}
 .lb-swatch{display:none}
 .lb-standards{display:flex}.lb-standards .insignia{width:20px;height:24px}
-.lb-name{display:flex;align-items:center;gap:6px;min-width:0;grid-column:3/5}
+.lb-name{display:flex;align-items:center;gap:6px;min-width:0;grid-column:3}
 .lb-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;min-width:0}
 .lb-bar{flex:none;width:30px;height:5px;background:#0008}.lb-bar>i{display:block;height:100%;background:var(--band,var(--brass))}
 .lb-pct{display:none}
-.lb-rel{grid-column:4;grid-row:1;justify-self:end;display:grid;place-items:center;color:var(--muted)}
+.lb-rel{grid-column:4;justify-self:center;display:grid;place-items:center;color:var(--muted)}
 .lb-rel .ui-icon{width:16px;height:16px}.lb-rel.enemy{color:var(--war)}.lb-rel.ally{color:var(--verdigris-hi)}
 .lb-land,.lb-troops{text-align:right}.lb-troops{font-weight:600;color:var(--ivory)}.lb-land{color:#d0c7aa}
 .lb-group{background:linear-gradient(90deg,color-mix(in srgb,var(--band,#888) 24%,transparent),transparent 72%);border-top:1px solid #0006;min-height:30px}
@@ -336,6 +336,7 @@ body[data-comms=thread] .powers .lb-summary{display:block}
 .scenario-note{margin:8px 0 0;color:var(--muted);font-size:14px}
 .keys{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;margin:0;font-size:15px}.keys dt{color:var(--brass-hi);font-weight:600}.keys dd{margin:0;color:var(--text-2)}
 .map-key .atlas-modes{position:static;max-width:none;box-shadow:none;pointer-events:auto}.map-key .atlas-key-toggle{display:none}
+.map-key .atlas-legend{font-size:15px;background:var(--well);border-color:#c29a5244}.map-key .atlas-mode-toggle{min-height:36px;font-size:15px;background:linear-gradient(180deg,#2d3537,#1f2527);border-color:var(--brass-lo);color:var(--ivory)}
 .journal .events{overflow:auto;min-height:0;padding:6px 14px 14px;scrollbar-width:thin}
 .event{display:grid;grid-template-columns:48px 1fr;gap:8px;padding:5px 0;border-bottom:1px solid #ffffff0a;font-size:15px;color:var(--text-2)}.event time{color:var(--brass)}
 /* Phones: the bottom dock. */
@@ -429,10 +430,11 @@ body[data-status=lobby] .war-room>:is(.topbar#hud,.strip,.left,.maparea,.powers,
   .create .card-foot{padding:8px 10px}.create .foot-note{display:none}
   .war-room{grid-template-columns:minmax(0,1fr);grid-template-rows:calc(var(--top) + var(--safe-t)) 52px minmax(0,1fr) auto;grid-template-areas:"top" "strip" "map" "bottom"}
   .topbar{gap:6px;padding:var(--safe-t) 6px 0 4px}
-  .nation{min-height:42px;padding:3px 10px 3px 4px;gap:6px;max-width:150px}
+  .nation{min-height:42px;padding:3px 10px 3px 4px;gap:6px;max-width:138px;flex:0 1 auto;min-width:0}
   .nation .insignia{width:26px;height:31px}.nation b{font-size:17px}.nation small{font-size:13px}
-  .clock-plaque{min-width:0;height:46px;padding:2px 12px;clip-path:polygon(8px 0,calc(100% - 8px) 0,100% 100%,0 100%)}
-  .clock-plaque b{font-size:21px}.clock-plaque small{font-size:13px}.clock-plaque .victory{display:none}
+  .clock-plaque{min-width:0;flex:none;height:46px;padding:2px 14px;clip-path:polygon(8px 0,calc(100% - 8px) 0,100% 100%,0 100%)}
+  .clock-face{flex-direction:column;align-items:center;gap:0}
+  .clock-plaque b{font-size:20px}.clock-plaque small{font-size:12px;line-height:1}.clock-plaque .victory{display:none}
   .stats{gap:3px}.stat{min-height:40px;padding:2px 6px 2px 5px;gap:4px}.stat .ui-icon{width:16px;height:16px}.stat b{font-size:17px}.stat>span>small{display:none}.stats .stat:nth-child(n+2){display:none}
   .hud-actions{gap:6px}.hud-actions .bezel-btn{width:40px;height:40px}
   .strip{grid-area:strip;z-index:4;display:flex;align-items:center;gap:6px;padding:0 6px;background:linear-gradient(180deg,#1c2123,#15191b);border-bottom:1px solid #c29a5255;box-shadow:0 3px 10px #0008}
@@ -453,7 +455,9 @@ body[data-status=lobby] .war-room>:is(.topbar#hud,.strip,.left,.maparea,.powers,
   .card-dock{padding:8px 10px calc(10px + var(--safe-b))}
   .maparea{grid-area:map}
   .toast-lane{width:100%}
-  .left,.maparea,.coach{grid-row:auto}
+  .maparea,.coach{grid-row:3}.left{grid-row:4}
+  .war-room:has(.powers.sheet) :is(.strip,.maparea){visibility:hidden}
+  .war-room:has(#hud-menu:not([hidden])) .maparea,.war-room:has(#war-journal:not([hidden])) .maparea{visibility:hidden}
   .powers{grid-area:auto;grid-column:1;grid-row:2/4;z-index:5;border-width:2px 0 0 0;border-left:0}
   .powers:not(.sheet){display:none}
   .dock{grid-area:bottom;z-index:4;display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:6px 6px calc(6px + var(--safe-b));background:var(--plate);border-top:2px solid;border-image:var(--rim) 1;box-shadow:0 -4px 14px #0009}
@@ -481,6 +485,9 @@ body[data-status=lobby] .war-room>:is(.topbar#hud,.strip,.left,.maparea,.powers,
 }
 /* Short landscape phones: one side sheet on the left, the dock as a column on the right. */
 @media (max-height:499px) and (min-width:560px){
+  .s-title{grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);grid-template-rows:auto minmax(0,1fr);grid-template-areas:"gate rooms" "create rooms";padding:8px calc(8px + var(--safe-r)) 8px calc(8px + var(--safe-l));gap:8px}
+  .gate{padding:8px 12px}.emblem{width:40px;height:40px}.gate h1{font-size:24px}.tagline{display:none}.identity-row{padding-top:4px}
+  .rooms{max-height:none;align-self:stretch}.create{align-self:end}.create .create-body{display:none}
   :root{--top:46px;--gap:6px}
   .war-room{grid-template-columns:auto minmax(0,1fr) 68px;grid-template-rows:calc(var(--top) + var(--safe-t)) minmax(0,1fr);grid-template-areas:"top top top" "sheet map dock"}
   .strip{display:none}
