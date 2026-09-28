@@ -110,6 +110,7 @@ export function reviewerNav(direction, label) {
   if (new URLSearchParams(location.search).get('clean') === '1') return;
   const s = screen(), i = SCREENS.findIndex(([id]) => id === s);
   const go = d => { const n = SCREENS[(i + d + SCREENS.length) % SCREENS.length][0]; location.search = `?s=${n}`; };
+  const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = '/concepts/kit/nav.css'; document.head.append(css);
   const nav = document.createElement('nav'); nav.className = 'concept-nav'; nav.setAttribute('aria-label', 'Concept screens');
   nav.innerHTML = `<a href="/concepts/" title="All concepts">${esc(direction)}</a><button type="button" data-d="-1" aria-label="Previous screen">‹</button><select aria-label="Screen">${SCREENS.map(([id, name]) => `<option value="${id}"${id === s ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select><button type="button" data-d="1" aria-label="Next screen">›</button><span>${esc(label)}</span>`;
   nav.addEventListener('click', e => { const d = e.target.closest('[data-d]')?.dataset.d; if (d) go(Number(d)); });
