@@ -12,7 +12,7 @@
 4. **Battle.** Arriving attackers fight dice rounds until one side is gone. Defenders win ties, and a factory (industry II or III) gives them +1. Send help, **recall** an army to bring it home, or send a returning army back to its target (**march again**, twice per army).
 5. **Rally.** Pick provinces and a rally point: their new troops march there automatically.
 6. **Build.** Spend troops to raise a province's industry: I→II costs 24 (2 min), II→III costs 48 (3 min). A capture takes the factory; unfinished work is lost.
-7. **War and peace.** Declare war before attacking another country; both whole alliances go to war. Anyone can offer peace; anyone on the other side can accept.
+7. **War and peace.** Declare war before attacking another country; both whole alliances go to war. Anyone can offer peace; anyone on the other side can accept. Peace brings a **1-minute truce**: neither side can declare war on the other until it ends.
 8. **Alliances.** Propose to a country; the alliance starts 30 s after everyone accepts, and leaving also takes 30 s. An alliance holds at most half the countries. Promises in chat are not orders.
 
 Everything starts from the map. Tap a province for its card: one button says exactly what will happen (`Attack Normandy with 5`, `Declare war on France & send 9`, `Rally troops here`). Tap a country (a standard or a Powers row) to ally, declare war, make peace or talk. The Messages button (**C**) shows what needs you first; offers are accepted right in the message.
@@ -31,7 +31,7 @@ Open **http://192.168.1.216:3107** (the default `npm start` binds all interfaces
 
 The room list shows running games first. **Spectate** opens the same map read-only with the public World history; **Resume** returns to your seat. Finished games open the after-action **Review**: the result, a replay of the whole match, battles and turning points.
 
-**Sound** starts after your first click (settings in ☰; **Shift+M** mutes). **Voice chat input**: every chat box has a mic; it uses an optional local speech-to-text sidecar (`npm run stt`, then `STT_URL=http://127.0.0.1:3190 npm start`) or the browser's own recognition. Phones need HTTPS for the microphone: run `scripts/dev-cert.sh` once and `npm start` serves HTTPS. [Operations, HTTPS and voice](docs/OPERATIONS.md) · [UI design](docs/UI-DESIGN.md)
+**Sound** starts after your first click (settings in ☰; **Shift+M** mutes). **Voice chat input**: every chat box has a mic; it uses OpenAI's transcription API when `OPENAI_API_KEY` is set, an optional local speech-to-text sidecar (`npm run stt`, then `STT_URL=http://127.0.0.1:3190 npm start`), or the browser's own recognition. Phones need HTTPS for the microphone: run `scripts/dev-cert.sh` once and `npm start` serves HTTPS. [Operations, HTTPS and voice](docs/OPERATIONS.md) · [UI design](docs/UI-DESIGN.md)
 
 For Internet hosting use an HTTPS reverse proxy and invited access; this is not a hardened public service.
 

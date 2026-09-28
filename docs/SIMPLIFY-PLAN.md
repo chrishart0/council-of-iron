@@ -81,6 +81,7 @@ Heuristic self-play is only used for invariants and "matches still resolve", nev
 | M10 | Defender +1 on the best die at industry II/III | unchanged | Factories are worth defending; trench feel. | — | — | **Keep** |
 | M11 | Development I→II→III (24/120 s, 48/180 s) | unchanged | Decision 2. | — | — | **Keep** |
 | M12 | 30 s notice to join or leave an alliance; offers expire | unchanged, stated as one rule | Backstab warning is the heart of diplomacy. | — | — | **Keep** |
+| M13 | (after M4) nothing stopped an instant re-declaration: in match 877de196 the Qing bot declared war 17× and accepted peace 17×, 25 treaties in 24 min, while an AI sent 22 peace offers | **Truce after peace**: for 60 s neither side (both whole alliances as they were) may declare war on the other; an offer that expires unanswered is not repeated to the same side for 30 s | Decision 4: peace becomes a commitment worth weighing, not a free pause | none (a small check on declaration and offer) | A player cannot punish a treaty-breaker for 1 min; the truce is short | **Added** |
 
 ## Bucket 3 — KEEP
 
@@ -110,7 +111,7 @@ Heuristic self-play is only used for invariants and "matches still resolve", nev
 6. **Build.** Spend troops to raise a province's industry: I→II costs 24 (2 min), II→III costs 48 (3 min).
    Capture takes the factory; unfinished work is lost.
 7. **War and peace.** You must declare war before attacking another country; the whole of both alliances
-   goes to war. Anyone can offer peace; anyone on the other side can accept.
+   goes to war. Anyone can offer peace; anyone on the other side can accept. Peace brings a 1-minute truce.
 8. **Alliances.** Propose to a country; it starts 30 s after everyone accepts. Leaving also takes 30 s.
    An alliance holds at most half the countries. Promises in chat are not orders.
 

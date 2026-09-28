@@ -10,7 +10,7 @@ import { Comms } from './comms.js';
 import { LeaderboardPanel } from './leaderboard-panel.js';
 import { ExpandableMap } from './expand.js';
 // Relations and alliance colours: the same DOM-free helpers the atlas and agent tools use.
-import { relationsOf, allianceColors, atWar as warBetween } from './relations.js';
+import { relationsOf, allianceColors, atWar as warBetween, truceUntil } from './relations.js';
 import { friendlyPath } from './movement.js';
 import { combatForecast } from './combat.js';
 import { SoundBoard } from './sound.js';
@@ -435,7 +435,9 @@ function orderPlan(){
     neutral:['NOT AT WAR',`Sending troops declares war on ${who}${war?.enemies.length>1?' and its allies':''}${war?.allies.length?'; your allies join in':''}.`]}[relation];
   const sent=parts.filter(s=>s.amount>0),many=sent.length>1,from=many?` from ${sent.length} provinces`:'';
   let label,danger=false,disabled=!active() || pendingCommand;
+  const truce=war?truceUntil(state,state.you,owner):null;
   if(relation==='own' || relation==='ally')label=`Reinforce ${name} with ${total}${many?` from ${sent.length}`:''}`;
+  else if(truce!==null){label=`Truce until ${time(truce)}`;disabled=true;words[1]=`Peace was made: no war with ${who} before ${time(truce)}.`;}
   else if(war){label=`Declare war on ${who} & send ${total}${from}`;danger=true;}
   else if(owner)label=many?`Attack ${name} from ${sent.length} provinces · ${total}`:`Attack ${name} with ${total}`;
   else label=`Send ${total} → ${name}${from}`;
@@ -627,7 +629,8 @@ function provinceCard(){
   const actions=[];
   if(mine && active() && p.development<state.rules.maxDevelopment){
     const cost=state.rules.developmentCosts[p.development],queued=state.orders.some(o=>o.type==='develop' && o.from===id);
-    actions.push({label:p.developing?`Building level ${p.developing.level} · ${Math.max(0,p.developing.completesAt-state.tick)}s`:queued?'Construction queued':`Develop · ${cost} troops`,act:'develop',arg:id,disabled:Boolean(p.developing) || queued || freeTroops(id)<cost || pendingCommand,id:'develop-province'});
+    const free=freeTroops(id),short=!p.developing && !queued && free<cost;
+    actions.push({label:p.developing?`Building level ${p.developing.level} · ${Math.max(0,p.developing.completesAt-state.tick)}s`:queued?'Construction queued':short?`Needs ${cost} · you have ${free}`:`Develop · ${cost} troops`,act:'develop',arg:id,disabled:Boolean(p.developing) || queued || freeTroops(id)<cost || pendingCommand,id:'develop-province'});
   }
   if(mine && active()){
     const rally=rallyOf(id);
@@ -714,6 +717,8 @@ function countryCard(){
   if(side){const s=el('span','card-bloc');const dot=el('i','alliance-dot');dot.style.setProperty('--band',allianceColors(state)[side.id]);s.append(dot,el('span','',`${side.name}: ${side.members.map(m=>country(m).name).join(', ')}`));status.append(s);}
   const enemies=p?relationsOf(state,id).enemies:[];
   if(enemies.length)status.append(el('span','card-wars',`At war with ${enemies.map(e=>e===state.you?'you':country(e).name).join(', ')}`));
+  const truce=state.you && id!==state.you?truceUntil(state,state.you,id):null;
+  if(truce!==null)status.append(el('span','card-truce',`Truce until ${time(truce)}`));
   const actions=[],can=active() && p && p.eliminatedAt===null && id!==state.you;
   const offer=(state.proposals || []).find(q=>q.status==='open' && state.you && q.roster.includes(state.you) && q.roster.includes(id));
   const peaceFrom=state.peaceOffers?.find(o=>o.toRoster.includes(state.you) && o.fromRoster.includes(id));
@@ -736,7 +741,7 @@ function countryCard(){
       if(canPropose)actions.push({label:proposing?'Send alliance offer':'Propose alliance',act:proposing?'send-offer':'propose',primary:!full,disabled:pendingCommand || full,id:full?undefined:'primary'});
       if(canPropose && full)note=state.maxAlliance<2?'Alliances need at least four countries in the match.':`An alliance holds at most ${state.maxAlliance} countries: half the match.`;
       else if(!canPropose)note=side?`${c.name} is in ${side.name}. Ask a member to invite you, or talk first.`:'A membership change is already pending.';
-      actions.push({label:'Declare war',act:'declare',arg:id,danger:true,disabled:pendingCommand});
+      actions.push(truce!==null?{label:`Truce until ${time(truce)}`,act:'declare',arg:id,disabled:true}:{label:'Declare war',act:'declare',arg:id,danger:true,disabled:pendingCommand});
       if(!actions.some(a=>a.primary))actions.unshift({label:'Message',act:'compose',primary:true,id:'primary'});
     }
   }
@@ -744,7 +749,7 @@ function countryCard(){
   const sub=[el('span','card-meta',p?`${seatType(p)} · ${p.displayName || p.name}`:'Unclaimed')];
   // Talking lives in Messages: a secondary "Message" opens the thread with this country.
   if(can && !actions.some(a=>a.act==='compose'))actions.push({label:'Message',act:'compose'});
-  return {flag:id,title:c.name,sub,subKey:[p?.displayName,p?.name,seatType(p)],status,statusKey:[rel,troops,land.length,side?.id,side?.name,side?.members,enemies,note],relation:rel,
+  return {flag:id,title:c.name,sub,subKey:[p?.displayName,p?.name,seatType(p)],status,statusKey:[rel,troops,land.length,side?.id,side?.name,side?.members,enemies,note,truce],relation:rel,
     more:proposing && can?()=>renderProposal(id):null,actions};
 }
 function proposalForm(id){
@@ -827,7 +832,7 @@ function describe(e){
     case 'alliance_activated':return`${e.name} is active: ${e.roster.map(c).join(', ')}.`;
     case 'coalition_dissolved':return'An alliance has dissolved.';
     case 'war_declared':return`${c(e.country)} declares war: ${e.fromRoster.map(c).join(' + ')} against ${e.toRoster.map(c).join(' + ')}.`;
-    case 'peace_accepted':return`${e.fromRoster.map(c).join(' + ')} and ${e.toRoster.map(c).join(' + ')} agree to peace; attacking troops return.`;
+    case 'peace_accepted':return`${e.fromRoster.map(c).join(' + ')} and ${e.toRoster.map(c).join(' + ')} agree to peace; attacking troops return${e.truceUntil?`; truce until ${time(e.truceUntil)}`:''}.`;
     case 'peace_offered':return`${c(e.by)} offers peace: ${e.fromRoster.map(c).join(' + ')} to ${e.toRoster.map(c).join(' + ')}, open until ${time(e.expiresAt)}.`;
     case 'peace_expired':return`A peace offer closed: ${e.reason}`;
     case 'departure_notice':return`${c(e.country)} announces a departure at ${time(e.activateAt)}.`;
@@ -883,7 +888,7 @@ function renderRules(){
     ['Battle',`Arriving attackers fight dice rounds until one side is gone. Defenders win ties, and a factory (industry II or III) gives them +1. Send help, recall an army to bring it home, or send a returning army back to its target (march again, ${timesWord(r.maxTurnArounds)} per army).`],
     ['Rally','Pick a province and a rally point: its new troops march there by themselves.'],
     ['Build',`Spend troops to raise a province’s industry: I→II costs ${r.developmentCosts[1]} (${span(r.developmentTicks[1])}), II→III costs ${r.developmentCosts[2]} (${span(r.developmentTicks[2])}). Capture takes the factory; unfinished work is lost.`],
-    ['War and peace',`Declare war before attacking another country: the whole of both alliances goes to war. Anyone can offer peace; anyone on the other side can accept within ${r.peaceLife} s.`],
+    ['War and peace',`Declare war before attacking another country: the whole of both alliances goes to war. Anyone can offer peace; anyone on the other side can accept within ${r.peaceLife} s. Peace brings a ${r.truce} s truce: neither side can declare war on the other until it ends.`],
     ['Alliances',`Propose to a country; the alliance starts ${r.notice} s after everyone accepts. Leaving also takes ${r.notice} s. An alliance holds at most half the countries. Promises in chat are not orders.`],
   ].map(([title,text])=>{const li=el('li');li.append(el('b','',`${title}. `),text);return li;}));
 }

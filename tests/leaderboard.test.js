@@ -88,3 +88,13 @@ test('teams: one total row per alliance with nested members; totals include ever
   assert.ok(!leaderboard(forming, { mode: 'teams' }).rows.some(r => r.id === 'france' || r.id === 'germany'), 'forming members are nested, not repeated');
   assert.throws(() => leaderboard(view, { mode: 'nope' }), /teams, players or alliances/);
 });
+test('truceFronts groups live truces by side like the war fronts, with the latest end', async () => {
+  const { truceFronts } = await import('../public/leaderboard.js');
+  const view = { tick: 5, players: [{ id: 'a', side: 's1' }, { id: 'b', side: 's1' }, { id: 'c', side: 'solo:c' }], sides: [{ id: 's1', name: 'Pact' }],
+    truces: [{ countries: ['a', 'c'], since: 0, until: 100 }, { countries: ['b', 'c'], since: 0, until: 120 }, { countries: ['a', 'x'], since: 0, until: 3 }] };
+  const [front, ...rest] = truceFronts(view);
+  assert.equal(rest.length, 0, 'an ended truce is not listed');
+  assert.deepEqual(front.sides.map(s => [s.name, s.countries]), [['Pact', ['a', 'b']], [null, ['c']]]);
+  assert.equal(front.until, 120);
+  assert.deepEqual(truceFronts({ ...view, truces: undefined }), [], 'replay states carry no truces');
+});

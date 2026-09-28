@@ -108,7 +108,7 @@ def main():
                 expect(feed_input).to_be_visible(timeout=15000)
                 mic = page.locator('#comms .cx-composer .voice-mic')
                 expect(mic).to_be_visible()
-                expect(mic).to_have_attribute('aria-label', 'Voice input (local GPU speech-to-text)')
+                expect(mic).to_have_attribute('aria-label', 'Voice input (local speech-to-text)')
                 expect(page.locator('.voice-mic')).to_have_count(1)
                 # The country card's Message opens that conversation: the same composer, the same mic.
                 close_comms(page)  # a thread takes the whole right column; Powers folds to its header

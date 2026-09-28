@@ -16,7 +16,8 @@ export class Store {
       DROP TABLE IF EXISTS results;
       CREATE TABLE IF NOT EXISTS outcomes (game_id TEXT NOT NULL, profile_id TEXT NOT NULL, country TEXT NOT NULL,
         kind TEXT NOT NULL, result TEXT NOT NULL, industry INTEGER NOT NULL, finished_at INTEGER NOT NULL,
-        PRIMARY KEY(game_id,profile_id));`);
+        PRIMARY KEY(game_id,profile_id));
+      CREATE TABLE IF NOT EXISTS room_activity (game_id TEXT PRIMARY KEY, active_at INTEGER, seen_at INTEGER, dropped_at INTEGER);`);
   }
   credential(profileId, gameId = null) {
     const token = randomBytes(32).toString('base64url');
@@ -50,6 +51,26 @@ export class Store {
       }
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+  }
+  /** Wall-clock bookkeeping kept outside the snapshot (the engine never reads a clock). `active_at`: last
+   * request from a seated human or agent (or room creation). `seen_at`: last time a running server held
+   * the room, so server downtime never counts as idleness. `dropped_at`: an operator allowed startup to
+   * drop this live room (COUNCIL_ALLOW_DROP_RUNNING=1); it no longer blocks startup. */
+  activity() {
+    return new Map(this.db.prepare('SELECT game_id, active_at, seen_at, dropped_at FROM room_activity').all()
+      .map(r => [r.game_id, { activeAt: r.active_at, seenAt: r.seen_at, droppedAt: r.dropped_at }]));
+  }
+  touch(gameId, at) {
+    this.db.prepare(`INSERT INTO room_activity (game_id, active_at, seen_at) VALUES (?,?,?)
+      ON CONFLICT(game_id) DO UPDATE SET active_at=excluded.active_at, seen_at=excluded.seen_at, dropped_at=NULL`).run(gameId, at, at);
+  }
+  seen(gameIds, at) {
+    const update = this.db.prepare('UPDATE room_activity SET seen_at=? WHERE game_id=?');
+    for (const id of gameIds) update.run(at, id);
+  }
+  markDropped(gameId, at) {
+    this.db.prepare(`INSERT INTO room_activity (game_id, dropped_at) VALUES (?,?)
+      ON CONFLICT(game_id) DO UPDATE SET dropped_at=excluded.dropped_at`).run(gameId, at);
   }
   /** Wins, draws and losses of every human and agent profile across finished matches. */
   standings() {

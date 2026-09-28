@@ -51,6 +51,13 @@ const stepWar=to=>stepRoom(w,to);
 for(const room of [w,...Object.values(taskRooms)]){stepRoom(room,55);app.games.set(room.id,room);app.store.save(room);}
 // The phone map suite needs the column that has just left Scotland (it departs at tick 57; internal links are fast, so it is still on the counter only then).
 const mobileRoom=warRoom('ui-mobile','The Rhine front · phone');stepRoom(mobileRoom,57);app.games.set(mobileRoom.id,mobileRoom);app.store.save(mobileRoom);
+// 'ui-truce': Britain and France made peace at tick 0, so a truce holds (until tick 60); for the truce and develop-label checks.
+const truceRoom=warRoom('ui-truce','The Channel truce');
+act(truceRoom,map,'britain',{type:'declare_war',country:'france'},'ui-truce-war');
+const truceOffer=act(truceRoom,map,'france',{type:'offer_peace',country:'britain'},'ui-truce-offer');
+act(truceRoom,map,'britain',{type:'accept_peace',offerId:truceOffer.offerId},'ui-truce-peace');
+Object.assign(truceRoom.provinces.find(p=>p.id==='scotland'),{troops:9,development:1}); // short of the 24 a level II costs
+while(truceRoom.tick<10)tick(truceRoom);app.games.set(truceRoom.id,truceRoom);app.store.save(truceRoom);
 app.server.listen(0,'127.0.0.1',()=>console.log(JSON.stringify({url:`http://127.0.0.1:${app.server.address().port}`,identity:profiles.britain})));
 for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>app.close().then(()=>process.exit(0)));
 

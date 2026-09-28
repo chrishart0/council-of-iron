@@ -18,6 +18,14 @@ export function warsOf(view) {
   for (const front of fronts.values()) for (const s of front.sides) s.countries.sort();
   return [...fronts.values()];
 }
+/** Truces between sides (public): [{ id, sides, pairs, until }] grouped like `warsOf`, each with the
+ * latest end among its pairs. Only truces still holding at `view.tick`. */
+export function truceFronts(view) {
+  const now = (view.truces || []).filter(t => t.until > view.tick);
+  const fronts = warsOf({ ...view, wars: now.map(t => t.countries.join(':')) });
+  for (const front of fronts) front.until = Math.max(...now.filter(t => front.pairs.some(([a, b]) => t.countries.join(':') === [a, b].sort().join(':'))).map(t => t.until));
+  return fronts;
+}
 /** Leaderboard (v0.6): ONE pure ranking used by the browser, CLI and MCP. No DOM, clock or I/O.
  * Input is a public observation (`provinces`, `armies`, `players`, `sides`), which every
  * spectator already receives in full, so the ranking reveals nothing new.
