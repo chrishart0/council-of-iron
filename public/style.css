@@ -501,6 +501,7 @@ body[data-status=lobby] .war-room>:is(.topbar#hud,.strip,.left,.maparea,.powers,
   :root{--top:46px;--gap:6px}
   .war-room{grid-template-columns:auto minmax(0,1fr) 68px;grid-template-rows:calc(var(--top) + var(--safe-t)) minmax(0,1fr);grid-template-areas:"top top top" "sheet map dock"}
   .strip{display:none}
+  .camera{flex-direction:row} /* five controls do not fit a short screen's height */
   .topbar{padding-left:calc(4px + var(--safe-l));padding-right:calc(6px + var(--safe-r))}
   .nation{min-height:38px}.clock-plaque{height:40px}.stat{min-height:36px}.hud-actions .bezel-btn{width:36px;height:36px}
   .left{grid-area:sheet;width:min(360px,50vw)}
