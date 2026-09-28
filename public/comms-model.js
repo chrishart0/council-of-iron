@@ -74,7 +74,9 @@ export function arrivals(before, after) {
   const personal = [];
   // Turned-back armies get their own notice from the client (with Turn around); no second toast here.
   for (const r of fresh.filter(r => r.tier === 'personal' && !r.pending && r.item.system !== 'turned_back')) {
-    const from = r.item.from ?? r.item.country ?? null, last = personal.at(-1);
+    // The sender is a country: side IDs (e.g. a war declaration's `from`) are not countries, so use the roster's first member.
+    const sender = r.item.fromRoster?.[0] ?? r.item.from ?? r.item.country ?? null;
+    const from = typeof sender === 'string' && !sender.includes(':') ? sender : null, last = personal.at(-1);
     if (last && last.from === from && last.thread === r.thread) { last.count++; last.rows.push(r); }
     else personal.push({ from, thread: r.thread, count: 1, rows: [r] });
   }

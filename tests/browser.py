@@ -36,6 +36,15 @@ def bring(page,province):
         for i in range(1,11):page.mouse.move(sx+(vw*.38-x)*i/10,sy+(vh*.4-y)*i/10)
         page.mouse.up();page.wait_for_timeout(120)
     raise AssertionError(('not in view',province))
+def confirmed(page,text,timeout=6000):
+    """An order confirmation shows in the one toast slot, unless a decision (an ACTION toast, e.g. an army about to
+    land on you) holds it: then the confirmation is not shown over it, by design. Either state passes."""
+    deadline=time.monotonic()+timeout/1000
+    while time.monotonic()<deadline:
+        if text in lane(page).inner_text():return
+        if lane(page).get_attribute('data-state')=='action':return
+        page.wait_for_timeout(100)
+    raise AssertionError(('no confirmation',text,lane(page).inner_text()))
 def province(page,pid):
     """v0.8: select your province on the map (its card opens)."""
     page.keyboard.press('Escape');page.locator('#home-view').click();page.wait_for_timeout(150)
@@ -143,7 +152,7 @@ def main():
                 expect(page.locator('#order-details')).to_contain_text('Risk-style rounds')
                 expect(page.locator('#sound-control')).to_have_attribute('data-loaded','ogg')  # decoded after the first click
                 page.locator('#primary').click()
-                expect(lane(page)).to_contain_text('Sent')
+                confirmed(page,'Sent')
                 assert {'cue':'march','priority':1,'audible':True} in page.evaluate('window.__cues'),page.evaluate('window.__cues')
                 report['assertions'].append('Committing the march through the UI played the audible march cue (toast is the visible counterpart).')
                 cli('war','france')
@@ -232,7 +241,8 @@ def main():
                 dm=page.locator('#comms .cx-msg[data-mine="false"]').last
                 expect(dm).to_contain_text('Agreed. I will hold.');expect(dm).to_be_visible()
                 assert page.locator('#comms img').count()==0
-                expect(page.locator('#comms-button')).to_have_attribute('data-unread','0',timeout=5000)  # read once shown in its thread
+                expect(dm).not_to_have_class(re.compile('cx-is-unread'),timeout=5000)  # read once shown in its thread
+                expect(page.locator('#comms .cx-switch [data-conv="dm:britain"] .cx-dot')).to_have_count(0,timeout=5000)  # (bots' war news may still be unread elsewhere)
                 page.locator('#cx-text').fill('Unsent draft survives live updates.')
                 page.wait_for_timeout(900)
                 expect(page.locator('#cx-text')).to_have_value('Unsent draft survives live updates.')
@@ -401,7 +411,7 @@ def main():
                 page.screenshot(path=str(artifacts/'06-coordinated-plan.png'),full_page=True)
                 capture(page,1300)
                 page.locator('#primary').click()
-                expect(lane(page)).to_contain_text('Sent')
+                confirmed(page,'Sent')
                 room2=http('/api/games')['games'][0]['id']
                 page.wait_for_timeout(1400)
                 # Group recall is a browser control, never direct mutation of the game.
@@ -409,7 +419,7 @@ def main():
                 recall_group=page.locator('[data-recall]').filter(has_text='Recall group')
                 expect(recall_group).to_be_visible(timeout=10000)
                 recall_group.click()
-                expect(lane(page)).to_contain_text('Recall queued')
+                confirmed(page,'Recall queued')
                 expect(page.locator('.march-row.returning').first).to_be_visible(timeout=5000)
                 page.screenshot(path=str(artifacts/'07-recalling.png'),full_page=True)
                 capture(page,1300)
@@ -422,7 +432,7 @@ def main():
                 develop.click()
                 expect(page.locator('#confirm-dialog')).to_contain_text('Spend 24 troops')
                 page.locator('#confirm-dialog [value="confirm"]').click()
-                expect(lane(page)).to_contain_text('Investment committed')
+                confirmed(page,'Investment committed')
                 expect(develop).to_contain_text(re.compile('Construction queued|Building level'),timeout=6000)
                 page.screenshot(path=str(artifacts/'08-development.png'),full_page=True)
                 capture(page,1300)
@@ -444,7 +454,9 @@ def main():
                 order(page,'west-us','east-us')
                 expect(page.locator('#primary')).to_contain_text('Reinforce')
                 expect(page.locator('#order-details')).to_contain_text('Via',timeout=5000)
-                page.locator('#primary').click();expect(lane(page)).to_contain_text('Sent')
+                expect(page.locator('#primary')).to_be_enabled(timeout=10000)  # the three-orders-per-ten-seconds limit may still be recovering
+                page.screenshot(path=str(artifacts/'10-long-march.png'))
+                page.locator('#primary').click();confirmed(page,'Sent')
                 deadline=time.monotonic()+8
                 while time.monotonic()<deadline and not any(a.get('controlledMarch') and a['path'][-1]=='east-us' for a in http(f'/api/games/{room2}')['armies']):page.wait_for_timeout(250)
                 assert any(a.get('controlledMarch') and a['path'][-1]=='east-us' for a in http(f'/api/games/{room2}')['armies'])
@@ -462,7 +474,7 @@ def main():
                 expect(page.locator('#fill-bots')).to_contain_text('Take this seat')
                 page.locator('#fill-bots').click()
                 expect(page.locator('#room-label')).to_contain_text('8/8')
-                expect(page.locator('#lobby-note')).to_contain_text('You command Japan')
+                expect(page.locator('#lobby-note')).to_contain_text('You command Empire of Japan')
                 practice=http('/api/games')['games'][0]['id']
                 players=http(f'/api/games/{practice}')['players']
                 assert next(p for p in players if p['id']=='japan')['kind']=='human' and sum(p['kind']=='bot' for p in players)==7
