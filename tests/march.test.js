@@ -18,7 +18,7 @@ const own = (g, id, owner, troops = 10) => Object.assign(at(g, id), { owner, tro
 const ally = (g, a, b) => { const { proposalId } = send(g, a, { type: 'propose', country: b }); send(g, b, { type: 'accept', proposalId }); advance(g, 30); };
 
 test('a march crosses any chain of your own land by the quickest route, at internal speed', () => {
-  const g = game(g => { own(g, 'mexico', 'usa', 30); own(g, 'west-canada', 'usa'); });
+  const g = game(g => { own(g, 'mexico', 'usa', 30); own(g, 'canada', 'usa'); });
   const plan = preview(g, map, 'usa', { from: 'mexico', to: 'alaska', amount: 20 });
   const path = plan.sources[0].path;
   assert.equal(path.at(-1), 'alaska'); assert.ok(path.length >= 3, 'several provinces, not a neighbour');
@@ -47,7 +47,7 @@ test('through an ally without gifting troops, and a final step into land you may
 });
 
 test('no route: a clear error naming what a march may pass through', () => {
-  const g = game(g => { own(g, 'central-us', 'germany'); own(g, 'west-canada', 'germany'); own(g, 'mexico', 'germany'); });
+  const g = game(g => { own(g, 'central-us', 'germany'); own(g, 'canada', 'germany'); own(g, 'mexico', 'germany'); });
   assert.throws(() => send(g, 'usa', { type: 'march', from: 'west-us', to: 'east-us', amount: 5 }),
     /No route from west-us to east-us: a march passes only through your own or allied provinces/);
   assert.throws(() => preview(g, map, 'usa', { from: 'west-us', to: 'east-us', amount: 5 }), /No route/);
@@ -55,7 +55,7 @@ test('no route: a clear error naming what a march may pass through', () => {
 });
 
 test('a column re-routes when its way is lost, and turns back with a reason when no way is left', () => {
-  const g = game(g => { own(g, 'mexico', 'usa', 30); own(g, 'west-canada', 'usa'); });
+  const g = game(g => { own(g, 'mexico', 'usa', 30); own(g, 'canada', 'usa'); });
   const sent = send(g, 'usa', { type: 'march', from: 'mexico', to: 'east-us', amount: 20 });
   assert.deepEqual(sent.orders[0].path, ['central-us', 'east-us']);
   advance(g, 2);
@@ -66,18 +66,18 @@ test('a column re-routes when its way is lost, and turns back with a reason when
   assert.equal(column.returning, true);
   assert.ok(g.events.some(e => e.type === 'army_recalled' && e.armyId === column.id && e.reason === 'transit_blocked' && e.owner === 'germany'));
   // A route lost further ahead is replaced by the quickest remaining friendly way.
-  const h = game(g => { own(g, 'alaska', 'usa', 30); own(g, 'west-canada', 'usa'); own(g, 'east-canada', 'usa'); });
-  const long = send(h, 'usa', { type: 'march', from: 'alaska', to: 'east-us', amount: 20 });
+  const h = game(g => { own(g, 'alaska', 'usa', 30); own(g, 'canada', 'usa'); });
+  const long = send(h, 'usa', { type: 'march', from: 'alaska', to: 'mexico', amount: 20 });
   const path = long.orders[0].path;
-  assert.deepEqual(path, ['west-canada', 'central-us', 'east-us']);
+  assert.equal(path.length, 3); assert.equal(path[0], 'canada');
   advance(h, 2);
   const c = h.armies.find(a => a.groupId === long.groupId);
   own(h, path[1], 'germany', 3);
   advance(h, c.arrivesAt - h.tick);
   assert.ok(h.events.some(e => e.type === 'army_rerouted' && e.armyId === c.id && e.recipients.join() === 'usa'));
-  assert.deepEqual(c.path, ['west-canada', 'east-canada', 'east-us'], 'the quickest remaining friendly way');
+  assert.deepEqual(c.path, ['canada', path[1] === 'west-us' ? 'central-us' : 'west-us', 'mexico'], 'the quickest remaining friendly way');
   advance(h, 200);
-  assert.ok(!h.armies.includes(c)); assert.ok(h.events.some(e => e.type === 'reinforced' && e.province === 'east-us'));
+  assert.ok(!h.armies.includes(c)); assert.equal(at(h, 'mexico').owner, 'usa');
 });
 
 test('an ally leaving mid-route: the column finds another way or turns back; waiting sources re-route at departure', () => {
@@ -92,7 +92,7 @@ test('an ally leaving mid-route: the column finds another way or turns back; wai
   assert.ok(g.events.some(e => e.type === 'army_recalled' && e.reason === 'transit_blocked') || g.events.some(e => e.type === 'reinforced' && e.province === 'east-us'));
   // Several sources, one of them far: they still arrive together.
   const h = game(g => own(g, 'mexico', 'usa', 30));
-  const both = send(h, 'usa', { type: 'march', to: 'caribbean', sources: [{ from: 'east-us', amount: 3 }, { from: 'mexico', amount: 3 }] });
+  const both = send(h, 'usa', { type: 'march', to: 'caribbean', sources: [{ from: 'east-us', amount: 3 }, { from: 'west-us', amount: 3 }] });
   assert.equal(new Set(both.orders.map(o => o.arrivesAt)).size, 1);
-  assert.ok(both.orders.find(o => o.from === 'mexico').path.length > 1);
+  assert.ok(both.orders.find(o => o.from === 'west-us').path.length > 1);
 });

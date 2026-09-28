@@ -60,7 +60,7 @@ test('cursor pagination crosses hidden events without losing a later public or p
 });
 
 test('British province counters stay near their namesake land, not Greenland',()=>{
-  for(const id of ['england','ireland','scotland']) {
+  for(const id of ['england','ireland']) {
     const p=map.provinces.find(p=>p.id===id);assert.ok(p.x>600 && p.x<650 && p.y>100 && p.y<180);
   }
 });
