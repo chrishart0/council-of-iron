@@ -138,7 +138,7 @@ Text lines (and bytes) per area, before → after (`git ls-files` text files; au
 | Docs (`docs/`, README, AGENTS.md) | 8,384 (547 KB) | 1,072 (126 KB) |
 | **Total** | **32,627 (2.21 MB)** | **17,164 (1.43 MB)** |
 
-Player-facing concepts removed: transit, long-march-only-through-own-land, arrival scheduling, recruitment arrows, rally "keep", turn-around/resume, war votes, peace votes, the opening council, the command budget, the chat cooldown, Prestige, prize pool, strength shares, maturity/tenure, 50/25/25 deadline prizes, negotiated draws, league eligibility, capture damage. Orders a player can give: 12 action types → 12, but movement is one order (was five) and diplomacy has no votes.
+Player-facing concepts removed: transit, long-march-only-through-own-land, arrival scheduling, recruitment arrows, rally "keep", turn-around/resume, war votes, peace votes, the opening council, the command budget, the chat cooldown, Prestige, prize pool, strength shares, maturity/tenure, 50/25/25 deadline prizes, negotiated draws, league eligibility, capture damage. Action types: 18 (incl. the opening lock) → 12; movement is one order (was five) and diplomacy has no votes.
 
 Tap counts (tests/ui_tasks.py, 390×844 touch / 1366×768 mouse): declare 3/3 (bound 4 → 3), attack 3/3, recall 2/2, propose 3/3, respond 2/2, reply 2/2 (bound 3 → 2), develop 3/3, rally 3/3, converse 7/6; the turn-around task is gone. None got worse.
 
