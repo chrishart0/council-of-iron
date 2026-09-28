@@ -193,12 +193,15 @@ export class Comms {
   convTitle(c) { return c.kind === 'world' ? 'World' : c.kind === 'alliance' ? (c.side ? this.names.side(c.side) : 'Alliance') : this.names.country(c.country); }
   renderList() {
     const list = this.panel.querySelector('.cx-list'), box = this.box;
-    list.innerHTML = box.conversations.map(c => {
+    // Countries you have not talked to yet fold into one "Write to" row of standards (no empty rows).
+    const quiet = box.conversations.filter(c => c.kind === 'dm' && !c.active);
+    const start = quiet.length ? `<li class="cx-start"><span class="cx-start-label">Write to</span>${quiet.map(c => `<button type="button" class="cx-start-btn" data-conv="${esc(c.key)}" aria-label="Write to ${esc(this.names.country(c.country))}" title="${esc(this.names.country(c.country))}" data-sfx="press">${insignia(c.country)}<span>${esc(this.names.short(c.country))}</span></button>`).join('')}</li>` : '';
+    list.innerHTML = box.conversations.filter(c => !(c.kind === 'dm' && !c.active)).map(c => {
       const last = c.last, preview = !last ? (c.kind === 'alliance' && !c.side ? 'Join an alliance to talk here.' : 'No messages yet.') : this.preview(last);
       const chip = c.action ? `<span class="cx-chip" data-tier="action">${c.rows.find(r => r.pending)?.item.system === 'offer' ? 'Offer' : 'Decide'}</span>` : '';
       const badge = c.unread ? `<i class="cx-count" data-tier="personal">${c.unread}</i>` : '';
       return `<li><button type="button" class="cx-conv" role="option" aria-selected="${c.key === this.conv}" data-conv="${esc(c.key)}" data-state="${c.action ? 'action' : c.unread ? 'unread' : 'read'}"${c.kind === 'world' && this.pulse ? ' data-pulse="1"' : ''}><span class="cx-standard">${c.kind === 'dm' ? insignia(c.country) : cxIcon(c.kind)}</span><span class="cx-conv-main"><b>${esc(this.convTitle(c))}</b><span class="cx-preview">${esc(preview)}</span></span><span class="cx-conv-meta"><time>${last ? clock(last.tick) : ''}</time>${chip}${badge}</span></button></li>`;
-    }).join('');
+    }).join('') + start;
   }
   preview(r) {
     const i = r.item; if (i.type === 'message') return `${r.mine ? 'You' : this.names.short(i.from)}: ${i.text}`;

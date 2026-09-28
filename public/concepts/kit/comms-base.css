@@ -43,3 +43,7 @@
 .cx-marker p,.cx-headline p{margin:0;grid-column:1/3}
 .cx-msg header{display:flex;align-items:center;gap:6px}.cx-msg header time{margin-left:auto}
 @media (prefers-reduced-motion:reduce){.cx-toast,.cx-panel,.cx-conv{animation:none!important;transition:none!important}}
+.cx-start{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.cx-start-label{flex-basis:100%}
+.cx-start-btn{display:inline-flex;align-items:center;gap:5px}
+.cx-start-btn .insignia{width:18px;height:21px}
