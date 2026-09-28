@@ -31,7 +31,7 @@ export function mapViewSvg(observation, map) {
 export async function mapViewPng(observation, map) {
   const svg = mapViewSvg(observation, map);
   return new Promise((resolve, reject) => {
-    const child = spawn('/usr/bin/convert', ['svg:-', 'png:-'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn('/usr/bin/convert', ['svg:-', '-depth', '8', 'png:-'], { stdio: ['pipe', 'pipe', 'pipe'] });
     const chunks = [];
     let size = 0, errorText = '';
     const timer = setTimeout(() => child.kill('SIGKILL'), 10000);
