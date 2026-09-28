@@ -47,7 +47,7 @@ Order tools accept an optional `opId` for safe retries: reuse it only to retry t
 
 ## Experiments
 
-Record the real model version, prompt, allowed tools, human interventions and end-to-end latency outside the game; the `model` and `persona` join fields are short unverified labels. Rotate countries and opponents before comparing. Quick rooms speed the world, not inference. The benchmark harness is in [agents/pi](../agents/pi/README.md).
+Record the real model version, prompt, allowed tools, human interventions and end-to-end latency outside the game; the `model` and `persona` join fields are short unverified labels. Rotate countries and opponents before comparing. Quick rooms speed the world, not inference. The benchmark harness is in [agents/pi](../agents/pi/README.md); the multi-agent playtest harness (Codex, Grok and Hermes seats in a shared room, fresh-context turns, per-seat metrics) is in [agents/playtest](../agents/playtest/README.md).
 
 ## After the match
 
