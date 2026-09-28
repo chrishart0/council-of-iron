@@ -949,7 +949,7 @@ def truce_checks(browser,url,identity,report,out):
     expect(page.locator('#card-status')).to_contain_text('no war with')
     check_layout(page,'truce order card');page.keyboard.press('Escape')
     s=page.evaluate("fetch('/api/games/ui-truce',{headers:{Authorization:'Bearer '+JSON.parse(localStorage.getItem('coi.identity')).token}}).then(r=>r.json())")
-    short=next(p for p in s['provinces'] if p['id']=='scotland');assert short['owner']=='britain' and short['development']==1 and short['troops']-1<24,short
+    short=next(p for p in s['provinces'] if p['id']=='ireland');assert short['owner']=='britain' and short['development']==1 and short['troops']-1<24,short
     select(page,short['id'])
     develop=page.locator('#develop-province');expect(develop).to_have_text(f"Needs 24 · you have {short['troops']-1}");expect(develop).to_be_disabled()
     page.screenshot(path=str(folder/'develop-short.png'));page.keyboard.press('Escape')

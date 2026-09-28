@@ -29,9 +29,9 @@ const warRoom=(id,name)=>{const room=createGame({id,name,hostId:profiles.britain
   for(const c of map.countries)join(room,map,{country:c.id,name:profiles[c.id].name,profileId:profiles[c.id].id,kind:'agent'});start(room);return room;};
 const w=warRoom('ui-war','The Rhine front');
 const taskRooms=Object.fromEntries(['ui-tasks-m','ui-tasks-d','ui-turn','ui-multi-m','ui-multi-d'].map(id=>[id,warRoom(id,'The Rhine front · walkthrough')]));
-// Multi-select walkthroughs: Britain also holds the Caribbean and the Great Plains (central-us), so four British provinces
-// (Caribbean, Great Plains, Eastern Canada, Southern England) border the USA's Atlantic States (east-us); Britain is at war with the USA.
-for(const id of ['ui-multi-m','ui-multi-d'])for(const [p,troops] of [['caribbean',14],['central-us',16]])
+// Multi-select walkthroughs: Britain also holds Mexico, the Great Plains (central-us) and Hawaii, so four British provinces
+// (Canada, Great Plains, Mexico, and Hawaii across the sea) border the USA's Pacific States (west-us); Britain is at war with the USA.
+for(const id of ['ui-multi-m','ui-multi-d'])for(const [p,troops] of [['mexico',14],['central-us',16],['hawaii',8]])
   Object.assign(taskRooms[id].provinces.find(v=>v.id===p),{owner:'britain',troops});
 // Britain (the browser seat) also declares war on the USA at tick 0: no armies move on that front, so the
 // recorded battles are unchanged, but the viewer has a real war for the v0.7 relation UI.
@@ -60,7 +60,7 @@ const truceRoom=warRoom('ui-truce','The Channel truce');
 act(truceRoom,map,'britain',{type:'declare_war',country:'france'},'ui-truce-war');
 const truceOffer=act(truceRoom,map,'france',{type:'offer_peace',country:'britain'},'ui-truce-offer');
 act(truceRoom,map,'britain',{type:'accept_peace',offerId:truceOffer.offerId},'ui-truce-peace');
-Object.assign(truceRoom.provinces.find(p=>p.id==='scotland'),{troops:9,development:1}); // short of the 24 a level II costs
+Object.assign(truceRoom.provinces.find(p=>p.id==='ireland'),{troops:9,development:1}); // short of the 24 a level II costs
 while(truceRoom.tick<10)tick(truceRoom);app.games.set(truceRoom.id,truceRoom);app.store.save(truceRoom);
 app.server.listen(0,'127.0.0.1',()=>console.log(JSON.stringify({url:`http://127.0.0.1:${app.server.address().port}`,identity:profiles.britain})));
 for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>app.close().then(()=>process.exit(0)));
