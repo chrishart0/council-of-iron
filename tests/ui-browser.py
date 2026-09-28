@@ -877,6 +877,55 @@ def coach_and_drag_checks(browser,url,identity,report,out):
     context.close()
     report['assertions'].append('First match: three dismissible tips (drag to attack, tap a country, the Messages button counts what needs you), stored per browser, replayable from the menu, closed by Escape, never overlapping other overlays. A real touch drag from a province counter draws a snapped order arrow with an ETA label, then opens the order card for that target with one primary action; drags elsewhere still pan.')
 
+def turn_notice_checks(browser,url,identity,server,report,out):
+    """Recorded position 'ui-turn': Britain's 5 troops reach Île-de-France (north-france) while Germany's battle is under way there and
+    are turned back (engine reason battle_in_progress). Live notice with March again + Show army; the returning army's
+    card at 1536×864 and 390×844; the notice's March again issues a turn_around the server accepts."""
+    folder=out/'turn';folder.mkdir(parents=True,exist_ok=True)
+    def step(to):
+        server.stdin.write(f'@ui-turn war {to}\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==to
+    step(92)
+    pages=[]
+    for name,(w,h),touch in [('card-desktop',(1536,864),False),('card-phone',(390,844),True),('notice',(1366,768),False)]:
+        context=browser.new_context(viewport={'width':w,'height':h},is_mobile=touch,has_touch=touch,device_scale_factor=2 if touch else 1)
+        context.add_init_script('localStorage.setItem("coi.identity",'+json.dumps(json.dumps(identity))+');'+COACH_DONE)
+        page=context.new_page();errors=[];page.on('pageerror',lambda e,errors=errors:errors.append(str(e)))
+        page.goto(f'{url}/?match=ui-turn');expect(page.locator('#phase')).to_have_text('In session');page.wait_for_timeout(1200)
+        pages.append((name,w,h,context,page,errors,touch))
+    state=lambda page,after=0:page.evaluate("after=>fetch('/api/games/ui-turn?after='+after,{headers:{Authorization:'Bearer '+JSON.parse(localStorage.getItem('coi.identity')).token}}).then(r=>r.json())",after)
+    cursor=state(pages[0][4])['cursor']
+    step(93)
+    s=state(pages[0][4],cursor);army=next(a for a in s['armies'] if a['country']=='britain' and a.get('returning'))
+    assert army['resume']['target']=='north-france' and any(e['type']=='army_recalled' and e.get('reason')=='battle_in_progress' for e in s['events']),army
+    for name,w,h,context,page,errors,touch in pages:
+        notice=page.locator('#toasts .cx-toast[data-tier="personal"]')
+        expect(notice).to_contain_text('Your 5 troops turned back from Île-de-France',timeout=6000)
+        expect(notice).to_contain_text('battle there was already under way')
+        expect(notice.locator('[data-notice-act="turn"]')).to_have_text('March again');expect(notice.locator('[data-notice-act="show-army"]')).to_have_text('Show army')
+        page.screenshot(path=str(folder/f'{w}x{h}-notice.png'));check_layout(page,f'{w}x{h} turned-back notice');check_contrast(page,f'{w}x{h} turned-back notice')
+        if touch:
+            for b in notice.locator('button').all():assert b.bounding_box()['height']>=43.5 and b.bounding_box()['width']>=43.5,(name,b.inner_text())
+        if name.startswith('card'):
+            notice.locator('[data-notice-act="show-army"]').click()
+            expect(page.locator('#card')).to_have_attribute('data-kind','army');expect(page.locator('#card-status')).to_contain_text('RETURNING')
+            expect(page.locator('#primary')).to_contain_text('March again → Île-de-France (arrives');expect(page.locator('#primary')).to_be_enabled()
+            expect(page.locator('#card-status')).to_contain_text('Another side’s battle is under way there; your troops may be turned back again.',timeout=5000)
+            page.wait_for_timeout(400);page.screenshot(path=str(folder/f'{w}x{h}-returning-army-card.png'))
+            check_layout(page,f'{w}x{h} returning-army card');check_commit(page,f'{w}x{h} returning-army card');check_contrast(page,f'{w}x{h} returning-army card')
+    page=pages[2][4]
+    page.locator('#toasts .cx-toast [data-notice-act="turn"]').click()
+    expect(page.locator('#toasts')).to_contain_text('Marching again → Île-de-France',timeout=5000)
+    s=state(page);assert any(o['type']=='turn_around' and o['target']==army['id'] for o in s['orders']),s['orders']
+    step(94)
+    s=state(page,cursor);moved=next(a for a in s['armies'] if a['id']==army['id'])
+    assert not moved.get('returning') and moved['turnArounds']==1 and moved['to']=='north-france',moved
+    assert any(e['type']=='army_turned_around' and e['armyId']==army['id'] for e in s['events']),'army_turned_around'
+    # The desktop card follows: the army marches again, so its one primary is Recall.
+    expect(pages[0][4].locator('#primary')).to_contain_text('Recall → Southern England',timeout=5000)
+    for name,w,h,context,page,errors,touch in pages:
+        assert not errors,(name,errors);context.close()
+    report['assertions'].append('A real automatic turn-back (Britain’s 5 reach Île-de-France (north-france) during Germany’s battle; engine reason battle_in_progress) arrives live as a sticky notice naming the cause with March again and Show army (44 px on touch); Show army opens the returning army’s card with one enabled primary “March again → Île-de-France (arrives mm:ss)” and the server’s warning that another side’s battle is under way (region, primary and contrast checks at 1536×864 and 390×844); the notice’s March again queues a turn_around the server executes (army_turned_around, no longer returning, 1 of the room’s maxTurnArounds used).')
+
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--bridge',action='store_true')
@@ -1193,10 +1242,11 @@ def main():
             if not args.bridge:mobile_checks(browser,url,identity,report,out)
             if not args.bridge:
                 coach_and_drag_checks(browser,url,identity,report,out)
+                turn_notice_checks(browser,url,identity,server,report,out)
                 # v0.8 core tasks, scripted like a player, with measured interaction counts (bounds in ui_tasks.BOUNDS).
                 report['tapCounts']={'390x844 touch':walkthrough(browser,url,identity,server,report,out,'ui-tasks-m',390,844,True),
                     '1366x768 mouse':walkthrough(browser,url,identity,server,report,out,'ui-tasks-d',1366,768,False)}
-                report['assertions'].append('Core tasks at 390×844 (touch) and 1366×768 (mouse), counted interactions within bounds: declare war on a neutral country and march ≤3, attack a neighbouring enemy with 50% ≤3 (drag on desktop, tap on phone), recall an army ≤2, propose an alliance ≤3, answer an alliance offer from the badge ≤2, reply to a DM ≤2 plus typing, develop a province ≤3, set a rally point ≤3, a DM/alliance conversation ≤7 (actual counts in tapCounts; screenshots in tasks/).')
+                report['assertions'].append('Core tasks at 390×844 (touch) and 1366×768 (mouse), counted interactions within bounds: declare war on a neutral country and march ≤3, attack a neighbouring enemy with 50% ≤3 (drag on desktop, tap on phone), recall an army ≤2, march a returning army again ≤2, propose an alliance ≤3, answer an alliance offer from the badge ≤2, reply to a DM ≤2 plus typing, develop a province ≤3, set a rally point ≤3, a DM/alliance conversation ≤7, a long move through your own land ≤3 and one through an ally’s land ≤3 (tap source, tap destination, one button; the preview names the way and the arrow follows it; routes in tapCounts) (actual counts in tapCounts; screenshots in tasks/).')
             assert not report['pageErrors'],report['pageErrors'];report['status']='passed'
             browser.close()
         if args.gif:

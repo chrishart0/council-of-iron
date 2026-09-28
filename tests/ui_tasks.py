@@ -10,7 +10,8 @@ import json
 from playwright.sync_api import expect
 from browser_helpers import lane, close_comms
 
-BOUNDS = {'attack': 3, 'declare': 3, 'propose': 3, 'respond': 2, 'reply': 2, 'recall': 2, 'develop': 3, 'rally': 3, 'converse': 7}
+BOUNDS = {'attack': 3, 'declare': 3, 'propose': 3, 'respond': 2, 'reply': 2, 'recall': 2, 'turn': 2, 'develop': 3, 'rally': 3, 'converse': 7,
+          'long': 3, 'through-ally': 3}
 
 class Walk:
     def __init__(self, page, server, room, touch, out, report):
@@ -65,9 +66,9 @@ class Walk:
             self.page.mouse.up()
         self.count += 1
         if label: self.snap(label)
-    def bring(self, province):
+    def bring(self, province, escape=True):
         """Camera only (not counted): pan the map by dragging empty map so the province is on screen."""
-        self.page.keyboard.press('Escape')
+        if escape: self.page.keyboard.press('Escape')
         vw, vh = self.page.viewport_size['width'], self.page.viewport_size['height']
         for _ in range(8):
             x, y = self.at(self.counter(province))
@@ -144,6 +145,28 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
         w.tap(w.counter('england'), 'province'); w.results['recallPath'] = 'source province card'
         w.tap(page.locator('#card-actions button', has_text='→ Normandy'), 'recalled')
     expect(lane(page)).to_contain_text('Recall queued')
+    w.end()
+
+    # March again: the recalled column is on its way home; send it back toward Normandy from where it is.
+    s = w.state(); back = None
+    for _ in range(4):
+        back = next((a for a in s['armies'] if a['id'] == army['id']), None)
+        if back and back.get('returning'): break
+        w.stdin(f'war {s["tick"] + 1}'); page.wait_for_timeout(900); s = w.state()
+    assert back and back.get('returning') and back['resume']['target'] == 'normandy', back
+    page.keyboard.press('Escape'); page.wait_for_timeout(900)  # start from a closed card (not counted)
+    w.begin('turn')
+    hit = page.locator(f'[data-army="{army["id"]}"]:not(.tap-blocked) .army-hit')
+    if hit.count() and page.evaluate('([x,y])=>Boolean(document.elementFromPoint(x,y)?.closest("[data-army]"))', list(w.at(hit))):
+        w.tap(hit, 'returning-army'); w.results['turnPath'] = 'army marker'
+        expect(page.locator('#card')).to_have_attribute('data-kind', 'army'); expect(page.locator('#card-status')).to_contain_text('RETURNING')
+        expect(primary).to_contain_text('March again → Normandy (arrives'); w.snap('card')
+        w.tap(primary, 'marched')
+    else:  # still on England's counter (counter taps win): the province card lists the troops heading home there
+        w.tap(w.counter('england'), 'province'); w.results['turnPath'] = 'home province card'
+        w.tap(page.locator('#card-actions button', has_text='March again'), 'marched')
+    expect(lane(page)).to_contain_text('Marching again → Normandy')
+    s = w.state(); assert any(o['type'] == 'turn_around' and o['target'] == army['id'] for o in s['orders']), s['orders']
     w.end()
 
     # (c) Propose an alliance: tap Russia (the powers strip on phones, its leaderboard row on desktop).
@@ -267,6 +290,34 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     steps['toDm'] = w.count - before; assert steps['toDm'] <= 1, steps
     expect(page.locator('#comms .cx-title')).to_have_text('Empire of Japan'); expect(page.locator('#cx-text')).to_have_value('Half-written thought')
     w.end(); w.results['converse']['steps'] = steps
+    close_comms(page)
+
+    # Long moves through friendly land: tap your province, tap the destination anywhere, one button. The card's one-line
+    # preview names the way (the server's /plan route); the arrow on the map follows it leg by leg.
+    routes = w.results.setdefault('routes', {})
+    for task, source, dest, ally in [('long', 'scotland', 'low-countries', False), ('through-ally', 'scotland', 'rhineland', True)]:
+        page.keyboard.press('Escape'); w.bring(source)
+        w.begin(task)
+        w.tap(w.counter(source), 'source')
+        if not w.counter(dest).evaluate('(el)=>{const r=el.getBoundingClientRect();return r.left>20&&r.right<innerWidth-20&&r.top>60&&r.bottom<innerHeight*.55&&el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}'):
+            w.bring(dest, escape=False)  # camera only
+        lit = page.evaluate('id=>document.querySelector(`#map [data-province="${id}"].province`)?.classList.contains("neighbor")', dest)
+        assert lit, ('destination not lit while the source is chosen', dest)
+        w.tap(w.counter(dest), 'target')
+        expect(primary).to_contain_text('Reinforce ')
+        preview = page.locator('#order-preview')
+        expect(preview).to_contain_text(' via ', timeout=5000); expect(preview).to_contain_text('(arrives')
+        legs = page.locator('#map .draft-arrow.route'); expect(legs).to_have_count(1)
+        w.snap('route')
+        text = preview.inner_text()
+        w.tap(primary, 'sent')
+        s = w.state(); order = next(o for o in s['orders'] if o['type'] == 'march' and o['from'] == source and o['to'] == dest)
+        owners = {p['id']: p['owner'] for p in s['provinces']}
+        path = order['path']; assert len(path) >= 3, path
+        routes[task] = {'source': source, 'via': path[:-1], 'target': dest, 'arrivesAt': order['arrivesAt'], 'preview': text}
+        allied = [v for v in path[:-1] if owners[v] not in (None, 'britain')]
+        assert (allied and all(owners[v] == 'germany' for v in allied)) if ally else not allied, (path, owners)
+        w.end()
     assert not errors, errors
     context.close()
     return w.results

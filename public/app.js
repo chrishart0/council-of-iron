@@ -71,9 +71,41 @@ function recallOption(a){
   if(!a || a.country!==state?.you || a.returning || !active())return null;
   const at=state.tick+1,home=a.path?a.origin:a.from;
   const back=at+Math.max(1,a.path?at-a.originDepartedAt:Math.min(a.arrivesAt-a.departedAt,at-a.departedAt));
-  const queued=state.orders.some(o=>o.type==='recall' && [a.id,a.groupId].includes(o.target));
-  return {to:home,arrivesAt:back,queued,label:`Recall → ${place(home).name}`,
+  const queued=state.orders.some(o=>['recall','turn_around'].includes(o.type) && [a.id,a.groupId].includes(o.target));
+  return {to:home,arrivesAt:back,queued,label:`Recall → ${place(home).name} (arrives ${time(back)})`,
     preview:`${a.amount} troops turn where they are and are back in ${place(home).name} at ${time(back)}.`};
+}
+const timesWord=n=>n===1?'once':n===2?'twice':`${n} times`;
+/** March again for one of your returning armies (recalled or turned back): it heads for the target it had been
+ * going to, from where it is. The label's arrival mirrors the engine; the server's /plan preview (turnPlan) adds
+ * its checks and warnings. Null when there is nothing to offer. */
+function resumeOption(a){
+  if(!a || a.country!==state?.you || !a.returning || a.engaged || !a.resume || !active())return null;
+  const limit=state.rules.maxTurnArounds,spent=(a.turnArounds || 0)>=limit,at=state.tick+1,{to,target}=a.resume;
+  const onward=target===to?null:friendlyPath(state,state.you,to,target);
+  const arrivesAt=at+a.resume.remaining+(at-a.resume.turnedAt)+(onward?.travel ?? 0);
+  const queued=state.orders.some(o=>['recall','turn_around'].includes(o.type) && o.target===a.id);
+  const plan=turnPlan.key===`${a.id}|${state.tick}`?turnPlan:null;
+  return {to:target,arrivesAt:plan?.result?.arrivesAt ?? arrivesAt,queued,spent,limit,plan,
+    label:`March again → ${place(target).name} (arrives ${time(plan?.result?.arrivesAt ?? arrivesAt)})`,
+    why:spent?`Already sent back ${timesWord(limit)}`:plan?.error || ''};
+}
+/** The server's read-only turn-around check for the army card (one request per army and game second). */
+let turnPlan={key:''};
+async function loadTurnPlan(a){
+  const key=`${a.id}|${state.tick}`;if(turnPlan.key===key)return;
+  turnPlan={key};const epoch=generation;
+  let next;
+  try{next={key,result:await request(`/api/games/${matchId}/plan`,'POST',{type:'turn_around',armyId:a.id})};}
+  catch(e){next={key,error:e.message};}
+  if(epoch!==generation || turnPlan.key!==key)return;
+  turnPlan=next;if(card?.kind==='army' && card.id===a.id)renderCard();
+}
+/** One line under the primary: where the returning army goes, and a warning when another side is fighting there. */
+function resumePreview(a,option){
+  const r=option.plan?.result,lines=[`${a.amount} troops march from where they are to ${place(option.to).name}${r?.via && r.via!==r.to?` via ${place(r.via).name}`:''} and arrive at ${time(option.arrivesAt)}.`];
+  if(r?.battleInProgress && !r.battleInProgress.joins)lines.push('Another side’s battle is under way there; your troops may be turned back again.');
+  return lines.join(' ');
 }
 /** Centre the map on one of your armies and open its card. */
 function showArmy(id){
@@ -125,10 +157,12 @@ function renderComms(live){
   if(comms.room!==room){comms.reset();comms.room=room;comms.read=loadRead();}
   const before=comms.box;
   comms.update(state,history,{live,readOnly:!seated() || state.status!=='running'});
-  // Your army turned back by itself: a sticky notice that says why, with Show army.
+  // Your army turned back by itself: a sticky notice that says why, with March again (unless it needs a new
+  // declaration of war first: peace, or the land changed hands to someone you are not at war with) and Show army.
   if(live && before && seated())for(const r of comms.box.rows.filter(r=>r.item.system==='turned_back' && !before.rows.some(b=>b.key===r.key))){
     const item=r.item,why=turnedBackReason(item,feedNames);
-    const buttons=state.armies.some(a=>a.id===item.armyId)?[{label:'Show army',act:'show-army',arg:item.armyId}]:[];
+    const army=state.armies.find(a=>a.id===item.armyId),again=resumeOption(army);
+    const buttons=army?[...(again && !again.spent && !['peace','no_war'].includes(item.reason)?[{label:'March again',act:'turn',arg:army.id,primary:true}]:[]),{label:'Show army',act:'show-army',arg:army.id}]:[];
     turnedBack.set(item.armyId,`n-${r.key}`);
     comms.notify({key:`n-${r.key}`,standard:state.you,sticky:true,title:`Your ${item.amount} troops turned back${item.province?` from ${place(item.province).name}`:''}`,detail:`${why[0].toUpperCase()}${why.slice(1)}.`,buttons});
   }
@@ -244,6 +278,7 @@ function initMap(){
       begin:from=>{sources=[from];target=null;armyId=null;proposing=false;paintMap();},
       label:(from,to)=>`${amountFor(from)} · ${routeOf(from,to)?.travel ?? '?'}s`,
       targets:from=>reachable(from),
+      path:(from,to)=>routeOf(from,to)?.path,
       end:(from,to)=>{sources=[from];target=to;armyId=null;openCard('province',to || from);paintMap();revealUnderCard(to || from);}},
     onArmy:id=>{const a=state?.armies.find(a=>a.id===id);if(!a)return false;armyId=id;sources=[];target=null;openCard('army',id);paintMap();return true;}});
   $('landing-map').innerHTML=map.provinces.map(p=>`<path d="${p.path}"/>`).join('');
@@ -343,7 +378,11 @@ function orderPlan(){
   if(!sources.length){disabled=true;why=`None of your provinces can reach ${name}.`;}
   else if(!total){disabled=true;why='No free troops: one must stay home.';}
   if(pendingCommand)label='Sending order…';
-  const preview=sources.length?`${total} vs ${tp.troops} ${relation==='own' || relation==='ally'?'there now':'defenders'} · arrives in ${travel+1}s (${time(state.tick+travel+1)})`:'';
+  // One line: where the troops go, the way (the server's route once /plan answers) and when they arrive.
+  const planned=marchPlan.key===JSON.stringify(actionFor(parts))?marchPlan.result:null,sent=parts.filter(s=>s.amount>0);
+  const way=sent.length===1?(planned?.sources?.[0]?.path || routeOf(sent[0].from,target)?.path || []).slice(0,-1):[];
+  const arrives=planned?.arrivesAt ?? state.tick+travel+1;
+  const preview=sources.length?`Send ${total} → ${name}${sent.length>1?` from ${sent.length} provinces`:''}${way.length?` via ${way.map(v=>place(v).name).join(', ')}`:''} (arrive${sent.length>1?' together':'s'} ${time(arrives)}) · ${tp.troops} ${relation==='own' || relation==='ally'?'there now':'defenders'}`:'';
   return {parts,total,travel,war,relation,words,label,danger,disabled,why,preview,owner,arrowLabel:`${total} · ${travel+1}s`};
 }
 /** "Declare war on X?" with the real consequences: both whole sides go to war. */
@@ -363,24 +402,32 @@ async function sendOrder(){
   closeCard();
 }
 /** The one march order for the current selection (several sources arrive together). */
-function marchAction(declare=false){
-  const parts=orderPlan().parts.filter(s=>s.amount>0);
+function marchAction(declare=false){return actionFor(orderPlan().parts,declare);}
+function actionFor(all,declare=false){
+  const parts=all.filter(s=>s.amount>0);
   return {type:'march',to:target,...(parts.length===1?{from:parts[0].from,amount:parts[0].amount}:{sources:parts.map(s=>({from:s.from,amount:s.amount}))}),...(declare?{declareWar:true}:{})};
+}
+/** The server's latest forecast for the selected march ({key: the action as JSON, result}). */
+let marchPlan={key:'',result:null};
+function planDetails(result){
+  const via=result.sources.length===1 && result.sources[0].path.length>1?`Via ${result.sources[0].path.slice(0,-1).map(v=>esc(place(v).name)).join(' → ')} · `:'';
+  const odds=result.combatAtArrival?` <b class="odds">${Math.round(100*result.combatAtArrival.attackerWinChance)}% to take it against ${result.defenseAtArrival.total} expected defenders.</b>`:'';
+  const when=result.sources.length>1?`All ${result.sources.length} columns arrive together at ${time(result.arrivesAt)}`:`arrives ${time(result.arrivesAt)}`;
+  return `${esc(result.summary)}${odds}<small>${via}${when}${result.defenseAtArrival?` · ${result.defenseAtArrival.current} there now, +${result.defenseAtArrival.recruits} recruits, +${result.defenseAtArrival.incoming} arriving`:''}. New orders and battles can change this.</small>`;
 }
 /** The server's forecast of this march (routes, arrival, odds), shown under the expanded card. */
 async function updatePreview(){
-  const box=$('order-details');if(!box)return;
-  if(!sources.length || !target || !active()){previewKey='';box.textContent='';return;}
+  if(!sources.length || !target || !active()){previewKey='';if($('order-details'))$('order-details').textContent='';return;}
   const action=marchAction(),key=JSON.stringify([matchId,state.tick,action]);
   if(key===previewKey || !orderPlan().total)return;previewKey=key;const version=++previewVersion,epoch=generation;
   try{
     const result=await request(`/api/games/${matchId}/plan`,'POST',action);
     if(key!==previewKey || version!==previewVersion || epoch!==generation)return;
-    const via=result.sources.length===1 && result.sources[0].path.length>1?`Via ${result.sources[0].path.slice(0,-1).map(v=>esc(place(v).name)).join(' → ')} · `:'';
-    const odds=result.combatAtArrival?` <b class="odds">${Math.round(100*result.combatAtArrival.attackerWinChance)}% to take it against ${result.defenseAtArrival.total} expected defenders.</b>`:'';
-    const when=result.sources.length>1?`All ${result.sources.length} columns arrive together at ${time(result.arrivesAt)}`:`arrives ${time(result.arrivesAt)}`;
-    $('order-details').innerHTML=`${esc(result.summary)}${odds}<small>${via}${when}${result.defenseAtArrival?` · ${result.defenseAtArrival.current} there now, +${result.defenseAtArrival.recruits} recruits, +${result.defenseAtArrival.incoming} arriving`:''}. New orders and battles can change this.</small>`;
-  }catch(e){if(key===previewKey && version===previewVersion && epoch===generation)$('order-details').textContent=e.message;}
+    const fresh=marchPlan.key!==JSON.stringify(action) || marchPlan.result?.arrivesAt!==result.arrivesAt;
+    marchPlan={key:JSON.stringify(action),result};
+    if($('order-details'))$('order-details').innerHTML=planDetails(result);
+    if(fresh)renderCard();
+  }catch(e){if(key===previewKey && version===previewVersion && epoch===generation && $('order-details'))$('order-details').textContent=e.message;}
 }
 
 /* ── The context card ── */
@@ -463,7 +510,7 @@ function renderCard(){
     if(a.id)b.id=a.id;b.disabled=Boolean(a.disabled);return b;}));
   $('card-dock').hidden=$('sources').hidden && $('amount-control').hidden && $('order-preview').hidden && !view.actions.length;
   if(order){const pct=Math.round(fraction*100);$('amount-slider').style.setProperty('--fill',`${pct}%`);}
-  if(card.kind==='province')paintMapDraftOnly();
+  if(card.kind==='province'){paintMapDraftOnly();if(order && order.parts.length)updatePreview();}
 }
 function paintMapDraftOnly(){const plan=target && sources.length?orderPlan():null;atlas.setDraft(plan?{sources,to:target,label:plan.arrowLabel}:null);}
 function detailsHTML(html){const d=el('div','card-more');d.innerHTML=html;return d;} // callers escape every name
@@ -503,7 +550,10 @@ function provinceCard(){
     // Troops that left (or are about to leave) this province: recall them from here too.
     const outgoing=[...state.orders.filter(o=>o.type==='march' && o.from===id).map(o=>({id:o.id,amount:o.amount,to:o.to,queued:true})),
       ...state.armies.filter(a=>a.country===state.you && (a.path?a.origin:a.from)===id && !a.returning && !recallOption(a)?.queued).map(a=>({id:a.id,amount:a.amount,to:a.path?.at(-1) || a.to}))];
-    for(const o of outgoing.slice(0,2))actions.push({label:`${o.queued?'Cancel':'Recall'} ${o.amount} → ${place(o.to).name}`,act:'recall',arg:o.id,disabled:pendingCommand});
+    // Troops coming home here (recalled or turned back): send them back toward their target.
+    const homing=state.armies.filter(a=>a.to===id && resumeOption(a) && !resumeOption(a).queued).map(a=>({id:a.id,amount:a.amount,to:a.resume.target,turn:true,spent:resumeOption(a).spent}));
+    for(const o of [...homing,...outgoing].slice(0,2))actions.push(o.turn?{label:`March again ${o.amount} → ${place(o.to).name}`,act:'turn',arg:o.id,disabled:pendingCommand || o.spent}
+      :{label:`${o.queued?'Cancel':'Recall'} ${o.amount} → ${place(o.to).name}`,act:'recall',arg:o.id,disabled:pendingCommand});
   }
   return {...base,sub:[owner && !mine?ownerButton(owner):el('span','card-meta',mine?'Your province':'Unclaimed'),el('span','card-meta',`${p.troops} troops${owner?` · industry ${'ⅠⅡⅢⅣⅤ'[p.development-1] || p.development}`:''}`)],subKey:[owner,relationOf(owner),p.troops,p.development,mine],
     status,statusKey:[battle && [battle.province,p.troops,state.armies.filter(a=>a.engaged && a.to===id).reduce((n,a)=>n+a.amount,0)],mine,freeTroops(id)>0,state.armies.filter(a=>a.engaged && a.to===id).length],relation:mine?'own':'',actions,more:()=>moreProvince(id,false)};
@@ -518,7 +568,8 @@ function moreProvince(id,order){
   const scroll=body.scrollTop;
   let html='';
   if(order){
-    const previous=$('order-details')?.dataset.for===`${sources.join()}>${id}`?$('order-details').innerHTML:null; // server text, escaped when written
+    const known=marchPlan.key===JSON.stringify(marchAction())?planDetails(marchPlan.result):null;
+    const previous=known ?? ($('order-details')?.dataset.for===`${sources.join()}>${id}`?$('order-details').innerHTML:null); // server text, escaped when written
     html+=`<p id="order-details" class="order-details" data-for="${esc(`${sources.join()}>${id}`)}">${previous ?? 'Checking the route and the garrison…'}</p>`;
   }else if(mine){
     const reserved=state.orders.filter(o=>o.from===id && ['march','develop'].includes(o.type)).reduce((n,o)=>n+o.amount,0);
@@ -545,22 +596,27 @@ function marchesHTML(){
   if(!moving.length && !queued.length)return '';
   const can=!pendingCommand;
   const recall=(id,label)=>`<button type="button" data-recall="${esc(id)}" ${can?'':'disabled'}>${label}</button>`;
+  const again=a=>{const o=resumeOption(a);return !o || o.queued?'':`<button type="button" data-turn="${esc(a.id)}" ${can && !o.spent?'':'disabled'} title="${o.spent?esc(o.why):''}">March again</button>`;};
   const groups=[...new Set([...moving,...queued].filter(a=>a.groupId && !a.returning).map(a=>a.groupId))].filter(id=>[...moving,...queued].filter(a=>a.groupId===id && !a.returning).length>1);
   const where=a=>a.path?.at(-1) || a.to;
-  return `<h3>Your orders <span class="count">${moving.length+queued.length}</span></h3><div class="march-list">${groups.map(id=>`<div class="march-row"><span>Marching together<small>${esc(id)}</small></span>${recall(id,'Recall group')}</div>`).join('')}${queued.map(o=>`<div class="march-row"><span>${o.type==='recall'?'Recall queued':o.type==='develop'?'Construction queued':o.type==='rally'?'Rally order queued':`${o.amount} · ${esc(place(o.from).name)} → ${esc(place(o.to).name)}`}<small>${Math.max(0,o.executeAt-state.tick)}s until ${o.type==='march'?'departure':'it takes effect'}</small></span>${o.type==='march'?recall(o.id,'Cancel'):''}</div>`).join('')}${moving.map(a=>`<div class="march-row ${a.returning?'returning':''}"><button class="march-focus" data-feed-province="${esc(where(a))}"><b>${a.amount}</b> ${a.returning?'↶':'→'} ${esc(place(where(a)).name)}<small>${a.returning?'Returning · ':''}arrives ${time(a.arrivesAt)} · ${Math.max(0,a.arrivesAt-state.tick)}s</small></button>${a.returning || recallOption(a)?.queued?'':recall(a.id,'Recall')}</div>`).join('')}</div>`;
+  return `<h3>Your orders <span class="count">${moving.length+queued.length}</span></h3><div class="march-list">${groups.map(id=>`<div class="march-row"><span>Marching together<small>${esc(id)}</small></span>${recall(id,'Recall group')}</div>`).join('')}${queued.map(o=>`<div class="march-row"><span>${o.type==='recall'?'Recall queued':o.type==='turn_around'?'March again queued':o.type==='develop'?'Construction queued':o.type==='rally'?'Rally order queued':`${o.amount} · ${esc(place(o.from).name)} → ${esc(place(o.to).name)}`}<small>${Math.max(0,o.executeAt-state.tick)}s until ${o.type==='march'?'departure':'it takes effect'}</small></span>${o.type==='march'?recall(o.id,'Cancel'):''}</div>`).join('')}${moving.map(a=>`<div class="march-row ${a.returning?'returning':''}"><button class="march-focus" data-feed-province="${esc(where(a))}"><b>${a.amount}</b> ${a.returning?'↶':'→'} ${esc(place(where(a)).name)}<small>${a.returning?'Returning · ':''}arrives ${time(a.arrivesAt)} · ${Math.max(0,a.arrivesAt-state.tick)}s</small></button>${a.returning?again(a):recallOption(a)?.queued?'':recall(a.id,'Recall')}</div>`).join('')}</div>`;
 }
 function armyCard(){
-  const a=state.armies.find(a=>a.id===card.id),option=recallOption(a),dest=a.path?.at(-1) || a.to;
+  const a=state.armies.find(a=>a.id===card.id),option=recallOption(a),again=resumeOption(a),dest=a.path?.at(-1) || a.to;
   const status=el('div','card-relation');status.append(el('b',`rel ${a.returning?'rel-ally':'rel-war'}`,a.returning?'RETURNING':a.engaged?'IN BATTLE':'MARCHING'),el('span','',`${place(a.from).name} → ${place(dest).name} · ${a.path && !a.returning?'next stop':'arrives'} in ${Math.max(0,a.arrivesAt-state.tick)}s (${time(a.arrivesAt)})`));
   const group=a.groupId && state.armies.filter(x=>x.groupId===a.groupId && !x.returning).length>1;
   let actions=[];
-  if(option?.queued)status.append(el('span','card-hint','Recall queued: they turn at the next game second.'));
+  if(option?.queued || again?.queued)status.append(el('span','card-hint',again?'Marching again: they turn at the next game second.':'Recall queued: they turn at the next game second.'));
   else if(option){
     actions=[{label:option.label,act:'recall',arg:a.id,primary:true,disabled:pendingCommand,id:'primary'},...(group?[{label:'Recall the whole march',act:'recall',arg:a.groupId}]:[])];
     status.append(el('span','card-hint',option.preview));
+  }else if(again){
+    if(!again.spent)loadTurnPlan(a);
+    actions=[{label:again.label,act:'turn',arg:a.id,primary:true,disabled:pendingCommand || again.spent || Boolean(again.plan?.error),id:'primary'}];
+    status.append(el('span','card-hint',again.why || resumePreview(a,again)));
   }
   return {flag:a.country,title:`${a.amount} ${faction(a.country).short} troops`,sub:[ownerButton(a.country)],subKey:[a.country,relationOf(a.country)],status,
-    statusKey:[a.returning,a.engaged,a.arrivesAt,state.tick,option?.label,option?.queued],relation:'',actions};
+    statusKey:[a.returning,a.engaged,a.arrivesAt,state.tick,option?.label,option?.queued,again?.label,again?.queued,again?.why,again?.plan?.result?.battleInProgress],relation:'',actions};
 }
 function countryCard(){
   const id=card.id,p=playerOf(id),c=country(id),rel=relationOf(id),me=myPlayer();
@@ -678,6 +734,7 @@ function describe(e){
     case 'development_started':return`${c(e.country)} invests ${e.cost} manpower in ${place(e.province).name}; level ${e.level} completes at ${time(e.completesAt)}.`;
     case 'development_completed':return`${place(e.province).name} reaches industrial level ${e.level}.`;
     case 'army_recalled':return`${c(e.country)} ${e.reason?'turns back':'recalls'} ${e.amount} troops${e.province?` from ${place(e.province).name}`:''}; return to ${place(e.to).name} at ${time(e.arrivesAt)}.`;
+    case 'army_turned_around':return`${c(e.country)} sends ${e.amount} troops back toward ${place(e.to).name}; they arrive at ${time(e.arrivesAt)}.`;
     case 'army_interned':return`${e.amount} troops from ${c(e.country)} cannot return through ${place(e.province).name}.`;
     case 'battle':return`${place(e.province).name}: ${e.owner!==e.previousOwner?`${c(e.owner)} captures it`:'defenders retain ownership'}; ${e.troops} troops remain.`;
     case 'alliance_notice':return`${e.name}: coalition change confirmed; activates at ${time(e.activateAt)}.`;
@@ -737,7 +794,7 @@ function renderRules(){
     ['Goal',`Hold ${Math.round(r.economyShare*100)}% of the world's industry with your alliance for ${r.hold} s. If nobody does by ${time(r.duration)}, the side with the most industry wins; a tie is a draw. Everyone on the winning side wins.`],
     ['Troops',`Each province makes troops every ${r.recruit} s: 1, 2 or 3 by its industry level.`],
     ['March','Drag from your province to any target, or tap one, then the other. Tap more of your provinces to attack together: they arrive at the same moment. Troops travel through your and your allies’ land, twice as fast inside it. Always leave one troop at home.'],
-    ['Battle','Arriving attackers fight dice rounds until one side is gone. Defenders win ties, and a factory (industry II or III) gives them +1. Send help, or recall to pull back.'],
+    ['Battle',`Arriving attackers fight dice rounds until one side is gone. Defenders win ties, and a factory (industry II or III) gives them +1. Send help, recall an army to bring it home, or send a returning army back to its target (march again, ${timesWord(r.maxTurnArounds)} per army).`],
     ['Rally','Pick a province and a rally point: its new troops march there by themselves.'],
     ['Build',`Spend troops to raise a province’s industry: I→II costs ${r.developmentCosts[1]} (${span(r.developmentTicks[1])}), II→III costs ${r.developmentCosts[2]} (${span(r.developmentTicks[2])}). Capture takes the factory; unfinished work is lost.`],
     ['War and peace',`Declare war before attacking another country: the whole of both alliances goes to war. Anyone can offer peace; anyone on the other side can accept within ${r.peaceLife} s.`],
@@ -796,6 +853,7 @@ async function perform(act,arg){
       const r=await command({type:'develop',from:arg});if(r)toast(`Investment committed. Completion at ${time(r.completesAt)}.`);return;
     }
     case 'recall':{const r=await command({type:'recall',id:arg});if(r){toast('Recall queued. The troops turn where they are and head home.');if(card?.kind==='army')closeCard();}return;}
+    case 'turn':{const r=await command({type:'turn_around',armyId:arg});if(r){toast(r.mode==='resume'?`Marching again → ${place(r.to).name}. Arrives ${time(r.arrivesAt)}.`:'Recall queued. The troops turn where they are and head home.');if(card?.kind==='army')closeCard();}return;}
     case 'rally-pick':{
       if(rallyFrom===arg){rallyFrom=null;renderCard();return;}
       rallyFrom=arg;toast(`Tap one of your provinces: new troops in ${place(arg).name} will march there.`);renderCard();paintMap();return;
@@ -927,6 +985,7 @@ document.addEventListener('click',safely(async event=>{
   if(b.dataset.feedProvince && state)showProvince(b.dataset.feedProvince);
   if(b.dataset.openCountry && state)openCard('country',b.dataset.openCountry,{focus:!b.closest('#card')});
   if(b.dataset.recall)await perform('recall',b.dataset.recall);
+  if(b.dataset.turn)await perform('turn',b.dataset.turn);
   if(b.dataset.act)await perform(b.dataset.act,b.dataset.arg);
 }));
 /** A province from Messages, a notice or the orders list: frame it and open its card. */

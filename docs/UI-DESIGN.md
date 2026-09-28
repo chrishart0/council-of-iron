@@ -41,8 +41,8 @@ the dock as a column on the right.
 
 Two nouns: a **province** (troops) and a **country** (diplomacy). One card shows whichever you selected, with two sizes (peek and *Show more*) and exactly **one primary button whose label says what happens**.
 
-- **March.** Drag from your province's counter to any target: the arrow snaps to reachable provinces and shows `troops · ETA`. Tap-tap works the same, and so does target-first (tap a target; your best-placed province is proposed). Tap more of your provinces to add them as sources (chips with per-source amounts): one `march` order, all arriving together. The card holds one amount control (slider plus 25/50/75/100 %, remembered per browser), the route and the capture chance on arrival. The primary reads `Attack Normandy with 5`, `Reinforce Ruhr with 24` or, against a country you are not at war with, `Declare war on France & send 9` (danger style; the confirmation letter names everyone who will be at war). Keyboard: Enter on your counter, then on a target, focuses the primary; Enter sends, Escape cancels.
-- **Recall.** A marching army is its arrow: tap it (or the province it left) for *Recall* (and *Recall the whole march* for a multi-source march). Counter taps win over army taps.
+- **March.** Drag from your province's counter to any province you can reach: every reachable province is lit (cream to reinforce, coral to attack) and the rest dimmed; the arrow follows the actual route leg by leg and shows `troops · ETA` at the target. The one-line preview reads `Send N → X via A, B (arrives mm:ss)`. Tap-tap works the same, and so does target-first (tap a target; your best-placed province is proposed). Tap more of your provinces to add them as sources (chips with per-source amounts): one `march` order, all arriving together. The card holds one amount control (slider plus 25/50/75/100 %, remembered per browser), the route and the capture chance on arrival. The primary reads `Attack Normandy with 5`, `Reinforce Ruhr with 24` or, against a country you are not at war with, `Declare war on France & send 9` (danger style; the confirmation letter names everyone who will be at war). Keyboard: Enter on your counter, then on a target, focuses the primary; Enter sends, Escape cancels.
+- **Turn around.** A marching army is its arrow: tap it (or the province it left) for one primary: `Recall → Home (arrives mm:ss)` while it advances (and *Recall the whole march* for a multi-source march), `March again → Target (arrives mm:ss)` while it comes back, with a one-line preview (and a warning when another side's battle is under way there); disabled with *Already sent back twice* after the second re-advance. The turned-back notice carries *March again* beside *Show army* (not for `peace`/`no_war`, which need a declaration first); on phones its text gets its own row above 44 px buttons. Counter taps win over army taps.
 - **Rally.** On your province: *Rally troops to…*, then tap one of your provinces. A dashed arrow in your colour shows it; *Clear rally* removes it; a paused rally (rally province lost, no friendly path) is a personal notice.
 - **Build.** *Develop · 24 troops* on your own province, with a confirmation that states cost and time.
 - **Battles:** a province in battle shows the live odds and recent rounds in its card.
@@ -58,7 +58,7 @@ A Powers row, a standard on the phone strip, or a province card's owner line ope
 | Tier | What | Arrives as | Sound |
 |---|---|---|---|
 | ACTION | an alliance offer to you, a peace offer to your side, an enemy army landing on your province within 30 s | the one toast slot, persistent, inline Accept / Read / ×, "+N" | `dispatch` stinger |
-| PERSONAL | DMs, alliance chat, diplomatic rows and headlines that affect you, your battle results, armies turned back (sticky, *Show army*), paused rallies | a brief one-line toast (bursts from one sender coalesce) | `chat` blip for messages |
+| PERSONAL | DMs, alliance chat, diplomatic rows and headlines that affect you, your battle results, armies turned back (sticky, *Show army* and *March again*), paused rallies | a brief one-line toast (bursts from one sender coalesce) | `chat` blip for messages |
 | WORLD | everything else | no toast; the World conversation pulses | silent |
 
 **Toast priority.** There is one toast slot. A decision (ACTION) always owns it. Otherwise your own order's confirmation or error shows first (about 4 s; 7 s for an error), ahead of a personal notice, which then takes the slot.
@@ -159,6 +159,9 @@ The full `python tests/browser.py` run includes `tests/ui-browser.py` (recorded-
 | Declare war on a neutral country and march | tap target, primary, confirm | 3 |
 | Attack a neighbouring enemy province with 50 % | tap target (or drag), 50 %, send | 3 |
 | Recall a marching army | army (or source province), Recall | 2 |
+| Send a returning army back | army (or its province), March again | 2 |
+| Long move across your own land | source, far target, send | 3 |
+| Move through an ally's land | source, target beyond the ally, send | 3 |
 | Propose an alliance | country, Propose alliance, Send | 3 |
 | Respond to an incoming offer | Messages, Accept | 2 |
 | Reply to a DM | Messages, Send (+ typing) | 2 |

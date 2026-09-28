@@ -40,7 +40,8 @@ export class Atlas {
    *  container: element to mount the key in instead of the map container, collapsed: boolean }. */
   constructor(svg, map, onSelect, options = {}) {
     this.svg = svg; this.map = map; this.onSelect = onSelect;
-    // Optional host hooks (v0.8): `drag: { start(id, { counter }) → boolean (no side effects), begin(from), end(from, to|null), label(from, to) → string }`
+    // Optional host hooks (v0.8): `drag: { start(id, { counter }) → boolean (no side effects), begin(from), end(from, to|null), label(from, to) → string,
+    // targets(from) → [id] (legal destinations, lit while a source is chosen), path(from, to) → [id…, to] (the route, drawn leg by leg) }`
     // turns a drag that starts on one of the host's provinces into an order arrow instead of a pan;
     // `onArmy(id) → boolean` handles a tap on a moving army (true = handled, no tooltip).
     this.dragHooks = options.drag || null; this.onArmy = options.onArmy || null; this.draftState = null;
@@ -646,13 +647,18 @@ export class Atlas {
     this.byId = new Map(state.provinces.map(p => [p.id, p]));
     const me = state.players.find(p => p.id === state.you), sides = new Map(state.players.map(p => [p.id, p.side]));
     const neighbors = this.places.get(source)?.neighbors || [];
+    // With a source of yours chosen, every legal destination is lit (reinforce or attack) and the rest dimmed.
+    const reach = source && this.dragHooks?.targets ? new Set(this.dragHooks.targets(source)) : null;
+    const friendly = owner => owner && me && sides.get(owner) === me.side;
+    this.svg.classList.toggle('has-source', Boolean(reach));
     // Provinces of the viewer that an army at war with it is marching on get a red ring (v0.8: no alert stack).
     const threatened = new Set(me ? state.armies.filter(a => threatening(state, a, state.you)).map(a => a.to) : []);
     for (const p of state.provinces) {
       const shape = this.shapes.get(p.id), marker = this.markers.get(p.id);
       if (!shape) continue;
-      const role = p.id === source ? 'selected' : p.id === destination ? 'destination' : neighbors.includes(p.id) ? 'neighbor' : '';
-      shape.setAttribute('class', `province ${role}${p.owner ? ' occupied' : ''}${threatened.has(p.id) ? ' threatened' : ''}`);
+      const role = p.id === source ? 'selected' : p.id === destination ? 'destination' : (reach ? reach.has(p.id) : neighbors.includes(p.id)) ? 'neighbor' : '';
+      const lit = reach && role === 'neighbor' ? (friendly(p.owner) ? ' reach-friendly' : ' reach-attack') : '';
+      shape.setAttribute('class', `province ${role}${lit}${p.owner ? ' occupied' : ''}${threatened.has(p.id) ? ' threatened' : ''}`);
       marker.group.setAttribute('class', `map-counter ${role}${p.owner === state.you && state.you ? ' owned' : ''}${threatened.has(p.id) ? ' threatened' : ''}`);
       marker.disc.setAttribute('stroke', this.countries.get(p.owner)?.color || NEUTRAL);
       marker.stripe.setAttribute('fill', this.countries.get(p.owner)?.color || NEUTRAL);
@@ -1050,9 +1056,16 @@ export class Atlas {
     const tx = draft.to ? this.near(target.x) : target.x, ty = target.y;
     for (const id of draft.sources) {
       const s = this.places.get(id); if (!s) continue;
-      const sx = tx + wrapDelta(s.x - tx), len = Math.hypot(tx - sx, ty - s.y), back = draft.to ? Math.min(len * .35, 12 / px) : 0;
-      const ex = len ? tx - (tx - sx) * back / len : tx, ey = len ? ty - (ty - s.y) * back / len : ty;
-      layer.append(node('path', { class: `draft-arrow${draft.to ? ' snapped' : ''}`, d: `M${sx},${s.y}L${ex},${ey}`, 'marker-end': `url(#${this.prefix}march-head)` }));
+      // Leg by leg along the host's route (a long march through friendly land), unwrapped back from the target copy.
+      const legs = (draft.to && this.dragHooks?.path?.(id, draft.to)) || [];
+      const points = [{ x: tx, y: ty }];
+      for (const via of [...legs.slice(0, -1)].reverse().concat(id)) {
+        const q = this.places.get(via); if (!q) continue;
+        points.unshift({ x: points[0].x + wrapDelta(q.x - points[0].x), y: q.y });
+      }
+      const [pa, pb] = points.slice(-2), len = Math.hypot(pb.x - pa.x, pb.y - pa.y), back = draft.to ? Math.min(len * .35, 12 / px) : 0;
+      if (len) points[points.length - 1] = { x: pb.x - (pb.x - pa.x) * back / len, y: pb.y - (pb.y - pa.y) * back / len };
+      layer.append(node('path', { class: `draft-arrow${draft.to ? ' snapped' : ''}${points.length > 2 ? ' route' : ''}`, d: points.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join(''), 'marker-end': `url(#${this.prefix}march-head)` }));
     }
     if (draft.label) {
       const g = node('g', { class: 'draft-label', transform: `translate(${tx} ${ty - 18 / px}) scale(${1 / px})` });
