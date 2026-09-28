@@ -1155,25 +1155,25 @@ def main():
             check_layout(page,'1600x1000 action toast')
             threat.locator('[data-do="dismiss"]').click()
             capture('11-incoming-attack.png')
-            # Tick 714: Russia's column breaks on Great Britain in a major battle: a PERSONAL notice with the troops left, a banner
-            # (it is Britain's battle) and exactly one audible cue. (Step to 710 first: the Egypt, Levant, India and Low Countries
+            # Tick 663: an attack breaks on the Low Countries in a major battle: a PERSONAL notice with the troops left, a banner
+            # (it is Britain's battle) and exactly one audible cue. (Step to 660 first: the Egypt, Levant, India and Great Britain
             # battles in between are not what this checks.)
-            server.stdin.write('710\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==710
+            server.stdin.write('660\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==660
             if threat.is_visible():threat.locator('[data-do="dismiss"]').dispatch_event('click')  # a banner may sit over it
             page.wait_for_timeout(20500);before=len(spy(page,'cues'))  # past the 20 s stinger budget window those battles used, as in real time
-            server.stdin.write('722\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==722
-            expect(personal).to_contain_text('Line held · Great Britain',timeout=8000)
+            server.stdin.write('671\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==671
+            expect(personal).to_contain_text('Line held · Low Countries',timeout=8000)
             expect(personal).to_contain_text(re.compile(r'\d+ troops remain'))
-            expect(page.locator('#declaration')).to_contain_text('Major battle at Great Britain',timeout=5000)
+            expect(page.locator('#declaration')).to_contain_text('Major battle at Low Countries',timeout=5000)
             page.wait_for_timeout(1600);fresh_cues=spy(page,'cues')[before:]
             assert len([c for c in fresh_cues if c['audible']])==1,fresh_cues
-            report['sound']={'tick714':fresh_cues}
-            report['assertions'].append(f'The live tick-714 headline (a major battle on your own province) chose exactly one audible cue ({[c["cue"] for c in fresh_cues if c["audible"]][0]}).')
+            report['sound']={'tick663':fresh_cues}
+            report['assertions'].append(f'The live tick-663 headline (a major battle on your own province) chose exactly one audible cue ({[c["cue"] for c in fresh_cues if c["audible"]][0]}).')
             camera(page,'world');capture('12-line-held.png')
             page.screenshot(path=str(out/'13-battle-banner.png'))
             check_layout(page,'1600x1000 banner')
             rows=open_thread(page,'world')
-            expect(rows.locator('[data-kind="major_battle"]').last).to_contain_text('Great Britain')
+            expect(rows.locator('[data-kind="major_battle"]').last).to_contain_text('Low Countries')
             close_comms(page)
             report['assertions'].append('Recorded position stepped live: a hostile army due within 30 s is the one ACTION toast; a defence you won is a PERSONAL notice with the troops left and, as a major battle (casualties above max(20, 3% of all troops)) on your land, a banner and a World row.')
             feed_checks(page,report)
@@ -1184,7 +1184,7 @@ def main():
             assert spy(page,'cues')[before:]==[],spy(page,'cues')[before:]
             sound_settings_checks(page,context,url,report,args.bridge)
             for banner in ['#declaration','#alliance-seal','#fallen-seal']:expect(page.locator(banner)).to_be_hidden()
-            rows=open_thread(page,'world');expect(rows.locator('[data-kind="major_battle"]').last).to_contain_text('Great Britain');close_comms(page)
+            rows=open_thread(page,'world');expect(rows.locator('[data-kind="major_battle"]').last).to_contain_text('Low Countries');close_comms(page)
             report['assertions'].append('Reopening the room rebuilt the World thread without replaying banners or toasts.')
             report['assertions'].append('Actual recorded losses and defense trigger factual, dismissible notices; reopening suppresses old battle popups.')
             page.set_viewport_size({'width':1500,'height':1150});go_back(page)
