@@ -45,7 +45,7 @@ For paired trials, pass the same `--combat-seed trial01` to Pi and Codex runners
 
 ## Benchmark ledger
 
-After a completed run, publish only its aggregate metrics to the tracked JSON ledger. It reports failed tool calls and rejected game orders separately, since a shell or read-tool failure differs from a rejected order. The importer refuses unfinished games and never copies endpoint details, credentials, model messages, or raw tool payloads:
+After a completed run, publish only its aggregate metrics to the tracked JSON ledger. It reports failed tool calls and rejected game orders separately. A rejected Pi MCP order usually counts in both fields, while a Codex shell command can exit successfully even after the game rejects its HTTP order. Compare rejected orders for the shared game-validity measure; tool failures describe each client path. The importer refuses unfinished games and never copies endpoint details, credentials, model messages, or raw tool payloads:
 
 ```bash
 node agents/pi/bench.js qwen data/pi/<completed-run>.json

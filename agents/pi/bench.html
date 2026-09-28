@@ -82,7 +82,7 @@
     <div class="table-wrap"><table><thead><tr><th>Started</th><th>Model</th><th>Country</th><th>Client</th><th>Clock</th><th>Seed</th><th>Strategy / version</th><th>Prestige</th><th>Accepted</th><th>Rejected orders</th><th>Failed / calls</th><th>Tokens</th><th>First action (s)</th><th>Seconds / turn</th></tr></thead><tbody id="rows"></tbody></table></div>
   </section>
   <section class="surface" aria-labelledby="pair-title">
-    <div class="surface-heading"><h2 id="pair-title">Same-seed run deltas</h2><p>Each Pi run uses the nearest-in-time Codex run with the same model, country, clock and seed. Positive Prestige and negative failure, rejection or token deltas favor Pi; these are separate games.</p></div>
+    <div class="surface-heading"><h2 id="pair-title">Same-seed run deltas</h2><p>Each Pi run uses the nearest-in-time Codex run with the same model, country, clock and seed. Positive Prestige and negative rejected-order or token deltas favor Pi. Failed-call deltas reflect different tool transports; these are separate games.</p></div>
     <div class="table-wrap"><table><thead><tr><th>Model</th><th>Country</th><th>Clock</th><th>Seed</th><th>Pi started</th><th>Prestige Δ</th><th>Failed calls Δ</th><th>Rejected orders Δ</th><th>Tokens Δ</th><th>Pi path</th><th>Codex path</th></tr></thead><tbody id="pairs"></tbody></table></div>
   </section>
   <section class="surface" aria-labelledby="task-title">
@@ -90,7 +90,7 @@
     <div id="task-error" role="alert" hidden></div>
     <div class="table-wrap"><table><thead><tr><th>Started</th><th>Model</th><th>Client</th><th>Success</th><th>Correct steps</th><th>Accepted</th><th>Rejected</th><th>Failed / calls</th><th>First action (s)</th><th>Complete (s)</th><th>Total tokens</th><th>Uncached</th></tr></thead><tbody id="task-rows"></tbody></table></div>
   </section>
-  <div class="notes"><p><span class="note-label">Reading the score</span>Prestige includes the game's alliance share and maturity rules. A winning ally may finish below zero. Deadline and domination games have different reward pools. Surviving passively can also earn a deadline prize.</p><p><span class="note-label">Benchmark boundary</span>Quick rooms run the whole clock 6× faster, including diplomatic offers. Qwen Codex used shell commands while Pi used Council MCP, and provider token counters may differ. Compare first-action time and rejected game orders separately from final score. Historical token fields are blank where usage was not recorded.</p></div>
+  <div class="notes"><p><span class="note-label">Reading the score</span>Prestige includes the game's alliance share and maturity rules. A winning ally may finish below zero. Deadline and domination games have different reward pools. Surviving passively can also earn a deadline prize.</p><p><span class="note-label">Benchmark boundary</span>Quick rooms run the whole clock 6× faster, including diplomatic offers. A rejected order is a failed MCP call for Pi, while a Codex shell command can exit successfully after an HTTP rejection. Use rejected orders for the shared game-validity comparison; tool failures describe each client path. Provider token counters may also differ. Historical token fields are blank where usage was not recorded.</p></div>
 </main>
 <script type="module">
 const $ = id => document.getElementById(id);
