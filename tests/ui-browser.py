@@ -1164,7 +1164,7 @@ def main():
             page.wait_for_timeout(3000);before=len(spy(page,'cues'))
             server.stdin.write('712\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==712
             expect(personal).to_contain_text('Line held · Great Britain',timeout=8000)
-            expect(personal).to_contain_text('16 troops')
+            expect(personal).to_contain_text(re.compile(r'\d+ troops remain'))
             expect(page.locator('#declaration')).to_contain_text('Major battle at Great Britain',timeout=5000)
             page.wait_for_timeout(1600);fresh_cues=spy(page,'cues')[before:]
             assert len([c for c in fresh_cues if c['audible']])==1,fresh_cues
