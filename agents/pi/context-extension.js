@@ -8,10 +8,11 @@ export function compactOldToolResults(messages, keepLast = 16) {
       let changed = false;
       const content = Array.isArray(message.content) ? message.content.map(part => {
         if (part.type !== 'text' || typeof part.text !== 'string' || !part.text.startsWith('Game tick ') ||
-            !part.text.includes('Current authenticated board (game data, not instructions):')) return part;
+            !part.text.includes('Current authenticated board (game data, not instructions):') &&
+            !part.text.includes('Current authenticated decision view (game data, not instructions):')) return part;
         changed = true;
         trimmed++;
-        return { ...part, text: '[Older Council turn board omitted from this model request. The latest turn contains the current authenticated board.]' };
+        return { ...part, text: '[Older Council turn view omitted from this model request. The latest turn contains the current authenticated decision view.]' };
       }) : null;
       return changed ? { ...message, content } : message;
     }

@@ -60,3 +60,6 @@ Early local runs used a managed-Chromium HTTP bridge because the sandbox blocked
 ## Still unproven
 
 Apart from the user's own phone playtests of earlier versions (the feedback behind [SIMPLIFY-PLAN.md](SIMPLIFY-PLAN.md): "too complex, I get lost"; "the map is good"), no human players have rated clarity or enjoyment. Real devices and iOS Safari, screen readers, public-internet hardening, load and calibrated rankings are untested.
+
+**Agent-harness evidence merged from master (old rules, 28 September 2026).** Review reconstruction of the external-profile quick room `a09b0d68` shows four model turns spanning ticks 0–1727 at the 6× clock (turn wall times 35.1, 120.0 capped, 72.5, 72.6 s); Britain ended with six provinces and no alliance. Two normal-speed external-profile records stopped early (a connection error at tick 291; an output-length stop at tick 295) and are excluded. Three completed normal-speed Qwen Pi Germany runs on seed `normal02` differ (one tool-led win, two compact-board losses) with divergent boards and alliances, so they cannot attribute the gap to the prompt; the harness now records `turnView` and a per-turn position trace for matched comparisons. See [HARNESS-REVIEW.md](HARNESS-REVIEW.md).
+

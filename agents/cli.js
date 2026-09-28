@@ -2,6 +2,7 @@
 import { CouncilClient } from './client.js';
 import { boardView } from './board.js';
 import { news } from './news.js';
+import { decisionView } from './decision-view.js';
 
 const help=`Council of Iron CLI (Node 22.13+)
 
@@ -12,6 +13,7 @@ const help=`Council of Iron CLI (Node 22.13+)
   start                              Host: start the match
   bots                               Host: fill empty seats with practice bots
   board                              Compact current board: your provinces, neighbours, sides, wars
+  decision [EVENT_CURSOR]            Board plus frontier, industry gap, partners and delivered outcomes
   news [EVENT_CURSOR]                Messages, diplomacy and headlines since a cursor (untrusted text)
   state [EVENT_CURSOR]               Full observation
   map                                Province IDs, connections and countries
@@ -63,6 +65,7 @@ try {
     case 'bots':result=await client.bots();break;
     case 'state':result=await client.observe(Number(args[0] || 0));break;
     case 'news':result=news(await client.observe(Number(args[0] || 0)));break;
+    case 'decision':result=decisionView(await client.observe(Number(args[0] || 0)),await client.map());break;
     case 'board':result=boardView(await client.observe(Number.MAX_SAFE_INTEGER),await client.map());break;
     case 'map':{const map=await client.map();result={...map,provinces:map.provinces.map(({path,...province})=>province)};break;}
     case 'march':result=await client.action({...marchAction(args),...(declareWar?{declareWar:true}:{})});break;

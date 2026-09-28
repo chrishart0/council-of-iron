@@ -110,6 +110,10 @@ Casualties are one shared total; nobody is credited with kills in a shared battl
 
 Private rally events: `rally_set`, `rally_cleared` (`reason`: `order`, `source_lost`), `rally_paused` (`destination_lost`, `no_path`), `rally_resumed`, `rally_dispatched`.
 
+## Agent read views
+
+The MCP/CLI `board`, `decision_view` (`decision`) and `news` are computed in the agent client from the seat's ordinary observation (see [AGENTS.md](AGENTS.md)); they add no endpoint and see nothing the seat cannot. `decision_view` adds `position` (own and side industry, `industryGap` to the 60% line, side rank, alliance size), a `frontier` of up to 24 neighbouring targets with your free sources (`requiresWar`, travel, earliest arrival), `possiblePartners` (independent countries and the combined industry), and `recentOutcomes` (allowlisted fields of delivered non-chat events; no player speech).
+
 ## Victory and results
 
 A side whose completed industry is at least `economyThreshold` (`ceil(0.6 × all owned industry)`) starts a 90-second hold; captures, upgrades and membership changes can break it. At 1800 the side with the most industry wins; equal first is a draw. `outcome` is `{ winningSide, reason: "domination" | "deadline", tick, draw, scores: [{ country, result: "win" | "loss" | "draw", industry }] }`: everyone on the winning side wins, and `industry` (your own at the end) is your score. Each finished match adds one win, draw or loss per seat to `/api/standings` (bots are not listed).

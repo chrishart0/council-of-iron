@@ -66,8 +66,10 @@ export function summarizeRun(raw, modelGroup) {
   return {
     id: raw.runId, match: raw.match, combatSeed: raw.combatSeed || null,
     startedAt: raw.startedAt, modelGroup, client, access, country: raw.country,
-    interfaceVersion: raw.interfaceVersion,
-    strategy: raw.embeddedBoard ? usedView ? 'board prompt + visual' : 'board in prompt'
+    interfaceVersion: raw.interfaceVersion, turnView: raw.turnView || null,
+    strategy: raw.embeddedBoard ? usedView ? `${raw.turnView === 'decision' ? 'decision view' : 'board'} prompt + visual`
+      : raw.turnView === 'decision' ? 'decision view in prompt' : 'board in prompt'
+      : raw.turnView === 'tools' ? 'tool-led turns'
       : usedView ? 'visual map' : usedBoard ? usedNews ? 'compact board + news' : 'compact board'
       : usedNews ? 'news' : raw.maxTurnSeconds ? 'full observation, capped' : 'full observation',
     maxTurnSeconds: number(raw.maxTurnSeconds),

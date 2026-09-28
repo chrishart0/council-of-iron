@@ -31,6 +31,10 @@ test('benchmark export keeps aggregate Pi metrics and excludes private run conte
   assert.equal(summarizeRun({ ...raw, toolCalls: [{ name: 'board', ok: true }, { name: 'news', ok: true }] }, 'luna').strategy,
     'compact board + news');
   assert.equal(summarizeRun({ ...raw, embeddedBoard: true }, 'luna').strategy, 'board in prompt');
+  assert.equal(summarizeRun({ ...raw, embeddedBoard: true, turnView: 'decision' }, 'luna').strategy,
+    'decision view in prompt');
+  assert.equal(summarizeRun({ ...raw, embeddedBoard: false, turnView: 'tools' }, 'luna').strategy,
+    'tool-led turns');
 });
 
 test('Codex benchmark export does not invent missing token or turn counts', () => {

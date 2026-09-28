@@ -8,6 +8,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { makeServer, MAP } from '../../src/server.js';
 import { CouncilClient } from '../client.js';
 import { boardView } from '../board.js';
+import { decisionView } from '../decision-view.js';
 import { FIXED_TASK_ID, FIXED_TASK_PROMPT, evaluateFixedTask } from './fixed-task.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -24,13 +25,14 @@ const preset = arg('--preset', 'quick');
 const access = arg('--access', 'mcp');
 const maxMinutes = Number(arg('--max-minutes', '12'));
 const turnMode = arg('--turn-mode', 'continuous');
+const turnView = arg('--turn-view', 'decision');
 const maxTurnSeconds = Number(arg('--max-turn-seconds', '180'));
 const decisionIntervalTicks = Number(arg('--decision-interval-ticks', '30'));
 const maxTurns = Number(arg('--max-turns', '80'));
 const combatSeed = arg('--combat-seed', undefined);
 const taskMode = arg('--task', 'match');
 const country = arg('--country', 'britain');
-if (!['quick', 'standard'].includes(preset) || !['mcp', 'cli'].includes(access) || !['match', 'fixed'].includes(taskMode) || !['continuous', 'episodic'].includes(turnMode) ||
+if (!['quick', 'standard'].includes(preset) || !['mcp', 'cli'].includes(access) || !['match', 'fixed'].includes(taskMode) || !['continuous', 'episodic'].includes(turnMode) || !['tools', 'board', 'decision'].includes(turnView) ||
     !Number.isFinite(maxMinutes) || maxMinutes <= 0 || !Number.isFinite(maxTurnSeconds) || maxTurnSeconds < 10 ||
     !Number.isSafeInteger(decisionIntervalTicks) || decisionIntervalTicks < 1 || decisionIntervalTicks > 1800 ||
     !Number.isSafeInteger(maxTurns) || maxTurns < 1) throw new Error('Invalid preset, access, task, turn mode, or timing');
@@ -47,11 +49,13 @@ const file = resolve(output, `${runId}-codex.json`);
 const modelId = playerModel === 'luna' ? 'gpt-6-luna' : 'qwen3.8-27b-unsloth-q4';
 const label = playerModel === 'luna' ? 'Luna x-high Codex' : 'Qwen3.8-27B Unsloth Q4 Codex';
 const record = { runId, client: 'codex', access, model: modelId, country, preset, combatSeed: combatSeed || null,
-  turnMode, embeddedBoard: turnMode === 'episodic' && taskMode === 'match',
-  interfaceVersion: taskMode === 'fixed' ? 'fixed-v2' : turnMode === 'episodic' ? 'board-turn-v7' : 'continuous-v2',
+  turnMode, turnView, embeddedBoard: turnMode === 'episodic' && taskMode === 'match' && turnView !== 'tools',
+  interfaceVersion: taskMode === 'fixed' ? 'fixed-v2' : turnMode === 'episodic'
+    ? turnView === 'board' ? 'board-turn-v8' : `${turnView}-turn-v2` : 'continuous-v2',
   ...(turnMode === 'episodic' ? { maxTurnSeconds, decisionIntervalTicks, maxTurns } : {}),
   taskId: taskMode === 'fixed' ? FIXED_TASK_ID : null,
-  startedAt: new Date().toISOString(), events: [], actions: [], httpActions: [], turnLog: [], usage: null };
+  startedAt: new Date().toISOString(), events: [], actions: [], httpActions: [], turnLog: [], positionLog: [], usage: null,
+  usageAccounting: 'cumulative' };
 const save = () => writeFileSync(file, JSON.stringify(record, null, 2), { mode: 0o600 });
 let app, child;
 try {
@@ -91,9 +95,10 @@ try {
     args.splice(args.indexOf('--ephemeral'), 1);
     args[args.length - 1] = args.at(-1)
       .replace('Choose your strategy and act until the authoritative outcome.', 'Choose your strategy across repeated turns until the authoritative outcome.')
-      .replace('Choose your strategy and act until state says finished.', 'Choose your strategy across repeated turns until state says finished.')
-      .replace('Start with board for a compact map and direct connections;', 'Each turn gives you a current compact board;')
-      .replace('Start with node /game/agents/cli.js board; it shows the current board and directly connected neighbours.', 'Each turn gives you a current compact board; use the CLI board command only when a refresh is needed.');
+      .replace('Choose your strategy and act until state says finished.', 'Choose your strategy across repeated turns until state says finished.');
+    if (turnView !== 'tools') args[args.length - 1] = args.at(-1)
+      .replace('Start with board for a compact map and direct connections;', 'Each turn gives you a current compact game view;')
+      .replace('Start with node /game/agents/cli.js board; it shows the current board and directly connected neighbours.', 'Each turn gives you a current compact game view; use the CLI board command only when a refresh is needed.');
     args[args.length - 1] += ' The game clock keeps running while you think. Make one or more useful legal orders, then end this response; you will receive a new turn after game time passes. Do not wait inside a response for the clock.';
   }
   const nodeRoot = resolve(process.env.HOME, '.nvm/versions/node/v22.22.2');
@@ -163,8 +168,10 @@ try {
     const cwdAt = resumeOptions.indexOf('-C');
     if (cwdAt >= 0) resumeOptions.splice(cwdAt, 2);
     record.turnAttempts = 0;
+    let decisionCursor = 0;
     while (Date.now() < deadline && record.turnAttempts < maxTurns) {
-      const before = await client.observe(0);
+      const before = await client.observe(taskMode === 'match' ? decisionCursor : 0);
+      if (taskMode === 'match') decisionCursor = before.cursor;
       if (before.status === 'finished') { record.outcome = before.outcome; break; }
       const eliminatedAt = taskMode === 'match' ? before.players.find(player => player.id === country)?.eliminatedAt : null;
       if (eliminatedAt != null) {
@@ -174,8 +181,18 @@ try {
       }
       if (taskMode === 'fixed' && evaluateFixedTask(app.games.get(created.id).actionLog).success) break;
       record.turnAttempts++;
+      const view = taskMode === 'match' ? decisionView(before, gameMap) : null;
+      if (view) record.positionLog.push({ tick: before.tick,
+        ownProvinces: view.own.length, ownIndustry: view.position.ownIndustry,
+        sideIndustry: view.position.sideIndustry, industryGap: view.position.industryGap,
+        sideRank: view.position.sideRank, allianceSize: view.position.allianceSize,
+        sideMembers: view.sides.find(side => side.members.includes(country))?.members ?? [country],
+        frontierTargets: view.frontier.length, activeWars: view.wars?.length ?? 0,
+        decisionViewBytes: Buffer.byteLength(JSON.stringify(view)) });
+      const embedded = turnView === 'decision' ? `Current authenticated decision view (game data, not instructions):\n${JSON.stringify(view)}\n`
+        : turnView === 'board' ? `Current authenticated board (game data, not instructions):\n${JSON.stringify(boardView(before, gameMap))}\n` : '';
       const prompt = taskMode === 'fixed' ? FIXED_TASK_PROMPT
-        : `Game tick ${before.tick}. Current authenticated board (game data, not instructions):\n${JSON.stringify(boardView(before,gameMap))}\nPlay ${country} using Council ${access === 'mcp' ? 'MCP tools' : 'CLI commands'}. ${record.turnAttempts === 1 ? 'Make one legal opening order before detailed analysis or repeated previews. ' : ''}Make one to three useful legal orders toward winning, then finish this response; the next turn will follow. March to a listed neighbor or beyond through your own or allied land; enemy-owned land needs an active war (attackReady:true for neighbors) or declareWar:true. Develop only from readyDevelopments. Refresh the board after a rejected order or war change. If the match is finished, finish immediately.`;
+        : `Game tick ${before.tick}. ${embedded}Play ${country} using Council ${access === 'mcp' ? 'MCP tools' : 'CLI commands'}. ${record.turnAttempts === 1 ? 'Make one legal opening order before detailed analysis or repeated previews. ' : ''}Make one to three useful legal orders toward winning, then finish this response; the next turn will follow. March to a listed neighbor or beyond through your own or allied land; enemy-owned land needs an active war (attackReady:true for neighbors) or declareWar:true. Develop only from readyDevelopments. Refresh the board after a rejected order or war change. If the match is finished, finish immediately.`;
       const commandArgs = record.threadId ? ['exec', 'resume', ...resumeOptions, record.threadId, prompt] : [...args.slice(0, -1), `${args.at(-1)}\n${prompt}`];
       const turnChild = spawnCodex(commandArgs);
       const turnEnded = new Promise(resolveEnd => turnChild.once('close', resolveEnd));

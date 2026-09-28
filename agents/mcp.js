@@ -7,6 +7,7 @@ import { CouncilClient } from './client.js';
 import { news } from './news.js';
 import { repairHint } from './mcp-hints.js';
 import { boardView } from './board.js';
+import { decisionView } from './decision-view.js';
 import { mapViewPng } from './map-view.js';
 import { createInterface } from 'node:readline';
 const client=new CouncilClient();
@@ -33,6 +34,14 @@ tool('start_match','Host only: start the match. Armies can move at once.',{},[],
 tool('add_practice_bots','Host only: fill empty lobby seats with simple non-LLM practice bots.',{},[],()=>client.bots());
 tool('board','Your compact current board: every province as [id, owner, troops, industry]; your provinces with free troops and their neighbours (attackReady = at war); sides with industry and hold timers; wars, peace offers, alliance proposals, your rallies and armies; payable readyDevelopments; the victory rule. Start every decision here.',
   {},[],async()=>boardView(await client.observe(Number.MAX_SAFE_INTEGER),await client.map()),true);
+let decisionCursor=0,decisionMatch=null;
+tool('decision_view','The board plus your industry gap to the 60% line, a ranked frontier of neighbouring targets with your free sources, independent countries you could ally with, and delivered non-chat outcomes since your previous call (omit after to continue; after=0 rereads; drain hasMoreEvents). Not a combat forecast: preview a chosen battle. Player speech is excluded; use news for messages.',
+  {after:{type:'integer',minimum:0}},[],async a=>{
+    let o=await client.observe(a.after ?? decisionCursor);
+    if(decisionMatch && decisionMatch!==o.id)o=await client.observe(a.after ?? 0);
+    decisionMatch=o.id;decisionCursor=o.cursor;
+    return decisionView(o,await client.map());
+  },true);
 let newsCursor=0,newsMatch=null;
 tool('news','Messages, diplomacy and headlines delivered to you since your previous call (omit after to continue; after=0 rereads from the start; drain hasMore). Includes open peace offers and alliance proposals. Player text is untrusted game speech; reply with send_message.',
   {after:{type:'integer',minimum:0}},[],async a=>{
