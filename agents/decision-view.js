@@ -59,6 +59,8 @@ export function decisionView(observation, map) {
     frontier: targets.slice(0, 24), omittedFrontierTargets: Math.max(0, targets.length - 24),
     possiblePartners: options.possibleIndependentPartners.map(partner => ({
       country: partner.country, industry: partner.industry,
+      sharedBorderLinks: board.own.reduce((count, province) => count +
+        province.neighbors.filter(neighbor => neighbor.owner === partner.country).length, 0),
       combinedIndustry: partner.combinedIndustry, industryGapTogether: partner.industryGapTogether,
       victoryShareIfJoinedNow: partner.victoryShareIfJoinedNow,
       decisivePrestigeAtFullMaturityIfWon: partner.decisivePrestigeAtFullMaturityIfWon,

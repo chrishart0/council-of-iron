@@ -85,6 +85,17 @@ test('decision view preserves recipient filtering for delivered messages', () =>
   assert.doesNotMatch(JSON.stringify(seen), /Hidden dispatch/);
 });
 
+test('decision view shows public border links to possible alliance partners', () => {
+  const game = createGame({ id: 'decision-partner-borders', name: 'Borders', hostId: 'russia' }, MAP);
+  for (const country of ['russia', 'britain', 'ottoman'])
+    join(game, MAP, { profileId: country, name: country, country });
+  start(game);
+  const view = decisionView(observe(game, 'russia'), MAP);
+  const partners = new Map(view.possiblePartners.map(partner => [partner.country, partner]));
+  assert.equal(partners.get('britain').sharedBorderLinks, 0);
+  assert.ok(partners.get('ottoman').sharedBorderLinks > 0);
+});
+
 test('decision view separates country industry from alliance industry', () => {
   const game = createGame({ id: 'decision-alliance-economy', name: 'Alliance economy', hostId: 'britain' }, MAP);
   join(game, MAP, { profileId: 'britain', name: 'Britain', country: 'britain' });

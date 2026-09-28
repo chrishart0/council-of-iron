@@ -16,6 +16,8 @@ The harness starts a private loopback server with a separate SQLite file, regist
 
 `decision-turn-v8` keeps the opening and roleplay, but asks for chat when there is a concrete diplomatic purpose and lets several turns pass between ordinary messages. The v7 Qing run had sent a chat action on nearly every turn through tick 362; this change aims to preserve conversation while reducing repetitive tool calls. Compare completed games before drawing a performance conclusion.
 
+`decision-turn-v9` adds a public shared-border count to each possible partner and asks the model to weigh reinforcement access alongside projected industry and score. Russia's v8 opening alliance with Britain had no shared starting border, while adjacent coalition pairings in completed wins did. This is a geographic hint, not a bonus or rule change; the evidence does not establish that partner distance caused Russia's early industry losses.
+
 For a short interface check, `--task fixed` starts that isolated room with its clock paused and asks the model to issue the same three legal orders. It uses the ordinary Council HTTP validation and does not add a public time-control endpoint. The task measures order accuracy, failed calls, reported tokens, and time to the third accepted order. It does not measure strategic playing strength.
 
 ```bash
