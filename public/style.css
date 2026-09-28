@@ -279,6 +279,7 @@ body[data-screen=match] #home{display:none}
 body[data-comms=thread] .powers .lb-body{display:none}
 body[data-comms=thread] .powers .lb-summary{display:block}
 .powers .plaque{padding-right:6px}
+.powers .plaque h2{flex:none;margin-right:6px}.powers .lb-summary{flex:1;min-width:0;text-align:right}
 .lb-toggle{display:inline-flex;align-items:center;gap:6px}
 .lb-summary{margin-left:auto}
 .powers .lb-summary{display:none}
