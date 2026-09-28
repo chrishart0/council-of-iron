@@ -75,6 +75,10 @@ tool('coordinated_attack','Commit connected source provinces to one target on th
   {...attackProperties,declareWar,...op},['to','sources'],a=>{const {opId,...action}=a;return client.action({type:'attack',...action},opId);});
 tool('recall','Cancel a queued attack or recall an outbound army/group. Troops already marching return from their current position and remain vulnerable; they fight if home is now hostile.',
   {id:string,...op},['id'],a=>client.action({type:'recall',id:a.id},a.opId));
+tool('turn_around','Reverse one of your own moving (not fighting) armies; executes next tick and costs one military command. An outbound army heads home exactly like recall. A returning army (recalled, or turned back automatically — see the army_recalled event reason) resumes toward the province it had been heading for, from its actual position, arriving after the remaining distance at normal speed. The destination must still be a legal move (neutral, at war, or allied = reinforcement). Transit columns cannot resume. At most turnAroundLimit resumes per army. Use preview_turn_around first to see the destination and arrival tick.',
+  {armyId:string,...op},['armyId'],a=>client.turnAround(a.armyId,a.opId));
+tool('preview_turn_around','Read-only: what turn_around would do for one of your moving armies if sent now — mode (recall or resume), destination, arrival tick, and any battle another side is already fighting there (your troops would be turned back again if it is still under way when they arrive). Spends no command.',
+  {armyId:string},['armyId'],a=>client.turnAroundPreview(a.armyId),true);
 tool('develop','Spend local uncommitted manpower to improve province recruitment. Level 1→2 costs 12 and takes 60 ticks; 2→3 costs 24 and takes 90. Capture destroys unfinished work, not completed levels.',
   {from:string,...op},['from'],a=>client.action({type:'develop',from:a.from},a.opId));
 

@@ -135,6 +135,7 @@ export class AfterAction {
       case 'development_started': return `${c(e.country)} invests ${e.cost} in ${this.place(e.province)}.`;
       case 'development_completed': return `${this.place(e.province)} reaches industry ${e.level}.`;
       case 'army_recalled': return `${c(e.country)} recalls ${e.amount} toward ${this.place(e.to)}.`;
+      case 'army_turned_around': return `${c(e.country)} turns ${e.amount} troops back toward ${this.place(e.to)}.`;
       case 'eliminated': return `${c(e.country)} is eliminated.`;
       case 'finished': return 'The campaign ends. Final scores are fixed.';
       default: return e.type;

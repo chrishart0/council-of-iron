@@ -66,6 +66,11 @@ export class CouncilClient {
   replay(tick) {return this.request(this.gamePath(`/replay?tick=${encodeURIComponent(tick)}`));}
   /** Any action object is sent as-is; move/attack/transit accept optional declareWar:true (solo, atomic). */
   action(action,opId=randomUUID()) { return this.request(this.gamePath('/actions'),'POST',{action,opId}); }
+  /** Reverse one of your moving armies (next tick, one command). Advancing: a recall. Returning: resume toward
+   * the province it had been heading for, from its actual position. Same opId = safe retry. */
+  turnAround(armyId,opId=randomUUID()) { return this.action({type:'turn_around',armyId},opId); }
+  /** Read-only preview of turnAround: mode (recall|resume), destination, arrival tick, any battle already there. */
+  turnAroundPreview(armyId) { return this.request(this.gamePath(`/turn-around?${new URLSearchParams({army:armyId})}`)); }
   preview(from,to,amount) {return this.request(this.gamePath(`/preview?${new URLSearchParams({from,to,amount})}`));}
   list() {return this.request('/api/games','GET',undefined,'');}
   map() {return this.request(this.match ? this.gamePath('/map') : '/map.json','GET',undefined,'');}

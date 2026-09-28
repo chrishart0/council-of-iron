@@ -147,6 +147,8 @@ export function buildReview(game, map) {
       } else if (e.type === 'army_recalled') {
         addEvent({ tick: e.tick, type: e.type, country: e.country, to: e.to, amount: e.amount, arrivesAt: e.arrivesAt,
           ...(e.reason?{reason:e.reason}:{}) });
+      } else if (e.type === 'army_turned_around') {
+        addEvent({ tick: e.tick, type: e.type, country: e.country, to: e.to, amount: e.amount, arrivesAt: e.arrivesAt });
       } else if (e.type === 'army_interned') {
         report.totals.interned += e.amount;
         addEvent({ tick: e.tick, type: e.type, country: e.country, province: e.province, amount: e.amount });

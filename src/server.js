@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { Store } from './store.js';
-import { act, attackPlan, createGame, join, observe, preview, start, tick, worldFeed, RuleError, requireRule, text } from './engine.js';
+import { act, attackPlan, turnAroundPlan, createGame, join, observe, preview, start, tick, worldFeed, RuleError, requireRule, text } from './engine.js';
 import { buildReview, unavailableReview } from './review.js';
 import { replayReader } from '../public/replay-model.js';
 import { operationalInsights } from '../public/insights.js';
@@ -167,7 +167,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         g.rules.revealAllianceChatAfterMatch=true;
         games.set(g.id,g);save(g);return json(res,201,{id:g.id});
       }
-      const match=path.match(/^\/api\/games\/([a-zA-Z0-9-]+)(?:\/(join|start|bots|actions|preview|plan|map|review|replay|feed|stt))?$/);
+      const match=path.match(/^\/api\/games\/([a-zA-Z0-9-]+)(?:\/(join|start|bots|actions|preview|plan|turn-around|map|review|replay|feed|stt))?$/);
       if(match) {
         const g=games.get(match[1]);requireRule(g,'Room not found.',404);
         const endpoint=match[2], gameMap=MAP;
@@ -208,6 +208,10 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         if(endpoint==='plan' && req.method==='POST') {
           const p=seat(), data=await body(req);
           return json(res,200,attackPlan(g,gameMap,p.id,data));
+        }
+        if(endpoint==='turn-around' && req.method==='GET') {
+          // Read-only: what "Turn around" would do for one of your moving armies if sent now.
+          const p=seat();return json(res,200,turnAroundPlan(g,p.id,url.searchParams.get('army')));
         }
         if(endpoint==='preview' && req.method==='GET') {
           if(identity) auth(g.id);
