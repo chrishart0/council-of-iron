@@ -408,10 +408,10 @@ const provinces = PROVINCES.map(([id, name, region, from]) => {
     return (hole ? area > 0 : area < 0) ? [...r].reverse() : r;
   });
   // Home landmass: the exterior containing the first member's published anchor (so Scandinavia's counter stays
-  // in Sweden, not Greenland), unless that is a minor island; then the largest landmass.
+  // in Sweden, not Greenland), unless that is a minor island (under 60 units², e.g. Kyushu); then the largest landmass.
   const primary = sourceById.get(from[0]), exteriors = oriented.filter(r => signedArea(r) > 0).sort((a, b) => signedArea(b) - signedArea(a));
   const anchored = exteriors.find(r => inside([primary.x, primary.y], r));
-  const home = anchored && signedArea(anchored) >= .3 * signedArea(exteriors[0]) ? anchored : exteriors[0];
+  const home = anchored && signedArea(anchored) >= 60 ? anchored : exteriors[0];
   const holes = oriented.filter(r => signedArea(r) < 0 && inside(r[0], home));
   const [x, y, clearance] = polylabel([home, ...holes]);
   const path = oriented.map(r => 'M' + r.map(v => `${f2(v[0])},${f2(v[1])}`).join('L') + 'Z').join('');

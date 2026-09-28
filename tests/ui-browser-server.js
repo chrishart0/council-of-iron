@@ -36,7 +36,7 @@ const warOrders={0:[['britain',{type:'declare_war',country:'usa'}],['russia',{ty
   15:[['germany',{type:'march',from:'ruhr',to:'south-france',amount:11}]],
   20:[['france',{type:'march',from:'south-france',to:'ruhr',amount:6}]],
   // Columns still on the march at tick 55, for army-layer checks.
-  56:[['britain',{type:'march',from:'england',to:'ireland',amount:6}]],
+  56:[['britain',{type:'march',from:'england',to:'scandinavia',amount:6}]],
   40:[['britain',{type:'march',from:'england',to:'low-countries',amount:8}],['france',{type:'march',from:'south-france',to:'iberia',amount:8}],['germany',{type:'march',from:'bavaria',to:'danube',amount:8}]]};
 // Tick 50: an approved alliance still inside its activation delay (a "forming" bloc).
 const pact=room=>{const q=act(room,map,'usa',{type:'propose',country:'japan',name:'Pacific Pact'},`${room.id}-pact`);act(room,map,'japan',{type:'accept',proposalId:q.proposalId},`${room.id}-pact-accept`);};

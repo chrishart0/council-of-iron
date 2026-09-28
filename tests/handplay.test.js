@@ -9,9 +9,9 @@ const { game, report } = replay();
 test('recorded decisions conserve manpower, end exactly once and reproduce the golden log',()=>{
   assert.equal(report.acceptedActions,204);
   assert.equal(report.simulatedTicks,1800);
-  assert.equal(report.eventLogSha256,'8b29bae3a5429b3a1d444458928e2b5734b4e46cfac2ca9846eb6f852539e91b');
-  assert.equal(report.finalStateSha256,'7d40f2765a37bfbe2d82978ba1deed8e41edbcc63b7ee603bbe277c8d3bf75ab');
-  assert.deepEqual(report.ledger,{initial:509,recruited:7964,invested:24,casualties:894,interned:0,remaining:7555,tickChecks:1801});
+  assert.equal(report.eventLogSha256,'f4cb554fb56fc1c7d58f4dd3a407e468853757720e14bb148635be3d14fe4f27');
+  assert.equal(report.finalStateSha256,'c2fd8a715c58da51648b6f4275a8f2f6013edc8f05d49cd776400b6c7fa03132');
+  assert.deepEqual(report.ledger,{initial:509,recruited:8054,invested:24,casualties:969,interned:0,remaining:7570,tickChecks:1801});
   assert.equal(game.events.filter(e=>e.type==='finished').length,1);
   assert.equal(game.outcome.reason,'deadline');
   assert.equal(game.outcome.winningSide,'coalition-72');
