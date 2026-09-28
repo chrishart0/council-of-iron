@@ -12,6 +12,7 @@ test('benchmark export keeps aggregate Pi metrics and excludes private run conte
     usage: { input: 1000, output: 300, cacheRead: 400 }, turnLog: [{ wallMs: 20000, timedOut: false }, { wallMs: 30000, timedOut: true }] };
   const run = summarizeRun(raw, 'luna');
   assert.equal(run.prestige, 27.57);
+  assert.equal(run.won, null);
   assert.equal(run.interfaceVersion,'board-turn-v2');
   assert.equal(run.acceptedActions, 1);
   assert.equal(run.rejectedActions, 1);
@@ -34,6 +35,16 @@ test('benchmark export keeps aggregate Pi metrics and excludes private run conte
     'decision view in prompt');
   assert.equal(summarizeRun({ ...raw, embeddedBoard: false, turnView: 'tools' }, 'luna').strategy,
     'tool-led turns');
+});
+
+test('benchmark win flag uses the saved outcome side and preserves unknown history', () => {
+  const base = { runId:'won', startedAt:'2026-09-28T00:00:00Z', match:'abcd1234',
+    status:'finished', score:{ prestige:12, side:'coalition-1' },
+    outcome:{ reason:'deadline', winningSide:'coalition-1', draw:false } };
+  assert.equal(summarizeRun(base,'qwen').won,true);
+  assert.equal(summarizeRun({ ...base, score:{ prestige:12, side:'coalition-2' } },'qwen').won,false);
+  assert.equal(summarizeRun({ ...base, outcome:{ reason:'draw', draw:true } },'qwen').won,false);
+  assert.equal(summarizeRun({ ...base, outcome:{ reason:'deadline' } },'qwen').won,null);
 });
 
 test('benchmark export does not invent missing historical action or token counts', () => {

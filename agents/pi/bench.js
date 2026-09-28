@@ -68,6 +68,9 @@ export function summarizeRun(raw, modelGroup) {
   const totalTokens = number(tokenUsage?.total) ?? (inputTokens === null || outputTokens === null ? null : inputTokens + outputTokens);
   const totalTurnMs = turns.length && !raw.usageIncomplete ? finiteSum(turns, 'wallMs') : null;
   const durationSeconds = raw.finishedAt ? (Date.parse(raw.finishedAt) - Date.parse(raw.startedAt)) / 1000 : null;
+  const won = typeof raw.score.side === 'string' && raw.outcome &&
+    (raw.outcome.draw === true || typeof raw.outcome.winningSide === 'string')
+    ? !raw.outcome.draw && raw.score.side === raw.outcome.winningSide : null;
   return {
     id: raw.runId, match: raw.match, combatSeed: raw.combatSeed || null,
     startedAt: raw.startedAt, modelGroup, client, access, country: raw.country || 'britain',
@@ -81,7 +84,7 @@ export function summarizeRun(raw, modelGroup) {
     decisionIntervalTicks: number(raw.decisionIntervalTicks),
     sessionMode: raw.sessionMode || raw.turnMode || (client === 'Pi' ? 'persistent' : null),
     preset: raw.preset, status: raw.status, resultReason: raw.outcome?.reason || null,
-    finalTick: number(raw.finalTick), prestige: round(raw.score.prestige),
+    finalTick: number(raw.finalTick), prestige: round(raw.score.prestige), won,
     acceptedActions, rejectedActions, toolCalls: calls.length, failedToolCalls: failed,
     firstActionSeconds: firstAcceptedAt ? round((Date.parse(firstAcceptedAt) - Date.parse(raw.startedAt)) / 1000) : null,
     failureRatePct: calls.length ? round(100 * failed / calls.length) : null,

@@ -34,7 +34,8 @@
       "turns": 7,
       "timedOutTurns": null,
       "meanTurnSeconds": 50.22,
-      "durationSeconds": 355.46
+      "durationSeconds": 355.46,
+      "won": false
     },
     {
       "id": "2026-09-28T00-17-09-071Z",
@@ -68,7 +69,8 @@
       "turns": 15,
       "timedOutTurns": null,
       "meanTurnSeconds": 76.15,
-      "durationSeconds": 1150.29
+      "durationSeconds": 1150.29,
+      "won": true
     },
     {
       "id": "2026-09-28T00-27-22-650Z",
@@ -102,7 +104,8 @@
       "turns": null,
       "timedOutTurns": null,
       "meanTurnSeconds": null,
-      "durationSeconds": 302.04
+      "durationSeconds": 302.04,
+      "won": null
     },
     {
       "id": "2026-09-28T00-34-12-864Z",
@@ -136,7 +139,8 @@
       "turns": 2,
       "timedOutTurns": null,
       "meanTurnSeconds": 186.81,
-      "durationSeconds": 374.97
+      "durationSeconds": 374.97,
+      "won": false
     },
     {
       "id": "2026-09-28T00-41-27-464Z",
@@ -170,7 +174,8 @@
       "turns": null,
       "timedOutTurns": null,
       "meanTurnSeconds": null,
-      "durationSeconds": 302.14
+      "durationSeconds": 302.14,
+      "won": null
     },
     {
       "id": "2026-09-28T00-47-24-497Z",
@@ -204,7 +209,8 @@
       "turns": null,
       "timedOutTurns": null,
       "meanTurnSeconds": null,
-      "durationSeconds": 878.1
+      "durationSeconds": 878.1,
+      "won": null
     },
     {
       "id": "2026-09-28T00-47-56-122Z",
@@ -238,7 +244,8 @@
       "turns": 2,
       "timedOutTurns": null,
       "meanTurnSeconds": 909.79,
-      "durationSeconds": 1820.92
+      "durationSeconds": 1820.92,
+      "won": true
     },
     {
       "id": "2026-09-28T01-26-41-555Z",
@@ -272,7 +279,8 @@
       "turns": 4,
       "timedOutTurns": 4,
       "meanTurnSeconds": 60.01,
-      "durationSeconds": 260.43
+      "durationSeconds": 260.43,
+      "won": false
     },
     {
       "id": "2026-09-28T01-26-48-128Z",
@@ -306,7 +314,8 @@
       "turns": 2,
       "timedOutTurns": 2,
       "meanTurnSeconds": 120.02,
-      "durationSeconds": 241.43
+      "durationSeconds": 241.43,
+      "won": false
     },
     {
       "id": "2026-09-28T01-32-55-502Z",
@@ -340,7 +349,8 @@
       "turns": 2,
       "timedOutTurns": 1,
       "meanTurnSeconds": 113.43,
-      "durationSeconds": 228.24
+      "durationSeconds": 228.24,
+      "won": true
     },
     {
       "id": "2026-09-28T01-33-00-563Z",
@@ -374,7 +384,8 @@
       "turns": 6,
       "timedOutTurns": 0,
       "meanTurnSeconds": 34.59,
-      "durationSeconds": 210.97
+      "durationSeconds": 210.97,
+      "won": false
     },
     {
       "id": "2026-09-28T01-34-15-102Z",
@@ -408,7 +419,8 @@
       "turns": null,
       "timedOutTurns": null,
       "meanTurnSeconds": null,
-      "durationSeconds": 208.67
+      "durationSeconds": 208.67,
+      "won": null
     },
     {
       "id": "2026-09-28T01-36-59-872Z",
@@ -442,7 +454,8 @@
       "turns": 6,
       "timedOutTurns": 1,
       "meanTurnSeconds": 53.74,
-      "durationSeconds": 325.84
+      "durationSeconds": 325.84,
+      "won": false
     },
     {
       "id": "2026-09-28T01-37-06-819Z",
@@ -476,7 +489,8 @@
       "turns": 3,
       "timedOutTurns": 2,
       "meanTurnSeconds": 112.32,
-      "durationSeconds": 343.34
+      "durationSeconds": 343.34,
+      "won": false
     },
     {
       "id": "2026-09-28T01-43-22-839Z",
@@ -510,7 +524,8 @@
       "turns": 3,
       "timedOutTurns": 2,
       "meanTurnSeconds": 107.52,
-      "durationSeconds": 328.98
+      "durationSeconds": 328.98,
+      "won": false
     },
     {
       "id": "2026-09-28T01-43-28-360Z",
@@ -544,7 +559,8 @@
       "turns": 6,
       "timedOutTurns": 1,
       "meanTurnSeconds": 47.25,
-      "durationSeconds": 291.36
+      "durationSeconds": 291.36,
+      "won": false
     },
     {
       "id": "2026-09-28T01-48-43-758Z",
@@ -578,7 +594,8 @@
       "turns": 1,
       "timedOutTurns": null,
       "meanTurnSeconds": 313.72,
-      "durationSeconds": 315.02
+      "durationSeconds": 315.02,
+      "won": null
     },
     {
       "id": "2026-09-28T01-48-58-561Z",
@@ -612,7 +629,8 @@
       "turns": 1,
       "timedOutTurns": null,
       "meanTurnSeconds": 321.73,
-      "durationSeconds": 324.08
+      "durationSeconds": 324.08,
+      "won": null
     },
     {
       "id": "2026-09-28T01-53-59-275Z",
@@ -646,7 +664,8 @@
       "turns": 4,
       "timedOutTurns": 1,
       "meanTurnSeconds": 75.05,
-      "durationSeconds": 302.63
+      "durationSeconds": 302.63,
+      "won": false
     },
     {
       "id": "2026-09-28T01-54-14-026Z",
@@ -680,7 +699,8 @@
       "turns": 2,
       "timedOutTurns": 1,
       "meanTurnSeconds": 81.38,
-      "durationSeconds": 164.13
+      "durationSeconds": 164.13,
+      "won": true
     },
     {
       "id": "2026-09-28T01-55-08-732Z",
@@ -714,7 +734,8 @@
       "turns": 3,
       "timedOutTurns": 2,
       "meanTurnSeconds": 105.23,
-      "durationSeconds": 317.54
+      "durationSeconds": 317.54,
+      "won": false
     },
     {
       "id": "2026-09-28T01-57-51-608Z",
@@ -748,7 +769,8 @@
       "turns": 1,
       "timedOutTurns": null,
       "meanTurnSeconds": 190.39,
-      "durationSeconds": 191.53
+      "durationSeconds": 191.53,
+      "won": null
     },
     {
       "id": "2026-09-28T02-00-35-343Z",
@@ -782,7 +804,8 @@
       "turns": 1,
       "timedOutTurns": null,
       "meanTurnSeconds": 263.19,
-      "durationSeconds": 264.74
+      "durationSeconds": 264.74,
+      "won": null
     },
     {
       "id": "2026-09-28T02-01-19-217Z",
@@ -816,7 +839,8 @@
       "turns": 3,
       "timedOutTurns": 0,
       "meanTurnSeconds": 53.54,
-      "durationSeconds": 162.49
+      "durationSeconds": 162.49,
+      "won": true
     },
     {
       "id": "2026-09-28T02-04-22-430Z",
@@ -850,7 +874,8 @@
       "turns": 1,
       "timedOutTurns": null,
       "meanTurnSeconds": 327.84,
-      "durationSeconds": 329.1
+      "durationSeconds": 329.1,
+      "won": null
     },
     {
       "id": "2026-09-28T02-05-52-852Z",
@@ -884,7 +909,8 @@
       "turns": 2,
       "timedOutTurns": 1,
       "meanTurnSeconds": 111.15,
-      "durationSeconds": 223.66
+      "durationSeconds": 223.66,
+      "won": true
     },
     {
       "id": "2026-09-28T02-09-43-739Z",
@@ -918,7 +944,8 @@
       "turns": 1,
       "timedOutTurns": null,
       "meanTurnSeconds": 281.34,
-      "durationSeconds": 283.11
+      "durationSeconds": 283.11,
+      "won": null
     },
     {
       "id": "2026-09-28T02-10-25-355Z",
@@ -952,7 +979,8 @@
       "turns": 3,
       "timedOutTurns": 2,
       "meanTurnSeconds": 116.56,
-      "durationSeconds": 351.58
+      "durationSeconds": 351.58,
+      "won": false
     },
     {
       "id": "2026-09-28T02-16-25-052Z",
@@ -986,7 +1014,8 @@
       "turns": 1,
       "timedOutTurns": null,
       "meanTurnSeconds": 329.18,
-      "durationSeconds": 330.1
+      "durationSeconds": 330.1,
+      "won": null
     },
     {
       "id": "2026-09-28T02-16-40-828Z",
@@ -1020,7 +1049,8 @@
       "turns": 3,
       "timedOutTurns": 2,
       "meanTurnSeconds": 105.42,
-      "durationSeconds": 322.63
+      "durationSeconds": 322.63,
+      "won": false
     },
     {
       "id": "2026-09-28T02-23-53-566Z",
@@ -1054,7 +1084,8 @@
       "turns": 1,
       "timedOutTurns": null,
       "meanTurnSeconds": 329.04,
-      "durationSeconds": 332.06
+      "durationSeconds": 332.06,
+      "won": null
     },
     {
       "id": "2026-09-28T02-24-04-075Z",
@@ -1088,7 +1119,8 @@
       "turns": 3,
       "timedOutTurns": 2,
       "meanTurnSeconds": 107.64,
-      "durationSeconds": 324.79
+      "durationSeconds": 324.79,
+      "won": false
     },
     {
       "id": "2026-09-28T02-46-52-746Z",
@@ -1123,7 +1155,8 @@
       "turns": 10,
       "timedOutTurns": 5,
       "meanTurnSeconds": 189.75,
-      "durationSeconds": 1902.84
+      "durationSeconds": 1902.84,
+      "won": false
     },
     {
       "id": "2026-09-28T03-11-14-750Z",
@@ -1158,7 +1191,8 @@
       "turns": 5,
       "timedOutTurns": 1,
       "meanTurnSeconds": 68.26,
-      "durationSeconds": 348.68
+      "durationSeconds": 348.68,
+      "won": true
     },
     {
       "id": "2026-09-28T03-19-21-865Z",
@@ -1193,7 +1227,8 @@
       "turns": 2,
       "timedOutTurns": 2,
       "meanTurnSeconds": 120.02,
-      "durationSeconds": 245.88
+      "durationSeconds": 245.88,
+      "won": false
     },
     {
       "id": "2026-09-28T03-26-04-951Z",
@@ -1228,7 +1263,8 @@
       "turns": null,
       "timedOutTurns": null,
       "meanTurnSeconds": null,
-      "durationSeconds": 1067.33
+      "durationSeconds": 1067.33,
+      "won": null
     },
     {
       "id": "2026-09-28T03-26-05-059Z",
@@ -1263,7 +1299,8 @@
       "turns": null,
       "timedOutTurns": null,
       "meanTurnSeconds": null,
-      "durationSeconds": 1187.46
+      "durationSeconds": 1187.46,
+      "won": null
     },
     {
       "id": "2026-09-28T03-45-06-733Z",
@@ -1298,7 +1335,8 @@
       "turns": 7,
       "timedOutTurns": 6,
       "meanTurnSeconds": 220.4,
-      "durationSeconds": 1546.72
+      "durationSeconds": 1546.72,
+      "won": false
     },
     {
       "id": "2026-09-28T03-46-42-581Z",
@@ -1333,7 +1371,8 @@
       "turns": 9,
       "timedOutTurns": 5,
       "meanTurnSeconds": 174.59,
-      "durationSeconds": 1586.32
+      "durationSeconds": 1586.32,
+      "won": true
     },
     {
       "id": "2026-09-28T04-12-52-527Z",
@@ -1369,7 +1408,8 @@
       "turns": 5,
       "timedOutTurns": null,
       "meanTurnSeconds": 42.46,
-      "durationSeconds": 216.42
+      "durationSeconds": 216.42,
+      "won": null
     },
     {
       "id": "2026-09-28T04-17-19-560Z",
@@ -1404,7 +1444,8 @@
       "turns": 20,
       "timedOutTurns": 0,
       "meanTurnSeconds": 15.29,
-      "durationSeconds": 316.28
+      "durationSeconds": 316.28,
+      "won": false
     },
     {
       "id": "2026-09-28T04-19-01-554Z",
@@ -1439,7 +1480,8 @@
       "turns": 3,
       "timedOutTurns": 3,
       "meanTurnSeconds": 90.01,
-      "durationSeconds": 276.41
+      "durationSeconds": 276.41,
+      "won": false
     },
     {
       "id": "2026-09-28T04-24-19-453Z",
@@ -1475,7 +1517,8 @@
       "turns": 2,
       "timedOutTurns": null,
       "meanTurnSeconds": null,
-      "durationSeconds": 343.52
+      "durationSeconds": 343.52,
+      "won": null
     },
     {
       "id": "2026-09-28T04-24-58-713Z",
@@ -1511,7 +1554,8 @@
       "turns": 40,
       "timedOutTurns": 0,
       "meanTurnSeconds": 34.58,
-      "durationSeconds": 1532.34
+      "durationSeconds": 1532.34,
+      "won": true
     },
     {
       "id": "2026-09-28T04-30-29-933Z",
@@ -1547,7 +1591,8 @@
       "turns": 22,
       "timedOutTurns": 4,
       "meanTurnSeconds": 82.04,
-      "durationSeconds": 1820.74
+      "durationSeconds": 1820.74,
+      "won": true
     },
     {
       "id": "2026-09-28T04-50-42-925Z",
@@ -1583,7 +1628,8 @@
       "turns": 57,
       "timedOutTurns": null,
       "meanTurnSeconds": 18.53,
-      "durationSeconds": 1815.19
+      "durationSeconds": 1815.19,
+      "won": null
     },
     {
       "id": "2026-09-28T05-07-55-672Z",
@@ -1619,7 +1665,8 @@
       "turns": 30,
       "timedOutTurns": null,
       "meanTurnSeconds": null,
-      "durationSeconds": 1648.14
+      "durationSeconds": 1648.14,
+      "won": null
     },
     {
       "id": "2026-09-28T05-21-23-615Z",
@@ -1655,7 +1702,8 @@
       "turns": 33,
       "timedOutTurns": 1,
       "meanTurnSeconds": 30.12,
-      "durationSeconds": 1308.52
+      "durationSeconds": 1308.52,
+      "won": false
     },
     {
       "id": "2026-09-28T05-35-53-707Z",
@@ -1691,7 +1739,8 @@
       "turns": 19,
       "timedOutTurns": 10,
       "meanTurnSeconds": 95.45,
-      "durationSeconds": 1837.03
+      "durationSeconds": 1837.03,
+      "won": true
     },
     {
       "id": "2026-09-28T05-43-30-269Z",
@@ -1727,7 +1776,8 @@
       "turns": 27,
       "timedOutTurns": 0,
       "meanTurnSeconds": 30.56,
-      "durationSeconds": 1773.04
+      "durationSeconds": 1773.04,
+      "won": false
     },
     {
       "id": "2026-09-28T20-37-32-308Z",
@@ -1763,7 +1813,8 @@
       "turns": 21,
       "timedOutTurns": 0,
       "meanTurnSeconds": 15.03,
-      "durationSeconds": 642.94
+      "durationSeconds": 642.94,
+      "won": true
     },
     {
       "id": "2026-09-28T20-48-38-408Z",
@@ -1799,7 +1850,8 @@
       "turns": 32,
       "timedOutTurns": 0,
       "meanTurnSeconds": 16.69,
-      "durationSeconds": 1046.7
+      "durationSeconds": 1046.7,
+      "won": true
     },
     {
       "id": "2026-09-28T21-06-58-918Z",
@@ -1835,7 +1887,8 @@
       "turns": 32,
       "timedOutTurns": 1,
       "meanTurnSeconds": 18.63,
-      "durationSeconds": 1103.02
+      "durationSeconds": 1103.02,
+      "won": true
     },
     {
       "id": "2026-09-28T21-26-43-510Z",
@@ -1871,7 +1924,8 @@
       "turns": 14,
       "timedOutTurns": 0,
       "meanTurnSeconds": 17.02,
-      "durationSeconds": 1804.3
+      "durationSeconds": 1804.3,
+      "won": false
     },
     {
       "id": "2026-09-28T21-35-14-392Z",
@@ -1907,7 +1961,8 @@
       "turns": 23,
       "timedOutTurns": 0,
       "meanTurnSeconds": 15.46,
-      "durationSeconds": 725.33
+      "durationSeconds": 725.33,
+      "won": true
     },
     {
       "id": "2026-09-28T21-47-54-551Z",
@@ -1943,7 +1998,8 @@
       "turns": 32,
       "timedOutTurns": 0,
       "meanTurnSeconds": 18.58,
-      "durationSeconds": 1086.03
+      "durationSeconds": 1086.03,
+      "won": true
     },
     {
       "id": "2026-09-28T22-06-56-162Z",
@@ -1979,7 +2035,8 @@
       "turns": 18,
       "timedOutTurns": 0,
       "meanTurnSeconds": 18.17,
-      "durationSeconds": 592.23
+      "durationSeconds": 592.23,
+      "won": true
     },
     {
       "id": "2026-09-28T22-17-32-054Z",
@@ -2015,7 +2072,8 @@
       "turns": 54,
       "timedOutTurns": 1,
       "meanTurnSeconds": 19.09,
-      "durationSeconds": 1829.97
+      "durationSeconds": 1829.97,
+      "won": true
     },
     {
       "id": "2026-09-28T22-48-52-479Z",
@@ -2051,7 +2109,8 @@
       "turns": 20,
       "timedOutTurns": 0,
       "meanTurnSeconds": 16.02,
-      "durationSeconds": 1676.16
+      "durationSeconds": 1676.16,
+      "won": false
     },
     {
       "id": "2026-09-28T22-59-38-475Z",
@@ -2087,7 +2146,8 @@
       "turns": 19,
       "timedOutTurns": 0,
       "meanTurnSeconds": 14.3,
-      "durationSeconds": 584.08
+      "durationSeconds": 584.08,
+      "won": true
     }
   ]
 }

@@ -78,6 +78,8 @@ For paired trials, pass the same `--combat-seed trial01` to Pi and Codex runners
 
 After a completed run, publish only its aggregate metrics to the tracked JSON ledger. It reports failed tool calls and rejected game orders separately. A rejected Pi MCP order usually counts in both fields, while a Codex shell command can exit successfully even after the game rejects its HTTP order. Compare rejected orders for the shared game-validity measure; tool failures describe each client path. The importer refuses unfinished games and never copies endpoint details, credentials, model messages, or raw tool payloads:
 
+The aggregate `won` field compares the saved player's side with the saved final winning side. It is `null` when an older raw run lacks enough outcome data; a draw is `false`. Check Prestige alongside `won`, since a coalition member can win with a negative personal score. Compare runs from the same interface version and normal-speed preset before interpreting a win fraction.
+
 ```bash
 node agents/pi/bench.js qwen data/pi/<completed-run>.json
 node agents/pi/bench.js luna data/pi/<completed-run>.json
