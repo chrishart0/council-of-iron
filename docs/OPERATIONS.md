@@ -1,10 +1,8 @@
-# Operating the prototype
+# Operating the server
 
 ## Current scenario and saved records
 
-There is one map, `imperial-1910-v4` (`public/imperial-map.json`; see `docs/MAP-V4-HAWAII.md`), and one ruleset (`RULES` in `src/engine.js`). The game keeps no backward compatibility: at startup the server loads a stored room only if it was created on this map and has every current rule field (`loadable()` in `src/server.js`); a finished room on this map with a materialized public review also loads. Anything else — rooms from the classic ruleset, the old v3 map, or a rule set missing current fields — is skipped with one log line (`Skipped N stored room(s) from an earlier version of the game: …`); unreadable snapshots are skipped too. Nothing is migrated or deleted: the rows stay in SQLite, and personal result history keeps them. Standings count results on the current map. Back up SQLite normally before updating.
-
-`public/imperial-map.json` is the runtime map and the source of truth (it was derived once from the earlier v3 build; that builder and the v3 file are removed). `public/map.json` remains as source geometry for the optional map-authoring script, not as a game mode. Runtime needs no Python or Shapely installation.
+There is one map, `imperial-1910-v4` (`public/imperial-map.json`, the source of truth), and one ruleset (`RULES` in `src/engine.js`). The game keeps no backward compatibility: at startup the server loads a stored room only if it was created on this map with exactly the current rule fields (`loadable()` in `src/server.js`); a finished one also needs its materialized public review. Anything else is skipped with one log line (`Skipped N stored room(s) from an earlier version of the game: …`); unreadable snapshots are skipped too. Nothing is migrated: the rows stay in SQLite. The results table of earlier versions (Prestige) is dropped at start; standings count wins, draws and losses from then on. Back up SQLite normally before updating.
 
 ## Supported deployment
 
@@ -14,7 +12,7 @@ For Internet access, terminate TLS at a reverse proxy (or use the optional built
 
 The database is `data/council.db` (SQLite WAL). Persist the entire `data/` directory. Do not run two processes against the same match data: SQLite serializes writes, but it does not coordinate two independent in-memory simulation authorities. There is no horizontal scaling or hot failover.
 
-Use SIGTERM/SIGINT for shutdown. Snapshots are saved as commands are accepted and as simulation batches advance; normal shutdown saves once more. Restart restores the snapshot and pauses game time during server downtime. A machine crash can lose progress since the most recent committed snapshot. For a real infrastructure failure that compromises a competitive match, the organizer should treat it as void; a public void/admin API is not part of v0.1.
+Use SIGTERM/SIGINT for shutdown. Snapshots are saved as commands are accepted and as simulation batches advance; normal shutdown saves once more. Restart restores the snapshot and pauses game time during server downtime. A machine crash can lose progress since the most recent committed snapshot. For a real infrastructure failure that compromises a competitive match, the organizer should treat it as void; there is no public void/admin API.
 
 ## Persistence and credentials
 
@@ -28,25 +26,23 @@ The server stores private messages and action history in its snapshots. A server
 
 - At most 32 unfinished rooms per process. Finished snapshots and logs are retained, not automatically pruned. There is no abandoned-lobby deletion UI yet; use a fresh test database or administrative maintenance between long test sessions.
 - JSON bodies are limited to 16 KiB; a coarse write-request limit supplements per-seat gameplay limits. This is not comprehensive DDoS protection.
-- Full game snapshots are persisted frequently and loaded at startup. Appropriate for a prototype and small playtests, not large public concurrency.
+- Full game snapshots are persisted frequently and loaded at startup: fine for small playtests, not large public concurrency.
 - Sound assets (`public/audio/`, ≈0.6 MB per browser as Ogg Opus, MP3 fallback) are fetched only after a player's first click or key press and cached for a day; `manifest.json` is not cached and its content hash versions the audio URLs, so regenerated audio is picked up on the next page load. Running the server needs no sound tooling; see `docs/UI-DESIGN.md` → Sound to regenerate.
 - The browser uses polling. Reconnects reconcile state and event cursors; it does not support offline orders or undo.
 - No integrated content moderation, mute UI, report handling, verified operator identities, match scheduling, account recovery, or public matchmaking.
 - Map and country balance have not been established. Names/colors are thematic, not faction-specific mechanics.
 
-## Experimental versus league results
+## Standings
 
-Default rooms are experimental. Set `LEAGUE_MODE=1` only for an organizer-controlled server whose participants agree to one independently controlled seat per operator and no arranged win trading. Adding built-in practice bots always marks the room experimental. An external bot cannot be automatically distinguished from an LLM or an independently controlled player; participant integrity is not solved by the join `kind` label.
+`/api/standings` lists every human and agent profile's wins, draws and losses over finished matches (practice bots are not listed). It is a record, not a skill rating: the server cannot tell whether one operator controls several seats, so organize competitive play by agreement.
 
-Standings display the mean of the last 20 decisive matches in the selected category. Draws do not replace decisive results in that window. Fewer than ten results is provisional. This is transparent Prestige bookkeeping, not Elo, no-sybil matchmaking, or a calibrated skill estimate.
+## Materialized after-action archives
 
-## Materialized after-action archives (v0.4)
-
-The server stores a private initial checkpoint for new matches and materializes a **public-only** after-action report and sparse exact-tick replay at completion. Old completed records reconstruct lazily when requested and only publish verified history. Scores remain available if the original game cannot be reproduced. No schema migration, new database service or database reset is needed; these fields use the existing SQLite snapshot storage.
+The server stores a private initial checkpoint for new matches and materializes a **public-only** after-action report and sparse exact-tick replay at completion. A record that cannot be reproduced keeps its saved result and publishes no history.
 
 Public archives include the match map/rules and survive restart without replaying the original private command log. The original full snapshot remains private to the server administrator and still contains diplomatic messages; the review feature does not authorize disclosing it. Apply the existing private-data backup and retention policy. Spectators can inspect public finished reports without a credential; supplied invalid/wrong-room credentials are rejected.
 
-Replay generation is synchronous, once per match, and sparse archives increase the snapshot's size. At most four decoded readers are cached for per-tick HTTP reads. This remains a small single-process prototype, not a claim of high-concurrency archival service performance. An earlier 630-tick regression fixture produced roughly 2.24 MB of uncompressed replay JSON plus its report; other games vary. An incompatible saved history may remain score-only; the server must not invent approximate past state. Public replay format 1 supports the current industrial scenario and retained materialized archives.
+Replay generation is synchronous, once per match, and sparse archives increase the snapshot's size. At most four decoded readers are cached for per-tick HTTP reads. This remains a small single-process prototype, not a claim of high-concurrency archival service performance. An incompatible saved history may remain score-only; the server must not invent approximate past state. Public replay format 1 supports the current industrial scenario and retained materialized archives.
 
 ## Voice input for chat (optional, self-host)
 

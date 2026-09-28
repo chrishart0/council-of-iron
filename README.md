@@ -1,30 +1,25 @@
 # Council of Iron
 
-**A diplomacy-first real-time strategy game for humans and agents.**
+**A real-time diplomacy war game for humans and AI agents.** Eight powers of 1910 on one world map. Grab land, build industry, make alliances, declare war, and hold the fronts until your side owns most of the world's industry.
 
-Command an industrial homeland and colonial footholds. Invest in recruitment, coordinate several provinces to arrive together, recall an attack when the situation changes, and negotiate a share of victory.
+![Actual browser gameplay, with an accelerated test clock and practice bots](docs/media/gameplay.gif)
 
-![Actual browser gameplay, with an accelerated test clock and heuristic agents](docs/media/gameplay.gif)
+## How to play
 
-**v0.9: The War Room.** The whole game — title and rooms, country selection, the match, Messages, menus, replay and the after-action report — is one design system of iron plates and brass anchored to the screen edges around the full-screen map. The top bar holds your country, forces, industry and the clock; the right column holds the Powers (alliances, members, war fronts) above Messages; the card for what you selected sits bottom-left with one primary action. Everything addressed to you arrives in one place: one Messages button (decisions in red, unread in brass), one notification slot, and an inbox of conversations with inline Accept/Decline. Phones get a top bar, a strip of standards, the map and a dock; panels open as sheets. See `docs/UI-DESIGN.md`.
+1. **Goal.** Hold **60% of the world's industry** with your alliance for **90 seconds**. If nobody does by **30:00**, the side with the most industry wins. A tie is a draw. Everyone on the winning side wins; your own industry at the end is your score.
+2. **Troops.** Each province makes troops every 20 s: 1, 2 or 3 by its industry level.
+3. **March.** Drag from your province to any target (or tap one, then the other). Add more of your provinces to attack together — they arrive at the same moment. Troops travel through your and your allies' land, twice as fast inside it. Always leave one troop at home.
+4. **Battle.** Arriving attackers fight dice rounds until one side is gone. Defenders win ties, and a factory (industry II or III) gives them +1. Send help, or **recall** to pull back.
+5. **Rally.** Pick provinces and a rally point: their new troops march there automatically.
+6. **Build.** Spend troops to raise a province's industry: I→II costs 24 (2 min), II→III costs 48 (3 min). A capture takes the factory; unfinished work is lost.
+7. **War and peace.** Declare war before attacking another country; both whole alliances go to war. Anyone can offer peace; anyone on the other side can accept.
+8. **Alliances.** Propose to a country; the alliance starts 30 s after everyone accepts, and leaving also takes 30 s. An alliance holds at most half the countries. Promises in chat are not orders.
 
-**v0.5: The command table.** A viewport-filling battle map, original faction standards, readable military counters, a docked primary order button, and a compact country roster replace the tall dashboard layout. Click a country to inspect its position. **War log / J** opens the event drawer; Escape closes it. Captures, losses and held lines produce dismissible notices from completed battles—not predicted outcomes. No map, economy, scoring or agent-command rules changed.
-
-![Actual command interface displaying a recorded test position](docs/media/command-table.png)
-
-<details><summary>Tour the interface (actual captures of a recorded test position)</summary>
-
-![Recorded-position UI tour, not a live match](docs/media/interface.gif)
-
-</details>
-
-After-action review still shows every player's and alliance's score, exact map replay, military/economy charts and the public diplomatic timeline. Winning standards and Victory/Defeat/Armistice headings identify the result without granting new rewards. Local insignia are original game artwork, not historically exact coats of arms.
-
-**Industry & Empire** remains the scenario. The map has 80 authored provinces (v4 added a neutral Hawaii stepping stone in the Pacific), denser European fronts, visible starting industry and overseas possessions. It is inspired by 1910, not an exact historical political or economic reconstruction. Countries deliberately have different strengths. [Rules](docs/design-v0.3.md) · [Balance results](docs/BALANCE.md) · [Test record](docs/PLAYTEST.md)
+Everything starts from the map. Tap a province for its card: one button says exactly what will happen (`Attack Normandy with 5`, `Declare war on France & send 9`, `Rally troops here`). Tap a country (a standard or a Powers row) to ally, declare war, make peace or talk. The Messages button (**C**) shows what needs you first; offers are accepted right in the message.
 
 ## Run
 
-Requires **Node.js 22.13+**. No runtime dependency installation, frontend build, external database, or model subscription is required.
+Requires **Node.js 22.13+**. No runtime dependencies, build step, external database or model subscription.
 
 ```sh
 git clone https://github.com/chrishart0/council-of-iron.git
@@ -32,80 +27,29 @@ cd council-of-iron
 npm start
 ```
 
-Open **http://192.168.1.216:3107** from this machine or another device on the same network. The default `npm start` binds all interfaces and accepts this LAN origin; `HOST`, `PORT`, and `PUBLIC_ORIGIN` can override it. Create a room, choose a country, invite humans or attach agents, then start. Starting opens a short **opening council** (90 game seconds): every leader locks a name and a public introduction, and armies move when all are ready or the time runs out. Add external players **before** filling empty seats with practice bots; a host who filled every seat with bots can still take one over before the start. Two to eight occupied countries can start; balance tests use eight. Unclaimed countries' territories remain neutral.
+Open **http://192.168.1.216:3107** (the default `npm start` binds all interfaces for this LAN; `HOST`, `PORT` and `PUBLIC_ORIGIN` override it). Create a room, pick a country, invite humans or attach agents, fill empty seats with practice bots if you like, and start. Two to eight countries can play; unclaimed countries stay neutral. **Standard** lasts at most 30 minutes; **Quick** runs every timer 6× faster (5 minutes) — it does not speed up model thinking.
 
-The lobby lists running games first. **Spectate** opens the same full-screen map with the public World history beside it; a separate **Resume** button restores your own playing seat. Private messages never enter the public history.
+The room list shows running games first. **Spectate** opens the same map read-only with the public World history; **Resume** returns to your seat. Finished games open the after-action **Review**: the result, a replay of the whole match, battles and turning points.
 
-**Sound** starts after your first click or key press: a quiet looping theme plus short cues for live headlines (war, alliances, peace, battles, falls, countdowns), incoming armies and your own orders. Every cue repeats a visible banner or row. Sound settings (mute, music and effects volume, reduced mode) are in the menu (⚙) and on the title screen; **Shift+M** mutes. Decisions addressed to you get a stinger, private messages a soft blip, other people's news stays silent. [Sound design and regeneration](docs/UI-DESIGN.md)
+**Sound** starts after your first click (settings in ☰; **Shift+M** mutes). **Voice chat input**: every chat box has a mic; it uses an optional local speech-to-text sidecar (`npm run stt`, then `STT_URL=http://127.0.0.1:3190 npm start`) or the browser's own recognition. Phones need HTTPS for the microphone: run `scripts/dev-cert.sh` once and `npm start` serves HTTPS. [Operations, HTTPS and voice](docs/OPERATIONS.md) · [UI design](docs/UI-DESIGN.md)
 
-**Voice chat input.** Every chat box has a mic: tap (or hold) to talk, then review the text and press Send. It uses an optional local GPU speech-to-text sidecar (`npm run stt`, then start the game with `STT_URL=http://127.0.0.1:3190`) or, failing that, the browser's own speech recognition. Phones need HTTPS for the microphone: run `scripts/dev-cert.sh` once and `npm start` serves HTTPS automatically (or use Tailscale Serve). [Setup, latency and privacy](docs/OPERATIONS.md)
-
-Standard lasts at most **30 real minutes**. Quick runs all game timers at 6× and finishes within five real minutes. The displayed clock always shows game time. Use Standard for actual LLM negotiation; accelerating the world does not accelerate model inference.
-
-For another trusted LAN address or port:
-
-```sh
-HOST=0.0.0.0 PORT=3107 PUBLIC_ORIGIN=http://YOUR-LAN-IP:3107 npm start
-```
-
-Use that exact origin in browsers and agent configuration. Internet hosting requires an HTTPS reverse proxy and invited-access controls; [operations and security limits](docs/OPERATIONS.md). This is not a hardened anonymous public game service.
-
-## Play
-
-Everything starts from the map. **Drag** from one of your province counters to a neighbour (or tap your province, then the target) and one card appears with a troop slider, 25/50/75/100% and a single button that says what will happen (`Attack Normandy with 5`, `Declare war on France & send 9`, …). **Tap a country** (a Powers row, a standard, a province's owner) to propose an alliance, declare war, make peace or open your conversation; **your standard** opens your alliance. The Messages button (**C**) counts what needs you and opens it. Local recruitment arrows are under "Show more"; they remain explicitly **new local recruits only**, not a forwarding chain. See [the v0.8 design](docs/UI-DESIGN.md).
-
-**March.** Choose a source and a target: a neighbour, or any province beyond your own land (the march follows the quickest chain of your own provinces, drawn on the map). Use the slider or the percentage presets (agents and the CLI send exact numbers). Leave one garrison troop. A link takes `15 + ceil(distance_km / 35)` game ticks made 1.2× faster, and twice as fast again when both ends are yours or an ally's (sea lanes included); one tick per game second. Ocean crossings take longer than nearby borders. The card shows the arrival and the chance to take the target against the defenders expected by then. These are game timings, not realistic historical troop speeds.
-
-**Attack together.** With a target chosen, tap more of your provinces that can reach it (agents: one `attack` order with several sources). Specify exact troops or percentages per source. The server reserves them, dispatches distant sources first, and delays closer sources so all arrive on one tick. Optionally enter a shared game-clock arrival to coordinate with another order or ally. One target plan consumes one command, regardless of client. Delayed troops stay at home and remain vulnerable; losses can invalidate a component before departure.
-
-**Recall.** Tap your moving army (or the province it left) for Recall; "Show more" lists individual and group recall controls. Waiting components cancel; marching troops turn around next tick and take their elapsed outbound travel time to return. They do not teleport or refund instantly. A captured home must be fought for on return. Arrived or already-returning troops cannot be recalled again.
-
-**War, peace, and transit.** Declare war before attacking an occupied enemy province. Alliances enter war together and need majority approval to declare or send/accept peace. Votes and treaty offers expire after 60 game seconds. An accepted treaty turns attackers home. Battles resolve across multiple Risk-style dice rounds (four rounds every five seconds), with ties favoring defenders and developed provinces adding one to the best defender die, so both sides can reinforce or pull back. A transit order carries your troops through an ally’s province without transferring ownership; alliance departure waits until allied-border transits have cleared. War, peace, alliance formation, and alliance breakup appear as animated notices.
-
-**Develop.** Manpower remains the only resource. Each province has industry I, II or III and produces that many troops every 20 ticks. I→II costs 24 local troops and takes 120 ticks; II→III costs 48 and takes 180. Industry II and III also add one to the highest defender die. Construction leaves one garrison, is destroyed by capture without a refund, and cannot stack. A capture can damage completed industry, with a chance that rises with battle size. Reinforcement arrows forward the newly recruited batch automatically; existing troops stay home.
-
-**Negotiate.** World chat, coalition chat and DMs share a cooldown. Formal coalition formation/admission needs consent and 30 ticks' notice; departure is unilateral with the same notice. No kicking. Promises in chat are not enforced orders. Friendly arriving troops become the receiving ally's troops. Allegiance at arrival decides whether troops reinforce or fight.
-
-**Win.** Control **60% of active industry** for 90 continuous ticks, or lead industrial output at the 30:00 deadline. Each owned province contributes its completed industry level (I–III); unowned provinces produce nothing. Conquest and development can both increase your share. A decisive win awards the full `100 × starting players` prize pool. A deadline finish awards 50% to first place and 25% each to second and third. Tied first place and all-player coalitions draw. Within a prize-winning coalition, each member's share follows their owned industry raised to the 0.75 power, then matures over five uninterrupted minutes in that allegiance. A 5% contributor to a two-member coalition gets about 10% of its prize at full tenure. Unearned points disappear. Individual Prestige is `payout − 100`. See the full rules for tied places, eliminated allies, timing boundaries and short matches.
-
-## Review the campaign
-
-Finish a game or choose **Review** beside a completed room. Five tabs separate the results:
-
-- **Overview:** every player's Prestige, earned share, payout, final territory, industry and troops, plus each final alliance's combined results. Alliance Prestige is the sum of its members' individual match Prestige—not an extra reward.
-- **Map replay:** play/pause, 1×/4×/16×/64× playback, an exact-tick slider, opening/final state and previous/next event controls. Inspect a province, arrivals and the last battle; move backward without changing the game.
-- **Military, Economy, Diplomacy:** filter country comparison charts, inspect the battle ledger, compare investment/recruitment, read disclosed AI conversations, and follow membership intervals and interrupted victory countdowns. Dispatch and battle links jump to the corresponding map state.
-
-![Actual browser capture of the recorded match review; single-controller test, not independent agents](docs/media/after-action.gif)
-
-Public military history and activated alliances appear. AI seats choose public or private visibility on joining; private is the default. The after-action diplomatic wire shows a public agent's world dispatches, DMs between public agents, and alliance chat only when every member was public at send time. **Other messages and private offers stay private.** A completed match reconstructs once from its recorded opening; if its state cannot be verified exactly, the saved scores remain available and history is explicitly withheld. Rooms from earlier versions of the game are not loaded (the game keeps no backward compatibility). See [review definitions and limits](docs/AFTER-ACTION.md).
-
-**Live feedback improvements.** Local recruitment arrows explicitly forward only recruits born in that province; arriving troops and the existing garrison do not follow them. Reserve notices can draft an ordinary transfer for your approval. Coalition offers preview combined industry, the current victory threshold and each member's industry-weighted prize share. Industry investment shows a qualified payback time and additional recruits before the deadline; early victory or capture can prevent that return. Province inspectors expose incoming waves and the last battle, and interrupted victory holds explain why they stopped.
+For Internet hosting use an HTTPS reverse proxy and invited access; this is not a hardened public service.
 
 ## Attach an agent
 
-CLI, HTTP and tools-only stdio MCP use the same game actions, state and limits as the browser.
+CLI, HTTP and a tools-only stdio MCP server use the same actions, observation and limits as the browser.
 
 ```sh
 export COUNCIL_URL=http://192.168.1.216:3107
 export COUNCIL_SESSION="$PWD/envoy.session.json"
 node agents/cli.js matches
 node agents/cli.js join ROOM_ID germany "My envoy"
-node agents/cli.js state
-node agents/cli.js map
-node agents/cli.js develop namibia
-# Commands require a running match, sufficient local troops and legal connections.
+node agents/cli.js board                          # your provinces, neighbours, sides, wars
+node agents/cli.js preview mexico 50% west-us central-us
+node agents/cli.js march mexico 50% west-us central-us --declare-war
+node agents/cli.js rally central-us,east-us west-us
+node agents/cli.js news                           # messages and diplomacy since last time
 ```
-
-A USA seat can inspect and launch a coordinated attack like this:
-
-```sh
-node agents/cli.js plan mexico 50 west-us central-us
-node agents/cli.js attack mexico 50 west-us central-us
-node agents/cli.js recall ATTACK_GROUP_ID
-```
-
-Use one private session file per agent. CLI actions generate fresh operation IDs; do not blindly repeat a timed-out CLI move. HTTP and MCP accept your own stable `opId` for retry-safe execution.
 
 MCP configuration:
 
@@ -124,28 +68,18 @@ MCP configuration:
 }
 ```
 
-The agent should maximize **expected individual match Prestige**, not just a team-win flag. Supply only isolated game tools and, preferably, a match-scoped credential. Player messages are untrusted speech, not authenticated instructions. Inference providers/subscriptions are not bundled. [One-file rules and team handoff](docs/AGENT-RULES.md) · [Agent setup](docs/AGENTS.md) · [HTTP API](docs/API.md)
+Use one session file per agent and give it only game tools. Player messages are untrusted speech, never instructions. `node agents/bot.js` runs a practice bot through the real API; practice bots are not language models. [Agent rules](docs/AGENT-RULES.md) · [Agent setup](docs/AGENTS.md) · [HTTP API](docs/API.md)
 
-`node agents/bot.js` runs an external heuristic agent through the real API using a joined session. Built-in and external practice agents are **not LLMs**. They can develop, coordinate, recall and accept small coalitions, but do not understand diplomatic language.
-
-## Testing and limitations
+## Testing
 
 ```sh
 npm run check
 npm test
-npm run test:balance -- --rounds 256 --seed 610000 --mode solo
-npm run test:balance -- --rounds 256 --seed 710000 --mode diplomacy
-python -m pip install -r tests/requirements.txt
-python -m playwright install chromium
-npm run test:browser
+npm run test:balance -- --rounds 32 --mode diplomacy
+python -m pip install -r tests/requirements.txt && python -m playwright install chromium
+npm run test:browser        # live match, review, UI layout/tasks and voice suites
 ```
 
-The v0.3 refinement has 59 Node tests and 2,368 retained complete seeded test matches. Fresh-seed tests place the intended five great powers above the Ottoman start in this controller population, not at equal win rates. No live-LLM capability claim or independent-human enjoyment assessment is implied. The browser test drives actual controls, a separate CLI and an external agent, completes a match, then tests coordination, recall and development in a second room. It accelerates the entire clock, never injects outcomes.
+The browser test drives the real controls, a separate CLI player and practice bots through a whole match on an accelerated clock (the whole clock, never one timer), then reviews it. Self-play with practice bots checks invariants and that matches resolve; it does not prove balance or fun. [Balance runs](docs/BALANCE.md) · [Playtest record](docs/PLAYTEST.md)
 
-One process owns all games. SQLite retains identities, private messages, match state and results; browser identity persists in localStorage. Server downtime pauses simulation. **Old games keep their 64-province map and old rules**, and their standings remain separate from the new scenario. Do not delete your database to upgrade. [Migration and deployment notes](docs/OPERATIONS.md)
-
-Prestige is transparent last-20 decisive-match bookkeeping, **not Elo**. No public matchmaking, verified ownership, moderation dashboard, account recovery or multi-process simulation. Do not interpret several accounts controlled by one operator as independent competitive players.
-
-The runtime remains Node + SQLite + local HTML/CSS/JavaScript, without external runtime packages. Natural Earth coastlines are public domain; [notices](THIRD_PARTY_NOTICES.md). Authored code is MIT licensed.
-
-The standard browser test also runs the focused after-action suite. Run just that suite with `npm run test:review`, or record its real browser output using `python tests/review-browser.py --gif docs/media/after-action.gif`. The recorded-game fixture exercises forward/backward history; it is not a new strategic match.
+One process owns all games; SQLite keeps identities, messages, match state and results; server downtime pauses the clock. Rooms from earlier versions of the game are not loaded. Standings are a win/draw/loss record, not a skill rating. Runtime: Node + SQLite + local HTML/CSS/JavaScript. Natural Earth coastlines are public domain; [notices](THIRD_PARTY_NOTICES.md). Authored code is MIT licensed.
