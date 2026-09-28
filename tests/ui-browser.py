@@ -1159,9 +1159,8 @@ def main():
             # (it is Britain's battle) and exactly one audible cue. (Step to 700 first: the Egypt, Levant and India battles
             # in between are not what this checks.)
             server.stdin.write('700\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==700
-            page.wait_for_timeout(3000)  # past the 2.5 s stinger gap after earlier cues, as in real time
             if threat.is_visible():threat.locator('[data-do="dismiss"]').click()
-            page.wait_for_timeout(3000);before=len(spy(page,'cues'))
+            page.wait_for_timeout(20500);before=len(spy(page,'cues'))  # past the 20 s stinger budget window those battles used, as in real time
             server.stdin.write('712\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==712
             expect(personal).to_contain_text('Line held · Great Britain',timeout=8000)
             expect(personal).to_contain_text(re.compile(r'\d+ troops remain'))
