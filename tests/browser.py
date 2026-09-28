@@ -398,19 +398,26 @@ def main():
                 page.keyboard.press('Escape');expect(page.locator('#card')).to_be_hidden();expect(page.locator('#hud-standard')).to_be_focused()
                 report['assertions'].append('A second room starts with the same browser identity; map taps open a peeking order card (province, then neighbour); 100% and Shift-click adding a second source work; the standard opens and closes the alliance card by keyboard with focus returned.')
                 # Attack together: with the target chosen, tapping another of your provinces beside it adds a source.
-                order(page,'west-us','mexico');page.locator('[data-fraction="0.5"]').click()
+                # The practice bots have been playing against an idle USA for a few minutes, so pick two provinces the USA
+                # still holds that border the same neutral province (on v6 Britain's Canada borders all three US states).
+                room2=http('/api/games')['games'][0]['id']
+                st=http(f'/api/games/{room2}');owner={p['id']:p['owner'] for p in st['provinces']};troops={p['id']:p['troops'] for p in st['provinces']}
+                nb={p['id']:p['neighbors'] for p in http('/map.json')['provinces']}
+                mine=sorted(i for i,o in owner.items() if o=='usa' and troops[i]>=3)
+                src,second,target=next((a,b,t) for t in sorted(nb) if owner[t] is None for a in mine for b in mine if a<b and t in nb[a] and t in nb[b])
+                order(page,src,target);page.locator('[data-fraction="0.5"]').click()
                 page.locator('#card-size').click()  # back to peek so the map is free
-                page.mouse.click(*centre(page.locator('#marker-central-us .counter-body')))
+                if not page.locator(f'#marker-{second} .counter-body').is_visible() or not (0<centre(page.locator(f'#marker-{second} .counter-body'))[0]<page.viewport_size['width']):bring(page,second)
+                page.mouse.click(*centre(page.locator(f'#marker-{second} .counter-body')))
                 expect(page.locator('#sources .source-chip')).to_have_count(2)
                 page.locator('#card-size').click();expect(page.locator('#order-details')).to_contain_text('arrive together')
                 page.screenshot(path=str(artifacts/'06-coordinated-plan.png'),full_page=True)
                 capture(page,1300)
                 page.locator('#primary').click()
                 confirmed(page,'Sent')
-                room2=http('/api/games')['games'][0]['id']
                 page.wait_for_timeout(1400)
                 # Group recall is a browser control, never direct mutation of the game.
-                province(page,'west-us');page.locator('#card-size').click()
+                province(page,src);page.locator('#card-size').click()
                 recall_group=page.locator('[data-recall]').filter(has_text='Recall group')
                 expect(recall_group).to_be_visible(timeout=10000)
                 recall_group.click()
