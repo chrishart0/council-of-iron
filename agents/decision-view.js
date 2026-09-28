@@ -15,6 +15,9 @@ export function decisionView(observation, map) {
   const options = strategicOptions(observation, map);
   const side = observation.leaderboard?.alliances?.find(entry => entry.id === board.side);
   const me = observation.leaderboard?.players?.find(entry => entry.country === board.you);
+  const countryIndustry = observation.provinces
+    .filter(province => province.owner === board.you)
+    .reduce((total, province) => total + province.development, 0);
   const targets = options.nearbyTargets.map(target => {
     const sources = target.adjacentSources.filter(source => source.availableNow > 0);
     return {
@@ -45,7 +48,7 @@ export function decisionView(observation, map) {
   return {
     ...board,
     position: {
-      ownIndustry: options.ownIndustry, sideIndustry: side?.economy ?? options.ownIndustry,
+      ownIndustry: countryIndustry, sideIndustry: side?.economy ?? options.ownIndustry,
       industryGap: options.industryGap, sideRank: side?.rank ?? null,
       currentDeadlinePayout: me?.projectedDeadlinePayout ?? null,
       currentVictoryShare: me?.victoryShare ?? null,

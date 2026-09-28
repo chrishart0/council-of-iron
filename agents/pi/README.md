@@ -10,6 +10,8 @@ The harness starts a private loopback server with a separate SQLite file, regist
 
 `decision-turn-v5` also includes up to eight newly delivered, recipient-filtered messages in the authenticated decision view. Each is marked untrusted; `news` remains available for older or overflow messages. The turn instruction no longer asks the model to poll `news` for messages already in the view. This is a client input change, not a change to message visibility or game rules.
 
+`decision-turn-v6` separates a country's own industry from its alliance's industry in the view and calculates additional-partner score shares using every current member's strength. The short instruction asks the player to reconsider independent partners when its side remains far below the victory threshold. These are read-only guidance and prompt changes; winning strength still needs completed normal-speed playtests.
+
 For a short interface check, `--task fixed` starts that isolated room with its clock paused and asks the model to issue the same three legal orders. It uses the ordinary Council HTTP validation and does not add a public time-control endpoint. The task measures order accuracy, failed calls, reported tokens, and time to the third accepted order. It does not measure strategic playing strength.
 
 ```bash
@@ -39,7 +41,9 @@ The Qwen Codex comparison runner reads the same ignored Qwen model ID, context l
 
 `--preset standard` uses the normal 30-minute clock; `quick` scales all game timings together. `--max-turns` defaults to 80. The final console line names the ignored JSON result file. A nonzero exit code means the match did not reach an authoritative finish or Pi failed.
 
-`--max-turn-seconds` defaults to 120. It aborts an overlong model response, keeps accepted game actions, and lets the next response start with a fresh observation. Pi records provider token usage, per-turn wall time, stop reason, and a coarse connection/timeout/HTTP/other error category when available; Codex records token usage from `turn.completed` events. Resumed Codex turns report cumulative session usage, so the aggregate exporter uses the last completed snapshot rather than adding the snapshots. A missing token value in a result means the provider/runner did not report it, not zero tokens.
+`--max-turn-seconds` defaults to 120. It aborts an overlong model response, keeps accepted game actions, and lets the next response start with a fresh observation. Pi records provider token usage, per-turn wall time, stop reason, and a coarse loading/connection/timeout/HTTP/other error category when available; Codex records token usage from `turn.completed` events. Resumed Codex turns report cumulative session usage, so the aggregate exporter uses the last completed snapshot rather than adding the snapshots. A missing token value in a result means the provider/runner did not report it, not zero tokens.
+The Pi runner treats a model provider's temporary `503 Loading model` response as an availability delay, waits five seconds, and retries with a fresh observation. It stops after 24 such consecutive responses; other consecutive model errors retain the three-turn stop rule.
+Read-only game observations and reviews retry transient network errors up to three times with short backoff. Action submission is unchanged.
 
 The Codex runner defaults to its historical `--turn-mode continuous`, one long response for a whole match. `--turn-mode episodic` asks it to make a short batch of orders and finish each response, then resumes its saved session after a game-time interval. This lets the runner collect `turn.completed` usage across a long match and puts Codex on a comparable decision cadence to Pi. It uses a private ignored Codex home and the same isolated game API. If a response times out or fails, the aggregate ledger leaves its token and mean-turn fields unknown instead of reporting a partial total. This mode is experimental until a completed match validates resume behavior.
 

@@ -61,6 +61,22 @@ test('strategic development options exclude reserved manpower', () => {
   assert.ok(!reservedOptions.readyDevelopments.some(p=>p.province==='east-us'));
 });
 
+test('partner forecast keeps the country share when already allied', () => {
+  const game = createGame({id:'allied-options',name:'Options',hostId:'test'},map);
+  for (const country of ['usa', 'france', 'britain'])
+    join(game,map,{profileId:country,name:country,country});
+  start(game);
+  const seen = observe(game, 'usa');
+  seen.players.find(player => player.id === 'france').side = seen.players.find(player => player.id === 'usa').side;
+  const industry = country => seen.provinces.filter(province => province.owner === country)
+    .reduce((total, province) => total + province.development, 0);
+  const partner = strategicOptions(seen, map).possibleIndependentPartners.find(entry => entry.country === 'britain');
+  const expected = industry('usa') ** .75 /
+    (industry('usa') ** .75 + industry('france') ** .75 + industry('britain') ** .75);
+  assert.ok(Math.abs(partner.victoryShareIfJoinedNow - expected) < 1e-10);
+  assert.equal(partner.combinedIndustry, industry('usa') + industry('france') + industry('britain'));
+});
+
 test('strategic options require a player seat', () => {
   const game = createGame({id:'options',name:'Options',hostId:'test'},map);
   join(game,map,{profileId:'usa',name:'USA',country:'usa'});

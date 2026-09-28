@@ -75,8 +75,11 @@ export function strategicOptions(state, map) {
     .map(p => {
       const partnerIndustry = industry.get(p.id) || 0;
       const exponent = state.rules.strengthExponent ?? .75;
-      const ownWeight = own ** exponent, partnerWeight = partnerIndustry ** exponent;
-      const victoryShareIfJoinedNow = ownWeight + partnerWeight ? ownWeight / (ownWeight + partnerWeight) : 0;
+      const ownWeight = (industry.get(state.you) || 0) ** exponent;
+      const currentSideWeight = ownRoster.reduce((sum, id) => sum + (industry.get(id) || 0) ** exponent, 0);
+      const partnerWeight = partnerIndustry ** exponent;
+      const victoryShareIfJoinedNow = currentSideWeight + partnerWeight
+        ? ownWeight / (currentSideWeight + partnerWeight) : 0;
       const prizePool = state.players.length * 100;
       const deadlinePrizes = state.rules.deadlinePrizes ?? [.5, .25, .25];
       return {country: p.id, industry: partnerIndustry,

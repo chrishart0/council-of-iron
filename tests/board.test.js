@@ -85,6 +85,24 @@ test('decision view preserves recipient filtering for delivered messages', () =>
   assert.doesNotMatch(JSON.stringify(seen), /Hidden dispatch/);
 });
 
+test('decision view separates country industry from alliance industry', () => {
+  const game = createGame({ id: 'decision-alliance-economy', name: 'Alliance economy', hostId: 'britain' }, MAP);
+  join(game, MAP, { profileId: 'britain', name: 'Britain', country: 'britain' });
+  join(game, MAP, { profileId: 'france', name: 'France', country: 'france' });
+  start(game);
+  const seen = observe(game, 'britain');
+  const side = seen.players.find(player => player.id === 'britain').side;
+  seen.players.find(player => player.id === 'france').side = side;
+  const countryIndustry = seen.provinces.filter(province => province.owner === 'britain')
+    .reduce((total, province) => total + province.development, 0);
+  const allyIndustry = seen.provinces.filter(province => province.owner === 'france')
+    .reduce((total, province) => total + province.development, 0);
+  seen.leaderboard.alliances.find(entry => entry.id === side).economy = countryIndustry + allyIndustry;
+  const view = decisionView(seen, MAP);
+  assert.equal(view.position.ownIndustry, countryIndustry);
+  assert.equal(view.position.sideIndustry, countryIndustry + allyIndustry);
+});
+
 test('decision view bounds delivered player speech in a busy event batch', () => {
   const game = createGame({ id: 'decision-busy-mail', name: 'Busy mail', hostId: 'britain' }, MAP);
   join(game, MAP, { profileId: 'britain', name: 'Britain', country: 'britain' });
