@@ -1,5 +1,5 @@
 /** v0.9 concept kit: recorded public data + the real atlas, shared by the three concept directions.
- * Prototype only. Every name and message comes from public/concepts/data/*.json (public observations as the
+ * Prototype only. Every name and message comes from public/concepts/fixture/*.json (public observations as the
  * API returns them); player text is rendered with textContent/escaping, never into SVG markup.
  */
 import { Atlas } from '/atlas.js';
@@ -19,7 +19,7 @@ export const SCREENS = [
 export const screen = () => { const s = new URLSearchParams(location.search).get('s'); return SCREENS.some(([id]) => id === s) ? s : 'hud'; };
 
 export async function load() {
-  const get = name => fetch(`/concepts/data/${name}.json`).then(r => { if (!r.ok) throw new Error(`${name}: ${r.status}`); return r.json(); });
+  const get = name => fetch(`/concepts/fixture/${name}.json`).then(r => { if (!r.ok) throw new Error(`${name}: ${r.status}`); return r.json(); });
   const [live, map, review, replay] = await Promise.all(['live', 'map', 'review', 'replay'].map(get));
   return model({ live, map, review, replay });
 }

@@ -1,14 +1,14 @@
 // Recorded positions for the v0.9 UI concept prototypes (public/concepts/). Test/prototype data only:
 // every file is a PUBLIC observation, review or replay exactly as the HTTP API returns it to one seat or to
 // spectators. No clock-control route; the rooms are stepped in this process like tests/ui-browser-server.js.
-// Usage: node scripts/concept-fixture.js  → public/concepts/data/*.json
+// Usage: node scripts/concept-fixture.js  → public/concepts/fixture/*.json
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { makeServer, MAP } from '../src/server.js';
 import { createGame, join, start, act, tick } from '../src/engine.js';
 import { replay } from './replay-handplay.js';
 import { replayReader } from '../public/replay-model.js';
 
-const out = new URL('../public/concepts/data/', import.meta.url); mkdirSync(out, { recursive: true });
+const out = new URL('../public/concepts/fixture/', import.meta.url); mkdirSync(out, { recursive: true });
 const app = makeServer({ dbPath: ':memory:', automatic: false });
 const profiles = Object.fromEntries(MAP.countries.map(c => [c.id, app.store.register(c.name)]));
 const room = createGame({ id: 'concept-live', name: 'The Rhine front', hostId: profiles.britain.id }, MAP);
