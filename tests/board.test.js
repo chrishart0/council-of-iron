@@ -19,6 +19,9 @@ test('compact board shows only observed state and legal direct connections', () 
   const england = board.own.find(p => p.id === 'england');
   const source = seen.provinces.find(p => p.id === 'england');
   assert.equal(board.provinces.length, seen.provinces.length);
+  assert.deepEqual(board.victoryRule, { targetEconomy: seen.economyThreshold,
+    holdTicks: seen.rules.hold, deadlinePrizeFractions: seen.rules.deadlinePrizes,
+    alliancePowerExponent: seen.rules.strengthExponent, maturityTicks: seen.rules.maturity });
   assert.equal(england.available, source.troops - 3);
   assert.equal(board.readyDevelopments.find(p => p.from === 'england')?.cost,
     seen.rules.developmentCosts[source.development]);

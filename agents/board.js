@@ -41,6 +41,9 @@ export function boardView(observation, map) {
     commandBudget: { remaining: o.commandBudget?.remaining ?? 0,
       nextRecoveryAt: o.commandBudget?.nextRecoveryAt ?? null },
     economyThreshold: o.economyThreshold,
+    victoryRule: { targetEconomy: o.economyThreshold, holdTicks: o.rules.hold,
+      deadlinePrizeFractions: o.rules.deadlinePrizes,
+      alliancePowerExponent: o.rules.strengthExponent, maturityTicks: o.rules.maturity },
     sides: (o.leaderboard?.alliances || []).map(a => ({ members: a.members, industry: a.economy,
       holdStartedAt: a.dominanceStartedAt,
       ...(a.dominanceStartedAt !== null && a.dominanceStartedAt !== undefined
@@ -51,6 +54,6 @@ export function boardView(observation, map) {
     armies: o.armies.filter(a => a.country === o.you || own.some(p => p.id === a.to))
       .map(a => ({ id: a.id, country: a.country, to: a.to, amount: a.amount, arrivesAt: a.arrivesAt })),
     outcome: o.outcome,
-    note: 'Province rows are [id, owner, troops, industry]. Own neighbors are direct legal connections; attackReady means a war is active. Available troops account for current reservations and one home garrison. Develop only from readyDevelopments. A side with winsAt will win at that tick if its industry hold persists. Check preview for battle odds and news for messages.',
+    note: 'Province rows are [id, owner, troops, industry]. Grow or conquer to hold victoryRule.targetEconomy active industry for victoryRule.holdTicks. Deadline prizes pay less; alliance prizes split by completed industry power and membership tenure. Own neighbors are direct connections; attackReady means a war is active. Available troops account for reservations and one home garrison. Develop only from readyDevelopments. A side with winsAt wins at that tick if its hold persists. Check preview for battle odds and news for messages.',
   };
 }

@@ -49,7 +49,7 @@ tool('news','Read delivered messages and major war/alliance events plus current 
     }
     newsMatch=o.id;newsCursor=o.cursor;return news(o);
   },true);
-tool('board','Read one compact map-like snapshot: all province ownership, troops and industry; your available troops and directly connected neighbors; currently payable readyDevelopments; active wars, command budget, side win ticks for active 60% holds, and pending diplomacy. Use this to choose a legal march or development. Use preview only for a chosen battle and news for delivered messages.',
+tool('board','Read one compact map-like snapshot: all province ownership, troops and industry; your available troops and directly connected neighbors; currently payable readyDevelopments; the 60% victory hold, deadline prize and alliance share rules; active wars, command budget, side win ticks, and pending diplomacy. Use this to choose a legal march or development. Use preview only for a chosen battle and news for delivered messages.',
   {},[],async()=>boardView(await client.observe(0),await client.map()),true);
 tool('view_map','See the current colored world map with your provinces outlined and nearby troop counts. The first content block also has the exact compact board data. Use this only with a vision-capable model; no private player text is drawn.',
   {},[],async()=>{
