@@ -6,13 +6,13 @@ import {buildReview} from '../src/review.js';
 const map=JSON.parse(readFileSync(new URL('../public/imperial-map.json',import.meta.url)));
 const HTML='<img src=x onerror="alert(1)"> & <b>plan</b>';
 let next=0;
-/** A finished three-country match with coalition chat at send-time boundaries.
+/** A finished four-country match with coalition chat at send-time boundaries.
  * `reveal` simulates a room created through HTTP after the notice was introduced. */
 function finishedMatch(reveal) {
   const g=createGame({id:`chat-${reveal}`,name:'Chat reveal',hostId:'usa'},map);
   if(reveal)g.rules.revealAllianceChatAfterMatch=true;
   g.rules.hold=1800; // no early domination; the deadline ends the match
-  for(const id of ['usa','britain','france'])join(g,map,{profileId:id,name:id,country:id});
+  for(const id of ['usa','britain','france','germany'])join(g,map,{profileId:id,name:id,country:id});
   start(g);
   const send=(id,action)=>act(g,map,id,action,`chat-op-${++next}`);
   const advance=n=>{for(let i=0;i<n;i++)tick(g);};
@@ -35,7 +35,7 @@ function finishedMatch(reveal) {
   while(g.status==='running')tick(g);
   return {g,live};
 }
-const flagged=finishedMatch(true),legacy=finishedMatch(false);
+const flagged=finishedMatch(true),unflagged=finishedMatch(false);
 
 test('live observations never include coalition messages for spectators or non-members',()=>{
   const {live}=flagged;
@@ -70,8 +70,8 @@ test('player text is stored and revealed as the exact plain string',()=>{
   assert.equal(buildReview(g,map).report.allianceChat[0].text,HTML);
 });
 
-test('rooms without the flag (legacy and fixtures) keep coalition chat private after the match',()=>{
-  const {g}=legacy;assert.equal(g.status,'finished');
+test('rooms without the flag (unflagged and fixtures) keep coalition chat private after the match',()=>{
+  const {g}=unflagged;assert.equal(g.status,'finished');
   assert.equal(g.rules.revealAllianceChatAfterMatch,undefined);
   const review=buildReview(g,map),json=JSON.stringify(review);
   assert.equal(review.report.allianceChatRevealed,false);assert.deepEqual(review.report.allianceChat,[]);

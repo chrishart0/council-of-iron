@@ -4,14 +4,14 @@ import { createGame, join, start, observe } from '../src/engine.js';
 import { MAP } from '../src/server.js';
 import { boardView } from '../agents/board.js';
 import { mapViewSvg } from '../agents/map-view.js';
-import { strategicOptions } from '../agents/strategic-options.js';
+import { developmentForecast } from '../public/insights.js';
 
 test('compact board shows only observed state and legal direct connections', () => {
   const game = createGame({ id: 'board-test', name: 'Board', hostId: 'britain' }, MAP);
   join(game, MAP, { profileId: 'britain', name: 'Britain', country: 'britain' });
   join(game, MAP, { profileId: 'france', name: 'France', country: 'france' });
   start(game);
-  game.orders.push({ type: 'move', country: 'britain', from: 'england', to: 'low-countries',
+  game.orders.push({ type:'march', country: 'britain', from: 'england', to: 'low-countries',
     amount: 2, executeAt: game.tick + 1 });
   game.provinces.find(p => p.id === 'england').troops = 200;
   const seen = observe(game, 'britain');
@@ -19,14 +19,11 @@ test('compact board shows only observed state and legal direct connections', () 
   const england = board.own.find(p => p.id === 'england');
   const source = seen.provinces.find(p => p.id === 'england');
   assert.equal(board.provinces.length, seen.provinces.length);
-  assert.deepEqual(board.victoryRule, { targetEconomy: seen.economyThreshold,
-    holdTicks: seen.rules.hold, deadlinePrizeFractions: seen.rules.deadlinePrizes,
-    alliancePowerExponent: seen.rules.strengthExponent, maturityTicks: seen.rules.maturity });
+  assert.deepEqual(board.victoryRule, { targetIndustry: seen.economyThreshold, holdTicks: seen.rules.hold, maxAlliance: 1 });
   assert.equal(england.available, source.troops - 3);
   assert.equal(board.readyDevelopments.find(p => p.from === 'england')?.cost,
     seen.rules.developmentCosts[source.development]);
-  assert.deepEqual(board.readyDevelopments.map(p => p.from).sort(),
-    strategicOptions(seen, MAP).readyDevelopments.map(p => p.province).sort());
+  assert.ok(board.readyDevelopments.every(p => developmentForecast(seen, p.from).cost === p.cost));
   game.orders.push({ type: 'develop', country: 'britain', from: 'england', amount: seen.rules.developmentCosts[source.development],
     executeAt: game.tick + 1 });
   assert.equal(boardView(observe(game, 'britain'), MAP).readyDevelopments.some(p => p.from === 'england'), false);

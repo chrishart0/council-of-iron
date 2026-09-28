@@ -17,35 +17,39 @@ const province=(g,id)=>g.provinces.find(p=>p.id===id);
 test('occupied attacks need war; neutral land remains open and failed orders reserve nothing',()=>{
   const g=game();province(g,'mexico').owner='britain';province(g,'mexico').troops=2;
   const before=g.players.find(p=>p.id==='usa').orderTicks.length;
-  assert.throws(()=>send(g,'usa',{type:'move',from:'west-us',to:'mexico',amount:5}),/Declare war/);
+  assert.throws(()=>send(g,'usa',{type:'march',from:'west-us',to:'mexico',amount:5}),/Declare war/);
   assert.equal(g.orders.length,0);assert.equal(g.players.find(p=>p.id==='usa').orderTicks.length,before);
   const war=send(g,'usa',{type:'declare_war',country:'britain'});
-  assert.equal(war.status,'enacted');assert.deepEqual(g.wars,['britain:usa']);
-  assert.equal(send(g,'usa',{type:'move',from:'west-us',to:'mexico',amount:5}).orderId.startsWith('order-'),true);
-  assert.equal(send(g,'usa',{type:'move',from:'west-us',to:'west-canada',amount:2}).orderId.startsWith('order-'),true);
+  assert.deepEqual(war.toRoster,['britain']);assert.deepEqual(g.wars,['britain:usa']);
+  assert.equal(send(g,'usa',{type:'march',from:'west-us',to:'mexico',amount:5}).orderId.startsWith('order-'),true);
+  assert.equal(send(g,'usa',{type:'march',from:'west-us',to:'west-canada',amount:2}).orderId.startsWith('order-'),true);
 });
 
-test('coalition war and peace need majorities; treaty recalls the offensive and expires on the game clock',()=>{
-  const g=game();
+test('any member speaks for its alliance: war is instant for both sides; anyone on the other side accepts peace',()=>{
+  const g=game(['usa','britain','france','germany']);
   const proposal=send(g,'usa',{type:'propose',country:'france',name:'Accord'});
   send(g,'france',{type:'accept',proposalId:proposal.proposalId});advance(g,30);
   assert.equal(g.players.find(p=>p.id==='france').side,g.players.find(p=>p.id==='usa').side);
-  const vote=send(g,'usa',{type:'declare_war',country:'britain'});
-  assert.equal(vote.status,'voting');assert.equal(g.wars.length,0);
-  const privateView=observe(g,'britain');assert.equal(privateView.diplomacy.length,0);
-  send(g,'france',{type:'vote_war',motionId:vote.motionId});assert.deepEqual(g.wars,['britain:france','britain:usa']);
+  const war=send(g,'france',{type:'declare_war',country:'britain'});
+  assert.deepEqual(war.fromRoster.sort(),['france','usa']);assert.deepEqual(g.wars,['britain:france','britain:usa']);
+  assert.ok(g.events.some(e=>e.type==='war_declared' && e.country==='france' && !e.recipients));
+  assert.throws(()=>send(g,'usa',{type:'declare_war',country:'britain'}),/already at war/);
   province(g,'mexico').owner='britain';province(g,'mexico').troops=12;
-  const move=send(g,'usa',{type:'move',from:'west-us',to:'mexico',amount:8});advance(g,2);
+  const move=send(g,'usa',{type:'march',from:'west-us',to:'mexico',amount:8});advance(g,2);
   assert.ok(g.armies.some(a=>a.orderId===move.orderId));
-  const peace=send(g,'usa',{type:'offer_peace',country:'britain'});
-  assert.equal(peace.status,'voting');send(g,'france',{type:'vote_peace',motionId:peace.motionId});
-  assert.equal(g.diplomacy.find(m=>m.id===peace.motionId).status,'offered');
-  send(g,'britain',{type:'vote_peace',motionId:peace.motionId});
+  const offer=send(g,'usa',{type:'offer_peace',country:'britain'});
+  assert.throws(()=>send(g,'france',{type:'offer_peace',country:'britain'}),/already open/);
+  assert.deepEqual(observe(g,'britain').peaceOffers.map(o=>o.id),[offer.offerId]);
+  assert.deepEqual(observe(g,'france').peaceOffers.map(o=>o.id),[offer.offerId],'the offering side sees its own offer');
+  assert.deepEqual(observe(g,'germany').peaceOffers,[]);
+  assert.throws(()=>send(g,'france',{type:'accept_peace',offerId:offer.offerId}),/receiving/);
+  send(g,'britain',{type:'accept_peace',offerId:offer.offerId});
   assert.equal(g.wars.length,0);assert.ok(g.armies.some(a=>a.orderId===move.orderId && a.returning));
-  assert.ok(g.events.some(e=>e.type==='peace_accepted' && e.recalled>0));
-  const second=send(g,'usa',{type:'declare_war',country:'britain'});advance(g,60);
-  assert.equal(g.diplomacy.find(m=>m.id===second.motionId).status,'expired');
-  assert.throws(()=>send(g,'france',{type:'vote_war',motionId:second.motionId}),/no longer open/);
+  assert.ok(g.events.some(e=>e.type==='peace_accepted' && e.recalled>0 && e.country==='britain'));
+  send(g,'usa',{type:'declare_war',country:'britain'});
+  const late=send(g,'usa',{type:'offer_peace',country:'britain'});advance(g,60);
+  assert.ok(g.events.some(e=>e.type==='peace_expired' && e.offerId===late.offerId));
+  assert.throws(()=>send(g,'britain',{type:'accept_peace',offerId:late.offerId}),/no longer open/);
 });
 
 test('battle begins on arrival and resolves over dice rounds; a small capture keeps industry',()=>{
@@ -53,7 +57,7 @@ test('battle begins on arrival and resolves over dice rounds; a small capture ke
   const target=province(g,'mexico');target.owner='britain';target.troops=4;target.development=2;target.nextRecruit=1000;
   province(g,'west-us').troops=24;
   send(g,'usa',{type:'declare_war',country:'britain'});
-  const move=send(g,'usa',{type:'move',from:'west-us',to:'mexico',amount:9});
+  const move=send(g,'usa',{type:'march',from:'west-us',to:'mexico',amount:9});
   advance(g,move.arrivesAt);
   assert.equal(target.owner,'britain');assert.equal(target.troops,4);
   assert.equal(g.battles.length,1);
@@ -64,39 +68,39 @@ test('battle begins on arrival and resolves over dice rounds; a small capture ke
   if(target.owner==='usa')assert.equal(target.development,2);
 });
 
-test('allied transit preserves troop ownership and blocks alliance departure while crossing',()=>{
-  const g=game(['usa','france','britain']);
+test('a march passes through allied land without gifting the troops; leaving does not wait for it',()=>{
+  const g=game(['usa','france','britain','germany']);
   const proposal=send(g,'usa',{type:'propose',country:'france',name:'Accord'});
   send(g,'france',{type:'accept',proposalId:proposal.proposalId});advance(g,30);
   province(g,'central-us').owner='france';province(g,'central-us').troops=3;province(g,'central-us').nextRecruit=1000;
   province(g,'west-us').troops=20;
   const amount=6;
-  const transit=send(g,'usa',{type:'transit',from:'west-us',path:['central-us','east-us'],amount});
+  const march=send(g,'usa',{type:'march',from:'west-us',to:'east-us',amount});
+  assert.deepEqual(march.orders[0].path,['central-us','east-us']);
   tick(g);
   assert.equal(province(g,'west-us').troops,14);
-  assert.throws(()=>send(g,'france',{type:'leave'}),/inside an ally/);
-  advance(g,transit.arrivesAt-g.tick);
+  advance(g,march.arrivesAt-g.tick);
   assert.equal(province(g,'central-us').owner,'france');
   assert.equal(province(g,'central-us').troops,3);
   assert.equal(province(g,'east-us').owner,'usa');
   assert.ok(province(g,'east-us').troops>=amount);
-  assert.equal(g.armies.some(a=>a.transit),false);
+  assert.equal(g.armies.length,0);
+  // A column that finds the land no longer friendly turns home instead of passing.
+  send(g,'france',{type:'leave'});advance(g,10);
+  const again=send(g,'usa',{type:'march',from:'west-us',to:'east-us',amount:4});
+  advance(g,again.arrivesAt-g.tick);
+  assert.ok(g.events.some(e=>e.type==='army_recalled' && e.reason==='transit_blocked' && e.country==='usa'));
+  assert.equal(province(g,'central-us').owner,'france');
 });
 
-test('large captures usually damage one industry level while the floor stays at I',()=>{
-  let captured=0,damaged=0;
-  for(let i=0;i<20;i++){
-    const g=game(['usa','britain']);g.id=`large-industry-${i}`;g.rules.hold=1800;
-    const target=province(g,'mexico');target.owner='britain';target.troops=40;target.development=3;target.nextRecruit=1000;
-    province(g,'west-us').troops=130;
-    send(g,'usa',{type:'declare_war',country:'britain'});
-    const move=send(g,'usa',{type:'move',from:'west-us',to:'mexico',amount:110});
-    advance(g,move.arrivesAt+120);
-    if(target.owner==='usa'){captured++;if(target.development===2)damaged++;}
-    assert.ok(target.development>=1);
-  }
-  assert.equal(captured,20);
-  assert.ok(damaged>=15,`expected damage in most large captures; observed ${damaged}`);
+test('a capture keeps completed industry',()=>{
+  const g=game(['usa','britain']);g.rules.hold=1800;
+  const target=province(g,'mexico');target.owner='britain';target.troops=40;target.development=3;target.nextRecruit=1000;
+  province(g,'west-us').troops=130;
+  send(g,'usa',{type:'declare_war',country:'britain'});
+  const move=send(g,'usa',{type:'march',from:'west-us',to:'mexico',amount:110});
+  advance(g,move.arrivesAt+120);
+  assert.equal(target.owner,'usa');assert.equal(target.development,3);
 });
 
 test('accepted peace pulls engaged troops out before the next combat round',()=>{
@@ -104,11 +108,11 @@ test('accepted peace pulls engaged troops out before the next combat round',()=>
   const target=province(g,'mexico');target.owner='britain';target.troops=30;target.nextRecruit=1000;
   province(g,'west-us').troops=25;
   send(g,'usa',{type:'declare_war',country:'britain'});
-  const move=send(g,'usa',{type:'move',from:'west-us',to:'mexico',amount:15});
+  const move=send(g,'usa',{type:'march',from:'west-us',to:'mexico',amount:15});
   advance(g,move.arrivesAt);
   assert.equal(g.battles.length,1);
   const peace=send(g,'usa',{type:'offer_peace',country:'britain'});
-  send(g,'britain',{type:'vote_peace',motionId:peace.motionId});
+  send(g,'britain',{type:'accept_peace',offerId:peace.offerId});
   assert.ok(g.armies.some(a=>a.returning && a.country==='usa'));
   const defenders=target.troops;tick(g);
   assert.equal(g.battles.length,0);
@@ -122,7 +126,7 @@ test('industrial defense bonus lowers exact capture odds and matches rolled defe
   target.owner='britain';target.troops=16;target.development=3;target.nextRecruit=1000;
   province(g,'west-us').troops=25;
   send(g,'usa',{type:'declare_war',country:'britain'});
-  const move=send(g,'usa',{type:'move',from:'west-us',to:'mexico',amount:16});
+  const move=send(g,'usa',{type:'march',from:'west-us',to:'mexico',amount:16});
   advance(g,move.arrivesAt);advance(g,2);
   const round=g.battles[0]?.lastRound || g.events.find(e=>e.type==='battle')?.lastRound;
   assert.ok(round);
@@ -133,24 +137,24 @@ test('attack preview counts visible defender reinforcements due before arrival',
   const g=game(['usa','britain']),target=province(g,'mexico');target.owner='britain';target.troops=6;
   target.nextRecruit=g.tick+20;province(g,'west-us').troops=30;
   g.armies.push({id:'visible-reinforcement',country:'britain',from:'central-america',to:'mexico',amount:20,departedAt:g.tick,arrivesAt:g.tick+5});
-  const forecast=preview(g,map,'west-us','mexico',20,'usa');
+  const forecast=preview(g,map,'usa',{from:'west-us',to:'mexico',amount:20});
+  assert.equal(forecast.warRequired,true,'forecast before the declaration');
   assert.equal(forecast.defenseAtArrival.incoming,20);
   assert.ok(forecast.defenseAtArrival.total>=26);
   assert.ok(forecast.combatAtArrival.attackerWinChance<forecast.combat.attackerWinChance);
 });
 test('allied attackers combine on one side and later arrivals reinforce the active battle',()=>{
-  const g=game(['usa','france','britain']);g.rules.hold=1800;
+  const g=game(['usa','france','britain','germany']);g.rules.hold=1800;
   const offer=send(g,'usa',{type:'propose',country:'france',name:'Accord'});
   send(g,'france',{type:'accept',proposalId:offer.proposalId});advance(g,30);
-  const motion=send(g,'usa',{type:'declare_war',country:'britain'});
-  send(g,'france',{type:'vote_war',motionId:motion.motionId});
+  send(g,'usa',{type:'declare_war',country:'britain'});
   const target=province(g,'mexico');target.owner='britain';target.troops=100;target.nextRecruit=1000;
   province(g,'central-us').owner='france';province(g,'central-us').troops=90;
   province(g,'west-us').troops=90;
-  const first=send(g,'usa',{type:'move',from:'west-us',to:'mexico',amount:20});
-  const second=send(g,'france',{type:'move',from:'central-us',to:'mexico',amount:30,arriveAt:first.arrivesAt+3});
+  const first=send(g,'usa',{type:'march',from:'west-us',to:'mexico',amount:60});
   advance(g,first.arrivesAt-g.tick);
-  assert.equal(g.battles.length,1);assert.equal(g.armies.filter(a=>a.engaged).reduce((n,a)=>n+a.amount,0),20);
+  assert.equal(g.battles.length,1);assert.equal(g.armies.filter(a=>a.engaged).reduce((n,a)=>n+a.amount,0),60);
+  const second=send(g,'france',{type:'march',from:'central-us',to:'mexico',amount:30});
   advance(g,second.arrivesAt-g.tick);
   assert.equal(g.battles.length,1);
   assert.ok(g.battles[0].arrivals.some(a=>a.country==='usa'));

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join as pathJoin } from 'node:path';
 import { buildReview, publicBoard } from '../src/review.js';
 import { replayReader } from '../public/replay-model.js';
-import { coalitionForecast, developmentForecast, operationalInsights } from '../public/insights.js';
+import { allianceForecast, developmentForecast, operationalInsights } from '../public/insights.js';
 import { createGame, join, start, tick, act, observe } from '../src/engine.js';
 import { replay, map } from '../scripts/replay-handplay.js';
 import { makeServer } from '../src/server.js';
@@ -20,14 +20,14 @@ function fresh(board=map) {
 }
 function advance(g,n) { for(let i=0;i<n;i++) tick(g); }
 
-test('report scores are the original scores and alliance scores sum the retained final roster',()=>{
+test('report results are the original results; every member of the winning alliance won',()=>{
   assert.equal(review.report.players.length,8);
   assert.deepEqual(review.report.outcome,recorded.outcome);
   assert.equal(review.report.alliances.length,3);
-  for(const a of review.report.alliances) assert.equal(a.prestige,total(review.report.players.filter(p=>a.members.includes(p.country)).map(p=>p.prestige)));
   const winner=review.report.alliances.find(a=>a.won);
-  assert.equal(winner.economy,76);assert.deepEqual(winner.members,['britain','france','usa']);
-  assert.ok(Math.abs(review.report.unawardedPrize-10.058800338070682)<1e-9);
+  assert.equal(winner.economy,78);assert.deepEqual(winner.members,['britain','france','usa']);
+  for(const p of review.report.players)assert.equal(p.result,winner.members.includes(p.country)?'win':'loss');
+  for(const p of review.report.players)assert.equal(p.industry,p.economy);
   assert.equal(JSON.stringify(recorded),original,'Building a report must not mutate its source match.');
 });
 test('every historical tick matches the real simulation, including movements, recalls, industry and alliances',()=>{
@@ -39,7 +39,7 @@ test('every historical tick matches the real simulation, including movements, re
   }
   assert.equal(read(0).players.filter(p=>!p.side.startsWith('solo:')).length,0);
   assert.notEqual(read(334).players.find(p=>p.id==='usa').side,read(335).players.find(p=>p.id==='usa').side);
-  assert.equal(read(622).status,'replay');
+  assert.equal(read(553).status,'replay');
 });
 test('review excludes all private conversations, offers, waiting orders, credentials and receipts',()=>{
   const json=JSON.stringify(review);
@@ -49,9 +49,9 @@ test('review excludes all private conversations, offers, waiting orders, credent
   assert.equal(review.report.events.some(e=>e.type==='message'),false);
 });
 test('military and economic report reconciles neutral forces, shared battles and investments',()=>{
-  assert.deepEqual(review.report.totals,{battles:63,casualties:1404,interned:0,recruited:3663,invested:0,upgrades:0,initialTroops:661,remainingTroops:2920});
-  assert.equal(total(review.report.metrics.map(p=>p.recruited)),3663);
-  assert.equal(review.report.series.at(-1).tick,622);
+  assert.deepEqual(review.report.totals,{battles:67,casualties:1272,interned:0,recruited:3195,invested:0,upgrades:0,initialTroops:661,remainingTroops:2584});
+  assert.equal(total(review.report.metrics.map(p=>p.recruited)),3195);
+  assert.equal(review.report.series.at(-1).tick,553);
   // Investment and upgrades, in a short match of its own.
   const g=fresh(),p=g.provinces.find(p=>p.id==='alaska');Object.assign(p,{owner:'usa',troops:60,development:1});g.rules.duration=130;start(g);
   act(g,map,'usa',{type:'develop',from:'alaska'},'build');advance(g,130);
@@ -59,10 +59,10 @@ test('military and economic report reconciles neutral forces, shared battles and
   assert.equal(built.totals.invested,24);assert.equal(built.totals.upgrades,1);
   assert.equal(built.metrics.find(m=>m.country==='usa').invested,24);
 });
-test('timeline records broken economic holds and historical membership',()=>{
-  assert.deepEqual(review.report.events.filter(e=>e.type==='dominance').map(e=>e.tick),[532]);
-  assert.deepEqual(review.report.tenures.filter(t=>t.country==='usa').map(t=>[t.start,t.end]),[[0,335],[335,622]]);
-  assert.equal(read(621).dominance[recorded.outcome.winningSide],532);
+test('timeline records broken economic holds and alliance changes',()=>{
+  assert.deepEqual(review.report.events.filter(e=>e.type==='dominance').map(e=>e.tick),[463]);
+  assert.ok(review.report.events.some(e=>e.type==='alliance_activated' && e.tick===335 && e.roster.includes('usa')));
+  assert.equal(read(552).dominance[recorded.outcome.winningSide],463);
   // A hold broken by an opponent's growth, in a short match of its own.
   const g=createGame({id:'broken',name:'Broken hold',hostId:'usa'},map);
   for(const id of ['usa','britain'])join(g,map,{profileId:id,name:id,country:id});
@@ -78,9 +78,9 @@ test('timeline records broken economic holds and historical membership',()=>{
 });
 test('scrubbing backward, to the first tick and the final tick does not mutate frames',()=>{
   const before=JSON.stringify(review.replay);
-  for(const at of [622,0,531,30,335,0,622])assert.equal(read(at).tick,at);
+  for(const at of [553,0,462,30,335,0,553])assert.equal(read(at).tick,at);
   assert.equal(JSON.stringify(review.replay),before);
-  for(const bad of [-1,1.5,623,NaN,'0',Infinity])assert.throws(()=>read(bad),/integer/);
+  for(const bad of [-1,1.5,554,NaN,'0',Infinity])assert.throws(()=>read(bad),/integer/);
   assert.throws(()=>replayReader({version:99,frames:[]}),/Unsupported/);
 });
 test('a match without its recorded opening, or with a tampered final state, is withheld',()=>{
@@ -92,11 +92,15 @@ test('a match without its recorded opening, or with a tampered final state, is w
 test('draws, two occupied seats and retained eliminated members have correct review semantics',()=>{
   const g=createGame({id:'draw',name:'Draw',hostId:'usa'},map);
   for(const id of ['usa','britain'])join(g,map,{profileId:id,name:id,country:id});
-  start(g);
-  const {proposalId}=act(g,map,'usa',{type:'propose',country:'britain'},'p');
-  act(g,map,'britain',{type:'accept',proposalId},'a');advance(g,30);
+  for(const p of g.provinces)if(p.owner){p.development=1;p.owner=p.owner==='usa'?'usa':'britain';}
+  g.rules={...g.rules,duration:30};start(g);
+  const usa=g.provinces.filter(p=>p.owner==='usa').length,britain=g.provinces.filter(p=>p.owner==='britain').length;
+  for(const p of g.provinces.filter(p=>p.owner==='usa').slice(Math.min(usa,britain)))p.owner=null;
+  for(const p of g.provinces.filter(p=>p.owner==='britain').slice(Math.min(usa,britain)))p.owner=null;
+  g.reviewOrigin=structuredClone({...g,reviewOrigin:undefined});advance(g,30);
   const r=buildReview(JSON.parse(JSON.stringify(g)),map);
-  assert.ok(r.report.players.every(p=>p.prestige===0));assert.equal(r.report.alliances[0].prestige,0);assert.equal(r.report.duration,30);
+  assert.equal(r.report.outcome.draw,true);assert.ok(r.report.players.every(p=>p.result==='draw'));
+  assert.equal(r.report.alliances.some(a=>a.won),false);assert.equal(r.report.duration,30);
   assert.equal(r.replay.map.provinces.length,map.provinces.length);
   const e=fresh();
   for(const p of e.provinces)p.owner='usa';
@@ -106,12 +110,12 @@ test('draws, two occupied seats and retained eliminated members have correct rev
 test('initial checkpoint preserves a nonstandard test opening and a tampered final state is withheld',()=>{
   const g=fresh();g.rules={...g.rules,duration:40};g.provinces[0].troops=234;start(g);advance(g,40);
   assert.equal(buildReview(g,map).replay.frames[0].provinces[0].troops,234);
-  g.outcome.scores[0].prestige=1234;assert.throws(()=>buildReview(g,map),/cannot be reproduced/);
+  g.outcome.scores[0].result='win';g.outcome.scores[0].industry+=5;assert.throws(()=>buildReview(g,map),/cannot be reproduced/);
 });
 test('live review and gameplay mutation from a replay are disallowed',()=>{
   const g=fresh();start(g);assert.throws(()=>buildReview(g,map),e=>e.status===409);
   const state=read(300);
-  assert.equal(state.status,'replay');assert.equal(state.commandBudget,undefined);
+  assert.equal(state.status,'replay');assert.equal(state.orders,undefined);
   assert.throws(()=>act(state,map,'usa',{type:'develop',from:'west-us'},'no'),/./);
 });
 test('development payback aligns with actual recruitment ticks and includes the deadline tick',()=>{
@@ -131,25 +135,13 @@ test('development forecast honors a queued or already-started upgrade without ch
   assert.equal(queued.queued,true);assert.equal(queued.completesAt,121);tick(g);
   const built=developmentForecast(observe(g,'usa'),p.id);assert.equal(built.alreadyInvested,true);assert.equal(built.completesAt,121);
 });
-test('admission forecasts expose combined territory and each full share without resetting incumbents',()=>{
-  const at=read(305),russia=at.players.find(p=>p.id==='russia');
-  const f=coalitionForecast(at,['britain','france','usa'],at.players.find(p=>p.id==='britain').side);
-  assert.equal(f.land,at.provinces.filter(p=>['britain','france','usa'].includes(p.owner)).length);
+test('admission forecasts show the combined industry against the victory line; insights stay private',()=>{
+  const at=read(305);
+  const f=allianceForecast(at,['britain','france','usa']);
   assert.equal(f.economy,at.provinces.filter(p=>['britain','france','usa'].includes(p.owner)).reduce((n,p)=>n+p.development,0));
-  assert.equal(f.threshold,Math.ceil(f.totalEconomy*.6));
-  assert.equal(f.members.find(p=>p.country==='usa').maturityAtActivation,0);
-  assert.equal(f.members.find(p=>p.country==='britain').keepsMaturity,true);
-  assert.ok(Math.abs(total(f.members.map(p=>p.victoryShare))-1)<1e-12);
-  assert.ok(Math.abs(total(f.members.map(p=>p.maximumShare))-800)<1e-9);
-  assert.ok(f.members.every(p=>p.maximumShare>=0));
-  const draw=coalitionForecast(at,at.players.map(p=>p.id),russia.side);assert.equal(draw.wouldDraw,true);assert.ok(draw.members.every(p=>p.fullMaturityPrestige===0));
-});
-test('reserve insights never pretend to forward arrivals and do not expose another player’s reservations',()=>{
-  const g=fresh();start(g);const p=g.provinces.find(p=>p.id==='central-us');p.route='west-us';
-  act(g,map,'usa',{type:'move',from:p.id,to:'west-us',amount:5},'send');
-  const insights=operationalInsights(observe(g,'usa'));
-  assert.equal(insights.routeReserves[0].available,p.troops-6);assert.match(insights.routeReserves[0].rule,/arriving reinforcements do not/);
-  assert.deepEqual(operationalInsights(observe(g)),{developments:[],routeReserves:[],admissions:[]});
+  assert.equal(f.threshold,Math.ceil(f.totalEconomy*.6));assert.equal(f.remaining,Math.max(0,f.threshold-f.economy));
+  const g=fresh();start(g);
+  assert.deepEqual(operationalInsights(observe(g)),{developments:[],admissions:[]});
 });
 test('HTTP review is read-only, private-state safe, bounded and durable across restart',async t=>{
   const dir=mkdtempSync(pathJoin(tmpdir(),'review-test-')),dbPath=pathJoin(dir,'review.db');let app;
@@ -161,14 +153,14 @@ test('HTTP review is read-only, private-state safe, bounded and durable across r
   app.games.set(g.id,g);app.store.save(g);
   assert.equal((await call('/api/games/recorded/review',token)).status,403);
   const response=await call('/api/games/recorded/review');assert.equal(response.status,200);assert.equal(response.data.historyAvailable,true);
-  assert.equal((await call('/api/games/recorded/replay?tick=622')).data.tick,622);
-  for(const invalid of ['-1','623','1.1','','NaN','1e2'])assert.equal((await call(`/api/games/recorded/replay?tick=${invalid}`)).status,400);
+  assert.equal((await call('/api/games/recorded/replay?tick=553')).data.tick,553);
+  for(const invalid of ['-1','554','1.1','','NaN','1e2'])assert.equal((await call(`/api/games/recorded/replay?tick=${invalid}`)).status,400);
   const publicJson=JSON.stringify((await call('/api/games/recorded/replay')).data);
   assert.ok(!publicJson.includes(profile.token));assert.ok(!publicJson.includes('profileId'));
   // A persisted materialized replay is usable without rerunning the old action log.
   delete g.actionLog;app.store.save(g);await app.close();await launch();
   assert.deepEqual((await call('/api/games/recorded/review')).data,response.data);
-  assert.equal((await call('/api/games/recorded/replay?tick=622')).data.tick,622);
+  assert.equal((await call('/api/games/recorded/replay?tick=553')).data.tick,553);
   const bad=structuredClone(recorded);bad.id='incompatible';delete bad.reviewOrigin;bad.provinces[0].troops+=17;
   app.games.set(bad.id,bad);
   const fallback=await call('/api/games/incompatible/review');assert.equal(fallback.status,200);assert.equal(fallback.data.historyAvailable,false);assert.deepEqual(fallback.data.outcome,recorded.outcome);
@@ -179,7 +171,7 @@ test('HTTP review is read-only, private-state safe, bounded and durable across r
 test('completed review discloses only opted-in AI conversations under the send-time roster',()=>{
   const g=createGame({id:'public-wire',name:'Public wire',hostId:'usa'},map);
   g.rules.duration=85;g.rules.hold=1800;
-  const seats=[['usa','agent','public'],['britain','agent','public'],['france','agent','private'],['germany','agent','public'],['ottoman','human','private']];
+  const seats=[['usa','agent','public'],['britain','agent','public'],['france','agent','private'],['germany','agent','public'],['ottoman','human','private'],['japan','agent','private']];
   for(const [country,kind,visibility] of seats)join(g,map,{profileId:country,name:country,country,kind,visibility});
   start(g);let op=0;const send=(country,action)=>act(g,map,country,action,`wire-${++op}`);
   send('usa',{type:'chat',channel:'world',text:'Public world dispatch'});

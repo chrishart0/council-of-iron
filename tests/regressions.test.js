@@ -46,19 +46,14 @@ test('declining an offer is private and does not change allegiance or create a n
   assert.ok(g.players.find(p=>p.id==='usa').side.startsWith('solo:'));
   assert.ok(!observe(g).events.some(e=>e.proposalId===offer.proposalId));
 });
-test('an owner’s preview accounts for reservations without exposing them to spectators',()=>{
-  const g=game();action(g,'usa',{type:'move',from:'west-us',to:'mexico',amount:6});
-  assert.throws(()=>preview(g,map,'west-us','mexico',6,'usa'),/uncommitted/);
-  const own=preview(g,map,'west-us','mexico',5,'usa');assert.equal(own.remaining,1);assert.equal(own.reserved,6);
-  const spectator=preview(g,map,'west-us','mexico',6);assert.equal(spectator.remaining,6);assert.equal(spectator.reserved,0);
-});
-test('command recovery time is authoritative and only visible to its owner',()=>{
-  const g=game();for(let i=0;i<3;i++)action(g,'usa',{type:'route',from:'west-us',to:null});
-  assert.equal(observe(g,'usa').commandBudget.nextRecoveryAt,10);assert.equal(observe(g).commandBudget,null);
-  advance(g,10);assert.equal(observe(g,'usa').commandBudget.nextRecoveryAt,null);
+test('a preview accounts for the owner’s own reservations; queued orders are visible only to their owner',()=>{
+  const g=game();action(g,'usa',{type:'march',from:'west-us',to:'mexico',amount:6});
+  assert.throws(()=>preview(g,map,'usa',{from:'west-us',to:'mexico',amount:6}),/uncommitted/);
+  assert.equal(preview(g,map,'usa',{from:'west-us',to:'mexico',amount:5}).sources[0].available,5);
+  assert.equal(observe(g,'usa').orders.length,1);assert.deepEqual(observe(g).orders,[]);assert.deepEqual(observe(g,'britain').orders,[]);
 });
 test('cursor pagination crosses hidden events without losing a later public or private event',()=>{
-  const g=game();for(let i=0;i<80;i++) { action(g,'usa',{type:'chat',channel:i%2?'world':'dm',to:'britain',text:`msg-${i}`});advance(g,10); }
+  const g=game();for(let i=0;i<80;i++) { action(g,'usa',{type:'chat',channel:i%2?'world':'dm',to:'britain',text:`msg-${i}`});advance(g,2); }
   const all=observe(g,'britain',0,10000).events;const paged=[];let after=0;
   do { const part=observe(g,'britain',after,3);paged.push(...part.events);after=part.cursor;if(!part.hasMore)break; }while(true);
   assert.deepEqual(paged,all);assert.equal(after,g.sequence);assert.equal(observe(g,'britain',after).events.length,0);
@@ -72,7 +67,7 @@ test('British province counters stay near their namesake land, not Greenland',()
 
 test('marches are accepted even when they would land after the match deadline',()=>{
   const g=game();g.tick=g.rules.duration-2;
-  const march=action(g,'usa',{type:'move',from:'west-us',to:'mexico',amount:2});
+  const march=action(g,'usa',{type:'march',from:'west-us',to:'mexico',amount:2});
   assert.ok(march.arrivesAt>g.rules.duration);
   advance(g,3);assert.equal(g.status,'finished');
 });
