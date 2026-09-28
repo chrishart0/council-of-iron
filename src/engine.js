@@ -357,7 +357,6 @@ export function turnAroundPlan(g, country, armyId, at = g.tick + 1) {
   requireRule(mayEnter(g, country, target.owner), 'Declare war before attacking another country.', 409);
   const arrivesAt = turnAroundArrival(army, g.travelTimes, at);
   requireRule(arrivesAt !== null, 'This army cannot turn around.', 409);
-  requireRule(arrivesAt <= gameRules(g).duration, 'The army would arrive after the match deadline.');
   const battle = (g.battles || []).find(b => b.province === target.id);
   return { armyId, mode: 'resume', to: target.id, owner: target.owner, amount: army.amount, arrivesAt,
     turnArounds: (army.turnArounds || 0) + 1, limit,

@@ -149,3 +149,21 @@ test('turn-around is deterministic and survives save/load; old snapshots without
   send(back,'usa',{type:'turn_around',armyId:a.id},'after-restart');tick(back);assert.equal(a.turnArounds,1);
   assert.equal(observe(back,'usa').turnAroundLimit,RULES.maxTurnArounds);
 });
+
+test('your own automatic turn-back is a personal history row with the cause in game voice; recalls you ordered are not',async()=>{
+  const {commsItems,systemCopy,isPersonal}=await import('../public/feed-model.js');
+  const names={country:id=>({japan:'Japan',britain:'Britain',usa:'USA'})[id]||id,province:id=>({philippines:'Philippines','west-us':'West US'})[id]||id,
+    side:id=>({'solo:japan:0':'Japan'})[id]||id,time:n=>`${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`};
+  const base={type:'army_recalled',country:'usa',armyId:'army-2072',to:'west-us',amount:109,arrivesAt:1390,tick:1045};
+  const events=[{...base,id:1,reason:'battle_in_progress',province:'philippines',battleAttackerSide:'solo:japan:0',owner:'britain'},
+    {...base,id:2,armyId:'army-9'},{...base,id:3,country:'japan',reason:'no_war',province:'philippines',owner:'usa'},
+    {...base,id:4,reason:'no_war',province:'philippines',owner:'britain'},{...base,id:5,reason:'transit_blocked',province:'philippines'},
+    {...base,id:6,reason:'no_war'}];
+  const rows=commsItems(events,[],{you:'usa'});
+  assert.deepEqual(rows.map(r=>r.id),[1,4,5,6]);assert.ok(rows.every(r=>r.system==='turned_back'&&isPersonal(r,'usa')));
+  assert.deepEqual(commsItems(events,[],{you:null}),[]);
+  const copy=rows.map(r=>systemCopy(r,names).detail);
+  assert.equal(copy[0],'Your 109 troops turned back from Philippines: Japan’s battle there was already under way. They reach West US at 23:10.');
+  assert.match(copy[1],/you are not at war with Britain/);assert.match(copy[2],/the allied route was blocked/);
+  assert.match(copy[3],/^Your 109 troops turned back: they could not attack there\./,'older events without detail still read well');
+});

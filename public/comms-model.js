@@ -71,7 +71,8 @@ export function arrivals(before, after) {
   const seen = new Set(before.rows.map(r => r.key)), fresh = after.rows.filter(r => !seen.has(r.key) && !r.mine);
   const actions = fresh.filter(r => r.pending);
   const personal = [];
-  for (const r of fresh.filter(r => r.tier === 'personal' && !r.pending)) {
+  // Turned-back armies get their own notice from the client (with Turn around); no second toast here.
+  for (const r of fresh.filter(r => r.tier === 'personal' && !r.pending && r.item.system !== 'turned_back')) {
     const from = r.item.from ?? r.item.country ?? null, last = personal.at(-1);
     if (last && last.from === from && last.thread === r.thread) { last.count++; last.rows.push(r); }
     else personal.push({ from, thread: r.thread, count: 1, rows: [r] });

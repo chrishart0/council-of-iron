@@ -21,7 +21,7 @@ export class Comms {
   constructor(opts) {
     Object.assign(this, { button: opts.button, toasts: opts.toasts, panel: opts.panel, names: opts.names, docked: opts.docked || (() => false),
       onAct: opts.onAct || (async () => null), onView: opts.onView || (() => {}), onSend: opts.onSend || (async () => null), onRead: opts.onRead || (() => {}),
-      onOpen: opts.onOpen || (() => {}), sfxHook: opts.sfx || (() => {}) });
+      onOpen: opts.onOpen || (() => {}), onNotice: opts.onNotice || (() => {}), sfxHook: opts.sfx || (() => {}) });
     this.reset();
     this.build(); this.bind();
   }
@@ -149,10 +149,11 @@ export class Comms {
   }
   /** A brief, quiet line in the one toast lane (order confirmations, errors). Never covers an ACTION. */
   flash(text, { error = false } = {}) { clearTimeout(this.flashTimer); this.toast.flash = { key: `flash-${Date.now()}`, text, error }; this.renderToasts(); this.flashTimer = setTimeout(() => { this.toast.flash = null; this.renderToasts(); }, error ? 7000 : 4200); }
-  /** A PERSONAL notice that is not a message (a battle result, an army turned back). */
-  notify({ key, title, detail = '', standard = null, view = null }) {
-    this.toast.personal = { from: standard, thread: null, count: 1, notice: { key, title, detail, view }, rows: [{ key, item: {} }] };
-    clearTimeout(this.personalTimer); this.personalTimer = setTimeout(() => { this.toast.personal = null; this.renderToasts(); }, 5200);
+  /** A PERSONAL notice that is not a message (a battle result, an army turned back). `buttons`: [{label, act, arg,
+   * primary}] handled by onNotice(act, arg); `sticky` notices stay until handled, dismissed or withdrawn. */
+  notify({ key, title, detail = '', standard = null, view = null, buttons = [], sticky = false }) {
+    this.toast.personal = { from: standard, thread: null, count: 1, notice: { key, title, detail, view, buttons }, rows: [{ key, item: {} }] };
+    clearTimeout(this.personalTimer); if (!sticky) this.personalTimer = setTimeout(() => { this.toast.personal = null; this.renderToasts(); }, 5200);
     this.renderToasts(); this.sfx('personal');
   }
   /** Withdraw a toast whose subject no longer applies (the inbox withdraws threat rows by itself). */
@@ -161,7 +162,10 @@ export class Comms {
     const b = e.target.closest('button'), t = e.target.closest('.cx-toast'); if (!t) return;
     const key = t.dataset.key, row = this.box?.rows.find(r => r.key === key);
     if (b?.dataset.do === 'dismiss') return this.dismissToast(key);
-    if (this.toast.personal?.notice?.key === key) { const v = this.toast.personal.notice.view; this.toast.personal = null; this.renderToasts(); if (v) this.onView(v); return; }
+    if (this.toast.personal?.notice?.key === key) {
+      const n = this.toast.personal.notice; this.toast.personal = null; this.renderToasts();
+      if (b?.dataset.noticeAct) return this.onNotice(b.dataset.noticeAct, b.dataset.arg); if (n.view) this.onView(n.view); return;
+    }
     if (row?.item.type === 'threat') { this.dismissToast(key); return this.onView({ province: row.item.army.to }); }
     if (b?.dataset.do === 'accept' || b?.dataset.do === 'decline') return this.decide(row, b.dataset.do);
     if (!b || b.dataset.do === 'view') { if (t.dataset.tier === 'personal') this.toast.personal = null; return this.openThread(row?.thread || t.dataset.thread || 'world', { focusComposer: t.dataset.tier === 'personal' && Boolean(row?.item.channel) }); }
@@ -231,7 +235,11 @@ export class Comms {
   }
   personalToast(g) {
     const n = this.names;
-    if (g.notice) return `<div class="cx-toast" data-tier="personal" data-key="${esc(g.notice.key)}" tabindex="0"><span class="cx-standard">${g.from ? insignia(g.from) : icon('battle')}</span><p><b>${esc(g.notice.title)}</b> <span class="cx-line">${esc(g.notice.detail)}</span></p>${g.notice.view ? `<button type="button" class="cx-secondary" data-do="view" data-sfx="press">View</button>` : ''}<button type="button" class="cx-dismiss" data-do="dismiss" aria-label="Dismiss" data-sfx="press">${icon('close')}</button></div>`;
+    if (g.notice) {
+      const buttons = g.notice.buttons?.length ? g.notice.buttons.map(x => `<button type="button" class="${x.primary ? 'cx-primary' : 'cx-secondary'}" data-notice-act="${esc(x.act)}" data-arg="${esc(x.arg ?? '')}" data-sfx="press">${esc(x.label)}</button>`).join('')
+        : g.notice.view ? `<button type="button" class="cx-secondary" data-do="view" data-sfx="press">View</button>` : '';
+      return `<div class="cx-toast${g.notice.buttons?.length > 1 ? ' cx-wide' : ''}" data-tier="personal" data-key="${esc(g.notice.key)}" tabindex="0"><span class="cx-standard">${g.from ? insignia(g.from) : icon('battle')}</span><p><b>${esc(g.notice.title)}</b> <span class="cx-line">${esc(g.notice.detail)}</span></p>${buttons}<button type="button" class="cx-dismiss" data-do="dismiss" aria-label="Dismiss" data-sfx="press">${icon('close')}</button></div>`;
+    }
     const r = g.rows.at(-1), i = r.item, who = g.from ? n.country(g.from) : 'News';
     const line = g.count > 1 ? `${g.count} messages` : i.type === 'message' ? String(i.text).split('\n')[0] : i.headline ? headlineCopy(i, { ...n, time: clock }).title : systemCopy(i, { ...n, time: clock }).title;
     const label = i.type === 'message' ? (i.channel === 'dm' ? 'Reply' : 'Open') : 'Open';
