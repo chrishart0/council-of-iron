@@ -46,7 +46,7 @@ async function fixture(t, options = {}) {
 
 test('voice input is off without STT_URL: capability false and 503 for seated players', async t => {
   const f = await fixture(t);
-  assert.deepEqual((await f.call('/api/stt')).data, { available: false });
+  assert.deepEqual((await f.call('/api/stt')).data, { available: false, provider: null });
   const r = await f.voice();
   assert.equal(r.status, 503);
   assert.match(r.data.error, /Voice input unavailable/);
@@ -54,7 +54,7 @@ test('voice input is off without STT_URL: capability false and 503 for seated pl
 
 test('voice input proxies seated players only and returns the transcript without sending chat', async t => {
   const side = await fakeSidecar(t), f = await fixture(t, { sttUrl: side.url });
-  assert.deepEqual((await f.call('/api/stt')).data, { available: true });
+  assert.deepEqual((await f.call('/api/stt')).data, { available: true, provider: 'local' });
   assert.equal((await f.voice(undefined, { token: null })).status, 401, 'spectators have no credential');
   assert.equal((await f.voice(undefined, { token: f.b.token })).status, 403, 'unseated profiles are refused');
   assert.equal((await f.voice(undefined, { token: 'bogus' })).status, 401);
@@ -97,7 +97,7 @@ test('voice input maps sidecar failures and never logs transcripts', async t => 
   await gone.close();
   const down = await h.voice();
   assert.equal(down.status, 503);
-  assert.deepEqual((await h.call('/api/stt')).data, { available: false });
+  assert.deepEqual((await h.call('/api/stt')).data, { available: false, provider: 'local' });
   assert.ok(!logs.some(line => line.includes('Belgium') || line.includes('betray')), 'transcript text never reaches logs');
 });
 
@@ -122,4 +122,30 @@ test('optional HTTPS listener shares the same routes and accepts its own https o
   });
   assert.equal(await get('/api/players', { Origin: `https://localhost:${port}` }), 201);
   assert.equal(await get('/api/players', { Origin: `http://localhost:${port}` }), 403);
+});
+
+test('OPENAI_API_KEY sends the clip to the OpenAI transcription API with the game vocabulary', async t => {
+  const { makeStt } = await import('../src/stt.js');
+  const seen = [];
+  const server = createServer(async (req, res) => {
+    const chunks = []; for await (const c of req) chunks.push(c);
+    const body = Buffer.concat(chunks).toString('latin1');
+    seen.push({ url: req.url, auth: req.headers.authorization, type: req.headers['content-type'],
+      model: /name="model"\r\n\r\n([^\r]*)/.exec(body)?.[1], prompt: /name="prompt"\r\n\r\n([^\r]*)/.exec(body)?.[1],
+      filename: /filename="([^"]+)"/.exec(body)?.[1] });
+    res.writeHead(seen.length === 1 ? 200 : 400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(seen.length === 1 ? { text: ` ${SECRET} ` } : { error: { message: 'bad audio' } }));
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise(r => server.close(r)));
+  const stt = makeStt({ url: '', openAiKey: 'test-key', openAiBase: `http://127.0.0.1:${server.address().port}/v1/`, prompt: 'Council of Iron. Britain.' });
+  const clip = (bytes = 3000, type = 'audio/webm;codecs=opus') => Object.assign((async function* () { yield Buffer.alloc(bytes, 3); })(),
+    { headers: { 'content-type': type, 'content-length': String(bytes) }, destroy() {} });
+  assert.equal(stt.provider, 'openai'); assert.equal(await stt.available(), true);
+  assert.deepEqual(await stt.transcribe(clip(), 'g:usa'), { text: SECRET });
+  assert.deepEqual(seen[0], { url: '/v1/audio/transcriptions', auth: 'Bearer test-key', type: seen[0].type,
+    model: 'whisper-1', prompt: 'Council of Iron. Britain.', filename: 'recording.webm' });
+  assert.match(seen[0].type, /^multipart\/form-data; boundary=/);
+  await assert.rejects(stt.transcribe(clip(2000, 'audio/mp4'), 'g:usa'), e => e.status === 422, 'an OpenAI 400 is an unintelligible recording');
+  assert.equal(seen[1].filename, 'recording.mp4');
 });

@@ -381,7 +381,7 @@ def main():
                 expect(page.locator('#card')).to_be_hidden()
                 if page.locator('#coach').is_visible():page.locator('#coach-skip').click()
                 names={p['id']:p['name'] for p in http('/map.json')['provinces']}
-                # Tap-tap on the map: your province, then a neighbour; Shift-click switches the source.
+                # Tap-tap on the map: your province, then a neighbour; Shift-click adds another source.
                 province(page,'west-us');expect(page.locator('#card-title')).to_have_text(names['west-us'])
                 expect(page.locator('#card')).to_have_attribute('data-size','peek')  # a map selection opens a peeking card
                 if not page.locator('#marker-mexico').is_visible():page.locator('#zoom-out').click()
@@ -389,12 +389,14 @@ def main():
                 expect(page.locator('#card-title')).to_have_text(names['mexico']);expect(page.locator('#card-sub')).to_contain_text(names['west-us'])
                 page.locator('[data-fraction="1"]').click();expect(page.locator('#amount-out')).to_contain_text('100%')
                 page.keyboard.down('Shift');page.mouse.click(*centre(page.locator('#marker-central-us .counter-body')));page.keyboard.up('Shift')
-                expect(page.locator('#card-title')).to_have_text(names['central-us'])
+                # Shift-click adds a second source to the same order (multi-select); both arrive together.
+                expect(page.locator('#card-title')).to_have_text(names['mexico']);expect(page.locator('#card-sub')).to_contain_text('from 2 provinces')
+                expect(page.locator('#sources .source-chip')).to_have_count(2)
                 page.keyboard.press('Escape');expect(page.locator('#card')).to_be_hidden()
                 page.locator('#hud-standard').focus();page.keyboard.press('Enter')
                 expect(page.locator('#card')).to_have_attribute('data-kind','alliance');expect(page.locator('#card-title')).to_be_focused()
                 page.keyboard.press('Escape');expect(page.locator('#card')).to_be_hidden();expect(page.locator('#hud-standard')).to_be_focused()
-                report['assertions'].append('A second room starts with the same browser identity; map taps open a peeking order card (province, then neighbour); 100% and Shift-source selection work; the standard opens and closes the alliance card by keyboard with focus returned.')
+                report['assertions'].append('A second room starts with the same browser identity; map taps open a peeking order card (province, then neighbour); 100% and Shift-click adding a second source work; the standard opens and closes the alliance card by keyboard with focus returned.')
                 # Attack together: with the target chosen, tapping another of your provinces beside it adds a source.
                 order(page,'west-us','mexico');page.locator('[data-fraction="0.5"]').click()
                 page.locator('#card-size').click()  # back to peek so the map is free

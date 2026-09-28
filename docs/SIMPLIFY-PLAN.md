@@ -81,6 +81,7 @@ Heuristic self-play is only used for invariants and "matches still resolve", nev
 | M10 | Defender +1 on the best die at industry II/III | unchanged | Factories are worth defending; trench feel. | — | — | **Keep** |
 | M11 | Development I→II→III (24/120 s, 48/180 s) | unchanged | Decision 2. | — | — | **Keep** |
 | M12 | 30 s notice to join or leave an alliance; offers expire | unchanged, stated as one rule | Backstab warning is the heart of diplomacy. | — | — | **Keep** |
+| M13 | (after M4) nothing stopped an instant re-declaration: in match 877de196 the Qing bot declared war 17× and accepted peace 17×, 25 treaties in 24 min, while an AI sent 22 peace offers | **Truce after peace**: for 60 s neither side (both whole alliances as they were) may declare war on the other; an offer that expires unanswered is not repeated to the same side for 30 s | Decision 4: peace becomes a commitment worth weighing, not a free pause | none (a small check on declaration and offer) | A player cannot punish a treaty-breaker for 1 min; the truce is short | **Added** |
 
 ## Bucket 3 — KEEP
 
@@ -100,17 +101,17 @@ Heuristic self-play is only used for invariants and "matches still resolve", nev
 1. **Goal.** Hold **60% of the world's industry** with your alliance for **90 seconds**. If nobody does by
    **30:00**, the side with the most industry wins. A tie is a draw. Everyone on the winning side wins.
 2. **Troops.** Each province makes troops every 20 s: 1, 2 or 3 by its industry level.
-3. **March.** Drag from your province to any province you can reach: a neighbour, or anywhere across your own
-   and your allies' land plus one step beyond it (the quickest way, twice as fast inside friendly land,
-   re-routed if part of it is lost). Add more of your provinces to attack together — they arrive at the same
-   moment. Always leave one troop at home.
+3. **March.** Drag from your province to another. You can attack any province that borders your own
+   territory, sending troops from anywhere in your empire (the quickest way through your and your allies'
+   land, twice as fast there, re-routed if part of it is lost). Select several of your provinces to send
+   together — they arrive at the same moment. Always leave one troop at home.
 4. **Battle.** Arriving attackers fight dice rounds until one side is gone. Defenders win ties, and a
    factory (industry II or III) gives them +1. Send help or **recall** to pull back.
 5. **Rally.** Pick provinces and a rally point: their new troops march there automatically.
 6. **Build.** Spend troops to raise a province's industry: I→II costs 24 (2 min), II→III costs 48 (3 min).
    Capture takes the factory; unfinished work is lost.
 7. **War and peace.** You must declare war before attacking another country; the whole of both alliances
-   goes to war. Anyone can offer peace; anyone on the other side can accept.
+   goes to war. Anyone can offer peace; anyone on the other side can accept. Peace brings a 1-minute truce.
 8. **Alliances.** Propose to a country; it starts 30 s after everyone accepts. Leaving also takes 30 s.
    An alliance holds at most half the countries. Promises in chat are not orders.
 
@@ -148,3 +149,7 @@ Gates: `npm test` 161/161, `npm run check`, full `python tests/browser.py` (live
 ### Follow-up (same day): turn-around restored, long marches made explicit
 
 At the user's request turn-around is back as one concept (M3 above): recall an advancing army, or send a returning one back to its target ("march again", at most twice per army, counts toward the order limit); MCP `turn_around` (replacing `recall`) and CLI `turn-around` take a march group or army ID, `POST /plan {type:'turn_around'}` previews it. The user also asked that "movement between any connected provinces the player owns, or connected through an ally, should just work, via the GUI or MCP": the single march already routed through own and allied land; it now also re-routes a column around land lost mid-way (or turns it back with a reason), re-routes waiting sources at departure, returns an actionable no-route error, and the GUI lights every reachable destination and draws the actual route. MCP gained `decision_view` from master (27 tools).
+
+### Follow-up: attacks need a border of your own, multi-select
+
+At the user's request ("the rule was only meant to ensure the attacker has some adjacency"), a march to land that is not yours or an ally's is an **attack** and is legal only if the attacking country itself owns a province bordering the target (a land border or a sea link in the map `neighbors`); an ally's border is not enough, so no leapfrogging through an ally's land. The sources may be anywhere in the empire: each column still takes the quickest way through own and allied land and makes the last step into the target. This sharpens core decision 1 (where to fight): fronts are the land you actually border. The error says "You have no province bordering X. Take or hold a province next to it first." with the attacker's nearest provinces and any allied border. A waiting source fails at departure if the attacker no longer borders the target. Second request ("select 4 provinces at once and order an attack from all"): `march` takes `fromAllBordering: true` (every province of yours bordering the target with free troops, `amount`/`percent` per source; CLI `--all-bordering`, `--from a,b,c`), and the browser has an explicit multi-select (Shift/Ctrl-click, Shift-drag rectangle, "Select all bordering" on a target card, a Select mode and long-press on phones, a chip bar of sources). No new action type.

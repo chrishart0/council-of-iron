@@ -55,6 +55,13 @@ test('decision view adds feasible frontier and filters delivered outcomes', () =
   const england = view.own.find(p => p.id === 'england');
   assert.ok(view.frontier.some(p => p.id === 'low-countries' &&
     p.sources.some(source => source.id === 'england' && source.available === england.available)));
+  // A target bordering your own land is on the frontier even when the bordering province has no free troops
+  // (troops can come from anywhere in your empire); land that only an ally borders is not.
+  const lone = game.provinces.find(p => p.id === 'egypt'); lone.troops = 1;
+  const quiet = decisionView(observe(game, 'britain'), MAP);
+  const egyptOnly = MAP.provinces.find(p => p.id === 'egypt').neighbors.filter(id => !MAP.provinces.find(q => q.id === id).neighbors.some(n => n !== 'egypt' && game.provinces.find(v => v.id === n).owner === 'britain') && game.provinces.find(v => v.id === id).owner !== 'britain');
+  for (const id of egyptOnly) assert.ok(quiet.frontier.some(t => t.id === id && t.sources.length === 0 && t.earliestArrival === null), id);
+  assert.ok(quiet.frontier.every(t => MAP.provinces.find(p => p.id === t.id).neighbors.some(n => game.provinces.find(v => v.id === n).owner === 'britain')));
   const britain = seen.sides.find(s => s.members.includes('britain'));
   assert.equal(view.position.industryGap, Math.max(0, seen.economyThreshold - britain.economy));
   assert.deepEqual(view.possiblePartners.map(p => p.country), ['france']);

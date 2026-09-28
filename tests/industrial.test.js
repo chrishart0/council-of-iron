@@ -169,7 +169,7 @@ test('capture preserves completed factories but destroys an unfinished investmen
   assert.equal(ruhr.development,3);assert.equal(ruhr.owner,'usa');
 });
 test('delayed dispatch revalidates a lost source without creating troops',()=>{
-  const g=game();const r=action(g,'usa',{type:'march',to:'mexico',sources:[{from:'west-us',amount:5},{from:'east-us',amount:5}]});
+  const g=game();const r=action(g,'usa',{type:'march',to:'mexico',sources:[{from:'west-us',amount:5},{from:'central-us',amount:5}]});
   const waiting=r.orders.find(o=>o.executeAt>1);province(g,waiting.from).owner='britain';advance(g,waiting.executeAt);
   assert.equal(g.armies.length,1);assert.ok(g.events.some(e=>e.type==='order_failed'&&e.orderId===waiting.id));
 });

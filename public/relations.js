@@ -107,3 +107,23 @@ export function battleColors(attacker, defender, minimum = 20) {
   for (const k of [.35, .5, .65]) { const dark = shade(attacker, k); if (colorDistance(dark, defender) >= minimum) return { attacker: dark, defender, adjusted: true }; }
   return { attacker: shade(attacker, .65), defender, adjusted: true };
 }
+/** The tick a truce between the sides of `a` and `b` ends, or null when none holds at `view.tick`.
+ * A truce binds pairs of countries (both whole alliances when peace took effect); a declaration
+ * between two sides is blocked while any pair across them is under truce. Shared by the engine. */
+export function truceUntil(view, a, b) {
+  const players = view?.players || [], side = id => players.find(p => p.id === id)?.side;
+  const sa = side(a), sb = side(b);
+  if (!sa || !sb || sa === sb) return null;
+  const left = new Set(players.filter(p => p.side === sa).map(p => p.id)), right = new Set(players.filter(p => p.side === sb).map(p => p.id));
+  let until = null;
+  for (const t of view.truces || []) {
+    const [x, y] = t.countries;
+    if (t.until > view.tick && (left.has(x) && right.has(y) || left.has(y) && right.has(x))) until = Math.max(until ?? 0, t.until);
+  }
+  return until;
+}
+/** Countries `country` cannot declare war on right now: [{ with, until }] sorted by country. */
+export function trucesOf(view, country) {
+  return (view?.players || []).map(p => p.id).filter(id => id !== country).sort()
+    .map(id => ({ with: id, until: truceUntil(view, country, id) })).filter(t => t.until !== null);
+}

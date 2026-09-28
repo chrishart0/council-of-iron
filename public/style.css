@@ -215,6 +215,7 @@ body[data-screen=match] #home{display:none}
 .card-bloc{display:flex;align-items:center;gap:6px;overflow-wrap:anywhere}
 .alliance-dot{display:inline-block;width:11px;height:11px;flex:none;background:var(--band,#65706a);transform:rotate(45deg);border:1.5px solid #0d1113}
 .card-wars{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;color:#ffc2b3}
+.card-truce{color:var(--verdigris-hi);font-weight:600}
 .card-wars .link,.link{min-height:28px;color:var(--brass-hi);text-decoration:underline;text-underline-offset:3px;font-weight:600}
 .card-note{display:block;margin-top:4px;padding:8px 10px;background:#0f1416;border:1px dashed #c29a5255;color:var(--text-2);font-size:15px;line-height:1.4}
 .card-members{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
@@ -228,7 +229,9 @@ body[data-screen=match] #home{display:none}
 .card-dock:empty{display:none}
 .sources{display:flex;flex-wrap:wrap;gap:6px}
 .source-chip{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:2px 10px;background:var(--well);border:1px solid var(--brass-lo);clip-path:var(--cham-in);font-size:15px}
-.source-chip b{color:var(--brass-hi)}.source-chip i{font-style:normal;color:var(--muted)}
+.source-chip b{color:var(--brass-hi)}.source-chip i{font-style:normal;color:var(--muted)}.source-chip small{color:var(--muted);font-size:13px;margin-left:-3px}
+.source-chip.off{opacity:.62;border-style:dashed}.source-chip.off b{color:var(--muted)}
+.sources-off{color:#eeb09f}
 .sources-hint{flex-basis:100%;color:var(--muted);font-size:14px}
 .amount-control{display:flex;flex-direction:column;gap:4px}
 .amount-line{display:flex;align-items:baseline;justify-content:space-between;color:var(--muted);font-size:15px}
@@ -325,6 +328,9 @@ body[data-comms=thread] .powers .lb-summary{display:block}
 .lb-front-button:hover{background:#ffffff0e}
 .lb-front.involved{background:#7a262133;box-shadow:inset 3px 0 0 var(--oxblood-hi)}.lb-front.involved span{color:#fff0cf}
 .lb-front-empty{padding:4px 12px;color:var(--muted)}
+.lb-truce .lb-front-button{grid-template-columns:minmax(0,1fr) 20px minmax(0,1fr);row-gap:0;padding-bottom:3px}
+.lb-truce .lb-front-button b{color:var(--verdigris-hi)}.lb-truce.involved{background:#2e5a4c33;box-shadow:inset 3px 0 0 var(--verdigris-hi)}
+.lb-truce-until{grid-column:1/-1;font-size:13px;color:var(--muted);text-align:center}
 /* Menu and war log take the right column (desktop) or the sheet (phones); never both. */
 .menu,.journal{grid-column:3;grid-row:2/4;z-index:6;border-width:0 0 0 2px}
 .war-room:has(#hud-menu:not([hidden])) :is(.powers,.comms),.war-room:has(#war-journal:not([hidden])) :is(.powers,.comms,#hud-menu){display:none}
@@ -499,6 +505,7 @@ body[data-status=lobby] .war-room>:is(.topbar#hud,.strip,.left,.maparea,.powers,
   :root{--top:46px;--gap:6px}
   .war-room{grid-template-columns:auto minmax(0,1fr) 68px;grid-template-rows:calc(var(--top) + var(--safe-t)) minmax(0,1fr);grid-template-areas:"top top top" "sheet map dock"}
   .strip{display:none}
+  .camera{flex-direction:row} /* five controls do not fit a short screen's height */
   .topbar{padding-left:calc(4px + var(--safe-l));padding-right:calc(6px + var(--safe-r))}
   .nation{min-height:38px}.clock-plaque{height:40px}.stat{min-height:36px}.hud-actions .bezel-btn{width:36px;height:36px}
   .left{grid-area:sheet;width:min(360px,50vw)}

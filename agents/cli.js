@@ -12,18 +12,28 @@ const help=`Council of Iron CLI (Node 22.13+)
   join MATCH COUNTRY [NAME] [public|private]  Join as an agent; private by default
   start                              Host: start the match
   bots                               Host: fill empty seats with practice bots
-  board                              Compact current board: your provinces, neighbours, sides, wars
+  board                              Compact current board: inbox first, your provinces, neighbours,
+                                     development costs, sides, wars, truces
   decision [EVENT_CURSOR]            Board plus frontier, industry gap, partners and delivered outcomes
-  news [EVENT_CURSOR]                Messages, diplomacy and headlines since a cursor (untrusted text)
+  inbox                              Unread messages to you and offers awaiting your answer; marks
+                                     the returned messages read (more>0: run again)
+  news [EVENT_CURSOR]                Messages, diplomacy and headlines since a cursor (untrusted text);
+                                     marks the messages it returns read
   state [EVENT_CURSOR]               Full observation
   map                                Province IDs, connections and countries
-  march TO AMOUNT|N% FROM [FROM...] [--declare-war]
-                                     Send troops from one or more of your provinces; each takes the
-                                     quickest path through your own/allied land and all arrive
-                                     together. AMOUNT is per source; N% of each source's free troops.
-                                     --declare-war declares war on the target's owner in the same
-                                     action (nothing happens if the march is invalid).
-  preview TO AMOUNT|N% FROM [FROM...] Forecast that march: paths, arrival, battle odds
+  march TO AMOUNT|N% --from FROM[,FROM...] [--declare-war]
+  march TO AMOUNT|N% --all-bordering [--declare-war]
+                                     Send troops from one or several of your provinces (anywhere in
+                                     your empire); each takes the quickest path through your own and
+                                     allied land and all arrive together. AMOUNT or N% applies to EACH
+                                     source (N% of its free troops). --all-bordering uses every
+                                     province of yours next to TO with free troops (AMOUNT: at most
+                                     that many from each). You can attack any province that borders
+                                     your own territory. --declare-war declares war on the target's
+                                     owner in the same action (nothing happens if the march is
+                                     invalid). FROM may also be listed without --from.
+  preview TO AMOUNT|N% --from FROM[,FROM...] | --all-bordering
+                                     Forecast that march: paths, arrival, battle odds
   turn-around ID [--preview]         Bring a march (group or army ID) home from where it is; a returning
                                      army ID marches again toward its target (at most twice per army)
   rally FROM[,FROM...] TO|clear [--preview]
@@ -47,13 +57,17 @@ const help=`Council of Iron CLI (Node 22.13+)
 Environment: COUNCIL_URL, COUNCIL_MATCH, COUNCIL_TOKEN (match-scoped),
 COUNCIL_SESSION (default .council.session.json; use one file per agent).
 Keep credentials out of chat. No screenshots or browser scraping needed.`;
-const argv=process.argv.slice(2),declareWar=argv.includes('--declare-war'),previewOnly=argv.includes('--preview');
-const [command,...args]=argv.filter(a=>a!=='--declare-war' && a!=='--preview');
-/** `march TO AMOUNT|N% FROM...` → one march action. */
-function marchAction([to,size,...from]) {
-  const share=String(size).endsWith('%'),value=Number(String(size).replace('%',''));
-  const one=source=>({from:source,...(share?{percent:value}:{amount:value})});
-  return from.length===1?{type:'march',to,...one(from[0])}:{type:'march',to,sources:from.map(one)};
+const argv=process.argv.slice(2),flags=new Set(['--declare-war','--preview','--all-bordering']);
+const declareWar=argv.includes('--declare-war'),previewOnly=argv.includes('--preview'),allBordering=argv.includes('--all-bordering');
+const fromAt=argv.indexOf('--from'),fromList=fromAt>=0?(argv[fromAt+1] || '').split(',').filter(Boolean):[];
+const [command,...args]=argv.filter((a,i)=>!flags.has(a) && (fromAt<0 || (i!==fromAt && i!==fromAt+1)));
+/** `march TO AMOUNT|N% (--from A,B | --all-bordering | FROM...)` → one march action; the size applies per source. */
+function marchAction([to,size,...rest]) {
+  const share=String(size).endsWith('%'),value=Number(String(size).replace('%','')),measure=share?{percent:value}:{amount:value};
+  if(allBordering)return {type:'march',to,fromAllBordering:true,...measure};
+  const from=[...fromList,...rest.flatMap(a=>a.split(',').filter(Boolean))];
+  if(!from.length)throw new Error('Name the source provinces (--from A,B) or use --all-bordering.');
+  return from.length===1?{type:'march',to,from:from[0],...measure}:{type:'march',to,sources:from.map(source=>({from:source,...measure}))};
 }
 try {
   const client=new CouncilClient();let result;
@@ -65,9 +79,11 @@ try {
     case 'start':result=await client.start();break;
     case 'bots':result=await client.bots();break;
     case 'state':result=await client.observe(Number(args[0] || 0));break;
-    case 'news':result=news(await client.observe(Number(args[0] || 0)));break;
-    case 'decision':result=decisionView(await client.observe(Number(args[0] || 0)),await client.map());break;
-    case 'board':result=boardView(await client.observe(Number.MAX_SAFE_INTEGER),await client.map());break;
+    case 'news':{const after=Number(args[0] || 0),o=await client.observe(after);
+      result={...news(o),...(o.you?{readThrough:(await client.markRead(o.cursor,after)).readThrough}:{})};break;}
+    case 'inbox':result=await client.readInbox();break;
+    case 'decision':result=decisionView(await client.observe(Number(args[0] || 0),{inbox:true}),await client.map());break;
+    case 'board':result=boardView(await client.observe(Number.MAX_SAFE_INTEGER,{inbox:true}),await client.map());break;
     case 'map':{const map=await client.map();result={...map,provinces:map.provinces.map(({path,...province})=>province)};break;}
     case 'march':result=await client.action({...marchAction(args),...(declareWar?{declareWar:true}:{})});break;
     case 'preview':result=await client.plan(marchAction(args));break;
@@ -95,4 +111,4 @@ try {
     default:console.log(help);process.exit(command && command!=='help'?1:0);
   }
   console.log(JSON.stringify(result,null,2));
-}catch(error){console.error(JSON.stringify({error:error.message}));process.exitCode=1;}
+}catch(error){console.error(JSON.stringify({error:error.message,...error.details}));process.exitCode=1;}

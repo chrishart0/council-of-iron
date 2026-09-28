@@ -15,6 +15,7 @@ const icons = {
   home: '<path d="M4 11l8-7 8 7M6 10v10h12V10m-8 10v-5h4v5"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   minus: '<path d="M5 12h14"/>',
+  select: '<path d="M4 7V4h3m3 0h4m3 0h3v3m0 3v4m0 3v3h-3m-3 0h-4m-3 0H4v-3m0-3v-4m5 2 2.5 2.5L16 10"/>',
   dispatches: '<path d="M3 6h18v12H3zm0 0 9 7 9-7"/>',
   economy: '<path d="M4 20h16M6 20v-6h4v6m0 0V9h4v11m0 0v-8h4v8"/>',
   send: '<path d="M4 12 20 4l-5 16-3-6zm8 2 8-10"/>',

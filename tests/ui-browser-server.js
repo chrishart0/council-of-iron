@@ -28,7 +28,11 @@ const finished=replay().game;finished.id='ui-review';finished.name='The Atlantic
 const warRoom=(id,name)=>{const room=createGame({id,name,hostId:profiles.britain.id},map);
   for(const c of map.countries)join(room,map,{country:c.id,name:profiles[c.id].name,profileId:profiles[c.id].id,kind:'agent'});start(room);return room;};
 const w=warRoom('ui-war','The Rhine front');
-const taskRooms=Object.fromEntries(['ui-tasks-m','ui-tasks-d','ui-turn'].map(id=>[id,warRoom(id,'The Rhine front · walkthrough')]));
+const taskRooms=Object.fromEntries(['ui-tasks-m','ui-tasks-d','ui-turn','ui-multi-m','ui-multi-d'].map(id=>[id,warRoom(id,'The Rhine front · walkthrough')]));
+// Multi-select walkthroughs: Britain also holds the Caribbean and the Great Plains (central-us), so four British provinces
+// (Caribbean, Great Plains, Eastern Canada, Southern England) border the USA's Atlantic States (east-us); Britain is at war with the USA.
+for(const id of ['ui-multi-m','ui-multi-d'])for(const [p,troops] of [['caribbean',14],['central-us',16]])
+  Object.assign(taskRooms[id].provinces.find(v=>v.id===p),{owner:'britain',troops});
 // Britain (the browser seat) also declares war on the USA at tick 0: no armies move on that front, so the
 // recorded battles are unchanged, but the viewer has a real war for the v0.7 relation UI.
 const warOrders={0:[['britain',{type:'declare_war',country:'usa'}],['russia',{type:'declare_war',country:'ottoman'}],['russia',{type:'march',from:'ukraine',to:'caucasus',amount:10}],['germany',{type:'declare_war',country:'france'}]],
@@ -51,6 +55,13 @@ const stepWar=to=>stepRoom(w,to);
 for(const room of [w,...Object.values(taskRooms)]){stepRoom(room,55);app.games.set(room.id,room);app.store.save(room);}
 // The phone map suite needs the column that has just left Great Britain (it departs at tick 57; internal links are fast, so it is still on the counter only then).
 const mobileRoom=warRoom('ui-mobile','The Rhine front · phone');stepRoom(mobileRoom,57);app.games.set(mobileRoom.id,mobileRoom);app.store.save(mobileRoom);
+// 'ui-truce': Britain and France made peace at tick 0, so a truce holds (until tick 60); for the truce and develop-label checks.
+const truceRoom=warRoom('ui-truce','The Channel truce');
+act(truceRoom,map,'britain',{type:'declare_war',country:'france'},'ui-truce-war');
+const truceOffer=act(truceRoom,map,'france',{type:'offer_peace',country:'britain'},'ui-truce-offer');
+act(truceRoom,map,'britain',{type:'accept_peace',offerId:truceOffer.offerId},'ui-truce-peace');
+Object.assign(truceRoom.provinces.find(p=>p.id==='scotland'),{troops:9,development:1}); // short of the 24 a level II costs
+while(truceRoom.tick<10)tick(truceRoom);app.games.set(truceRoom.id,truceRoom);app.store.save(truceRoom);
 app.server.listen(0,'127.0.0.1',()=>console.log(JSON.stringify({url:`http://127.0.0.1:${app.server.address().port}`,identity:profiles.britain})));
 for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>app.close().then(()=>process.exit(0)));
 

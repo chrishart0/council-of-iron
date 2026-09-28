@@ -6,12 +6,12 @@ Interactions counted: taps/clicks and drags on game controls, and Send. Typing a
 moving the camera (pan) are reported separately and are not counted. Screenshots of every step
 are written to <artifacts>/tasks/<viewport>/ for manual review.
 """
-import json
+import json, re
 from playwright.sync_api import expect
 from browser_helpers import lane, close_comms
 
 BOUNDS = {'attack': 3, 'declare': 3, 'propose': 3, 'respond': 2, 'reply': 2, 'recall': 2, 'turn': 2, 'develop': 3, 'rally': 3, 'converse': 7,
-          'long': 3, 'through-ally': 3}
+          'long': 3, 'through-ally': 3, 'bordering-desktop': 3, 'bordering-phone': 5, 'shift': 4, 'lasso': 3, 'select-mode': 6}
 
 class Walk:
     def __init__(self, page, server, room, touch, out, report):
@@ -321,6 +321,112 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
         allied = [v for v in path[:-1] if owners[v] not in (None, 'britain')]
         assert (allied and all(owners[v] == 'germany' for v in allied)) if ally else not allied, (path, owners)
         w.end()
+    assert not errors, errors
+    context.close()
+    return w.results
+
+
+def multiselect(browser, url, identity, server, report, out, room, width, height, touch):
+    """Attack one province from several of yours at once: "Select all bordering" (desktop ≤3, phone ≤5 interactions),
+    Shift-click and a Shift-drag rectangle (desktop), the Select mode and a long-press (phone). Room: Britain holds
+    four provinces bordering the USA's Atlantic States (east-us) and is at war with the USA."""
+    folder = out / 'tasks' / f'{width}x{height}'; folder.mkdir(parents=True, exist_ok=True)
+    context = browser.new_context(viewport={'width': width, 'height': height}, is_mobile=touch, has_touch=touch, device_scale_factor=2 if touch else 1)
+    context.add_init_script('localStorage.setItem("coi.identity",' + json.dumps(json.dumps(identity)) + ');localStorage.setItem("coi.coach","done");')
+    page = context.new_page(); errors = []; page.on('pageerror', lambda e: errors.append(str(e)))
+    page.goto(f'{url}/?match={room}'); expect(page.locator('#commander-title')).to_have_text('Britain' if width < 1024 else 'British Empire')
+    w = Walk(page, server, room, touch, folder, report)
+    primary, chips, card = page.locator('#primary'), page.locator('#sources .source-chip'), page.locator('#card')
+    four = ['caribbean', 'central-us', 'east-canada', 'england']
+    def closer():
+        """Camera only (not counted): zoom in until the four provinces' counters show, keeping east-us in view."""
+        page.keyboard.press('Escape')
+        for _ in range(8):
+            try: w.bring('east-us', escape=False)
+            except AssertionError: pass
+            else:
+                if all(w.counter(p).is_visible() for p in ['east-us', 'caribbean', 'central-us']): return
+            page.keyboard.press('e'); page.wait_for_timeout(150); w.camera += 1
+        raise AssertionError('counters not visible')
+    close_comms(page); closer()
+    task = 'bordering-phone' if touch else 'bordering-desktop'
+    w.begin(task)
+    w.tap(w.counter('east-us'), 'target')
+    expect(card).to_have_attribute('data-relation', 'enemy')
+    select_all = page.locator('#select-bordering'); expect(select_all).to_have_text('Select all bordering (4)')
+    w.tap(select_all, 'all-bordering')
+    expect(primary).to_contain_text('Attack Atlantic States from 4 provinces · ')
+    expect(chips).to_have_count(4)
+    expect(page.locator('#order-preview')).to_contain_text('from 4 provinces'); expect(page.locator('#order-preview')).to_contain_text('all arrive together at')
+    expect(page.locator('#map .draft-arrow')).to_have_count(4)
+    total = int(primary.inner_text().split('·')[-1])
+    w.snap('order-card')
+    w.tap(primary, 'sent')
+    s = w.state(); orders = [o for o in s['orders'] if o['type'] == 'march' and o['to'] == 'east-us']
+    assert sorted(o['from'] for o in orders) == sorted(four), orders
+    assert len({o['arrivesAt'] for o in orders}) == 1 and len({o['groupId'] for o in orders}) == 1, orders
+    assert sum(o['amount'] for o in orders) == total, (orders, total)
+    w.end(); w.results[task]['sources'] = len(orders)
+
+    if not touch:
+        # Shift-click two provinces of yours, then the target: one order from both.
+        closer()
+        w.begin('shift')
+        page.keyboard.down('Shift'); w.tap(w.counter('caribbean')); w.tap(w.counter('central-us')); page.keyboard.up('Shift')
+        expect(page.locator('#card-title')).to_have_text('2 provinces selected'); expect(chips).to_have_count(2)
+        expect(page.locator('#map .province.selected')).to_have_count(2)
+        w.snap('shift-selected')
+        w.tap(w.counter('east-us'), 'shift-target')
+        expect(primary).to_contain_text('Attack Atlantic States from 2 provinces')
+        w.tap(primary, 'shift-sent')
+        s = w.state(); group = [o for o in s['orders'] if o['type'] == 'march' and o['to'] == 'east-us' and o['groupId'] != orders[0]['groupId']]
+        assert sorted(o['from'] for o in group) == ['caribbean', 'central-us'], group
+        w.end()
+        # Shift-drag a rectangle around two provinces: both are selected (only your own), Escape clears.
+        closer()
+        w.begin('lasso')
+        boxes = [w.counter(p).bounding_box() for p in ['caribbean', 'central-us']]
+        x0, y0 = min(b['x'] for b in boxes) - 12, min(b['y'] for b in boxes) - 12
+        x1, y1 = max(b['x'] + b['width'] for b in boxes) + 12, max(b['y'] + b['height'] for b in boxes) + 12
+        page.keyboard.down('Shift'); page.mouse.move(x0, y0); page.mouse.down()
+        for i in range(1, 11): page.mouse.move(x0 + (x1 - x0) * i / 10, y0 + (y1 - y0) * i / 10)
+        expect(page.locator('#map .lasso')).to_be_attached(); w.snap('lasso-drawing')
+        page.mouse.up(); page.keyboard.up('Shift'); w.count += 1
+        expect(page.locator('#map .lasso')).to_have_count(0)
+        picked = page.evaluate("[...document.querySelectorAll('#sources .source-chip span')].map(e=>e.textContent)")
+        assert {'Caribbean', 'Great Plains'} <= set(picked), picked
+        assert set(picked) <= {'Caribbean', 'Great Plains', 'Eastern Canada', 'Southern England'}, picked  # only your own
+        # Destinations are lit for the selection; a province you cannot attack is dimmed and says why on hover (not counted).
+        expect(page.locator('#map .province[data-province="east-us"]')).to_have_class(re.compile(r'\breach-attack\b'))
+        expect(page.locator('#map .province[data-province="hawaii"]')).not_to_have_class(re.compile(r'\bneighbor\b'))
+        page.mouse.move(*w.at(w.counter('hawaii'))); expect(page.locator('.atlas-tooltip')).to_contain_text('You cannot attack it: none of your provinces borders it')
+        w.snap('lasso-selected')
+        w.tap(w.counter('east-us'), 'lasso-target')
+        expect(primary).to_contain_text('Attack Atlantic States from')
+        w.end()
+        page.keyboard.press('Escape'); expect(card).to_be_hidden(); expect(page.locator('#map .province.selected')).to_have_count(0)
+    else:
+        # Select mode: taps add your provinces; a long-press adds one too; Escape leaves the mode and clears.
+        closer()
+        w.begin('select-mode')
+        toggle = page.locator('#select-mode'); w.tap(toggle, 'mode-on'); expect(toggle).to_have_attribute('aria-pressed', 'true')
+        w.tap(w.counter('caribbean')); w.bring('central-us', escape=False); w.tap(w.counter('central-us'), 'two-selected')
+        expect(page.locator('#card-title')).to_have_text('2 provinces selected'); expect(chips).to_have_count(2)
+        w.bring('east-us', escape=False); w.tap(w.counter('east-us'), 'mode-target')
+        expect(primary).to_contain_text('Attack Atlantic States from 2 provinces')
+        w.end()
+        page.keyboard.press('Escape'); expect(card).to_be_hidden(); expect(toggle).to_have_attribute('aria-pressed', 'false')
+        x, y = w.at(w.counter('caribbean'))
+        cdp = page.context.new_cdp_session(page)
+        cdp.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': x, 'y': y, 'id': 1}]})
+        page.wait_for_timeout(700)
+        cdp.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
+        x, y = w.at(w.counter('central-us'))
+        cdp.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': x, 'y': y, 'id': 1}]})
+        page.wait_for_timeout(700)
+        cdp.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
+        expect(page.locator('#card-title')).to_have_text('2 provinces selected'); w.snap('long-press')
+        page.keyboard.press('Escape'); expect(card).to_be_hidden()
     assert not errors, errors
     context.close()
     return w.results

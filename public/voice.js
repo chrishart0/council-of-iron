@@ -6,7 +6,8 @@
  * so the normal chat action keeps its validation, cooldown and length limit.
  *
  * Paths, best first:
- *  1. local GPU: record with MediaRecorder, POST to /api/games/{match}/stt (seated players only).
+ *  1. server: record with MediaRecorder, POST to /api/games/{match}/stt (seated players only); the server
+ *     transcribes with OpenAI's API (labelled) or the optional local sidecar.
  *  2. browser speech (Web Speech API), labelled because browsers may send audio to a cloud service.
  * Microphones need a secure context (HTTPS or localhost); otherwise the button explains that.
  *
@@ -15,7 +16,7 @@
 const MAX_MS = 30000, SILENCE_MS = 1500, HOLD_MS = 400, SPEECH_LEVEL = 0.035;
 const MIME_TYPES = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm'];
 const Recognition = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
-const LABEL = { server: 'Voice input (local GPU speech-to-text)', browser: 'Voice input: browser speech (may use a cloud service)' };
+const LABEL = { server: 'Voice input (local speech-to-text)', openai: 'Voice input (transcribed by OpenAI)', browser: 'Voice input: browser speech (may use a cloud service)' };
 
 let mode = null; // 'server' | 'browser' | 'insecure' | null (none)
 let active = null; // the one composer currently recording/transcribing
@@ -37,7 +38,7 @@ async function detectMode() {
   if (!window.isSecureContext) return 'insecure';
   const canRecord = Boolean(navigator.mediaDevices?.getUserMedia && pickMime() !== null);
   if (canRecord) {
-    try { if ((await (await fetch('/api/stt', { cache: 'no-store' })).json()).available) return 'server'; } catch { /* fall through */ }
+    try { const s = await (await fetch('/api/stt', { cache: 'no-store' })).json(); if (s.available) return s.provider === 'openai' ? 'openai' : 'server'; } catch { /* fall through */ }
   }
   return Recognition ? 'browser' : null;
 }

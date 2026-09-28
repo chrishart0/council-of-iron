@@ -53,6 +53,8 @@ test('an army turned back automatically can march again once the war exists; int
   assert.ok(g.events.some(e => e.type === 'army_recalled' && e.armyId === army.id && e.reason === 'peace'));
   assert.throws(() => turnAroundPlan(g, 'usa', army.id), /Declare war/);
   assert.throws(() => send(g, 'usa', { type: 'turn_around', armyId: army.id }), /Declare war/);
+  assert.throws(() => send(g, 'usa', { type: 'declare_war', country: 'britain' }), /Truce with britain/);
+  g.truces = []; // Lift the truce (tests/war.test.js covers it) so the army is still on the road.
   send(g, 'usa', { type: 'declare_war', country: 'britain' });
   assert.equal(turnAroundPlan(g, 'usa', army.id).to, 'mexico');
   // A column crossing its own land resumes toward the far target along friendly land.
@@ -97,6 +99,7 @@ test('turn-around is checked again at execution, refused for engaged or foreign 
   assert.equal(b.returning, true);
   assert.ok(g.events.some(e => e.type === 'order_failed' && e.orderId === order.orderId && /Declare war/.test(e.reason)));
   // Engaged armies cannot turn around; they are recalled from the battle instead.
+  g.truces = []; // Lift the truce (tests/war.test.js covers it).
   send(g, 'usa', { type: 'declare_war', country: 'britain' });
   const fight = send(g, 'usa', { type: 'march', from: 'central-us', to: 'mexico', amount: 3 });
   advance(g, fight.arrivesAt - g.tick);
@@ -124,4 +127,16 @@ test('turn-around counts toward the anti-spam limit, survives save/load and is d
   for (let i = 0; i < 8; i++) send(g, 'usa', { type: 'march', from: 'central-us', to: 'east-us', amount: 1 });
   assert.throws(() => send(g, 'usa', { type: 'turn_around', armyId: id }), e => e.status === 429);
   assert.equal(observe(g, 'usa').rules.maxTurnArounds, 2);
+});
+
+test('march again into land you no longer border is refused', () => {
+  const g = game();
+  const sent = send(g, 'usa', { type: 'march', from: 'west-us', to: 'mexico', amount: 6 });
+  advance(g, 8);
+  const army = g.armies.find(a => a.groupId === sent.groupId);
+  send(g, 'usa', { type: 'recall', id: army.id }); tick(g);
+  assert.equal(army.returning, true);
+  // Every USA province bordering Mexico changes hands (fixture): no border of your own, no attack.
+  for (const id of ['west-us', 'central-us']) Object.assign(at(g, id), { owner: 'germany', troops: 30 });
+  assert.throws(() => turnAroundPlan(g, 'usa', army.id), /You have no province bordering mexico\. Take or hold a province next to it first\./);
 });
