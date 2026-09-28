@@ -19,7 +19,7 @@ The v5 map for comparison is `git show 683661d:public/imperial-map.json`.
 - Recruitment is 1/2/3 troops per 20 s by industry level. Development costs 24 troops and 2 min for I→II, 48 troops and 3 min for II→III.
 - A province at industry II–III adds +1 to the defender's best die.
 - Win condition: hold 60% of the owned industry for 90 s, or have the most industry at 30:00.
-- **Attacks** (the corrected rule on the sibling branch): you may attack any province that borders your territory, by land or by a declared sea link. Troops can come from anywhere in your empire, travelling through your own and allied land.
+- **Attacks** (merged from ui-v0.9-gameui): you may attack any province that borders your territory, by land or by a declared sea link. Troops can come from anywhere in your empire, travelling through your own and allied land.
   - So a power's **frontier** is the set of provinces bordering its land. Long internal redeployments stay fast.
   - Chokepoints and sea links decide where fronts form, because every attack needs a border to launch from.
 
@@ -169,6 +169,32 @@ Land links are exactly the pairs that share a border arc. Every other link is in
   - Hawaii–Pacific States, Hawaii–Japan, Hawaii–Philippines
 
 v5's direct Pacific States–Japan and Pacific States–Philippines lanes are gone. **Hawaii is now the only mid-Pacific crossing** (the Bering Strait remains in the north), a real stepping stone that the USA and Japan both want. At the end of the 256 diplomacy matches the USA held it in 153, Japan in 55 and Qing in 39. The transatlantic Atlantic States–Great Britain lane is gone too. The Atlantic crossings are the northern Canada–Ireland lane and the southern Brazil–West Africa narrows, so Britain and the USA meet in Canada rather than across open sea.
+
+### Impassable terrain (user request: "use mountains/deserts … to bottleneck gameplay")
+
+A barrier is a drawn border that is **not** a link: no new rule, the two provinces are simply not neighbours, and the map draws the terrain that explains why. They are declared in `BARRIERS` in the builder and published as `barriers[]` (`a`, `b`, `terrain`, `name`, `around`). The geometry test accepts a shared border only as a land link or a declared barrier. It also checks that every province stays reachable and that every power still borders neutral land.
+
+| Barrier | Border | Chokepoint it creates |
+|---|---|---|
+| **Himalayas** (mountains) | India–Tibet | India is reached through Afghanistan (the north-west) or Indochina (Burma), or by sea. Qing loses its direct front with British India. |
+| **Urals** (mountains) | Moscow–Siberia | European and Asian Russia meet only through Central Asia, so Siberia is a separate front, reinforced the long way round. |
+| **Alps** (mountains) | Italy–Southern France | Italy is entered through the Danube lands (the eastern passes) or by sea. France's southern flank is shut; the Rhine and the Low Countries stay the Franco-German front. |
+| **Sahara** (desert) | Maghreb–Sahara, Maghreb–West Africa | North Africa is cut off from sub-Saharan Africa. The Maghreb is reached by sea (Gibraltar, Marseille, Sicily). Africa is entered up the Nile (Egypt–Sahara, Egypt–Congo), through East Africa or by sea. |
+
+Tried and dropped:
+- **Swiss Alps** (Southern France–Danube) and the **Libyan Desert** (Egypt–Sahara). With all seven barriers, France's Maghreb, Sahara and Alpine flank were sealed together. France's winning-side appearances rose from 130 to 165 of 256 (diplomacy), a safe backyard no one could contest.
+- **Andes** (Andes–Brazil), a Pacific coast strip. It changed nothing beyond noise (USA 151 → 143 of 256).
+- **Pyrenees**. Iberia would have been reachable only by sea.
+- **Gobi**. It would leave Qing a single neutral neighbour.
+
+In the UI:
+- Mountains are drawn as a brown ridge band with small upright peaks. The peaks are regenerated per zoom so they keep a constant screen size.
+- Deserts are a stippled sand band.
+- Terrain sits above the alliance glow and below counters, and is quieter at near zoom. The border line is drawn as terrain, not as a province or country border. War fronts never run along it, but alliance outlines still close over it.
+- Hovering or tapping it explains it, for example "The Himalayas: impassable. Mountains between India and Tibet. India is reached through Afghanistan or Indochina, or by sea."
+- Dragging a march onto a province across it shows "Himalayas · impassable" with the same explanation.
+- The map key lists the barriers by terrain.
+- **Agents** read `barriers` in `map` and `board.own[].impassable`. A refused attack or march names the barrier and the way around.
 
 ### Starting setups
 

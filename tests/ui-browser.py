@@ -130,8 +130,10 @@ def click_at(page,locator):
 def select(page,source,target=None,size=None):
     """v0.8 order card by map taps (tap-tap): Home, your province, then its neighbour."""
     page.keyboard.press('Escape');page.locator('#home-view').click();page.wait_for_timeout(150)
-    click_at(page,page.locator(f'#marker-{source} .counter-body'))
-    if target:click_at(page,page.locator(f'#marker-{target} .counter-body'))
+    # A province in battle shows its clash marker instead of its counter; tapping that selects it the same way.
+    spot=lambda id:page.locator(f'#marker-{id} .counter-body') if page.locator(f'#marker-{id} .counter-body').is_visible() else page.locator(f'#map .battle-counter[data-province="{id}"]')
+    click_at(page,spot(source))
+    if target:click_at(page,spot(target))
     expect(page.locator('#card')).to_have_attribute('data-kind','province')
     if size and page.locator('#card').get_attribute('data-size')!=size:page.locator('#card-size').click()
     if size:expect(page.locator('#card')).to_have_attribute('data-size',size)
