@@ -29,14 +29,21 @@ jobs:
           Path('/tmp/v06-current.patch').write_bytes(patch)
           PY
           git checkout --detach 054b56536a78448d2688d89425d66690b86f447c
-          # Reuse only these bot files from the previously verified candidate.
-          # The patch adapts them to current rules. No old engine, server or UI is restored.
-          git restore --source=f1aba784a20a746808fccbefd6b8527b2df97c9d --worktree -- \
+          # This is the actual remote commit from the native-tested candidate.
+          # Restore only bot files, never the old engine, server or UI.
+          git restore --source=bd49beffbc93ee5c81ce68b28c86375f348bcbc6 --worktree -- \
             agents/bot.js agents/bots/controller.js agents/bots/diplomacy.js \
             agents/bots/military.js agents/bots/position.js public/bot-profiles.js \
             scripts/bot-tournament.js scripts/check.js tests/bot-ai.test.js \
             tests/bot-server.test.js tests/bots-browser-server.js tests/bots-browser.py \
             docs/BOT-AI.md package.json package-lock.json
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          hashes={'agents/bot.js':'5a24c259bec04298b25cf1f034c22394b9080a980279d4ca4cd0c3fcbf2ede59','agents/bots/controller.js':'30d227d2c7c93e2638da40318a94c5dfe9a90a04e4bda7769ef1dfd959fa0574','agents/bots/diplomacy.js':'9813bc5b4d769f24c3bdf440da6a52d9f3d09691bcbb302db3a68ddf6692966b','agents/bots/military.js':'8d9b8f7b0eb32ecf7626012cd9870e1f3a5da237409ed1fd4727a9bd4497d13b','agents/bots/position.js':'84d06831d2a83ccd8160de7752148f2c0a5ff96a960bf383eff35591ad6375ea','public/bot-profiles.js':'6c3ab69d483eaa2e620e4f13bb6a49542e0b22065a112aeaa3dfa7ea904065a5','scripts/bot-tournament.js':'8431ebf4f62e0f4085ff12fafaf5d94cae9003d879266ba61a01c9a51b2b9b23','scripts/check.js':'0e991a11674cd989985602a7b1a506f3d8113c4d7418bdcc854f801341dec62e','tests/bot-ai.test.js':'756f35fb17cd66a27d3150b6c904941e0b07dc2180eebe7e0f75b8bc6616bad2','tests/bot-server.test.js':'d29090b6097f2a288dfc5ad5e164d3fc454b56e179c2ac6ee98f8266d903204c','tests/bots-browser-server.js':'6f085eb5fce236659c705ccf803d07456c8f9790e6e3bd73d96730b685f54562','tests/bots-browser.py':'75b04ed94bee45e5225c80dda13bce45c19565ad27359e62a97235fcb169e8fb','docs/BOT-AI.md':'666486878cfb5545f394beb46d5c7a4a3b9a3ea520381f721641e53a1f7c4904','package.json':'be8428f91dea646453ff18c24c0cac18f23054f3247e05715938104203577aa8','package-lock.json':'3390f9e012c421f0d96928b93b503a60d5e664ae68d8735e912572cc3ab503d9'}
+          for path,digest in hashes.items():
+              assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest,path
+          PY
           git apply --unidiff-zero --check /tmp/v06-current.patch
           git apply --unidiff-zero /tmp/v06-current.patch
           git diff --check
