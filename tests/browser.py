@@ -107,7 +107,7 @@ def main():
                 page.locator('#display-name').fill('Browser Commander')
                 page.locator('#room-name').fill('The First Council')
                 page.locator('[data-preset="standard"]').click()
-                page.locator('#create-form button').click()
+                page.locator('#create-form button[type=submit]').click()
                 expect(page.locator('#lobby')).to_be_visible()
                 room=http('/api/games')['games'][0]['id']
                 page.locator('[data-country-seat="usa"]').click()
@@ -354,7 +354,7 @@ def main():
                 report['assertions'].append('Persistent Prestige standings included the browser player after returning to the rooms.')
                 # Local UI interactions: distinct source selection, keyboard tabs and a real next room.
                 page.locator('#room-name').fill('Second Council')
-                page.locator('#create-form button').click()
+                page.locator('#create-form button[type=submit]').click()
                 expect(page.locator('#lobby')).to_be_visible()
                 page.locator('[data-country-seat="usa"]').click()
                 page.locator('#join-form button').click()

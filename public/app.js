@@ -131,6 +131,7 @@ function renderComms(live){
     comms.notify({key:`n-${r.key}`,standard:state.you,sticky:true,title:`Your ${item.amount} troops turned back${item.province?` from ${place(item.province).name}`:''}`,detail:`${why[0].toUpperCase()}${why.slice(1)}.`,buttons});
   }
   for(const [army,key] of turnedBack)if(!state.armies.some(a=>a.id===army && a.returning)){comms.withdraw(key);turnedBack.delete(army);}
+  battleNotices(); // after the inbox update, so a battle result is not replaced by the headline of the same battle
 }
 /** Completed battles of this seat (Secured, Lost, Line held): a PERSONAL notice, never replayed on reconnect. */
 function battleNotices(){
@@ -745,7 +746,7 @@ function render(){
   renderLobby();
   $('phase').textContent=state.status==='lobby'?'Assembling':state.status==='finished'?'Concluded':seated()?'In session':'Watching';
   $('clock').textContent=time(state.tick);$('clock-total').textContent=`/ ${time(state.rules.duration ?? 1800)}`;$('pace-badge').textContent=state.speed===1?'Standard pace':`Quick · ${state.speed}×`;
-  placeSound();battleNotices();
+  placeSound();
   paintMap();renderHud();renderResult();renderLeaderboard();
   $('events').innerHTML=history.map(e=>({e,description:describe(e)})).filter(x=>x.description).slice(-30).reverse().map(({e,description})=>`<div class="event"><time>${time(e.tick)}</time>${esc(description)}</div>`).join('');
 }

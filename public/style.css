@@ -49,7 +49,7 @@ a{color:var(--brass-hi)}
 .plaque h2{margin:0 auto 0 0;display:flex;align-items:center;gap:7px;min-width:0;font:700 19px/1 var(--title);letter-spacing:.01em;text-shadow:0 1px 0 #f7e2b080;white-space:nowrap}
 .plaque h2 button{font:inherit;color:inherit;text-shadow:inherit}
 .plaque .ui-icon{width:18px;height:18px}
-.plaque-note{font:600 14px var(--ui);color:#3a2d14;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.plaque-note{font:600 14px var(--ui);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 /* Buttons: chamfered brass (primary), oxblood enamel (danger), iron with a brass rim (secondary). One loud primary per panel. */
 .btn,button.primary,button.danger{position:relative;isolation:isolate;display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:44px;padding:6px 16px;border:0;cursor:pointer;clip-path:var(--cham);background:var(--rim);font:600 17px/1.1 var(--ui);letter-spacing:.01em;color:var(--ivory);text-align:center;transition:filter .12s,transform .06s}
 .btn::before,button.primary::before,button.danger::before{content:'';position:absolute;inset:2px;z-index:-1;clip-path:var(--cham-in);background:linear-gradient(180deg,#3a4346,#262d2f 60%,#1f2527);box-shadow:inset 0 1px 0 #ffffff14}
@@ -188,7 +188,7 @@ body[data-screen=match] #home{display:none}
 .left{grid-area:left;grid-row:2/4;display:flex;flex-direction:column;justify-content:flex-end;padding:var(--gap) 0 var(--gap) var(--gap);pointer-events:none}
 .left>*{pointer-events:auto}
 .card{max-height:100%;animation:slide-in .22s ease-out;outline:none}
-@keyframes slide-in{from{transform:translateX(-14px);opacity:.3}}
+@keyframes slide-in{from{transform:translateY(12px);opacity:.3}}
 .card-plaque h2{font-size:18px}
 .plaque-icon{display:inline-grid}
 .card-head{flex:none;display:flex;align-items:center;gap:12px;padding:12px 16px 6px}
@@ -199,7 +199,7 @@ body[data-screen=match] #home{display:none}
 .card-owner{display:inline-flex;align-items:center;gap:5px;min-height:32px;padding:2px 10px 2px 4px;background:#12171a;border:1px solid var(--brass-lo);clip-path:var(--cham-in);font-size:15px;color:var(--ivory);transition:filter .12s}
 .card-owner:hover{filter:brightness(1.25)}.card-owner .insignia{width:18px;height:22px}.card-owner-go{color:var(--brass-hi);font-weight:700}
 .card-meta{color:var(--text-2)}
-.card-status{flex:none;padding:4px 16px 8px}
+.card-status{flex:0 1 auto;min-height:44px;overflow:auto;padding:4px 16px 8px;scrollbar-width:thin}
 .card-status:empty{display:none}
 .card-relation{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:8px 12px;background:var(--well);border-left:4px solid var(--muted);font-size:15px;color:var(--text-2);line-height:1.35}
 .card-relation.big{flex-direction:column;align-items:stretch}
@@ -406,6 +406,8 @@ body[data-status=lobby] .war-room>:is(.topbar#hud,.strip,.left,.maparea,.powers,
 .rack>button:hover:not(:disabled){transform:translateY(-4px)}
 .rack>button:disabled{filter:grayscale(.7) brightness(.75);cursor:default}
 .result{position:absolute;inset:0;z-index:20}
+/* A finished match shows only the after-action report / replay: the live HUD regions step away underneath. */
+.war-room:has(#result:not([hidden]))>:is(#hud,.strip,.left,.maparea,.powers,.comms,.dock,#hud-menu,#war-journal,.coach){display:none}
 
 /* ── Mid widths ── */
 @media (max-width:1535px){:root{--left:356px;--right:336px}.clock-plaque{min-width:210px}.stat{padding:3px 9px 3px 7px}}
@@ -462,6 +464,7 @@ body[data-status=lobby] .war-room>:is(.topbar#hud,.strip,.left,.maparea,.powers,
   .powers:not(.sheet){display:none}
   .dock{grid-area:bottom;z-index:4;display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:6px 6px calc(6px + var(--safe-b));background:var(--plate);border-top:2px solid;border-image:var(--rim) 1;box-shadow:0 -4px 14px #0009}
   .war-room:has(#card:not([hidden])) .dock{display:none}
+  .war-room:has(#card[data-size=full]:not([hidden])) .camera{display:none} /* the expanded card owns the screen; the camera returns with the peek */
   .dock-btn{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;min-height:54px;background:linear-gradient(180deg,#2d3537,#1c2123);clip-path:var(--cham);color:var(--brass-hi);font:600 15px var(--ui);box-shadow:inset 0 0 0 1px #c29a5244;transition:filter .12s,transform .06s}
   .dock-btn b{color:var(--ivory);font-weight:600}.dock-btn:active{transform:translateY(1px)}
   .dock-btn[aria-pressed=true]{background:var(--face);color:var(--ink)}.dock-btn[aria-pressed=true] b{color:var(--ink)}
@@ -502,7 +505,11 @@ body[data-status=lobby] .war-room>:is(.topbar#hud,.strip,.left,.maparea,.powers,
   .dock{grid-area:dock;display:flex;flex-direction:column;justify-content:center;gap:6px;padding:6px calc(6px + var(--safe-r)) 6px 6px;border-top:0;border-left:2px solid;border-image:var(--rim) 1}
   .war-room:has(#card:not([hidden])) .dock{display:flex}
   .dock-btn{min-height:50px;font-size:13px}
-  .card-dock{padding-bottom:10px}
+  .card-dock{padding:6px 10px 8px;gap:4px}
+  .card-plaque{min-height:34px}.card-head{padding:4px 12px 2px;gap:8px}.card-flag .insignia{width:28px;height:34px}.card-heading h3{font-size:19px}.card-sub{font-size:14px;margin-top:1px}
+  .card-status{padding:0 12px 4px}.card-relation{padding:4px 8px;font-size:14px}.card-relation .rel{font-size:17px}
+  input[type=range].slider{height:26px}.presets .chip{min-height:32px}.amount-line output{font-size:17px}.order-preview{font-size:14px}
+  .card-actions>button.primary{min-height:42px;font-size:17px}.card-actions>button:not(.primary){min-height:36px}
   .lobby{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:calc(var(--top) + var(--safe-t)) minmax(0,1fr);grid-template-areas:"top top" "dossier rack"}
   .rack{flex-wrap:wrap;align-content:center;border-top:0;border-left:2px solid;border-image:var(--rim) 1}
   .dossier{overflow:auto}
