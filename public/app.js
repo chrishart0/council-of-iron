@@ -724,7 +724,7 @@ function renderLobby(){
   if(chosen && state.players.some(p=>p.id===chosen))$('country-choice').value='';
   $('host-controls').hidden=!state.isHost;$('fill-bots').disabled=state.players.length===8;$('start-match').disabled=state.players.length<2 || !state.you;
   const selected=country(state.you || $('country-choice').value);
-  const head=selected?`${insignia(selected.id)}<div><h3>${esc(selected.name)}</h3><p>${state.you?'Your country':`${selected.start.length} holdings · ${selected.homeland?.length || 0} homeland, ${selected.colonies?.length || 0} colonies`}</p></div>`:`${insignia(null)}<div><h3>Pick a standard</h3><p>Choose an open country from the rack.</p></div>`;
+  const head=selected?`${insignia(selected.id)}<div><h3>${esc(selected.name)}</h3><p>${state.you?'Your country':'Open seat'}</p></div>`:`${insignia(null)}<div><h3>Pick a standard</h3><p>Choose an open country from the rack.</p></div>`;
   if($('dossier-head').dataset.key!==head){$('dossier-head').dataset.key=head;setHTML($('dossier-head'),head);} // country names are authored map data
   $('starting-holdings').textContent=selected?startingSummary(selected):'Industrial homelands, colonial footholds. Unequal strengths, the same rules.';
   $('join-form').querySelector('button').disabled=!country($('country-choice').value);

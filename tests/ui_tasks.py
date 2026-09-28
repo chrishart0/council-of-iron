@@ -8,6 +8,7 @@ are written to <artifacts>/tasks/<viewport>/ for manual review.
 """
 import json
 from playwright.sync_api import expect
+from browser_helpers import lane, close_comms
 
 BOUNDS = {'attack': 3, 'declare': 4, 'propose': 3, 'respond': 2, 'reply': 3, 'recall': 2, 'turn': 2, 'develop': 3}
 
@@ -85,8 +86,6 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     page.goto(f'{url}/?match={room}'); expect(page.locator('#commander-title')).to_have_text('British Empire')
     w = Walk(page, server, room, touch, folder, report)
     page.locator('#home-view').click(); page.wait_for_timeout(300)
-    # A private row shown in the open desktop history counts as read; start collapsed so the badge path is what gets measured.
-    if page.locator('#feed-toggle').get_attribute('aria-expanded') == 'true': page.locator('#feed-toggle').click()
     primary = page.locator('#primary')
 
     # (b) Declare war on a neutral country and march: France (neutral), from the best-placed province.
@@ -141,7 +140,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     else:  # the column still sits on a counter (counter taps win): recall from the province it left
         w.tap(w.counter('england'), 'province'); w.results['recallPath'] = 'source province card'
         w.tap(page.locator('#card-actions button', has_text='→ Normandy'), 'recalled')
-    expect(page.locator('#toast')).to_contain_text('Recall queued')
+    expect(lane(page)).to_contain_text('Recall queued')
     w.end()
 
     # Turn around: the recalled column heads back to Normandy from where it is (one order, one tap after opening it).
@@ -162,11 +161,12 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     else:  # still on England's counter: the province card lists troops heading home there
         w.tap(w.counter('england'), 'province'); w.results['turnPath'] = 'home province card'
         w.tap(page.locator('#card-actions button', has_text='Turn around'), 'turned')
-    expect(page.locator('#toast')).to_contain_text('Turning around')
+    expect(lane(page)).to_contain_text('Turning around')
     s = w.state(); assert any(o['type'] == 'turn_around' and o['target'] == army['id'] for o in s['commandBudget']['reserved']), s['commandBudget']
     w.end()
 
     # (c) Propose an alliance: tap Russia (the powers strip on phones, its leaderboard row on desktop).
+    close_comms(page)
     w.begin('propose')
     w.tap(page.locator('#lb-powers [data-power="russia"]') if touch else page.locator('#lb-rows .lb-row[data-id="russia"]'), 'country')
     expect(page.locator('#card')).to_have_attribute('data-kind', 'country'); expect(page.locator('#card-status')).to_contain_text('NEUTRAL')
@@ -179,36 +179,37 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     w.end()
     page.keyboard.press('Escape')
 
-    # (d) Respond to an incoming alliance offer from the one attention badge.
+    # (d) Respond to an incoming alliance offer: the one Messages button opens the offer, Accept is inline.
     w.begin('respond')
     w.stdin('offer germany britain Rhine Pact')
-    expect(page.locator('#attention-count')).to_have_text('1', timeout=5000)
-    expect(page.locator('#notice')).to_contain_text('Alliance offer from German Empire', timeout=5000)
-    w.snap('badge')
-    page.locator('#notice [data-notice-close]').click() if page.locator('#notice [data-notice-close]').is_visible() else None
-    w.tap(page.locator('#attention'), 'card')
-    expect(page.locator('#card')).to_have_attribute('data-kind', 'country'); expect(page.locator('#card-title')).to_have_text('German Empire')
-    expect(page.locator('#card-status')).to_contain_text('ALLIANCE OFFER PENDING'); expect(primary).to_have_text('Accept alliance')
-    w.tap(primary, 'accepted')
+    expect(page.locator('#comms-button')).to_have_attribute('data-action', '1', timeout=5000)
+    toast = page.locator('#toasts .cx-toast[data-tier="action"]')
+    expect(toast).to_contain_text('German Empire', timeout=5000); expect(toast).to_contain_text('Rhine Pact')
+    w.snap('toast')
+    w.tap(page.locator('#comms-button'), 'thread')
+    expect(page.locator('#comms')).to_have_attribute('data-view', 'thread'); expect(page.locator('#comms .cx-title')).to_have_text('German Empire')
+    letter = page.locator('#comms .cx-letter')
+    expect(letter).to_contain_text('Rhine Pact')
+    w.tap(letter.locator('[data-do="accept"]'), 'accepted')
     s = w.state(); q = next(q for q in s['proposals'] if q['name'] == 'Rhine Pact'); assert 'britain' in q['accepted'], q
-    expect(page.locator('#attention')).to_be_hidden()
+    expect(page.locator('#comms-button')).to_have_attribute('data-action', '0', timeout=5000)
     w.end()
-    page.keyboard.press('Escape')
+    close_comms(page)
 
-    # (e) Reply to a DM: badge → the sender's card with the message box focused → type → Send.
+    # (e) Reply to a DM: the Messages button opens the sender's thread with the composer focused → type → Send.
     w.begin('reply')
     w.stdin('dm usa britain Will you stand down in the Atlantic?')
-    expect(page.locator('#attention-count')).to_have_text('1', timeout=5000)
-    w.tap(page.locator('#attention'), 'thread')
-    expect(page.locator('#card-title')).to_have_text('United States'); expect(page.locator('#card-body')).to_contain_text('Will you stand down in the Atlantic?')
-    expect(page.locator('#composer-text')).to_be_focused()
-    expect(page.locator('#composer-send')).to_be_enabled(timeout=5000)
+    expect(page.locator('#comms-button')).to_have_attribute('data-unread', '1', timeout=5000)
+    w.tap(page.locator('#comms-button'), 'thread')
+    expect(page.locator('#comms .cx-title')).to_have_text('United States'); expect(page.locator('#comms .cx-rows')).to_contain_text('Will you stand down in the Atlantic?')
+    expect(page.locator('#cx-text')).to_be_focused()
+    expect(page.locator('#comms .cx-send')).to_be_enabled(timeout=5000)
     page.keyboard.type('Only if you recall your fleet.'); w.snap('typed')
-    w.tap(page.locator('#composer-send'), 'sent')
-    expect(page.locator('#card-body .thread-row.mine').last).to_contain_text('Only if you recall your fleet.', timeout=5000)
-    expect(page.locator('#attention')).to_be_hidden()
+    w.tap(page.locator('#comms .cx-send'), 'sent')
+    expect(page.locator('#comms .cx-msg[data-mine="true"]').last).to_contain_text('Only if you recall your fleet.', timeout=5000)
+    expect(page.locator('#comms-button')).to_have_attribute('data-unread', '0')
     w.end()
-    page.keyboard.press('Escape')
+    close_comms(page)
 
     # Develop a province: East Canada (level II) once natural recruitment pays for level III.
     w.begin('develop')
@@ -218,7 +219,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     develop = page.locator('#develop-province'); expect(develop).to_contain_text('Develop · 24 troops'); expect(develop).to_be_enabled(timeout=5000)
     w.tap(develop, 'confirm-open')
     w.tap(page.locator('#confirm-dialog [value="confirm"]'), 'invested')
-    expect(page.locator('#toast')).to_contain_text('Investment committed')
+    expect(lane(page)).to_contain_text('Investment committed')
     s = w.state(); assert any(o['type'] == 'develop' and o['from'] == 'east-canada' for o in s['commandBudget']['reserved']), s['commandBudget']
     w.end()
     assert not errors, errors

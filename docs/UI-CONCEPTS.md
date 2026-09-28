@@ -1,5 +1,7 @@
 # v0.9 — Three game-UI directions (Phase 1 concepts)
 
+> **Outcome:** the user chose **A · War Room**; it is implemented in the game (see `docs/UI-DESIGN.md`, v0.9). The concept pages, their fixture generator and screenshot scripts were removed from the served app afterwards; they remain in the history at commit `9ed064e` (`public/concepts/`, `scripts/concept-*.{js,py}`). The shared comms model moved into `public/comms-model.js` / `public/comms.js`.
+
 User verdict on v0.8: *"This feels like a website with a map in it, not like an integrated game UI."* and *"The map is good, it's everything else: the after-action report, the menus, etc., the chat. It doesn't feel integrated and cohesive."* Earlier: *"too complex, I get lost"* (v0.8 cut the match to 7 surfaces with one primary action per card; every concept keeps that model). Open bugs that shaped the layout rules: the desktop leaderboard was covered by the history, and in replay "Powers" covered "At this moment".
 
 These are **static prototypes**, not the game. Each renders the unchanged atlas (`public/atlas.js`, rendering, zoom, counters and borders untouched) over a **recorded public position**, and applies one design system to the whole shell: title and rooms, country selection, match HUD, chat, notifications, menu, powers, replay and the after-action report, plus a style tile. Nothing sends orders; no rule, API or balance value changed.

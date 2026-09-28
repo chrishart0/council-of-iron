@@ -104,7 +104,8 @@ export class Comms {
   refresh() { if (this.state) { this.box = inbox(this.state, { read: this.read, dismissed: this.dismissed, history: this.history }); this.render(); } }
   setRead(keys) { this.read = new Set(keys); this.refresh(); }
   /* ── navigation ── */
-  openBest() { const c = this.box?.conversations.find(c => c.action || c.unread); c ? this.openThread(c.key) : this.showList(); }
+  /** The most important conversation; for an unread message (no decision waiting) the composer is focused, ready to reply. */
+  openBest() { const c = this.box?.conversations.find(c => c.action || c.unread); c ? this.openThread(c.key, { focusComposer: !c.action }) : this.showList(); }
   showList() { this.saveScroll(); this.view = 'list'; this.render(); this.onOpen('list'); this.focusConv(this.conv || this.box?.conversations[0]?.key); }
   close() { this.saveScroll(); const wasOpen = this.view !== 'closed'; this.view = this.docked() ? 'list' : 'closed'; this.render(); if (wasOpen) this.onOpen(this.view); if (this.panel.contains(document.activeElement) || wasOpen) this.button.focus({ preventScroll: true }); }
   focusConv(key) { if (!key) return; this.conv = key; this.renderList(); this.panel.querySelector(`[data-conv="${CSS.escape(key)}"]`)?.focus({ preventScroll: true }); }

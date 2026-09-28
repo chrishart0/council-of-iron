@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import sys
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
-from browser_helpers import open_thread
+from browser_helpers import open_thread, close_comms
 from playwright.sync_api import sync_playwright, expect
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -111,6 +111,7 @@ def main():
                 expect(mic).to_have_attribute('aria-label', 'Voice input (local GPU speech-to-text)')
                 expect(page.locator('.voice-mic')).to_have_count(1)
                 # The country card's Message opens that conversation: the same composer, the same mic.
+                close_comms(page)  # a thread takes the whole right column; Powers folds to its header
                 page.locator('#lb-rows .lb-row[data-id="germany"]').click()
                 page.locator('#card-actions button', has_text='Message').click()
                 expect(page.locator('#comms .cx-title')).to_have_text('German Empire')
