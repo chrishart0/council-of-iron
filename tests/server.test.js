@@ -201,7 +201,7 @@ test('industrial HTTP plans are private, atomic, synchronized, recallable and pe
   assert.equal(new Set(receipt.orders.map(o=>o.arrivesAt)).size,1);
   f.app.step(f.app.games.get(id),1);await f.restart();
   const restored=(await f.call(`/api/games/${id}`,'GET',undefined,usa.token)).data;
-  assert.equal(restored.scenario,'imperial-1910-v3');assert.ok(restored.armies.some(a=>a.groupId===receipt.groupId));
+  assert.equal(restored.scenario,'imperial-1910-v4');assert.ok(restored.armies.some(a=>a.groupId===receipt.groupId));
   const recall={opId:'return',action:{type:'recall',id:receipt.groupId}};
   assert.equal((await f.call(`/api/games/${id}/actions`,'POST',recall,usa.token)).status,200);
   f.app.step(f.app.games.get(id),10);
@@ -237,7 +237,7 @@ test('the active scenario contributes to standings and player history',async t=>
   const g=f.app.games.get(id);g.provinces.find(p=>p.id==='mexico').owner='usa';g.provinces.find(p=>p.id==='mexico').nextRecruit=20;f.app.step(g,1800);
   assert.equal((await f.call('/api/standings')).data.standings.length,2);
   assert.equal((await f.call('/api/standings?scenario=classic-64')).status,400);
-  assert.equal((await f.call('/api/me','GET',undefined,a.token)).data.history[0].scenario,'imperial-1910-v3');
+  assert.equal((await f.call('/api/me','GET',undefined,a.token)).data.history[0].scenario,'imperial-1910-v4');
 });
 
 
