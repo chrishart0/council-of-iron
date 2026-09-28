@@ -110,7 +110,9 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     w.end()
 
     # (a) Attack a neighbouring enemy province with 50%: Indochina (France, now at war), from India.
-    w.bring('indochina')  # camera only (not counted): the Indian front
+    page.keyboard.press('Escape')
+    for _ in range(5): page.keyboard.press('q')  # camera only (not counted): zoom out, then pan to the Indian front
+    page.wait_for_timeout(200); w.bring('indochina', escape=False)
     w.begin('attack')
     before = {p['id']: p['troops'] for p in s['provinces']}
     if touch:
