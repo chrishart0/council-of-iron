@@ -406,7 +406,7 @@ button{cursor:pointer}
 .report-screen.phone .seal-card .seal{width:48px;height:48px}.report-screen.phone .seal-card b{font-size:18px}
 
 /* ── Style tile ── */
-.tile-screen .tile{position:fixed;inset:0;overflow:auto;padding:24px}
+.desk.tile-screen>.tile{position:fixed;inset:0;overflow:auto;padding:24px}
 .tile-head{color:var(--tape);margin-bottom:14px}.tile-head h1{margin:0;font-size:48px;color:var(--brass-l)}.tile-head p{margin:0;font-size:15px}
 .tile-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px;align-items:start}
 .tcard{padding:12px 16px 16px;background:var(--card);box-shadow:var(--paper-shadow)}
@@ -450,14 +450,14 @@ body.b .phone{font-size:14px}
 .phone .reel{grid-template-columns:auto minmax(0,1fr);padding:8px 10px calc(8px + var(--safe-b));column-gap:10px}
 .phone .reel-tape{grid-column:1/-1;grid-row:1}.phone .reel-keys{grid-row:2;margin-top:6px}.phone .reel-caption{grid-row:2;grid-column:2;white-space:normal;font-size:13px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;margin-top:6px}
 .phone .reel-keys .key{width:40px;height:40px}.phone .reel-keys .key.play{width:46px;height:46px}.phone .reel-keys .key.speed{display:none}
-.title-screen.phone{display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:10px;padding:calc(10px + var(--safe-t)) 10px calc(10px + var(--safe-b))}
+.title-screen.phone{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;gap:10px;padding:calc(10px + var(--safe-t)) 10px calc(10px + var(--safe-b))}
 .title-screen.phone .letterhead{padding:12px 14px 10px}.title-screen.phone .letterhead h1{font-size:40px}.title-screen.phone .letterhead p{font-size:13.5px}
 .title-screen.phone .lh-rule{display:none}
 .title-screen.phone .reg-rows li{flex-wrap:wrap;gap:4px 10px;padding:9px 0}.title-screen.phone .reg-rows li>div{flex-basis:calc(100% - 120px)}.title-screen.phone .reg-rows li>button{margin-left:auto}
-.title-screen.phone .open-form{gap:6px;padding:0 12px 12px}.title-screen.phone .open-form h2{font-size:22px}.title-screen.phone .open-form .small,.title-screen.phone .open-form .field:nth-of-type(1){display:none}
+.title-screen.phone .open-form{gap:6px;padding:0 12px 12px}.title-screen.phone .open-form h2{font-size:22px}.title-screen.phone .open-form .small,.title-screen.phone .open-form .f-name,.title-screen.phone .register .sub{display:none}
 .title-screen.phone .form-head{margin:0 -12px 4px;padding:5px 12px}
 .title-screen.phone .keys .key{flex:1;font-size:13px;padding:6px 4px}
-.tile-screen.phone .tile{padding:12px}.tile-screen.phone .tile-grid{grid-template-columns:1fr}.tile-screen.phone .tile-head h1{font-size:36px}
+.desk.tile-screen.phone>.tile{padding:12px}.tile-screen.phone .tile-grid{grid-template-columns:1fr}.tile-screen.phone .tile-head h1{font-size:36px}
 
 /* ── Reviewer switcher (outside the design; hidden in screenshots) ── */
 .concept-nav{position:fixed;z-index:50;left:50%;bottom:calc(8px + var(--safe-b));transform:translateX(-50%);display:flex;align-items:center;gap:4px;padding:3px 6px;border-radius:20px;background:#000c;color:#fff;font:12px system-ui,sans-serif;opacity:.8}

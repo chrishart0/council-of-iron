@@ -211,7 +211,7 @@ button,input{font:inherit;color:inherit}
 .amount-line{display:flex;justify-content:space-between;align-items:baseline;font-weight:700;color:var(--muted);font-size:14px}
 .amount-line output{font-size:26px;font-weight:800;color:var(--ink)}.amount-line small{font-size:14px;color:var(--muted)}
 .c-actions{padding:12px 14px 14px;display:flex;gap:10px;margin-top:auto}
-.c-actions.two>.btn{flex:1}.c-actions.two>.btn-primary{flex:1.5}
+.c-actions.two>.btn{flex:1 1 auto;padding:0 12px}.c-actions.two>.btn-primary{flex:1.6 1 auto}.c-actions.two kbd{display:none}
 .relation{margin:0 14px 10px;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:14px;background:var(--ink);color:#fff}
 .rel-big{font-size:28px;font-weight:900;letter-spacing:-.01em}.relation span:last-child{font-size:14px;color:var(--on-dark-2);font-weight:600}
 .at-war{margin:0 14px 10px;display:grid;gap:6px}.at-war>span{display:flex;align-items:center;gap:6px;font-weight:700;font-size:14px;color:#a3161b}.at-war>span .ic{width:16px;height:16px}

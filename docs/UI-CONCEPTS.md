@@ -5,7 +5,7 @@ User verdict on v0.8: *"This feels like a website with a map in it, not like an 
 These are **static prototypes**, not the game. Each renders the unchanged atlas (`public/atlas.js`, rendering, zoom, counters and borders untouched) over a **recorded public position**, and applies one design system to the whole shell: title and rooms, country selection, match HUD, chat, notifications, menu, powers, replay and the after-action report, plus a style tile. Nothing sends orders; no rule, API or balance value changed.
 
 - Open: `/concepts/` (index), `/concepts/A.html?s=hud` etc. Screens: `tile, title, faction, hud, province, country, offer, chat, menu, powers, replay, report`. The small switcher at the bottom (or `[` `]`) moves between screens; `&clean=1` hides it.
-- Data: `node scripts/concept-fixture.js` writes `public/concepts/fixture/*.json`, exactly what the HTTP API returns: Britain's observation at tick 60 of a scripted eight-seat room (three alliances, two independents, eight wars, a pending *Channel Entente* offer from France, world chat and a DM), the public feed and map, and the review + replay of the recorded 530-tick handplay match (replay decoded every 10 ticks so a static page can scrub it). The title screen's room list shows these two rooms plus one illustrative open lobby, labelled as such.
+- Data: `node scripts/concept-fixture.js` writes `public/concepts/fixture/*.json`, exactly what the HTTP API returns: Britain's observation at tick 60 of a scripted eight-seat room (three alliances, two independents, eight wars, a pending *Channel Entente* offer from France, world chat and a DM), the public feed and map, and the review + replay of the recorded 530-tick handplay match (replay decoded every 10 ticks so a static page can scrub it). The title screen's room list shows these two rooms plus one illustrative open lobby (named like a normal room; it is illustrative only in this document, never labelled so inside the game chrome).
 - Check: `python scripts/concept-shots.py OUT [A B C]` renders every screen at 1920×1080, 1536×864 and 390×844 and fails on any overlap between visible `[data-region]` panels, a panel leaving the viewport, or document scroll.
 - Server: `/concepts/*` is a startup-built allowlist of files under `public/concepts` (no request path reaches the filesystem). Temporary; removed or replaced when a direction is implemented.
 
@@ -23,6 +23,47 @@ Principles taken from shipped games (interaction and structure only; no art, nam
 8. **Notifications are a stack of icons that expand**, in their own lane, never over other panels (Civ VI's right-edge stack, HoI4's alert row under the top bar).
 9. **Minimal, glanceable HUD**: status on top, actions in reach, the map owns the middle. The camera frames targets inside the uncovered area, never under the frame.
 10. **One orchestrated transition per state** (a letter unfolds, a telegram slides out, a panel springs from its anchor) instead of scattered animation; reduced motion respected.
+
+## Copy rule (user: "Get rid of all the language like 'experimental'")
+
+Inside the game chrome, text reads like a finished game: short, confident, in-world where it fits. No "experimental", "prototype", "practice bots", "provisional", "read-only", "untrusted" or "not a prediction" disclaimers, no version stamps, no engineering phrasing. Decision facts stay, in plain words ("18 defenders now"). Captions that say a screenshot is a recorded position belong outside the chrome.
+
+## Comms: one model for notifications and messages (shared by A, B and C)
+
+User priority: *"see things coming in without clutter, know how to access what is important, and be able to easily read, respond, dismiss or scroll back."* The three concepts share one interaction model (`public/concepts/kit/comms-model.js`, pure; `kit/comms.js`, the controller; `kit/comms-base.css`, structure). Only the skin differs. In Phase 2 the triage moves into `public/feed-model.js` next to `affectsViewer`/`decisionsFor`, so browser, CLI and MCP agree.
+
+**1. Triage (pure, from the viewer's own observation).**
+
+| Tier | What | Arrives as | Sound |
+|---|---|---|---|
+| ACTION | a decision that is mine: an alliance offer to me, a war/peace vote of my coalition, a peace offer to my side (`decisionsFor`); an enemy army landing on my province within 30 s | one compact toast that stays until handled or dismissed; one visible, "+N" for the rest | stinger (`cx-sfx: stinger`) |
+| PERSONAL | to me, no decision: DMs, alliance chat, diplomatic rows in my threads, headlines that `affectsViewer` (war on me, my battles, my alliance) | a one-line toast (standard + first line), hides after ~4 s; a burst from one sender coalesces ("Japan · 3 messages") | soft blip |
+| WORLD | everything else: headlines and world chat | no toast; the World conversation pulses | none |
+
+**2. One place for each thing.** One comms button in a fixed HUD spot shows the ACTION count (loud) and unread PERSONAL count (quiet); `C` opens it on the most important unread item. One toast lane (`data-region="toasts"`) holds at most one toast; an ACTION toast owns the lane, a PERSONAL toast shows only when no decision waits. Toasts never take focus, never cover the card's primary button, and are dismissed with ×, a sideways swipe, or Escape on the toast. A dismissed ACTION stays in the inbox with its chip until it is decided or expires.
+
+**3. Messages panel = inbox + threads.** A list of conversations (World, my alliance, one per country), sorted by what needs me (pending decision, then unread, then latest), each with its last line, time, unread count and an "Offer"/"Decide" chip. A thread shows messages and inline diplomatic rows (an open offer has Accept/Decline right there, with its expiry), quick replies in DMs, and a composer with the mic. The same push navigation everywhere: list → thread → back. Desktop docks the list in the right column (its resting state); a thread takes the full column and Powers folds to its header. Phone: a full-height sheet under the top bar. The history log is simply the World thread: headlines, world chat and war/alliance markers.
+
+**4. Reading and scroll-back.** Opening a thread jumps to the first unread row under an "Unread" divider (or restores that thread's saved scroll position); every thread scrolls on its own; minute separators in game time; war and alliance headlines are full-width markers you can scroll back to. Long messages clamp at four lines with More/Less. A new row while you are scrolled up adds a "↓ N new" pill instead of moving you. Read state is per item and set only when the row has actually been on screen; "Mark all read" clears the rest. Handled offers collapse to one line ("You accepted · Island Accord"); closed or expired ones grey out. Nothing is deleted.
+
+**5. Keyboard and assistive tech.** `C` open/close, `J`/`K` next/previous conversation, `Enter` open, `Escape` thread → list → closed (or dismiss a focused toast). Toast lane: `aria-live="assertive"` only for ACTION, `polite` for PERSONAL; WORLD is silent.
+
+```
+                   ACTION arrives ─▶ [toast: Accept · Read · ×]  (stays; +N)
+                   PERSONAL arrives ─▶ [toast: standard + line · Open · ×] (4 s, coalesced)
+                   WORLD arrives ─▶ World row pulses (no toast)
+
+ closed/docked ──C · badge · toast Read/Open──▶ THREAD (jump to Unread divider)
+      ▲   ▲                                      │  Accept/Decline inline ─▶ resolved one-liner
+      │   └──────────── Esc · × ─────────── LIST ◀── back · Esc
+      │                                  (sorted: decide ▸ unread ▸ recent; J/K; Enter)
+      └────────── Esc · × (phone: sheet closes; desktop: list is the resting state)
+ toast × / swipe / Esc ─▶ gone from the lane, chip stays in LIST until decided or expired
+```
+
+**Benchmark walkthrough** (`python scripts/concept-walk.py OUT A B C`, 1536×864 and 390×844): Japan sends a DM, then offers the *Island Accord* while two war declarations and two world messages arrive; the player reads the offer thread, accepts inline, replies by voice, goes back to World, scrolls to the opening war declaration, marks the rest read and closes. The arrivals are Britain's recorded observations (`public/concepts/fixture/comms-*.json`) delivered through a test-only page hook; the voice step plays a scripted transcript (the game uses `public/voice.js`). Taps are counted by the script; scrolling is counted separately.
+
+<!-- WALK-RESULTS -->
 
 ## Layout rules shared by all three (why nothing overlaps)
 

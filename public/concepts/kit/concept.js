@@ -121,7 +121,8 @@ export function reviewerNav(direction, label) {
 }
 
 /** Mount the shared comms model (kit/comms.js) on a direction's elements for the current screen.
- * els: { button, toasts, panel } — the direction places them in its own fixed regions and skins `cx-*`.
+ * els: { button, toasts, panel, docked?: () => boolean } — the direction places them in its own fixed regions and skins `cx-*`;
+ * `docked()` true (e.g. desktop right column) makes the inbox list the resting state instead of a hidden panel.
  * Screens: 'walk' = the scripted walkthrough (recorded observations comms-0…4); 'offer' = France's offer arriving
  * as an ACTION toast; 'chat' = Messages open on the France thread; anything else = the live position at rest. */
 export async function mountComms(m, els, s = screen()) {

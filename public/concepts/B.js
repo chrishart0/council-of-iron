@@ -308,7 +308,7 @@ function titleScreen() {
     </ol></section>
   <form class="telegram open-form" data-region="create" aria-labelledby="create-title"><header class="form-head"><span>Imperial telegraph · form C-1</span><span>Open a council</span></header>
     <h2 id="create-title" class="fell">Open a council</h2>
-    <label class="field"><span>Your name</span><input value="Chris" maxlength="40"></label>
+    <label class="field f-name"><span>Your name</span><input value="Chris" maxlength="40"></label>
     <label class="field"><span>Room name</span><input value="The evening council" maxlength="80"></label>
     <div class="field"><span>Pace</span><div class="keys" role="group" aria-label="Pace"><button class="key" type="button" aria-pressed="true" ${sfx('type')}>Standard · 30 min</button><button class="key" type="button" aria-pressed="false" ${sfx('type')}>Quick · 5 min</button></div></div>
     <p class="small">Invite by room link, attach an agent, or fill empty seats with practice bots.</p>

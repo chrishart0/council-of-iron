@@ -22,13 +22,15 @@ const QUICK = ['Agreed.', 'Not now.', 'Let us talk terms.'];
 export class Comms {
   /** opts: { button, toasts, panel, m, state, onAct(action) → Promise<nextState|null>, voiceScript, readUpTo, phone } */
   constructor(opts) {
-    Object.assign(this, { button: opts.button, toasts: opts.toasts, panel: opts.panel, m: opts.m, onAct: opts.onAct || (async () => null), voiceScript: opts.voiceScript || '' });
+    Object.assign(this, { docked: opts.docked || (() => false), button: opts.button, toasts: opts.toasts, panel: opts.panel, m: opts.m, onAct: opts.onAct || (async () => null), voiceScript: opts.voiceScript || '' });
     this.read = new Set(); this.dismissed = new Set(); this.scroll = new Map(); this.expanded = new Set(); this.resolved = new Map();
     this.view = 'closed'; this.conv = null; this.toast = { actions: [], personal: null }; this.pulse = false; this.hold = new URLSearchParams(location.search).get('hold') === '1';
     this.state = opts.state;
     // Everything already on the table when the page opens counts as read up to `readUpTo` (a seq), like a returning player.
     for (const r of inbox(this.state).rows) if (r.seq <= (opts.readUpTo ?? Infinity)) this.read.add(r.key);
     this.names = { ...this.m.names, time: clock, players: this.state.players.length };
+    if (this.docked()) this.view = 'list';
+    addEventListener('resize', () => { if (this.view === 'closed' && this.docked()) { this.view = 'list'; this.render(); } });
     this.buildShell(); this.bind(); this.render();
     window.__comms = this; // test-only handle for the scripted walkthrough (never a game route)
   }
@@ -49,7 +51,7 @@ export class Comms {
   }
   bind() {
     const p = this.panel;
-    this.button.addEventListener('click', () => this.view === 'closed' ? this.openBest() : this.close());
+    this.button.addEventListener('click', () => this.view === 'thread' || (this.view === 'list' && !this.docked()) ? this.close() : this.openBest());
     p.querySelector('.cx-back').addEventListener('click', () => this.showList());
     p.querySelector('.cx-close').addEventListener('click', () => this.close());
     p.querySelector('.cx-readall').addEventListener('click', () => this.markAllRead());
@@ -69,8 +71,8 @@ export class Comms {
   }
   key(e) {
     if (e.target.closest?.('input,textarea,select,[contenteditable]')) { if (e.key === 'Escape') e.target.blur(); return; }
-    if (e.key === 'c' || e.key === 'C') { e.preventDefault(); this.view === 'closed' ? this.openBest() : this.close(); return; }
-    if (e.key === 'Escape') { if (e.target.closest?.('.cx-toast')) return this.dismissToast(e.target.closest('.cx-toast').dataset.key); if (this.view === 'thread') return this.showList(); if (this.view === 'list') return this.close(); }
+    if (e.key === 'c' || e.key === 'C') { e.preventDefault(); this.view === 'thread' || (this.view === 'list' && !this.docked()) ? this.close() : this.openBest(); return; }
+    if (e.key === 'Escape') { if (e.target.closest?.('.cx-toast')) return this.dismissToast(e.target.closest('.cx-toast').dataset.key); if (this.view === 'thread') return this.showList(); if (this.view === 'list' && !this.docked()) return this.close(); }
     if (this.view === 'closed') return;
     const convs = this.box.conversations.map(c => c.key), i = Math.max(0, convs.indexOf(this.conv ?? convs[0]));
     if (e.key === 'j' || e.key === 'k') { e.preventDefault(); const next = convs[(i + (e.key === 'j' ? 1 : -1) + convs.length) % convs.length]; this.view === 'thread' ? this.openThread(next) : this.focusConv(next); }
@@ -80,7 +82,8 @@ export class Comms {
   /* ── navigation ── */
   openBest() { const c = this.box.conversations.find(c => c.action || c.unread); c ? this.openThread(c.key) : this.showList(); }
   showList() { this.saveScroll(); this.view = 'list'; this.render(); this.focusConv(this.conv || this.box.conversations[0].key); }
-  close() { this.saveScroll(); this.view = 'closed'; this.render(); this.button.focus({ preventScroll: true }); }
+  /** Docked (desktop right column): the inbox list is the resting state, so closing returns to it. */
+  close() { this.saveScroll(); this.view = this.docked() ? 'list' : 'closed'; this.render(); this.button.focus({ preventScroll: true }); }
   focusConv(key) { this.conv = key; this.render(); this.panel.querySelector(`[data-conv="${CSS.escape(key)}"]`)?.focus({ preventScroll: true }); }
   openThread(key) {
     this.saveScroll(); this.view = 'thread'; this.conv = key; this.divider = this.box.rows.find(r => r.thread === key && r.unread)?.key ?? null;
