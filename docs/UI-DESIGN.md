@@ -1,14 +1,14 @@
-# v0.9 — The War Room
+# The War Room — browser UI
 
-User verdict on v0.8: *"This feels like a website with a map in it, not like an integrated game UI."* and *"The map is good, it's everything else: the after-action report, the menus, etc., the chat. It doesn't feel integrated and cohesive."* Three directions were prototyped over the real atlas (`docs/UI-CONCEPTS.md`); the user chose **A · War Room**. This pass implements it across the whole shell with C's interaction habits (one loud primary per panel, press feedback, round camera buttons). No rule, balance value, event or API field changed for the UI.
+This describes the browser client as it is now (`public/`). The UI holds no rules: every order goes through the same actions, validation and observation as agents, and the rules themselves are README "How to play" (also in the ☰ menu). Earlier UI passes (v0.2–v0.9) are in git history.
 
-## The system
+## Design system
 
-- **Material:** blued-iron plates (brushed gradient, brass rim, dark inner line, four brass studs), engraved brass title strips (plaques), oxblood enamel for war and danger, verdigris for alliances, ivory text. One set of primitives in `public/style.css`: `.plate`, `.plaque`, `.btn` (`-primary` brass, `-danger` oxblood, `-ghost`), round `.bezel-btn`, `.tabs`, `.seg`, `.chip`, the brass range slider, iron switches, input slots, event letters (`dialog.letter`, open decisions in Messages). Comms skin in `public/comms.css`; replay and report in `public/review.css`; the map keeps its own type in `public/map-layers.css`.
-- **Type:** Alegreya SC for titles and plaques, Barlow Condensed for UI and tabular numbers. SIL OFL 1.1 files and licences in `public/fonts/` (four Latin subsets, 91 KB, cached for a day).
-- **Icons:** one original engraved line set in `presentation.js` (24-unit grid); old names are aliases.
-- **Motion:** one moment per state — a card slides in, a letter unfolds, a toast drops, a herald plate scales in; press feedback on every control; `prefers-reduced-motion` removes all of it.
-- **Copy:** game voice, sentence case, no development jargon. "Bots" not "practice bots", "Prestige" without disclaimers, banners in sentence case.
+- **Material:** blued-iron plates (brushed gradient, brass rim, dark inner line, four brass studs), engraved brass title strips (plaques), **oxblood** enamel for war and danger, **verdigris** for alliances, ivory text. One set of primitives in `public/style.css`: `.plate`, `.plaque`, `.btn` (`-primary` brass, `-danger` oxblood, `-ghost`), round `.bezel-btn`, `.tabs`, `.seg`, `.chip`, the brass range slider, input slots, and letters (`dialog.letter` for confirmations; open decisions in Messages). Messages in `public/comms.css`, replay and report in `public/review.css`, map type in `public/map-layers.css`.
+- **Type:** Alegreya SC for titles and plaques, Barlow Condensed for UI and tabular numbers. Four Latin-subset WOFF2 files with their SIL OFL 1.1 licences in `public/fonts/`, served with a one-day cache.
+- **Icons:** one original engraved line set in `public/presentation.js` (24-unit grid, `icon(name)`, unknown names fall back to the compass). The eight country standards there are fictional insignia, always shown beside the country name; decorative SVG is `aria-hidden` and never contains player text.
+- **Motion:** one moment per state — a card slides in, a letter unfolds, a toast drops, a herald plate scales in — and press feedback on every control. `prefers-reduced-motion` removes all of it.
+- **Copy:** game voice, sentence case, no development jargon ("Bots", "Declare war on France & send 9", "Recall queued").
 
 ## Layout: anchored regions, no overlap
 
@@ -19,490 +19,160 @@ Every panel is a named grid region of the stage, marked `data-region`; nothing i
 │ card (left, bottom-anchored,        map area: toasts (top) · banner (under it)      │ powers  (≤ 62%) │
 │ primary in a fixed footer)          camera (bottom-right, round bezel buttons)     │ comms   (rest)  │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────┘
-Menu and war log take the right column while open. Phones (<1024 px): hud · strip of standards · map · dock
-(Map / Powers / Menu); the card, Powers, Messages and the menu are sheets that replace the dock. Short landscape
-(<500 px tall): one side sheet on the left, the dock as a column on the right.
+The menu and war log take the right column while open.
+Phones (< 1024 px): hud · strip of standards · map · dock (Map / Powers / Menu); the card, Powers, Messages
+and the menu are sheets that replace the dock. Short landscape (< 500 px tall): one side sheet on the left,
+the dock as a column on the right.
 ```
 
-The camera gets the regions as insets (`atlas.setInsets({left,right,top})` and `{insets}` on focus/fit), so World view and focus frame the uncovered map, never under the frame.
+`#map` is exactly the viewport and the document never scrolls. The camera receives the covered edges as insets (`atlas.setInsets({left,right,top})` and `{insets}` on focus/fit), so Home, World view and card reveals frame the uncovered map. **Expand** (camera cluster, and the replay map's corner) is a CSS pseudo-fullscreen that works without the Fullscreen API (iPhone Safari); the web app manifest makes *Add to Home Screen* open without browser chrome.
 
 ## Screens
 
-- **Title:** the iron gate (emblem, name, commander, sound), *The Assembly* (rooms by state with Resume/Watch/Enter/Review; a Prestige tab), *Open a council* (name, room, Pace as a segmented control, one primary; there is one ruleset).
-- **Lobby:** a rack of the eight standards along the bottom, the dossier of the chosen country (holdings, commander name, *Take this seat*), host controls (bots, *Start match*; a host who filled every seat with bots can take one over), invite link.
-- **Opening council** (after *Start match*): the same dossier and rack — the plaque reads *Opening council*, a countdown, *Leader name* and *Opening declaration* with one primary (*Announce to the world*), and each standard shows *Ready* or *Choosing*. Declarations are World messages (text only). Play begins when every seat is ready or the window closes.
-- **Match:** the HUD, the card (orders with the brass slider and 25/50/75/100 chips — to a neighbour or, through your own provinces, beyond them, with the route drawn leg by leg and the arrival capture chance in the details; a province in battle shows the live odds and recent rounds; country with the relation in large type, strength and *Propose alliance* / *Declare war* / *Message*; army with *Recall* or *Turn around*; your alliance), Powers with nested alliance totals and the war fronts always listed under the rows, Messages, heralds for what affects you (compact on phones), the menu (map views, sound and voice, map key, controls, war log, room, identity, tips), rally points (card action, keep-N field, dashed arrow, pause notices).
-- **Replay:** top bar, the map, the right column = one team leaderboard at the scrubbed tick above the History thread up to the tick (rows seek; alliance chat only where the room revealed it, and messages public AI seats disclosed), a timeline band (big play, ±10 s, first/last, speed chips, event marks, next-event line).
-- **After-action report:** victory/defeat/armistice band with the winners' standards and a Prestige medal, final standings grouped by alliance (alliance = sum of member Prestige), land-share chart, turning points that open the replay at that moment, Military/Economy/Diplomacy tabs (Diplomacy: the disclosed messages of public AI seats by conversation, searchable, each opening the replay at its moment), one primary *Watch the replay*.
+- **Title:** the iron gate (emblem, name, commander, sound), *The Assembly* (rooms by state with Resume / Watch / Enter / Review, and a *Record* tab of wins–draws–losses), *Open a council* (your name, room name, Pace: Standard 30 min or Quick 5 min; one primary).
+- **Lobby:** a rack of the eight standards, the dossier of the chosen country (starting holdings, commander name, *Take this seat*), host controls (*Fill empty seats with bots*, *Start match*; a host who filled every seat with bots can take one over), the invite link. *Start match* starts play at once.
+- **Match:** the HUD (your standard, troops, provinces, your side's industry against the amount needed, the clock with a one-line victory status, Messages, ☰), the card, Powers (teams or players, land and troops, alliance totals, and every war front listed under the rows), Messages, heralds, the camera and the menu.
+- **Menu (☰):** room status; **How to play** (the eight rules of README "How to play", filled with this room's numbers — hold time, recruitment interval, build costs and times, peace window, alliance notice); map views (World, Europe, Expand); sound and voice; the map key; controls; War log (L); Copy room link; *Show the tips*; Change identity; Leave to rooms.
+- **Tips:** three first-match tips (drag to attack; tap a country; the Messages button), stored per browser, replayable from ☰; a tip advances by itself once acted on.
+- **Spectators** get the same map, Powers, read-only cards (no actions) and the World thread without a composer.
+- **After the match:** the review (result band, standings, replay, report tabs). See [AFTER-ACTION.md](AFTER-ACTION.md).
 
-## Comms: one model for notifications and messages
+## Orders: everything starts from the map
 
-The Phase 1 model (`docs/UI-CONCEPTS.md`, "Comms") is now production code: `public/comms-model.js` (pure triage) and `public/comms.js` (controller).
+Two nouns: a **province** (troops) and a **country** (diplomacy). One card shows whichever you selected, with two sizes (peek and *Show more*) and exactly **one primary button whose label says what happens**.
+
+- **March.** Drag from your province's counter to any target: the arrow snaps to reachable provinces and shows `troops · ETA`. Tap-tap works the same, and so does target-first (tap a target; your best-placed province is proposed). Tap more of your provinces to add them as sources (chips with per-source amounts): one `march` order, all arriving together. The card holds one amount control (slider plus 25/50/75/100 %, remembered per browser), the route and the capture chance on arrival. The primary reads `Attack Normandy with 5`, `Reinforce Ruhr with 24` or, against a country you are not at war with, `Declare war on France & send 9` (danger style; the confirmation letter names everyone who will be at war). Keyboard: Enter on your counter, then on a target, focuses the primary; Enter sends, Escape cancels.
+- **Recall.** A marching army is its arrow: tap it (or the province it left) for *Recall* (and *Recall the whole march* for a multi-source march). Counter taps win over army taps.
+- **Rally.** On your province: *Rally troops to…*, then tap one of your provinces. A dashed arrow in your colour shows it; *Clear rally* removes it; a paused rally (rally province lost, no friendly path) is a personal notice.
+- **Build.** *Develop · 24 troops* on your own province, with a confirmation that states cost and time.
+- **Battles:** a province in battle shows the live odds and recent rounds in its card.
+
+## Diplomacy: tap a country
+
+A Powers row, a standard on the phone strip, or a province card's owner line opens the country card. It states the relation in large type (**AT WAR / ALLIED / ALLIANCE FORMING / ALLIANCE OFFER PENDING / NEUTRAL / FALLEN**), strength, alliance and wars, and one primary: *Propose alliance* (inline name, default `Britain–Russia Pact`, with the combined industry against the target) and *Declare war* as the secondary; *Accept alliance* / *Decline* for an offer; *Offer peace* at war, *Accept peace* for an offer to your side; *Message* for an ally, with *Leave alliance*. When your alliance is at its size cap the card says so. Your own standard opens the **alliance card**: members, industry toward victory, wars, *Alliance chat*, *Leave alliance*.
+
+## Messages and notifications
+
+`public/comms-model.js` (pure triage) and `public/comms.js` (controller).
 
 | Tier | What | Arrives as | Sound |
 |---|---|---|---|
-| ACTION | an offer to you, your coalition's war/peace vote, a peace offer to your side (`decisionsFor`); an enemy army `threatening()` your province within 30 s | the one toast slot, persistent, inline Accept / Read / ×, "+N" | `dispatch` stinger |
-| PERSONAL | DMs, alliance chat, diplomatic rows, headlines that affect you, your battle results, turned-back armies (sticky, Turn around / Show army), paused rallies | a brief one-line toast (bursts coalesce) | `chat` blip (messages) |
+| ACTION | an alliance offer to you, a peace offer to your side, an enemy army landing on your province within 30 s | the one toast slot, persistent, inline Accept / Read / ×, "+N" | `dispatch` stinger |
+| PERSONAL | DMs, alliance chat, diplomatic rows and headlines that affect you, your battle results, armies turned back (sticky, *Show army*), paused rallies | a brief one-line toast (bursts from one sender coalesce) | `chat` blip for messages |
 | WORLD | everything else | no toast; the World conversation pulses | silent |
 
-**Talking to one power or your alliance.** Every power is a row in Messages (standard, name, relation, last line), even before the first message; your alliance is pinned on top ("Your alliance: <name>" with its unread count) or, if you have none, says so with a *Propose an alliance* action that lists the powers. A country card's *Message* and your alliance card's *Alliance chat* open the same threads. While a thread is open, a row of standards under its title switches to any other conversation in one tap; the alliance thread names its members, and in rooms that reveal alliance chat after the match it says so above the composer. Drafts are kept per conversation across polling and switching; Enter sends (Shift+Enter for a new line); the chat cooldown is shown on the Send button; after sending, focus stays in the box. A reply in the thread you are reading arrives in place (marked read, no toast; "↓ N new" only if you had scrolled up).
+**Toast priority.** There is one toast slot. A decision (ACTION) always owns it. Otherwise your own order's confirmation or error shows first (about 4 s; 7 s for an error), ahead of a personal notice, which then takes the slot.
 
-One comms button (red count = decisions, brass = unread; **C**); Messages = conversations sorted by what needs you + threads with inline Accept/Decline, an Unread divider, "↓ N new", quick replies, the composer with the mic, Mark all read; docked in the right column on desktop, a sheet on phones; the World thread is the history. Read state is per item (`coi.comms.<match>.<seat>`). Spectators get the World thread only, read-only. Order confirmations and errors use the same slot and never cover a decision.
+**Messages** (one button, **C**; red count = decisions, brass = unread) lists every conversation sorted by what needs you: World, your alliance (pinned, or *Propose an alliance* if you have none) and every power, even before the first message. Threads have inline Accept/Decline, an Unread divider, "↓ N new", quick replies and the composer with the mic. A row of standards under a thread's title switches conversation in one tap; the alliance thread names its members and, in rooms that reveal alliance chat after the match, says so above the composer. Drafts are kept per conversation across polling and switching; Enter sends (Shift+Enter for a new line); focus stays in the box after sending. A reply in the open thread arrives in place (read, no toast). Read state is per item (`coi.comms.<match>.<seat>` in localStorage). **J / K** move between conversations. Docked in the right column on desktop, a sheet on phones. Anti-spam limits are server-side and have no countdown in the UI.
 
-## Verified (automated, not a usability study)
+**Heralds** (banners) are only for headlines that affect you: war seal, treaty, alliance seal with both standards, fallen standard (DEFEAT for your own country), major battle, victory countdown. One queue of at most five, most important first; `pointer-events:none`, never focused, and only for events after the initial catch-up, so reconnects replay nothing. Player text is set with `textContent` only.
 
-`npm test` (156), `npm run check`, `npm run test:balance -- --rounds 32 --mode diplomacy`, and the full `python tests/browser.py` (live 12× match, review, the focused UI suite with the tap walkthroughs, voice) pass with no page errors. The README GIF was re-recorded from that run (`python tests/browser.py --gif docs/media/gameplay.gif`, heuristic agents, accelerated test clock; recorded-position frames are labelled as such).
+## Headlines
 
-- **Region audit** (`tests/ui-browser.py`): every visible `[data-region]`; no overlap over 4 px, nothing off-screen, no document scroll, `#map` is the viewport — at 1920×1080, 1536×864, 1440×900, 1366×768, 1280×800, 390×844 and 844×390, for the player (idle, order card peek and full, country card, alliance card, Messages list and thread, menu, the phone Powers sheet), the spectator, the lobby, the replay and the report.
-- **Contrast** (WCAG, computed colour against the effective background, gradient stops included): minimum 4.96:1 over every sampled screen and viewport.
-- **Uncovered map** (idle / order card peeking): 1920×1080 76.7% / 69.1%, 1536×864 71.0% / 59.2%, 1440×900 70.8% / 59.2%, 1366×768 68.6% / 54.2%, 1280×800 68.1% / 54.2%, 390×844 76.7% / 41.1%, 844×390 78.6% / 40.7%. The War Room frame is heavier than v0.8's floating cards by design; asserted bounds: ≥65% idle and ≥50% peeking at 1366×768, ≥64% idle everywhere.
-- **Interaction counts** (`tests/ui_tasks.py`, 390×844 touch / 1366×768 mouse): declare war and march 3/3 (bound 4), attack with 50% 3/3, recall 2/2, turn around 2/2, propose an alliance 3/3, respond to an offer 2/2, reply to a DM 2/2 (bound 3), develop 3/3 (+1 camera move), rally 3/3 (+1), and the new conversation walkthrough (DM Japan, receive a reply, reply again, switch to the alliance chat, send, switch back) 7 / 6 (bound 7; opening the DM ≤2, each switch 1) with no toast for the open thread and drafts kept across polling.
-- Comms: an offer arrives as one ACTION toast with Accept/Read/dismiss, a DM as a PERSONAL toast, no toast replay on reconnect, per-item read state across reloads, aria-live assertive/polite per tier, the World thread keeps scrollback with "N new", long messages clamp and expand; war fronts all listed and hit-testable at 1366×768 and 1920×1080.
+`src/engine.js` classifies each public event once (`classifyHeadline`) as structured facts (kind, IDs, counts); clients write the prose. Private events are never headlines.
 
-Not verified: real devices and iOS Safari, screen-reader output beyond the ARIA attributes asserted, and whether players find it more integrated or enjoyable — only that it is laid out, readable and reachable as described.
+| Event → `headline.kind` | Herald | Map effect |
+|---|---|---|
+| `war_declared` → `war` | War seal | `war {from,to}` |
+| `peace_accepted` → `peace` | Treaty | `peace {from,to}` |
+| `alliance_activated` → `alliance` | Alliance seal (name is player text) | `alliance {countries}` |
+| `eliminated` → `eliminated` | Fallen standard | `eliminated {country}` |
+| `departed` / `coalition_dissolved` → `departure` / `dissolved` | Dispatch | — |
+| `dominance` / stopped hold → `dominance` / `dominance_broken` | Victory countdown / countdown stopped | — |
+| major `battle` → `major_battle` | "Major battle at P · N troops lost" | `captured` if ownership changed |
+| `development_completed` at level III → `industry_up` | — | `industry_up {province,level}` |
+| `finished` → `finished` | result screen | — |
 
-## Known issues
+A battle is major when `casualties ≥ max(20, ceil(3% × all troops on the map))`; the headline carries both numbers. Level II builds are routine and stay in the War log.
 
-- With a card open on a phone the map shows about 41% of the screen (the card is the focus there).
-- An incoming attack warning (ACTION) holds the one toast slot, so a battle notice waits until it is dismissed — this follows the tier rule, but it is a visible change from v0.8.
-- The replay's phone map is short while the standings sheet is open.
+## Map layers
 
+- **Borders** (`public/map-geometry.js`): thin dashed province borders, a heavier border where owners differ (re-classified on every update), coastline over a faint shelf. `tests/map-geometry.test.js` checks that shared borders match and every touching pair is connected.
+- **Level of detail** by on-screen pixels per map unit: far = one counter per same-owner region; mid = overlapping same-owner counters merge (never across owners); near = every province with industry pips and names. Remaining overlaps are nudged with a leader line; every province's troops are on screen exactly once. Clicking a merged counter zooms to its members.
+- **Battles:** a clash counter per battle (attacker strength × swords × garrison) with a two-colour tug-of-war bar split by strength (colours separated by ≥ 20 ΔE incl. simulated colour-blindness), a flash per round, the winner's colour when it resolves.
+- **Armies** are the top layer: owner-coloured arrow, troop pill, larger for big columns; hover/focus shows owner, size, route and ETA. Their hit circle is disabled wherever it overlaps a counter, so counter taps always win.
+- **Rallies:** your own rally points as dashed arrows (private to you).
+- **Wraparound:** the world repeats every 1280 units; world layers are repeated by `<use>` copies (no duplicate IDs) and interactive overlays are drawn once on the nearest copy. Pacific routes cross the dateline.
+- **Alliances:** `public/relations.js` (shared with agents) assigns one of four palette hues (≥ 38 ΔE apart under normal and simulated protan/deutan/tritan vision, `tests/relations.test.js`). Each coalition gets a bloc outline, member counter ticks and its name on its largest land (player text, `textContent`, ≤ 28 characters); forming alliances are dashed.
+- **Wars:** crimson hatched fronts on land borders between countries at war; a dashed sea front only where they share no land. **M** toggles Diplomacy mode (focus country gold, allies blue-green, enemies red).
+- **Map key** in ☰ (legend and the Diplomacy toggle).
+- **Zoom** is capped at 14 screen px per map unit on every device; pinch, wheel, +/−, double tap and Q/E share the clamp. Small European provinces reach ≥ 32 CSS px on a phone.
+- **Effects API:** `atlas.effect(kind, data)` for the kinds in `MAP_EFFECTS`; decorative, `aria-hidden`, scoped to one map instance, never throws. Live and review maps use distinct ID prefixes.
 
-# v0.8 — One map, two nouns
+## Phones
 
-User verdict after playing on a phone: *"The UX is too complex and not intuitive enough. I get lost."* They got lost declaring war, forming an alliance and responding to offers and messages; troop movement "isn't smooth yet"; "the map feels good". This pass keeps the map (rendering, zoom, counters, borders) and replaces everything around it with fewer concepts. No rule, balance value, event, API field, CLI or MCP command changed.
+Below 1024 px: HUD, a strip of standards (one tap into diplomacy), the map, and a dock (Map / Powers / Menu). The card, Powers, Messages and the menu are sheets that replace the dock; the primary stays in the sheet's fixed footer. 44 px targets on coarse pointers; +/− are hidden there (pinch). The toast is compact (≤ 72 px) and clear of the order sheet. Phones need HTTPS for the microphone (`scripts/dev-cert.sh`, see [OPERATIONS.md](OPERATIONS.md)).
 
-## The model
+## Sound
 
-1. **Everything starts from the map.** Two nouns: a **province** (troops) and a **country** (diplomacy). One context card shows whichever you selected; it has two levels only: **peek** and **expanded** ("Show more").
-2. **Troops: direct manipulation.** Drag from your province's counter to a neighbour: an arrow follows the finger, snaps to adjacent provinces (they light up, the rest dim) and shows `troops · ETA`. Tap-tap works the same (your province, then a neighbour), and so does target-first (tap an enemy province: your best-placed neighbour is proposed). The card then holds **one amount control** (a slider plus 25/50/75/100%, remembered per browser) and **one primary button whose label says what happens**: `Attack Normandy with 5`, `Reinforce Ruhr with 24`, `Send 9 → Netherlands`, `Declare war on France & send 9` (danger style, confirmation lists everyone you will be at war with) or `Call war vote on Germany` for coalition members. Coordinate is not a mode: with a target chosen, tap more of your provinces beside it to add them (chips with per-source amounts; one `attack` order). Develop is a button on your own province's card. After sending, the moving army is the arrow; tap it (or your source province) to **Recall**. Reserves, recruitment arrow, incoming waves, your orders and the rules are under "Show more". Keyboard: Enter on a province counter, then on a neighbour, focuses the primary; Enter sends, Escape cancels; the expanded card also has a "send to" select. The atomic `declareWar` move/attack and same-opId retry are unchanged.
-3. **Diplomacy: tap a country** (a leaderboard row, a standard on the phone's powers strip, a province card's owner line, a rail row's "Open ›", your allies in the alliance card). The country card states the relation in big words (**AT WAR / ALLIED / ALLIANCE FORMING / ALLIANCE OFFER PENDING / NEUTRAL / HOSTILE / FALLEN**), strength (troops, provinces, bloc, wars) and one primary: Neutral → *Propose alliance* (inline name, default `Britain–Russia Pact`, terms in one line) with *Declare war* as the secondary; an offer → *Accept alliance* / *Decline* (the terms are in the card, so no second dialog); at war → *Offer peace* (or *Call peace vote*); ally → *Message*, *Leave alliance*. Expanded, it shows the conversation with that country (DMs and diplomatic rows) and a message box (`.composer`, `data-voice`). **Your alliance card** (tap your standard) replaces the Council: members and tenure, industry toward victory, wars, pending votes (Approve), alliance chat, Leave.
-4. **Responding: one inbox.** ✉ and ⚑ are merged into one attention badge beside your standard (decisions first, then unread private messages). Tapping it opens the first item in context (the offering country's card, your alliance card for a vote, the sender's card with the message box focused). Toasts for things that affect you carry direct Accept/Decline/Reply. Read state is **per item** (a set of seqs per match and seat), marked when the row is actually visible in the rail or the card's thread.
-5. **HUD: one row.** Standard (+ badge), clock with a one-phrase victory status, forces and land, ☰. The second row, ally/war chips and the bottom navigation are gone; relations are on the map (blocs, fronts, red rings on threatened provinces) and in the leaderboard (⚔/⛓ markers, bands, and the list of war fronts, the one involving you highlighted and clickable).
-6. **History rail = history only**, three chips: All, World, Mine. Private rows link to the card that answers them. Incoming hostile armies are a rail row plus a red ring on the province (a toast when they arrive within 20 s); the alerts stack is gone.
-7. **☰ holds the rare things:** World/Europe views, Expand, War log (J), sound, room link, identity, the three tips, the map key (legend and Diplomacy colours), controls help. The camera cluster is Expand + Home (+/− with a fine pointer).
-8. **Onboarding:** three first-match tips (drag to attack; tap a country; your standard shows what needs you), stored per browser, replayable from ☰; a tip that has just been acted on advances by itself. Empty states say what to do next ("You are independent. Select a country … to propose an alliance").
-9. **Spectators** get the same map, leaderboard, rail and read-only cards (no actions, no message boxes). **Replay** uses the same components: the team leaderboard at the scrubbed tick, a history rail up to that tick (public events, plus alliance chat only in rooms that announced it, under an "Alliance chat" chip), rows that seek the scrubber, and map effects only while playing forward. All from the public report and replay data.
+Presentation only: every sound repeats something visible, so muting loses no information.
 
-## Surfaces, before and after (390×844 player)
-
-| v0.7 | v0.8 |
+| Cue | Plays when (live only) |
 |---|---|
-| HUD row 1 (menu, sound, standard, clock, 3 stats) | **HUD** (standard + badge, clock/status, 2 stats, ☰) |
-| HUD row 2 (ally chip, war chip, ✉, ⚑, victory line) | — (badge in the HUD; relations on map and leaderboard) |
-| Leaderboard strip | **Powers strip** (your rank + every other standard, one tap into diplomacy) |
-| Alerts stack (threats, battle notice, countdown) | — (red ring + rail row + toast; countdown in the rail and HUD) |
-| Map | **Map** |
-| Camera cluster (Expand, World, Europe, Home) + Map key chip | **Camera** (Home, Expand); views and key in ☰ |
-| Messages ticker → rail sheet (5+ chips, DM recipient select) | **History** ticker → sheet (All/World/Mine) |
-| Bottom nav (Orders, Council, War log) | — |
-| Order sheet (3 modes, relation line, war council link, 3 commit buttons) | **Card** (province/army/country/alliance; one primary) |
-| Council sheet | — (country card + alliance card = the same card) |
-| Popups (banners, notices, order toasts, confirm) | **Popups** (affecting you only; confirm for war, develop, leave) |
-| Menu popover, war log window, sound popover | ☰ (war log and sound inside it) |
-| Skip link | Skip link |
+| `war`, `alliance`, `peace` | a headline of that kind that affects you |
+| `battle` | a major battle that affects you |
+| `fallen` / `defeat` | another country falls / your country falls or your side loses |
+| `industry_up` | a level-III factory completes (yours or your side's) |
+| `countdown` / `countdown_stop` | a victory hold starts / stops |
+| `victory` / `draw` | the match ends (spectators hear `victory` for any winner) |
+| `dispatch` | an ACTION decision addressed to you; an alliance departure or dissolution |
+| `warning` | a hostile army newly targets one of your provinces |
+| `chat` | a DM or alliance message to you |
+| `march` / `click` | your own accepted march / any other accepted order |
 
-Uncovered map (4 px sampling of overlay rectangles): 1920x1080 79.8% idle / 74.4% with an order card peeking · 1366x768 73.6% idle / 63.4% with an order card peeking · 1280x720 72.0% idle / 60.4% with an order card peeking · 390x844 82.4% idle / 49.0% with an order card peeking · 844x390 65.9% idle / 53.0% with an order card peeking · 768x1024 85.9% idle / 67.9% with an order card peeking. (v0.7 at 1366×768: 72.9% / 65.1%; tablets upright were 51–55% idle.)
+The sprite still contains an unused `industry_down` cue from the removed capture damage.
 
-Persistent or common on a phone: **7** (map, HUD, powers strip, camera, history, card, popups), plus ☰ on demand and the three tips once. v0.7 had 15. Idle, at most four overlays sit on the map (HUD, leaderboard, history, camera), asserted at six viewports.
+**Music:** `theme`, a 64 s D-minor march that loops seamlessly; `tension`, a 16 s percussion layer faded in while you are at war or a victory countdown runs.
 
-## Measured (scripted walkthroughs, `tests/ui_tasks.py`)
+**Arbitration** (`public/sound-model.js`, pure, unit-tested): at most one stinger per poll (priority ≥ 2; +2 when it names your country), a UI cue only when no stinger was chosen, per-cue cooldowns, a 2.5 s gap between stingers, at most four stingers per 20 s (your defeat always passes). Music ducks to 30 % under a stinger. Catch-up history, reconnects and room switches play nothing.
 
-Each task is scripted like a player in its own copy of the recorded war room and counts taps/clicks/drags (typing and camera pans are counted separately). Bounds are asserted.
+**Settings:** nothing is fetched or decoded until the first click or key press. Mute, Music and Effects sliders and *Reduced sound* (stingers only, quieter, no tension layer) live in ☰ and persist in `localStorage["coi.sound"]`. **Shift+M** mutes (ignored while typing). Hidden tabs suspend audio. Defaults: effects 70 %, music 30 %.
 
-| Task | Bound | 390×844 touch | 1366×768 mouse |
-|---|---|---|---|
-| Declare war on a neutral country and march (incl. confirm) | ≤4 | 3 (tap target, primary, confirm) | 3 |
-| Attack a neighbouring enemy province with 50% | ≤3 | 3 (tap target, 50%, send) | 3 (drag, 50%, send) |
-| Propose an alliance | ≤3 | 3 (standard, Propose, Send) | 3 (row, Propose, Send) |
-| Respond to an incoming offer from the badge | ≤2 | 2 (badge, Accept) | 2 |
-| Reply to a DM | ≤3 + typing | 2 (badge, Send) | 2 |
-| Recall an army | ≤2 | 2 (source province, Recall)* | 2* |
-| Develop a province | ≤3 | 3 (+1 camera pan) | 3 (+1 pan) |
+**How the audio is made:** original synthesis only — no samples or recordings. `scripts/sound/compose.js` describes each cue with Tone.js 15.1 (a devDependency, used in headless Chromium at build time, never served). `scripts/sound/generate.py` renders with `Tone.Offline` at 48 kHz, cuts seamless loops, levels to ITU-R BS.1770 targets (stingers −16 LUFS momentary, UI −24, theme −23 LUFS integrated, tension −25, peaks ≤ −1 dBFS) and encodes Ogg Opus plus MP3 fallbacks into one cue sprite indexed by `public/audio/manifest.json`. A browser downloads about 600 KB (Ogg) or 960 KB (MP3).
 
-\* The fixture's column was still on top of a counter, where counter taps win (map contract), so the walkthrough used the source province's Recall; tapping the army itself is also 2 when it is clear of counters. Step screenshots: `artifacts/ui/tasks/<viewport>/`.
+Regenerate: `npm install` (dev), `python -m pip install numpy scipy matplotlib` plus the Playwright Chromium from `tests/requirements.txt`, ffmpeg with libopus and libmp3lame, then `python scripts/sound/generate.py --report /tmp/sound-report` (spectrograms and `levels.json`). Encoded bytes can differ between runs.
 
-## Verified (automated, not a usability study)
+## Voice input
 
-`npm test`, `npm run check` and `python tests/browser.py` (live 12× match, review, the focused UI suite, voice). The focused suite additionally checks, on recorded positions: the one-map layout at 1920×1080, 1366×768, 1280×720, 390×844, 844×390 and 768×1024 for player and spectator (idle, order card peek/expanded, country card, alliance card, history), with exactly one primary button, visible and unobstructed; ≥65% of the map uncovered idle at 1366×768 and ≥62% with a card peeking; keyboard order entry; a real CDP touch drag with a snapped arrow and ETA; the three tips; the badge with per-item read state across reloads and no replayed toasts; declare-war-and-march by keyboard with exactly one banner; alliance forming → active in the card, HUD and leaderboard; replay parity (leaderboard at tick, history up to tick with revealed alliance chat as text, seek from rows, no effects when scrubbing). All v0.6/v0.7 map, sound and effect checks still pass. A pre-existing failure from the ui-map-wrap merge (the dateline test assumed the old world-view geometry) was fixed in the test.
+`public/voice.js` adds a mic to every text box marked `data-voice` (the Messages composer); it never sends.
 
-Screenshots were read at every step at 390×844 and 1366×768 and adjusted until each step had one primary action and nothing overlapped (found and fixed this way: the toast covering the primary button, an empty country card filling the screen, a queued recall still offered, a forming alliance labelled neutral, short-landscape cards pushing the primary off screen).
+- **Talk:** tap to start and again to stop, or press and hold (walkie-talkie). A level bar and elapsed time show while recording; it stops after 30 s or about 1.5 s of silence after speech. **Esc** cancels; **Ctrl+Shift+Space** toggles while the composer has focus.
+- **Review, then Send:** the transcript is inserted at the caret, trimmed to 500 characters, focused, never sent automatically.
+- **Paths:** the server's local speech-to-text sidecar (`npm run stt`, `STT_URL=…`) when configured; otherwise the browser's Web Speech API (dashed mic, "may use a cloud service"); otherwise no mic. Spectators get no mic. On plain HTTP the mic is dimmed and explains that it needs HTTPS.
+- The transcript is untrusted player text and only reaches `input.value`.
 
-Not verified: real devices, screen readers, iOS; whether it is more intuitive or enjoyable for people — only that the tasks take few, clearly labelled steps in scripts.
+## Accessibility
 
-## Known issues
-
-- Dragging from a merged counter at world zoom is not possible; tap zooms in first (as before).
-- The desktop rail still covers the eastern edge until panned; camera insets are now used by Home, rail rows and card reveals, not by World/Europe.
-- The README GIF was re-recorded with `python tests/browser.py --gif docs/media/gameplay.gif` (60 real frames, 12× test clock, heuristic agents); it shows the live match, not the task walkthroughs.
-
-# v0.7 — The map is the screen
-
-A first-principles pass on the live match screen. No rule, balance value, event or map changed; relations (wars, alliances) are presented from data every spectator already receives. Review and replay keep their v0.4–v0.6 page layout (only its heading moved into the shared room menu); redesigning them was out of scope.
-
-## Principles (interaction only; no assets, art, names or trade dress copied)
-
-1. **The map is the whole screen.** Territorial.io and CK3 give the viewport to the map and float status over it. Here `#map` is exactly the viewport; nothing scrolls the document. — territorial.io tutorial (balance at the top, attack percentage bar at the bottom): https://territorial.io/tutorial
-2. **Status on top, actions in reach.** A slim top strip reads like a resource bar (CK3 puts resources and alert icons along the top edge, the outliner on the right). Mobile guidance puts primary actions in the bottom thumb zone and status at the top. — CK3 interface guide: https://www.gamepressure.com/crusader-kings-3/interface-description/z2f0f6 · Mobile game UI (thumb zones, fewer/bigger elements): https://www.wandr.studio/blog/mobile-game-ui-design
-3. **Selection drives context.** Nothing opens until you choose: selecting a province opens its card, like Conflict of Nations' province bar or CK3's context windows. — Conflict of Nations UI: https://wiki.conflictnations.com/User_Interface
-4. **One commit, a percentage, always visible.** Territorial.io's bottom percentage bar informs the commit dock: slider + 25/50/Max + one large Commit, outside any scrolling region.
-5. **What needs attention, where the eye starts.** Threats, battle notices, pending votes and the victory countdown stack top-left as CK3-style alerts; nothing moves the camera by itself.
-6. **Large targets, sheets, no hover dependence.** Bottom sheets with a drag handle on phones, 44 px targets on coarse pointers, WCAG 2.2 minimum target size as a floor. — https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html
-7. **History stays.** (User feedback) The World feed is a persistent, scrollable column; new items arrive expanded and settle, never vanish.
-8. **Friends and enemies at a glance.** (User feedback) Alliance colour and war status sit in the HUD, the leaderboard and the order card without opening a drawer.
-
-Material Design's bottom-sheet and Apple's layout pages were consulted but render client-side and could not be fetched; they are not cited as sources.
-
-## Layout
-
-```
-┌─[≡][◆ Britain][Allied ◆◆][⚔ At war ◆][▣18 ✕544 ⚒88/84 ★+166]──[ IN SESSION 08:00/30:00 · victory ]──[Orders][Council 2][Dispatches 16][Log]┐
-│ ┌alerts────────────┐                                                                          ┌Leaderboard (bands, ⚔/⛓)─┐ │
-│ │ ↘ 2 incoming …    │                                                                          │ 1 Britain  22.8% · 544   │ │
-│ │ 2 council matters │                       M A P  (full viewport)                              ├World history─────────────┤ │
-│ └──────────────────┘                                                                          │ ⚔ War declared   10:15   │ │
-│                                                                                               │ … scrollable, "N new ↓"  │ │
-│ ┌Southern England ^×┐ [+]                                                                     │                          │ │
-│ │MARCH COORD DEVELOP│ [−]                                                                     │                          │ │
-│ │AT WAR — can attack│ [World]                                                                 │                          │ │
-│ │═══○══ 25% 50% Max │ [Europe]                                                                │ [Reply to the world…][⏎] │ │
-│ │[ Commit 7 troops ]│ [Home]                                                                  └──────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
-Phones (portrait): two-row HUD (country · clock · stats / ally+war chips · victory), leaderboard strip, alerts,
-map, World ticker line; Orders/Council/Dispatches/War log as a bottom nav; card, drawers and history are bottom sheets
-(the order sheet takes priority). Tablets upright keep the desktop overlays with the bottom nav. Landscape phones:
-compact strip, narrower rail, order card up to full height on the left.
-```
-
-- **Order card** (bottom-left): peek (title, order type, relation line, commit dock) → half → full, via the chevron/grab handle (click, arrow keys, or drag on phones). A map click opens it peeking so the map stays usable; the Orders button opens it at half.
-- **Council / Dispatches**: a full-height left drawer (a bottom sheet on phones). Council now starts with **Wars** (side ⚔ side, since when, "you are involved"; click to frame the front) and **The Powers** roster (the old bottom scoreboard). At widths under 1100 px an open drawer takes the rail's place.
-- **Menu** (☰): room name/label, connection, identity, Copy room link, All rooms, Change identity, browser Full screen, map-control help, scenario note. In review it becomes the page heading.
-- **Map controls**: bottom-left, beside the card; +/− hidden on coarse pointers (pinch), World/Europe/Home stay. The atlas key (legend and Political/Diplomacy toggle) sits beside them; M toggles the mode.
-- **Camera insets**: `focus`/`home`/`fit` calls pass `{insets:{top,right,bottom,left}}` as an optional trailing argument describing the covered edges; the current atlas ignores it.
-
-## Team totals (user request: "how many troops each team has in total")
-
-The leaderboard defaults to **Teams**: one row per alliance (colour swatch, name as text, total land share and troops) with its members nested underneath (standard, name, a bar and percentage for their share of the alliance's troops, land, troops), sorted by strength; independents are single rows. Groups collapse to their total with a keyboard-accessible ▾/▸ button (`aria-expanded`); forming alliances are dashed and marked "forming"; the viewer's own row stays highlighted inside its group. **Players** keeps the flat list. The same `leaderboard(observation, {mode:'teams'})` feeds the CLI and MCP.
-
-## Expand map and installable app (user report: "I don't see how to put the replay map into fullscreen")
-
-- Every map has a thumb-reachable **⤢ Expand** control: live and spectator maps at the top of the camera cluster, the replay map in its bottom-right corner (a menu entry, "Expand map (full screen)", is never hidden). `public/expand.js` toggles a CSS pseudo-fullscreen (`position:fixed; inset:0`, safe-area padding, page scroll locked) that needs no Fullscreen API, which iPhone Safari lacks for non-video elements. Where the API exists it also requests real fullscreen (errors ignored) and leaving it through the browser leaves the pseudo state.
-- Live expanded: the HUD strip and bottom navigation step away; alerts, leaderboard, history, camera buttons and the order card remain. Escape (after menu, war log and panel) or ✕ Exit returns and restores focus.
-- Replay expanded: the map fills the screen with "At this moment" as a small top-left overlay, the zoom buttons top-right and the playback controls (play, ±10 s, speed, slider) pinned at the bottom. Rotation re-fits without moving the camera centre (the viewBox is kept).
-- `manifest.webmanifest` (display `fullscreen`, `display_override` fullscreen → standalone, original compass icons as SVG and PNG) plus `apple-mobile-web-app-capable`/status-bar meta: **Add to Home Screen** opens the game without browser chrome.
-
-## Deviations from the first proposal, and why
-
-- World feed moved from bottom-left to a **persistent right rail** under the leaderboard (user feedback: history must stay visible and scrollable). The context card and camera buttons moved to the **bottom-left** so nothing overlaps the rail.
-- The desktop card uses the **same peek/half/full states** as the phone sheet: a full-height card on the left hid the Americas and blocked map targeting.
-- **Single command panel** (Orders, Council, Dispatches share one surface) instead of independent drawers: keeps Escape/focus rules simple and avoids stacked panels on small screens.
-- **Bottom navigation up to 1023 px wide** (tablets upright too), not only phones: the top strip cannot hold relation chips, stats and four buttons at 768 px.
-- **Spectators** can still tap a province to see an inspector card (owner, incoming waves); there is no order form, dock or order type.
-- Zoom +/− are hidden on coarse pointers; **World/Europe/Home stay** (presets, not replaceable by pinch).
-- Relations and alliance colours come from the map branch's shared `public/relations.js` (merged); `warsOf` stays in `public/leaderboard.js`. The atlas's own key (legend + Political/Diplomacy toggle) is mounted in the camera cluster via `new Atlas(svg, map, onSelect, {legend: {placement, container, collapsed}})`; it hides beside an open card below 1100 px, and starts collapsed on phones. M toggles the map mode.
+Skip link to the map controls; every card, sheet and menu opens with focus moved in and returns it on Escape (which closes the top-most layer: tip, banner, menu, war log, Messages, card, Powers sheet, expanded map). Keyboard order entry, tabs with arrow/Home/End, `aria-expanded` / `aria-pressed` / `aria-live` (assertive for ACTION, polite for PERSONAL); the victory timer is not re-announced. Shortcuts (C, J/K, H, Q/E, M, L, Shift+M) never fire inside text entry. Representative text in every region meets WCAG contrast (4.5:1, 3:1 for large text). Relations are never colour-only: the card states them in words, and country names accompany every standard.
 
 ## Verified (automated, not a usability study)
 
-`npm test` (93 tests, including relations/wars/alliance-colour unit tests and CLI/MCP `wars` parity), `npm run check`, and `python tests/browser.py` (live 12× match, historical review, focused UI suite) pass. The focused suite, on recorded positions:
+The full `python tests/browser.py` run includes `tests/ui-browser.py` (recorded-position fixture with test-only stdin stepping; its screenshots are recorded-position UI, not a live match), `tests/ui_tasks.py` and `tests/voice-browser.py`.
 
-- At 1920×1080, 1366×768, 1280×720, 390×844, 844×390 and 768×1024, for player and spectator: `#map` equals the viewport; no document scroll; no overlapping or off-screen overlays when idle, with a selection (peek/half/full), with Council or Dispatches open, with the history collapsed to its edge tab (wide) or opened as a sheet (phones). The form-associated March commit is visible, unobstructed (hit-tested) and outside any scrolling region in every sheet size.
-- Uncovered map share (4 px sampling of overlay rectangles), recorded in the report: 1366×768 72.9% idle / 65.1% with a card peeking (asserted ≥65% / ≥62%); 1920×1080 79.3% / 75.4%; 1280×720 71.2% / 62.4%. Phones and tablets are much lower with a sheet open (390×844 33.5%, 844×390 37.0%, 768×1024 44.8%): the sheet is the focus there.
-- Keyboard: Council opens from its HUD button with focus moved in; Escape closes and returns focus; the sheet handle resizes with arrow keys; the menu opens/closes the same way; J/Escape war log; roster focus survives polling.
-- World history: scrollback to the first item of the match; reply pinned to the column bottom; a new item while scrolled up shows "1 new ↓" and does not move the reader; a long message arrives at ≤4 lines, shrinks to ≤2, expands and collapses by click, Enter and Space with `aria-expanded`.
-- Relations (war room fixture, where Britain declares war on the USA at tick 0 with no armies on that front): war chip = exactly the viewer's enemies; each leaderboard row's ⚔ marker matches `wars`; Council → Wars lists exactly the observation's pairs and focuses the front; the card states AT WAR / NEUTRAL and links to the war council. Alliances: a test-only acceptance shows "forming" (dashed), then active; band and feed colours equal `allianceColor`; a hostile alliance name renders as text only. The live match checks that the HUD chips agree with the public war list.
-- All v0.6 checks (map LOD audit, battle markers, effects scoping, banners without replay, reduced motion) still pass.
+- **Region audit** at **1920×1080, 1536×864, 1440×900, 1366×768, 1280×800, 390×844 and 844×390**, for the player (idle, order card peek and expanded, country card, alliance card, Messages list and thread, menu, the phone Powers sheet), the spectator, the lobby, the replay and the report: no visible `[data-region]` overlaps another by more than 4 px or leaves the viewport, no document scroll, `#map` is the viewport, exactly one primary on the card, visible and unobstructed.
+- **Contrast:** WCAG ratio of the computed colour against the effective background (gradient stops included) in every region and viewport.
+- **Uncovered map** (asserted): ≥ 65 % idle and ≥ 50 % with an order card peeking at 1366×768; ≥ 73 % / 65 % at 1920×1080; ≥ 64 % idle at every viewport.
+- **Interaction bounds** (`tests/ui_tasks.py`, 390×844 touch and 1366×768 mouse; taps, clicks and drags counted, typing and camera moves separately):
 
-Not verified: real touch-drag of the sheet on a device (the drag code path runs only on narrow screens and was not exercised by Playwright); iOS safe-area insets; screen-reader output; whether the layout is more enjoyable. The README GIF was re-recorded with `python tests/browser.py --gif docs/media/gameplay.gif` (12× test clock, heuristic agents), and is about twice the previous size.
+| Task | Steps | Bound |
+|---|---|---:|
+| Declare war on a neutral country and march | tap target, primary, confirm | 3 |
+| Attack a neighbouring enemy province with 50 % | tap target (or drag), 50 %, send | 3 |
+| Recall a marching army | army (or source province), Recall | 2 |
+| Propose an alliance | country, Propose alliance, Send | 3 |
+| Respond to an incoming offer | Messages, Accept | 2 |
+| Reply to a DM | Messages, Send (+ typing) | 2 |
+| Develop a province | province, Develop, confirm (+1 camera move) | 3 |
+| Set a rally point | province, Rally troops to…, rally province | 3 |
+| Converse: DM Japan, get a reply, reply, switch to alliance chat, send, switch back | open ≤ 2, each switch 1, each send 1 | 7 (measured 7 touch / 6 mouse) |
+
+The walkthroughs also check no toast for the open thread and drafts kept across polling.
+
+Not verified: real devices and iOS Safari, screen-reader output beyond the asserted ARIA attributes, how anything sounds, and whether players find the UI clear or enjoyable.
 
 ## Known issues
 
-- The atlas fits the 1280×680 world into the viewport, so in portrait phones the world view is a thin band until you pinch or press Home; the rail covers the eastern edge on desktop until panned. Camera insets are passed but not yet used by the atlas.
-- Tablet-portrait idle coverage is ~55%: the 288 px rail is a large share of 768 px.
-
-# v0.7 — Voice input (user request: "humans can type or use STT voice input")
-
-Typing stays primary; the mic is a shortcut into the same text box. `public/voice.js` + `public/voice.css` are self-contained: they attach a mic button to every field marked `data-voice` (the World reply box and the Dispatches message box, so world, coalition and private replies on desktop and phones) and never send anything.
-
-- **Talk:** tap the mic to start and tap again to stop, or press and hold and release (walkie-talkie). While recording the button turns red with a pulsing dot, and a live level bar (AnalyserNode) and elapsed time appear beside it. Recording stops by itself after 30 s or ~1.5 s of silence following speech. **Esc** cancels (and does not close the panel underneath). **Ctrl+Shift+Space** toggles while the composer has focus; other game shortcuts still never fire inside text entry.
-- **Review, then Send:** a spinner shows while transcribing; the text is inserted at the caret (with a space if text is already there), trimmed to the field's 500-character limit, the field is focused and the status says "Review, then Send". Nothing is sent automatically; the normal chat action applies its cooldown and validation.
-- **Paths:** the default is the server's local GPU speech-to-text (MediaRecorder picks WebM/Opus, Ogg/Opus or MP4/AAC for iOS Safari; microphone tracks are released as soon as recording stops). If the server has none but the browser has the Web Speech API, the mic (dashed outline) uses it and says "browser speech (may use a cloud service)". With neither, the mic is hidden. Spectators get no mic.
-- **HTTPS:** phones only grant the microphone to secure pages. On plain http the mic stays visible but dimmed with the tooltip "Voice input needs HTTPS", and tapping it explains why instead of failing silently. See `docs/OPERATIONS.md` → HTTPS for phones.
-- **Accessibility and safety:** `aria-pressed` on the mic, an accessible name that states which path it uses, and a polite `role=status` line for "Recording…", "Transcribing…", results and errors. The transcript is untrusted player text and only ever reaches `input.value` / `textContent`.
-
-Verified by `tests/voice-browser.py` (part of `python tests/browser.py`): Chromium's fake microphone plays generated speech through MediaRecorder, the `/stt` proxy and a fake sidecar (or the real GPU sidecar with `--real-stt URL`); it checks silence auto-stop, insertion after existing text, focus, no automatic send, Esc, the shortcut, hold-to-talk, the insecure-context message and the spectator view. Not yet verified on a physical phone.
-
-# v0.7 — Sound
-
-A presentation-only layer. It changes no rule, event, headline classification or API field. Every sound repeats something already visible (a banner, a World-feed row, the threat strip or an order toast), so muting loses no information.
-
-## Sound → event
-
-| Cue | Plays when (live only) | Visible counterpart | Priority (+2 if it names your country) |
-|---|---|---|---|
-| `war` — snare roll, timpani, low brass stab, horn call | headline `war` | War seal banner, red feed row | 3 |
-| `alliance` — brass fanfare, F-major chord, bells | headline `alliance` | Alliance seal, brass row | 3 |
-| `peace` — Gsus4 → G major strings, bells | headline `peace` | Treaty banner, white row | 3 |
-| `battle` — two distant low booms and a rumble | headline `major_battle` | Major-battle banner, orange row | 2 |
-| `fallen` — descending muted horn | headline `eliminated` (another country) | Fallen-standard banner | 3 |
-| `defeat` — lower, longer horn, timpani roll, D-minor chord | `eliminated` of your country, or `finished` when your side lost | DEFEAT banner / result panel | 5 |
-| `industry_up` — two clanks, rising steam hiss | headline `industry_up` (level III) | gear row, map effect | 2 |
-| `industry_down` — metal crunch, falling hiss | headline `industry_down` | gear row, map effect | 2 |
-| `countdown` — accelerating ticks, timpani, low D/E♭ swell | headline `dominance` | VICTORY COUNTDOWN banner | 3 |
-| `countdown_stop` — tension chord falling open | new entry in `dominanceBreaks` | “Countdown stopped” row + strip | 3 |
-| `victory` / `draw` | headline `finished` (spectators hear `victory` for any winner) | result panel, gold row | 3 |
-| `dispatch` — two neutral muted notes | `departure` / `dissolved` | Council dispatch banner | 2 |
-| `warning` — soft two-tone bugle | a hostile army newly targets one of your provinces | threat strip | 3 (always yours) |
-| `chat` — double blip | another player's world message | feed row | 1 |
-| `march` / `click` | your own committed move/transit/attack / any other accepted command | toast | 1 |
-
-**Music.** `theme` is a 64 s D-minor march (90 BPM, 24 bars: strings pad, horn melody, bass, timpani, snare) that loops seamlessly. `tension` is a 16 s timpani/snare/pulse layer started in sync with it (16 divides 64) and faded in while you are at war or any victory countdown runs; it is silent otherwise and in Reduced mode.
-
-**Arbitration** (`public/sound-model.js`, pure and unit-tested). Requests are ranked by priority. Per poll at most one stinger (priority ≥ 2) plays, plus a UI cue only when no stinger was chosen. Each cue has its own cooldown (battle 6 s, chat 6 s, warning 8 s, …); an equal-or-lower stinger must wait 2.5 s after the previous one; at most four stingers per 20 s (own defeat always passes). Dropped cues still have their banner and feed row. Music is ducked to 30% under each stinger.
-
-**Live only.** `app.js` calls `sounds.update(state, liveDeclarations, live)` right after `announce()`: the same post-catch-up event list that drives banners (`messageCatchupComplete`). Threat IDs and stopped-hold `seq` baselines advance on every poll, including catch-up, and reset when the room changes, so reconnects and room switches replay nothing. Spectators hear headlines and chat, never warnings.
-
-**Autoplay and settings.** Nothing is fetched, decoded or started until the first trusted `pointerdown`/`keydown`; then one `AudioContext` is created, `/audio/manifest.json` is read and Ogg Opus is decoded (MP3 if the browser reports no Ogg Opus or its decode fails — Safari's `decodeAudioData` support for Ogg Opus varies by version). The header **♪ Sound** button opens mute, Music and Effects sliders and **Reduced sound**; they persist in `localStorage["coi.sound"]` (all access in try/catch). Defaults: effects 70%, music 30%. **Shift+M** toggles mute; it is ignored while typing in inputs, selects, text areas and dialogs, and stops propagation so it cannot also trigger a plain `M` shortcut. Muted or hidden tabs suspend the `AudioContext` (music pauses). *Reduced sound* is a separate opt-in, not tied to `prefers-reduced-motion` (motion sensitivity and sound sensitivity are different needs): only priority ≥ 3 stingers (including your own battles), effects −6 dB, music −3 dB, no tension layer, no UI clicks or chat blips.
-
-## How the audio is made
-
-Original, pure synthesis — no samples, soundfonts, loops or third-party recordings. `scripts/sound/compose.js` describes every cue with [Tone.js](https://github.com/Tonejs/Tone.js) 15.1 (MIT, a **devDependency** only: loaded into headless Chromium at build time, never served or bundled). `scripts/sound/generate.py` seeds `Math.random`, renders each cue with `Tone.Offline` at 48 kHz, takes the steady-state second cycle of each loop (so reverb tails wrap), prepends the loop's last second and appends its first 0.5 s, levels everything with an ITU-R BS.1770 K-weighted meter, and encodes with ffmpeg: Ogg Opus (theme 40 kb/s stereo, tension 32 kb/s mono, cue sprite 32 kb/s mono) and MP3 fallbacks (64/48/48 kb/s). All cues share one sprite, `effects.*`, indexed by `manifest.json` (start/duration per cue, loop points, content hash used as `?v=` cache buster). Audio routes are an allowlist in `src/server.js` served as `audio/ogg` / `audio/mpeg` with `Cache-Control: public, max-age=86400`; the CSP is unchanged (`fetch` is covered by `connect-src 'self'`; no media elements are used).
-
-Regenerate: `npm install` (dev), `python -m pip install numpy scipy matplotlib` plus the Playwright Chromium from `tests/requirements.txt`, ffmpeg with libopus/libmp3lame, then `python scripts/sound/generate.py --report /tmp/sound-report` (spectrogram PNGs + `levels.json`). Renders repeat within ≈4×10⁻⁷ (−128 dBFS); encoded bytes can differ between runs.
-
-## Measured levels (committed assets)
-
-Targets: stingers −16 LUFS maximum momentary (400 ms), UI −24, click −27, theme −23 LUFS integrated, tension −25; sample-peak ceiling −1 dBFS (the ceiling wins, so three percussive cues end below target). True peak from 4× oversampling.
-
-| Asset | Seconds | Loudness | True peak dBFS |
-|---|---|---|---|
-| theme (loop 64 s) | 65.5 | −23.0 LUFS-I | −9.8 |
-| tension (loop 16 s) | 17.5 | −25.0 LUFS-I | −5.7 |
-| war / alliance / peace | 5.0 / 3.7 / 3.9 | −16.0 M | −2.9 / −3.7 / −4.8 |
-| battle / fallen / defeat | 3.3 / 4.4 / 6.3 | −16.0 M | −2.0 / −7.3 / −6.0 |
-| industry_up / industry_down | 2.1 / 2.3 | −18.9 / −16.0 M | −0.9 / −2.1 |
-| countdown / countdown_stop | 3.1 / 2.9 | −17.8 / −16.0 M | −1.0 / −2.8 |
-| victory / draw / dispatch | 5.3 / 4.0 / 2.0 | −16.0 M | −3.4 / −5.0 / −8.7 |
-| click / march / warning / chat | 0.2 / 1.1 / 1.2 / 0.4 | −27 / −24 / −24 / −24 M | −3.1 / −2.9 / −16.2 / −9.8 |
-
-Sizes: theme 320 KB (ogg) / 525 KB (mp3), tension 67 / 105 KB, effects 211 / 332 KB, manifest 1.4 KB. A browser downloads one format: 599 KB (Ogg) or 963 KB (MP3); 1.56 MB in the repository.
-
-**Loop seams** (decoded files, 40 ms before `loopEnd` vs before `loopStart`, max difference over 20 log bands within 30 dB of the loudest): theme 0.9 dB (Ogg) / 0.0 dB (MP3), tension 2.9 / 0.5 dB; sample step at the join ≤ 0.003. Source (pre-encode) seam difference is exactly 0. Spectrograms and waveforms of every asset were inspected for clipping, silence and discontinuities: none at the seams; leading silence 12–32 ms per cue. An abrupt end of the theme's final-bar cymbal swell was found this way and resolved by a soft crash on the loop's downbeat.
-
-## Verified
-
-- `tests/sound.test.js`: every headline kind → cue, own-country variants and priorities; spectator finish/elimination; only other players' public world chat; stopped holds by `seq`; one stinger per batch, gap, per-cue cooldowns and a 30-event burst limited to ≤ 4 plays; Reduced mode filtering; threat IDs and tension from a real engine observation (war + a German army marching on France; none for spectators); every cue exists in the sprite; server Content-Types, `nosniff`, cache header, byte-exact files, Ogg magic, 404 for unlisted paths, unchanged CSP, total size.
-- `tests/ui-browser.py` (recorded position, with a test-only spy on `AudioContext`, `AudioBufferSourceNode.start` and `coi:sound`): no context, audio fetch or start before the first click; after it, one context and exactly two loop starts, Ogg decoded under the page CSP with no CSP violation; catch-up history plays no cue; the live tick-535 headlines (a lost major battle and Britain's stopped countdown) choose exactly one audible cue — `countdown_stop` at priority 5 outranks the battle (4); reopening the room plays nothing; mute suspends audio; sliders and mute persist across pages; Shift+M types into the feed reply instead of muting, and mutes/unmutes elsewhere.
-- `tests/browser.py` (live match): committing a march through the UI plays the audible `march` cue.
-
-Not verified: how anything sounds — no listening test or human feedback; Safari/iOS decoding (only Chromium is automated); the tension layer's audibility balance; real output devices.
-
----
-
-# v0.6 — Map layers
-
-A presentation-only pass on the atlas. No rule, map ID, province geometry or adjacency changed; the server still decides every movement, battle and ownership change.
-
-**Borders.** `public/map-geometry.js` classifies each province outline once per map into shared runs (province↔province) and coastline. The atlas draws three strokes: thin dashed province borders, a heavier dark border wherever the two sides have different owners (re-classified on every state update, so captures move it), and a coastline over a faint shelf. `tests/map-geometry.test.js` checks both map files: paths parse; every vertex either lies on its neighbour's border (≤0.01 units — split-province junctions are rounded to two decimals) or is clearly separate (≥0.09, narrow straits); no boundary point lies inside another province; counter anchors sit on their province; every touching pair has a map connection. Audit result: no overlaps or drift slivers. Known, reported-not-changed gameplay mismatches: `poland|west-russia` is a land link whose polygons meet only at a corner; the legacy `map.json` has a land link `central-asia|mesopotamia` with ~3 units of water between the polygons; 13 sea links in the industrial map (e.g. `iberia|maghreb`, `east-canada|ireland`, `baltic|scandinavia`) also share a drawn border because the authored partition gives one province land across the strait.
-
-**Level of detail.** Chosen from on-screen pixels per map unit (`LOD` in `atlas.js`: far < 1.2 ≤ mid < 2.6 ≤ near). Far: one counter per contiguous same-owner land region with its summed garrison, a count badge and country stripe; large country names on the country's own land; no province names. Mid and far: counters of the **same owner** that would overlap on screen merge (repeated until stable) into one counter with the summed total and a member-count badge. Different owners are never summed. Near: every province counter, industry drawn as pips (font-independent), names wherever they fit above or below. Remaining overlaps are resolved by a deterministic outward nudge with a thin leader line back to the province; nothing is hidden, so every province's troops are on screen exactly once. Selected source/destination and battle provinces are never merged. Clicking or pressing Enter on a merged counter zooms to fit its members. Layout reruns on pan/zoom/resize at most once per animation frame (≈1–2 ms measured for 79 provinces). At country level, arrow labels of small foreign columns (<20, non-hostile) are hidden; the arrows stay.
-
-**Battles.** Each entry in `state.battles` gets a clash counter at its province — attacker strength (sum of engaged armies) × crossed swords × defending garrison, with attacker/defender stripes and a pulsing outline — at every zoom level, plus the province name when not at country level. Engaged armies are represented by this marker instead of an arrow. A newly adjudicated round briefly flashes the body and shows each side's losses; a freshly loaded page never replays old rounds. Reduced motion: static outline, no pulse or floating numbers.
-
-**Battle tug-of-war.** The token's background is a two-colour bar. The left part is the attacking team's colour and the right part the defender's, split at attacker ÷ (attacker + defender). Attacker is the sum of engaged armies, and defender is the garrison, the same numbers printed on the token. A side with troops always keeps at least 6% of the bar. Team colour is the coalition colour from `allianceColors`, or else the country fill; uncontrolled land is neutral grey. If the two colours are within 20 ΔE (`colorDistance`: CIE76, worst case over normal and simulated protan/deutan/tritan vision), the attacker's colour is darkened until they separate (`battleColors`). The bar is built from plain rects with no gradient or clip IDs, so the live and review instances cannot collide. It has a dark divider and frame, and the numbers and swords get dark halos. When a round changes the counts, the split slides over 0.4 s together with the loss flash. Under reduced motion it jumps. When a battle resolves, the bar fills with the winner's colour for a final flash and then disappears. The token is an overlay placed on the nearest wraparound copy, and moving armies stay above it. On `ui-war` the test checks colours and a split within 1% before and after a real stepped round, the 0.4 s transition, no transition under reduced motion, and unique IDs.
-
-**Effects API.** `atlas.effect(kind, data)`; supported kinds are exported as `MAP_EFFECTS`: `industry_up`/`industry_down` `{province, level}`, `captured` `{province, owner}`, `alliance` `{countries}`, `war`/`peace` `{from, to}`, `eliminated` `{country}`. Each is a ≈2 s decorative animation (reduced motion: a 1.6 s static highlight) in `aria-hidden` layers of that map instance only, with no element IDs. Fronts use current ownership: shared land borders, else sea links, else a capital-to-capital line. `eliminated` uses the last territory the atlas saw. It returns `false` for unknown kinds, unknown IDs or malformed data and never throws. Player text never enters these SVG fragments.
-
-**Zoom limits.** Maximum zoom is defined in screen pixels per map unit (`MAX_PX_PER_UNIT` = 14), not as a fixed view width, so every device reaches the same maximum. Before, a 390 px phone topped out near 2.9 px/unit against ~11.5 on a 1920 px desktop. The minimum view width is element width ÷ 14 and is recomputed on every view change and on resize or orientation change (the ResizeObserver re-clamps). The viewBox always takes the SVG element's own aspect ratio, so portrait phones fill the screen instead of being letterboxed, and px/unit is element width ÷ view width. World view fits the world's width; on a tall portrait screen the vertical position centres. Pinch, wheel, the +/− buttons and a touch double-tap (2× at the tap point; the first tap still selects, the second does not select again) all use the same clamp. The mobile suite emulates touch at 390×844 and 844×390 and checks that:
-- the viewBox aspect matches the element;
-- a real two-finger CDP pinch zooms in and reaches 14 px/unit;
-- a double tap halves the view width;
-- the + button reaches the near LOD at ≥14 px/unit;
-- Belgium, the Netherlands, Ruhr, Rhineland, Saxony and Serbia are each ≥32 CSS px;
-- the counter audit (no overlaps, each province once, correct sums) passes.
-
-**East–west wraparound.** The world repeats horizontally with a period of 1280 map units (`WORLD`). World-space layers live once in three groups: `base` (ocean names, meridians, sea links, fills, borders, coastline, alliance blocs, war fronts, relation outlines, area effects), `lines` (sea fronts, selection links, recruitment arrows, army traces) and `fx` (point effects). Each group is repeated by two `<use>` copies at ±1280, so ownership, borders, blocs, fronts, selection and effects are live on every copy, and `<use>` shadow trees add no document IDs. Names, counters, merged counters, battle markers and moving armies are single interactive overlays: each is drawn once, on the copy nearest the view centre. After every pan the view centre is normalized into [0, 1280), and an active drag follows the shift, so drag, pinch, wheel, arrow keys (focus the map) and World/Europe/Home all wrap seamlessly. Vertical movement stays clamped. Zoom out is capped at one world width actually visible on screen (accounting for the panel's aspect ratio; very wide panels crop a little height at World view), so no province or ocean label appears twice. A click or tap on a copy resolves the point to the same province with the shared geometry. Links and army traces use the shortest wrapped delta, so Pacific routes cross the dateline instead of spanning the map. Meridians are spaced to divide the world width, so the seam has no irregular gap. There is no pan inertia, with or without reduced motion. The server and `movement.js` are unchanged.
-
-**Layer order** (bottom to top): ocean and grid → fills → province, allied and country borders → coastline → alliance blocs → war fronts and relation outlines (all repeated) → sea fronts and route traces (repeated) → alliance and country names → counters and merged counters → battle markers → effects (repeated) → **moving armies**, the last child of the map SVG, above every copy. Armies are drawn once on the nearest copy. Each has a dark halo, an owner-coloured direction arrow, a troop-count pill and an 8 px hit circle, and all of it stays the same size on screen. Large columns (≥25% of the owner's troops, or the three biggest on the map) are 1.3× larger. Hover or keyboard focus shows the owner, size, route, a returning flag and the ETA. Taps on counters always win. The group ignores pointer events except a hit circle of 6.5 map units (≤17 px), and every layout/animation frame disables that circle while it overlaps any counter or battle box. An army can still be tapped away from counters, and it stays reachable with Tab. The mobile test taps the Scotland counter under a just-departed column at 390 px and gets Scotland. Engaged armies are still represented by the battle marker; columns still approaching stay above it. Province, country and alliance names treat each army's swept screen rectangle over the next interpolation window as an obstacle and move or wait rather than cover it.
-
-**Alliances (political view).** `public/relations.js` is pure and shared. It exports `relationsOf`, `atWar`, `coalitions`, `formingAlliances` and `allianceColors`.
-- **Palette:** `ALLIANCE_PALETTE` has four hues (lime, aqua, pink, blue). An 8-seat room has at most four coalitions. Any two hues are ≥38 CIE76 ΔE apart under simulated normal, protan, deutan and tritan vision (Machado 2009 matrices), and each is ≥15 from war crimson, the diplomacy gold and all eight country fills. `tests/relations.test.js` enforces this.
-- **Colour assignment:** each coalition prefers the palette slot hashed from its name. Active coalitions claim slots first, oldest first; forming ones follow by activation time. So a forming alliance normally keeps its colour when it activates, and the test checks that. A proposal that joins an existing coalition uses that coalition's colour.
-- **Blocs:** each is one outline around the union of its members' land, drawn as a crisp line plus an inner glow band clipped to the bloc (scoped `clipPath` IDs). Borders between members are softened (thin dashed) and stay distinct from the heavy border between unrelated owners.
-- **Counter ticks:** member counters and merged counters carry a thin alliance-colour tick beside the country stripe.
-- **Names:** at world and mid zoom, the coalition name is placed on the bloc's largest contiguous land with member colour pips. It is player text, set with `textContent` only and capped at 28 characters, and it avoids counters, country names and armies.
-- **Forming alliances:** approved proposals inside the activation delay (public `proposals` with status `pending`) get a dashed outline in their future colour around the future roster's land, and a "· forming" legend entry.
-
-**Map key.** The key is an HTML chip holding a collapse button, the legend and the Diplomacy toggle.
-- **Placement:** `new Atlas(svg, map, onSelect, { legend: { placement, container, collapsed } })`, where `placement` is one of `LEGEND_PLACEMENTS` (default `bottom-left`). The chip is positioned inside the visible map using CSS variables `--atlas-map-*` that the atlas keeps up to date, plus `--atlas-legend-inset`.
-- **Custom mounting:** `container` mounts the chip anywhere the host chooses.
-- **Collapse:** `setLegendCollapsed(bool)` collapses it to a single "Map key" chip. It starts collapsed at ≤520 px.
-- **Runtime changes:** `setLegendPlacement(p)` moves it.
-
-**Wars.** With formal war rules, every land border between owners at war carries a crimson hatched front over the country border (thicker at world zoom; a slow opacity shimmer, static under reduced motion). A dashed red sea link is drawn only when two warring countries have no land contact. The legend lists up to four wars by country. Legacy rooms without formal war draw no fronts, because every non-allied border there is hostile and fronts would just repeat the country borders; `relationsOf` still reports those relations exactly as the engine does. `atlas.setMapMode('political'|'diplomacy')` and `atlas.setRelationFocus(country|null)` are public, and `MAP_MODES` is exported. Diplomacy mode colours the focus country (default: the viewer; spectators: the country under the pointer) gold, allies blue-green, enemies red, other countries grey and uncontrolled land slate. Country and alliance labels are kept. Hovering or keyboard-focusing a country's counter or land for 300 ms, or setting a relation focus, outlines its enemies in red and its allies in blue in either mode. The map-mode toggle and legend are a small HTML chip in the map container, created per atlas (the live and review maps each have their own). On phones the political-mode legend is hidden, leaving the toggle.
-
-**Verified.** `tests/ui-browser.py` also drags and arrow-key-pans more than one world width in each direction and checks that the view centre is normalized and matches the distance travelled. It centres the dateline, clicks Australia on the repeated copy (the element under the pointer is the `<use>`) and checks that the inspector selects Australia. There it re-runs the counter audit (once each, correct sums, no overlaps) at two zoom levels and at 390px. It checks that every sea-link path, including the three Pacific links, is narrower than half the world, and that a trans-Pacific army's trace and marker take the short way. It checks for no duplicate IDs and exactly six copies. `tests/ui-browser.py` also compares the live DOM with the public room state at five zoom depths on 1366×768, 1920×1080 and 390px: each province appears once, merged totals equal the member garrisons, owners never mix, visible counters do not overlap, battle markers exist for every battle with attacker strength equal to the engaged armies. A second recorded test position (`ui-war`, real formal-war battles; test-only private stdin stepping) checks the round flash. Effects are checked on a separate atlas instance for scoping, `aria-hidden`, bad-input tolerance and reduced motion. Relations checks, on the `ui-fixture` match with three coalitions:
-- one bloc per coalition, covering exactly its members' provinces, inside the repeated world layer;
-- colours equal `allianceColors` and are stable across polls;
-- member counter ticks are correct;
-- at least one name is placed, and every name appears in the legend.
-
-On `ui-war` (real formal wars, plus three columns still marching at tick 55):
-- fronts exist exactly on the borders between warring owners, with sea fronts only where expected;
-- diplomacy mode recolours every province as specified and back;
-- hover outlines work;
-- the army layer is the last SVG child, after every `<use>` and overlay, and no army is inside a copied group;
-- no visible name label intersects an army arrow at four zoom levels;
-- a focused army shows its route and size;
-- IDs are unique.
-
-A separate atlas instance takes a hostile alliance name (`<img onerror>`): no element is created and the label is capped. The review atlas has its own chip and blocs. These checks do not establish legibility for real players. Known limits:
-- country names and some alliance names often have no room in dense Europe at world zoom;
-- the magenta and violet palette slots are the closest pair;
-- HUD overlays from other panels can cover map labels.
-
-## Event clarity
-
-Goal: anyone at the table — a human player, a spectator or an agent — can tell what just changed in the world without reading the War log. This is a presentation and observation change; no rule, balance value or event ID changed (the recorded 530-tick handplay event-log hash is unchanged).
-
-## One classification, many renderers
-
-`src/engine.js` classifies each **public** event once (`classifyHeadline`) and stores the result beside the adjudication log in `g.headlines` (keyed by event ID), so historic event hashes and replays stay exact. `observe` and the new `worldFeed` attach it as `event.headline`: structured public facts only (kind, country/province IDs, counts). Clients write the prose; the engine never sends text that could differ between clients. Private events (recipients) are never headlines. Games saved before v0.6 simply lack the field for older events.
-
-**Major battle rule.** A completed battle is a headline when `casualties ≥ max(20, ceil(3% × all troops on the map at the end of that tick))`. The headline carries `casualties`, `worldTroops` and `threshold`, so anyone can check it. Why: a fixed count means nothing when the world holds 700 troops early and 2,400 late; a pure share lets tiny early skirmishes through, hence the floor. Measured, not tuned for balance: in six seeded heuristic-bot war-rule matches (2,551 battles) 3% marked about 6% of battles (~25 per match), 2% marked 16% (too noisy for banners) and "any factory province captured" would have marked 26%, so factory captures are not a battle criterion — actual industry loss has its own headline. In the recorded 530-tick handplay game it marks 6 of 78 battles (17 headlines in all). Casualties stay a single shared total: there is no per-country kill attribution.
-
-**Industry threshold.** Only completions at the room's `maxDevelopment` (level III today) are headlines. Level II builds are routine opening economy and would bury the feed; reaching the top tier is the notable commitment (24 troops, 90 ticks). Every completion remains in the War log.
-
-## Event matrix
-
-| Event (engine type → `headline.kind`) | World feed | Banner (live only, queued) | Map effect `atlas.effect?.()` | Agent-visible |
-|---|---|---|---|---|
-| `war_declared` → `war` | red row, focuses target | War seal “WAR DECLARED” | `war {from,to}` | `headline` on observe + `world_feed` |
-| `peace_accepted` → `peace` | white row | Treaty “PEACE AGREED” (double-ruled) | `peace {from,to}` | same |
-| `alliance_activated` → `alliance` | brass row with alliance name (player text) | Standards draw together, brass ribbon stamps “ALLIANCE FORMED · name” | `alliance {countries}` | same; name is on the event, not the headline |
-| `eliminated` → `eliminated` | “X has fallen” row | Fallen standard dims and is struck through, country name shown; own country gets a DEFEAT variant | `eliminated {country}` | same |
-| `departed` → `departure`, `coalition_dissolved` → `dissolved` | grey row | Council dispatch | — | same |
-| `dominance` → `dominance` | gold row | “VICTORY COUNTDOWN” | — | same |
-| stopped hold → `dominance_broken` (in `dominanceBreaks`, `seq` = that tick's last event) | grey row | — (existing countdown strip) | — | `world_feed` item `type:"dominance_broken"` |
-| `battle` meeting the major rule → `major_battle` | orange row, focuses province | “Major battle at P · N troops lost” | `captured {province,owner}` if ownership changed | same |
-| `industry_damaged` → `industry_down` | gear row | — | `industry_down {province,level}` | same |
-| `development_completed` at max level → `industry_up` | gear row | — | `industry_up {province,level}` | same |
-| `finished` → `finished` | gold row | — (result screen takes over) | — | same |
-| world `message` | chat row, escaped text | — | — | `world_feed` item, `untrusted:true` |
-| minor battles, level II builds, orders, alliance/DM chat | — (War log / Dispatches only) | — | — | ordinary `observe` events |
-
-## Browser behavior
-
-- **World feed** is a collapsible overlay in the map's lower-left corner (310 px, list ≤ 220 px), so it never enters or displaces the command dock. At ≤ 760 px it flows below the map, collapsed by default; the choice is remembered per browser. Rows are appended, never re-rendered, so scroll and focus survive polling. Headline rows carry icon + tone (war red, peace white, alliance brass, battle orange, industry gear) and are buttons that focus the map on the province or country — only on click; nothing moves the camera automatically. An unread count shows live items that arrived while collapsed.
-- **Reply** posts through the ordinary `chat` action on channel `world`, so the shared 10-second chat cooldown applies and is displayed. Spectators see the same feed read-only; it replaces the old temporary chat bubbles. The Dispatches tab keeps the full wire; its badge now counts only coalition and private messages.
-- **Banners** share one queue (at most five waiting). The highest-ranked waiting banner shows next; headlines naming the viewer's own country outrank others; when full, the least important is dropped (it stays in the feed). Bursts shorten each banner. Banners are `pointer-events:none`, never take focus, and are only created for events received after the initial catch-up (the existing `messageCatchupComplete` pattern), so reconnects and room switches never replay them. All player text is written with `textContent`; insignia are the authored constants from `presentation.js`, always beside the country name. Under `prefers-reduced-motion` all feed/banner animations are off and banners appear in their final state.
-
-## Leaderboard
-
-A compact ranked panel pinned to the map's top-right corner (the feed owns bottom-left; incoming-army and battle notices own top-left; the incoming-army strip is narrowed so it cannot run underneath). It is shown to players and spectators whenever the match is not in the lobby.
-
-- **One ranking** (`public/leaderboard.js`, pure) is used by the browser, CLI `leaderboard` and MCP `leaderboard`. Input is the public observation only: provinces, armies, players, sides. Every army, including other countries' marching, returning and engaged armies, is already in the public observation that spectators receive, so nothing new is revealed.
-- **Troops** = garrisons + all of that country's armies on the map. **Territory** = provinces held and the share of all provinces. Rank by provinces, then troops, then ID.
-- **Players / Alliances** toggle: a coalition sums its members, and independents rank as themselves. The alliance name is player text, written with `textContent`, with up to three member standards. Eliminated countries stay listed, dimmed, struck through and marked "fallen". There is no Prestige or industry column: territory is shown for orientation, and the victory rule stays in the campaign bar.
-- Top 5 are shown, plus the viewer's own row with its real rank if it is outside them (dashed separator). Rows are fixed slots updated in place with fixed column widths and tabular numbers, so polling never flickers or reflows. A rank change shows a small ▲/▼ for 4 seconds; with reduced motion the arrow does not animate.
-- The panel collapses to one line: your rank, share and troops (spectators see the leader). At ≤ 760 px it flows under the map as a 40 px tappable strip, collapsed by default.
-
-## Verified
-
-- `tests/feed.test.js`: the threshold and floor, minor battles excluded, battle casualties, private events never classified, level II excluded, identical headline for spectator/player observations, public-only chronological feed with cursor and unsplittable pages, deterministic headlines, a real elimination, and the banner/effect plan (own vs other elimination).
-- `tests/server.test.js`: `/feed` over HTTP, CLI `feed` and MCP `world_feed` return identical items; DMs excluded; invalid cursor/limit rejected.
-- `tests/browser.py` (12× live match): a CLI war declaration appears as a feed headline; the alliance seal shows both standards and names; hostile HTML from an agent and from the feed reply renders as inert text for player and spectator; the reply reaches the public feed API; a reconnect rebuilds the feed and shows no banner for any pre-reconnect headline.
-- `tests/ui-browser.py` (recorded position): catch-up shows history with no flashes/banners; the real tick-535 battle (128 of 2,367 troops) raises one “Major battle at Northern India” banner and fresh row; reopening replays nothing; reduced motion disables every new animation.
-
-- `tests/leaderboard.test.js`: ranking and tie-break, in-transit/engaged/returning armies counted, alliance aggregation, own row outside the top N with its real rank, and identical results for spectator and player observations. `tests/ui-browser.py`: at 1366×768 and 1920×1080 the panel stays inside the map and does not overlap the feed, notices, dock or command panel; every row's `data-troops` and `data-provinces` equal sums recomputed from `/api/games/ROOM`; the Players/Alliances toggle works; at 390 px it starts as a collapsed strip of 44 px or less and expands without horizontal overflow. `tests/server.test.js`: CLI and MCP leaderboards equal the shared function over the public observation.
-
-Not verified: the fallen-standard animation is covered by unit tests and styling, not by a live browser elimination; no human usability or enjoyment study.
-
----
-
-# v0.5 — The command table
-
-This is a layout and interaction pass, not a claim that automated tests can establish taste, fun or “world-class” quality. The earlier local reskin was not on master. This release replaces the old CSS system rather than adding its hundreds of bevel/shadow overrides.
-
-## Visual decisions
-
-The live match has a fixed desktop field of view: slim campaign status, force/territory/allegiance/Prestige strip, large map, contextual Orders/Council/Dispatches pane and one compact roster. At 1366×768 and above, the primary order and roster stay in the viewport. Longer reports belong in the War log drawer, not under the board. Below the desktop breakpoint, and on short viewports, the page flows normally instead of clipping controls.
-
-Original eight-power standards recur in country selection, the player's command header, the roster and the final result. Each has a distinct line motif and banner tone. These are **fictional game insignia**, not verified historical heraldry. They do not add national abilities. Country names accompany them; decorative SVG is hidden from assistive technology. No flags, icons, screenshots or textures were copied from other games. No font files or asset service is required.
-
-The palette reserves brass for the selected action and important state, dark naval blue for instruments, and parchment for the analytical post-match ledger. Rectangular military counters retain screen-space size while zooming; nationality stripes match the board. Recruitment levels remain separate, not disguised as extra resources. Labels declutter independently. Fine stipple stays a fine grain at every zoom. An initial diagonal texture was rejected because it looked like an occupation map mode.
-
-Marching markers point toward the actual destination. Visible route traces are selective: sizeable own commitments or those tied to the selected province, not an unreadable web of every one-troop reinforcement. Returning paths start at the actual turn-around coordinate. All time/position calculations still use the existing shared movement module.
-
-## Interactions
-
-- **Faction selection** chooses the actual native country selector and shows its starting assets. Occupied seats disable. The in-game roster inspects a country's strongest currently held province without submitting an order. Its button retains keyboard focus through polling.
-- **Primary commands** are docked outside the scrolling detail pane. March uses a normal form-associated submit button; Coordinate/Develop call the same existing actions. The dock displays the source/destination and the March button states the chosen troop count. No hotkey commits an attack.
-- **War log** opens by click or J, closes by Escape or Close, and returns focus. It is hidden in review. J does not hijack typing in a chat message, number field or dialog.
-- **Battle notices** come only from fresh completed battles involving the controlled country. Secured, Lost and Line held are distinct. They can be dismissed or inspected; they never move the camera automatically, issue an order, disclose private messages or replay stale notifications on reconnect. An active victory hold gets a contrasting status strip. Its timer is not repeatedly announced as an aria-live message.
-- **Spectators** retain the concurrent full-screen map, escaped public-chat bubbles and running-game lobby groups. A separate Resume action restores an authenticated playing seat; Spectate remains credential-free even for its owner. The read-only note lives in the sidebar so it cannot displace the map grid.
-- **Results** identify Victory/Defeat for the viewing participant, Armistice for a draw, or Campaign concluded for an observer. Every winner's standard is shown without inventing an alliance emblem, bonus or kill attribution.
-
-## References
-
-The official Total War campaign manual describes a faction-symbol entry point and separation of faction, objectives and economic views. That inspired recurring country standards and bounded command surfaces, not a copy of its interface: https://r2enc.totalwar.com/en/manual/single-player/0015a_enc_page_campaign_play_interface/
-
-Paradox's Victoria 3 map-graphics diary discusses making UI selections relate visibly to the map. That informed contextual inspection and restrained map feedback, not extra scenery or an imported mechanic: https://www.paradoxinteractive.com/games/victoria-3/news/victoria-3-dev-diary-70-feature-game-jam-pt2
-
-## Verification boundaries
-
-Run `npm test`, `npm run check`, and `python tests/browser.py`. The browser entry point includes both historical review and the new focused UI suite. To run the focused suite alone: `python tests/ui-browser.py`.
-
-The focused server uses a recorded position at tick 480 and a private stdin test channel to resume the original decisions to ticks 535/539; this does not expose a public time-control API. Those real adjudicated outcomes verify Lost/Line held notices and interrupted holds. It is not another independent strategic match. Tests cover 1366×768/1600×1000/1920×1080 desktop fitting, 1024px/390px/short-landscape flow, persistent keyboard focus, symbol uniqueness/injection resistance, docked controls, faction selection, disclosures and review identity separation. Reduced-motion styling disables the brief notice entrance. This is not a full accessibility audit or an independent usability study.
-
-See `docs/testing/v05-local.json` and, when published, `v05-native-ci.json` for actual verification. Native Chromium/CSP/origin checks remain distinct from the explicit managed-environment bridge.
-
----
-
-## Earlier design records
-
-# v0.3 interaction refinements
-
-The atlas visual language remains; order complexity is separated into **March / Coordinate / Develop** modes rather than a taller wall of controls. Source/destination selection stays shared. Coordinate lists each adjacent owned source, its actual travel time, selectable percentage/exact troops and an optional common arrival tick. It shows earliest arrival and delayed dispatch explicitly. A read-only server preview is not a commitment.
-
-Committed orders distinguish waiting, outbound and returning components, with individual/group recall controls. No recall button promises instant restoration. Development shows level, output, local troop cost, construction time and capture risk before a confirmation. Lobby summaries expose starting troop, production and territory differences instead of presenting them as equal starts.
-
-Map anchors, distance durations and recall turning positions are shared with the server; the UI does not invent a trajectory or result. Industrial output appears on province markers and in country summaries. The Orders scroller retains position while data refreshes. Army/plan state changes are server-validated; a stale draft cannot spend unavailable troops.
-
-Browser tests cover these controls through real HTTP actions. Screenshots and GIF are actual rendered gameplay with an explicit 12× test-clock/heuristic-agent label, not concept art. Native browser evidence is separate from the managed local browser bridge. No claim of a full accessibility audit or independent-user usability study.
-
----
-
-# Historical v0.2 design notes
-
-# UI and UX pass — v0.2
-
-## Direction
-
-An atlas on a diplomatic table, not an admin dashboard. The map stays visually dominant; the command panel should answer “what can I do next?” and the campaign strip should answer “what needs attention?” Navy ocean, restrained brass, readable parchment controls, system serif headings and system UI body text. No copied game art, downloaded fonts, or decorative resources are required at runtime.
-
-This pass was implemented and reviewed within the same assistant session. No independent second coding-agent runtime was available; do not represent it as an independently reviewed design.
-
-## References and adaptation
-
-- **OpenFront**, official game: https://openfront.io/ — contextual map actions, attack-fraction controls, event navigation and visible incoming threats. Adapted here as explicit 25/50/Max controls, a source-garrison explanation and a focusable incoming-army banner, not as new mechanics.
-- **Warzone / War.app**, official Orders list: https://war.app/wiki/Orders_list — keep entered/executed orders linked to the board. Adapted as a visible committed-march queue with troop counts, destinations and ETA. Council's committed movements remain irreversible; no turn-based undo was imported.
-
-These are interaction references, not claims that either game proves the new UI is enjoyable. No screenshots or assets from those games are shipped.
-
-## Changes
-
-**Map.** Troop counters retain a useful screen size while zooming, neutral clutter is suppressed when appropriate, labels appear with detail, and allied countries keep their own colors. Source/target selection and connections are explicit. Hover/focus information names a province; counters for Scotland and Ireland no longer appear over a distant disconnected polygon. Moving armies interpolate visually between authoritative ticks; reduced-motion preferences suppress animation. The server still decides all arrivals.
-
-**Orders.** Click an owned province, then a connected target; Shift-click selects a different source, Escape clears. Source and destination selectors remain available for keyboard users and dense regions. Presets and a range slider complement the precise troop input. Available troops and previews account for already-reserved orders. The command budget shows its next recovery time. An in-flight/queued order list confirms accepted commands; a repeated click cannot accidentally dispatch another copy while a request is pending.
-
-**Situational awareness.** A compact strip shows land, troop total, victory progress and projected individual Prestige. Incoming attacks have a focus action and an ETA. The map and sidebar have independent useful space on desktop instead of forcing a tall empty map whenever a form grows.
-
-**Diplomacy.** Open proposals show the exact roster and maximum slice cost before acceptance. Decline and withdraw are real server actions. Leaving displays a confirmation with the maturity consequence; Escape cancels without a departure. Pending changes remain clearly distinct from active membership. Private message delivery stays recipient-scoped. Unread means unseen incoming messages, not every message ever sent. Draft text survives polling and tab changes.
-
-**Navigation.** Abort stale room/identity reads before they can display another seat's inbox. Keyboard-accessible tabs implement arrow/Home/End navigation and selection state. Dialog focus returns to the initiating control. A skip-map link and standard form controls provide alternatives to pointer use. Wheel, drag and pinch camera gestures coexist with world/Europe/home buttons. A 390-pixel layout keeps controls reachable without horizontal document overflow.
-
-## Verified versus unproven
-
-The browser test exercises room creation, human and CLI-agent seats, actual shared-API orders, alliance acceptance, private messaging, escaped hostile HTML, reconnect, a full scored match, and a second-room map interaction. Added checks cover leave-cancel, unread behavior, retained drafts, troop presets, map/Shift-click targeting, keyboard tabs and mobile overflow. GIF recording uses these real browser frames, not mockups or generated imagery.
-
-Local managed Chromium required the documented HTTP test bridge. Native CI uses actual navigation, origin, storage and served CSP. No live LLM or independent human enjoyment study was performed, and automated focus/layout tests are not a full accessibility audit. Color distinction, map density and mobile camera comfort still need real player feedback.
+- With a card open on a phone the map shows about 41 % of the screen (the card is the focus there).
+- An incoming-attack warning (ACTION) holds the toast slot, so a battle notice waits until it is dismissed.
+- The replay's phone map is short while the standings sheet is open.
+- Country names and some alliance names often have no room in dense Europe at world zoom.

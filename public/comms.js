@@ -1,4 +1,4 @@
-/** v0.9 Messages: ONE interaction model for notifications and messages (see docs/UI-DESIGN.md v0.9).
+/** Messages: ONE interaction model for notifications and messages (see docs/UI-DESIGN.md).
  * One comms button (ACTION count loud, unread PERSONAL quiet), one toast lane (at most one toast, "+N"), one
  * panel = inbox (conversations sorted by what needs you) + threads (messages with inline Accept/Decline, an
  * Unread divider, "↓ N new", quick replies, a composer with the mic from voice.js). The World thread is the
