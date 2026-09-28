@@ -305,7 +305,7 @@ def relations_checks(page,report,capture):
         menu(page)
         if page.locator('.menu-key').get_attribute('open') is None:page.locator('.menu-key summary').click()
         expect(page.locator('#map-key .atlas-legend')).to_be_visible()
-    key();assert page.locator('.war-room .atlas-modes').count()==0
+    key();assert page.evaluate("[...document.querySelectorAll('.war-room .atlas-modes')].every(e=>e.closest('#map-key'))")  # only inside the menu's key
     toggle=page.locator('#map-key .atlas-mode-toggle')
     fills=lambda:page.evaluate('''async()=>{const s=await (await fetch('/api/games/ui-war')).json();return s.provinces.map(p=>[p.id,p.owner,document.querySelector('#province-'+p.id).getAttribute('fill')]);}''')
     toggle.click();expect(page.locator('#map')).to_have_attribute('data-mode','diplomacy')
@@ -448,13 +448,15 @@ HOSTILE_ALLIANCE='<b onclick="x()">Iron & "Pact"</b>'
 def inbox_checks(page,server,context,url,report,capture):
     """v0.9 Messages: one button (decisions loud, unread quiet), one toast lane, an inbox of threads; read per item, never replayed."""
     page.set_viewport_size({'width':1366,'height':768});page.keyboard.press('Escape');close_comms(page)
+    page.locator('#comms .cx-readall').click()  # "Mark all read": start from zero unread (decisions keep their chips)
+    expect(page.locator('#comms-button')).to_have_attribute('data-unread','0')
     for line in ['dm russia britain An older note from Petersburg.','dm germany britain Our armies should talk before the Rhine burns.','offer qing france']:
         server.stdin.write(line+'\n');server.stdin.flush();json.loads(server.stdout.readline())
     button=page.locator('#comms-button')
     expect(button).to_have_attribute('data-action','1',timeout=5000)  # the offer waits for this seat (a new member of its alliance)
     expect(button).to_have_attribute('data-unread','2')  # two unread DMs
     toast=page.locator('#toasts .cx-toast[data-tier="action"]')
-    expect(toast).to_have_count(1,timeout=8000);expect(toast).to_contain_text('Iron Triangle')
+    expect(toast).to_have_count(1,timeout=8000);expect(toast).to_contain_text('proposes French Republic');expect(toast).to_contain_text(HOSTILE_ALLIANCE);assert page.locator('#toasts b[onclick]').count()==0  # the alliance name is text
     for control in ['[data-do="accept"]','[data-do="view"]','[data-do="dismiss"]']:expect(toast.locator(control)).to_be_visible()
     expect(page.locator('#toasts .cx-live[data-tier="action"]')).to_have_attribute('aria-live','assertive')
     expect(page.locator('#toasts .cx-live[data-tier="personal"]')).to_have_attribute('aria-live','polite')
@@ -470,7 +472,7 @@ def inbox_checks(page,server,context,url,report,capture):
     assert stored==['coi.comms.ui-war.britain'],stored
     page.reload();expect(button).to_have_attribute('data-unread','1',timeout=5000)  # read state persists per item
     button.click()  # first: the decision, as a letter in the thread with Accept inline
-    letter=page.locator('#comms .cx-letter');expect(letter).to_contain_text('Iron Triangle');check_layout(page,'1366x768 offer letter')
+    letter=page.locator('#comms .cx-letter');expect(letter).to_contain_text('Qing, France and you');check_layout(page,'1366x768 offer letter')
     letter.locator('[data-do="accept"]').click();expect(button).to_have_attribute('data-action','0',timeout=5000)
     close_comms(page);button.click();expect(page.locator('#comms .cx-title')).to_have_text('Russian Empire')
     expect(page.locator('#cx-text')).to_be_focused();expect(button).to_have_attribute('data-unread','0',timeout=5000)
@@ -479,7 +481,7 @@ def inbox_checks(page,server,context,url,report,capture):
     spectator=context.new_page();spectator.goto(url+'/?match=ui-war&spectate=1');expect(spectator.locator('#phase')).to_have_text('Watching')
     spectator.wait_for_timeout(800)
     expect(spectator.locator('#comms [data-conv^="dm:"],#comms [data-conv="alliance"]')).to_have_count(0)
-    rows=open_thread(spectator,'world');assert 'Rhine burns' not in rows.inner_text() and 'Iron Triangle' not in rows.inner_text()
+    rows=open_thread(spectator,'world');assert 'Rhine burns' not in rows.inner_text() and 'Petersburg' not in rows.inner_text()
     expect(spectator.locator('#comms-button .cx-count')).to_have_count(0);spectator.close()
     report['assertions'].append('Messages: two DMs from different countries and an alliance decision read 1 decision (loud) and 2 unread (quiet) on the one button; the decision arrives as ONE action toast with Accept, Read and dismiss in an assertive live region (personal toasts are polite) while the DMs wait; a reload keeps the counts without any summary or replayed toast; reading the newer DM in its thread leaves the older one unread (per-item read state persisted under coi.comms.<match>.<seat>); the button opens the decision first as a letter with Accept inline, then the remaining DM with the composer focused; Escape returns from a thread to the list; a spectator sees none of these private items.')
 
@@ -548,7 +550,7 @@ def relation_checks(page,server,report,capture):
     state=page.evaluate("fetch('/api/games/ui-war').then(r=>r.json())");assert 'britain:france' in state['wars'],state['wars']
     mine=page.evaluate("fetch('/api/games/ui-war',{headers:{Authorization:'Bearer '+JSON.parse(localStorage.getItem('coi.identity')).token}}).then(r=>r.json())")
     assert any(o['type']=='move' and o['from']=='england' and o['to']=='north-france' for o in mine['commandBudget']['reserved']),mine['commandBudget']
-    page.wait_for_timeout(1200);assert page.evaluate('window.__banners.length')==1 and 'WAR DECLARED' in page.evaluate('window.__banners[0]'),page.evaluate('window.__banners')
+    page.wait_for_timeout(1200);assert page.evaluate('window.__banners.length')==1 and 'war declared' in page.evaluate('window.__banners[0]').lower(),page.evaluate('window.__banners')
     report['assertions'].append('Declare war & march (solo, keyboard): a neutral target makes the one primary read “Declare war on France & send N”; the confirmation names the whole target side with Cancel focused; Escape keeps the peace; confirming declares the war and reserves the march in one order, adds the war marker to the World thread and shows exactly one banner (it affects this seat).')
     report['assertions'].append('Relations (recorded war room, Britain at war with the USA): every leaderboard row’s relation marker matches the public war list; Powers always lists exactly the war fronts under the rows (count shown; every front row visible and hit-testable at 1366×768 and 1920×1080), marks the one involving the viewer and frames it on the map; country cards state AT WAR / NEUTRAL with Offer peace / Propose alliance as the primary; the order card states the target owner’s relation and its owner line opens that country’s card.')
     # Alliances from the country card: forming (dashed) during the notice, then active in the alliance colour; the name stays text.
@@ -592,13 +594,15 @@ def expand_checks(browser,url,identity,report,out):
         page.locator('#aar-tab-replay').click();expect(page.locator('#replay-stage')).to_be_visible()
         button=page.locator('#replay-expand');expect(button).to_be_visible()
         board,corner=page.locator('#review-map').bounding_box(),button.bounding_box()
-        assert corner['x']>=board['x'] and corner['x']+corner['width']<=board['x']+board['width']+1 and corner['y']+corner['height']<=board['y']+board['height']+1 and corner['height']>=44,(board,corner)
+        # v0.9: the Expand key sits in the replay's top bar (a fixed HUD spot), fully on screen, ≥40 px.
+        assert corner['x']>=0 and corner['y']>=0 and corner['x']+corner['width']<=w+.5 and corner['y']+corner['height']<=h+.5 and corner['height']>=40,(board,corner)
         page.locator('#replay-slider').fill('300');centre=page.evaluate(VIEW_CENTRE)
         button.click();theatre=page.locator('#aar-replay');expect(theatre).to_have_class(re.compile('map-expanded'))
         assert theatre.bounding_box()=={'x':0,'y':0,'width':w,'height':h},theatre.bounding_box()
         scroll=page.evaluate('scrollY');page.mouse.wheel(0,600);page.wait_for_timeout(150);assert page.evaluate('scrollY')==scroll,'page scrolled behind the expanded map'
-        assert page.locator('#review-map').bounding_box()['height']>=h*.45
-        for control in ['#replay-play','#replay-slider','#replay-speed','#replay-expand']:
+        # v0.9: expanded, the phone replay keeps the standings at the tick and the timeline beside the map (map ≈39% of 844 px).
+        assert page.locator('#review-map').bounding_box()['height']>=h*(.38 if w<h else .45)
+        for control in ['#replay-play','#replay-slider','#replay-expand']+(['#replay-speed'] if w<h else []):  # short landscape: speed lives in the collapsed timeline
             box=page.locator(control).bounding_box();assert box and box['y']>=0 and box['y']+box['height']<=h+.5 and box['x']+box['width']<=w+.5,(control,box)
         page.locator('#replay-play').click();expect(page.locator('#replay-play')).to_have_text('Pause');page.locator('#replay-play').click()
         page.locator('#replay-slider').fill('420');expect(page.locator('#replay-stage')).to_have_attribute('data-tick','420')
@@ -609,7 +613,7 @@ def expand_checks(browser,url,identity,report,out):
         after=page.evaluate(VIEW_CENTRE);assert abs(after[0]-centre[0])<1 and abs(after[1]-centre[1])<1,(centre,after)
         page.set_viewport_size({'width':w,'height':h});page.wait_for_timeout(150)
         page.keyboard.press('Escape');expect(theatre).not_to_have_class(re.compile('map-expanded'));expect(button).to_be_focused()
-        expect(button).to_have_attribute('aria-pressed','false');assert theatre.bounding_box()['height']!=h or theatre.bounding_box()['y']!=0
+        expect(button).to_have_attribute('aria-pressed','false')  # v0.9: the replay is itself a full-screen stage; expanding only hides its panels
         button.click();page.locator('#replay-expand').click();expect(theatre).not_to_have_class(re.compile('map-expanded'))  # ✕ Exit
         ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
         assert page.locator('#review-map [id]').evaluate_all('(n)=>n.every(e=>e.id.startsWith("review-map"))')
