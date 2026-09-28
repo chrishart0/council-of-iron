@@ -15,6 +15,7 @@ export const SCREENS = [
   ['tile', 'Style tile'], ['title', 'Title & rooms'], ['faction', 'Choose a country'], ['hud', 'In match · idle'],
   ['province', 'Province · send troops'], ['country', 'Country · war or alliance'], ['offer', 'Incoming alliance offer'],
   ['chat', 'Chat & diplomacy'], ['menu', 'Menu & settings'], ['powers', 'Powers & wars'], ['replay', 'Replay'], ['report', 'After-action report'],
+  ['walk', 'Comms walkthrough'],
 ];
 export const screen = () => { const s = new URLSearchParams(location.search).get('s'); return SCREENS.some(([id]) => id === s) ? s : 'hud'; };
 
@@ -117,4 +118,31 @@ export function reviewerNav(direction, label) {
   nav.querySelector('select').addEventListener('change', e => { location.search = `?s=${e.target.value}`; });
   addEventListener('keydown', e => { if (e.target.closest?.('input,textarea,select')) return; if (e.key === ']') go(1); if (e.key === '[') go(-1); });
   document.body.append(nav);
+}
+
+/** Mount the shared comms model (kit/comms.js) on a direction's elements for the current screen.
+ * els: { button, toasts, panel } — the direction places them in its own fixed regions and skins `cx-*`.
+ * Screens: 'walk' = the scripted walkthrough (recorded observations comms-0…4); 'offer' = France's offer arriving
+ * as an ACTION toast; 'chat' = Messages open on the France thread; anything else = the live position at rest. */
+export async function mountComms(m, els, s = screen()) {
+  const { Comms } = await import('/concepts/kit/comms.js');
+  const get = name => fetch(`/concepts/fixture/${name}.json`).then(r => r.json());
+  const live = m.live, offerEvent = live.events.find(e => e.type === 'alliance_offer'), dmFrance = live.events.find(e => e.type === 'message' && e.from === 'france' && e.channel === 'dm');
+  if (s === 'walk') {
+    const snaps = await Promise.all(['0-before', '1-dm', '2-offer', '3-accepted', '4-replied'].map(n => get(`comms-${n}`)));
+    const comms = new Comms({ ...els, m, state: snaps[0], readUpTo: snaps[0].events.at(-1).id, voiceScript: 'Agreed. Hold the Pacific and we will hold the Channel.',
+      onAct: async a => a.type === 'accept' && a.proposalId && snaps[2].proposals.some(q => q.id === a.proposalId && q.creator === 'japan') ? snaps[3]
+        : a.type === 'chat' && a.to === 'japan' && comms.state === snaps[3] ? snaps[4] : null });
+    // Test-only stepping (like tests/ui-browser-server.js' private stdin): deliver the next recorded observation.
+    let stage = 0; window.__walk = { arrive: () => { stage = Math.min(2, stage + 1); comms.receive(snaps[stage]); return stage; } };
+    return comms;
+  }
+  if (s === 'offer') {
+    const before = { ...live, events: live.events.filter(e => e.id < offerEvent.id), proposals: [] };
+    const comms = new Comms({ ...els, m, state: before, readUpTo: dmFrance.id });
+    requestAnimationFrame(() => comms.receive(live)); return comms;
+  }
+  const comms = new Comms({ ...els, m, state: live, readUpTo: s === 'chat' ? dmFrance.id - 1 : dmFrance.id - 1 });
+  if (s === 'chat') requestAnimationFrame(() => comms.openThread('dm:france'));
+  return comms;
 }

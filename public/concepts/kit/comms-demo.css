@@ -1,0 +1,5 @@
+body{margin:0;height:100vh;overflow:hidden;background:#345;color:#eee;font:15px system-ui;display:grid;grid-template:56px auto 1fr/1fr 380px}
+.bar{grid-column:1/-1;background:#123;display:flex;justify-content:flex-end;padding:6px}#toasts{grid-column:1;grid-row:2;padding:8px}#panel{grid-column:2;grid-row:2/4;background:#fff;color:#123}
+button{font:inherit}.cx-count[data-tier=action]{background:#c00;color:#fff;border-radius:9px;padding:0 5px;top:-4px;right:-4px}.cx-count[data-tier=personal]{background:#07c;color:#fff;border-radius:9px;padding:0 5px;font-style:normal;bottom:-4px;right:-4px}
+.cx-toast{background:#fff;color:#123;padding:8px;border-radius:6px}.cx-conv{padding:8px;border:0;border-bottom:1px solid #ccc;background:none}.cx-conv[data-state=action]{background:#fee}
+.cx-rows>li{padding:6px 10px}.cx-divider{color:#c00;text-align:center}.cx-sep{text-align:center;color:#888;font-size:12px}.cx-sys[data-tier=action]{background:#fee}.cx-marker{background:#eef}.cx-composer{padding:8px}
