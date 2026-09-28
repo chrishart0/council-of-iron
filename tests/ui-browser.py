@@ -631,7 +631,7 @@ def expand_checks(browser,url,identity,report,out):
         page.keyboard.press('Escape');expect(page.locator('#stage')).not_to_have_class(re.compile('map-expanded'))
         expect(page.locator('#hud')).to_be_visible();expect(live).to_be_focused()
         # Popups on phones are compact toasts under the HUD, never over the order sheet or its commit.
-        select(page,'england','ireland')
+        select(page,'ireland','england')
         sheet=page.locator('#card').bounding_box();commit=page.locator('#primary').bounding_box();sizes=page.evaluate(TOAST_SIZE)
         for name,r in sizes.items():
             assert r['height']<=min(80 if name=='declaration' else 72,h*.22)+.5 and r['top']>=0,(w,h,name,r)
