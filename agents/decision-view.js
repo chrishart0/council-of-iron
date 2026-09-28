@@ -31,7 +31,9 @@ export function decisionView(observation, map) {
     .slice(-12).map(event => {
       const result = {};
       for (const key of ['tick', 'type', 'country', 'province', 'from', 'to', 'orderId',
-        'owner', 'previousOwner', 'level', 'side', 'winsAt'])
+        'owner', 'previousOwner', 'level', 'side', 'winsAt', 'battleId',
+        'attackerSide', 'defenderSide', 'before', 'troops', 'duration',
+        'casualties', 'industryLost'])
         if (event[key] !== undefined) result[key] = event[key];
       return result;
     });
