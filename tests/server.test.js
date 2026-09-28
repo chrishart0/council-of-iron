@@ -47,6 +47,14 @@ test('HTTP lobby: human and agent identities, occupied countries, host controls,
   const rejoined=await f.call(`/api/games/${id}/join`,'POST',{country:'usa'},a.token);
   assert.equal(rejoined.status,200);assert.equal((await f.call(`/api/games/${id}`,'GET',undefined,rejoined.data.token)).data.you,'usa');
 });
+test('private server ID factory supports paired combat trials without a public seed parameter',async t=>{
+  const f=await fixture(t,{gameIdFactory:()=> 'paired-01'}),host=await f.register('Benchmark host');
+  const first=await f.room(host);
+  assert.equal(first,'paired-01');
+  const duplicate=await f.call('/api/games','POST',{name:'Second room'},host.token);
+  assert.equal(duplicate.status,400);
+  assert.equal((await f.call('/api/games')).data.games.length,1);
+});
 test('opening locks introductions, blocks orders, and launches when every seat is ready',async t=>{
   const f=await fixture(t),{id,sa,sb}=await f.boot();
   const started=await f.call(`/api/games/${id}/start`,'POST',{},sa.token);

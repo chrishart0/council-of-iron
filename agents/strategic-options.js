@@ -37,6 +37,9 @@ export function strategicOptions(state, map) {
       manpowerReady: availableNow >= forecast.cost && !forecast.alreadyInvested && !forecast.queued,
       commandReady: (state.commandBudget?.remaining || 0) > 0 };
   }).filter(Boolean);
+  const readyDevelopments = developmentChoices.filter(choice => choice.manpowerReady && choice.commandReady)
+    .map(choice => ({ province: choice.province, cost: choice.cost, availableNow: choice.availableNow,
+      paysBackBeforeDeadline: choice.paysBackBeforeDeadline }));
   const targets = [];
   for (const target of state.provinces) {
     if (target.owner && ownMembers.has(target.owner)) continue;
@@ -69,9 +72,20 @@ export function strategicOptions(state, map) {
     (a.earliestArrival ?? Infinity) - (b.earliestArrival ?? Infinity) ||
     a.province.localeCompare(b.province));
   const partners = state.players.filter(p => p.side !== me.side && p.side.startsWith('solo:') && p.eliminatedAt === null)
-    .map(p => ({country: p.id, industry: industry.get(p.id) || 0,
-      combinedIndustry: own + (industry.get(p.id) || 0),
-      industryGapTogether: Math.max(0, threshold - own - (industry.get(p.id) || 0))}))
+    .map(p => {
+      const partnerIndustry = industry.get(p.id) || 0;
+      const exponent = state.rules.strengthExponent ?? .75;
+      const ownWeight = own ** exponent, partnerWeight = partnerIndustry ** exponent;
+      const victoryShareIfJoinedNow = ownWeight + partnerWeight ? ownWeight / (ownWeight + partnerWeight) : 0;
+      const prizePool = state.players.length * 100;
+      const deadlinePrizes = state.rules.deadlinePrizes ?? [.5, .25, .25];
+      return {country: p.id, industry: partnerIndustry,
+        combinedIndustry: own + partnerIndustry,
+        industryGapTogether: Math.max(0, threshold - own - partnerIndustry),
+        victoryShareIfJoinedNow,
+        decisivePrestigeAtFullMaturityIfWon: prizePool * victoryShareIfJoinedNow - 100,
+        deadlinePrestigeAtFullMaturityByRank: deadlinePrizes.map(fraction => prizePool * victoryShareIfJoinedNow * fraction - 100)};
+    })
     .sort((a, b) => a.industryGapTogether - b.industryGapTogether || a.country.localeCompare(b.country));
   return {
     status: state.status, tick: state.tick, country: state.you, side: me.side,
@@ -79,7 +93,7 @@ export function strategicOptions(state, map) {
     holdTicks: hold, latestHoldStart, ticksUntilLatestStart: Math.max(0, latestHoldStart - state.tick),
     holdStillStartable: state.tick <= latestHoldStart,
     currentDeadlinePayout: state.leaderboard?.players.find(p => p.country === state.you)?.projectedDeadlinePayout ?? null,
-    nearbyTargets: targets, developmentChoices, possibleIndependentPartners: partners,
-    assumptions: 'Static public board only. Capture comparisons assume the current industry level survives, no other province changes, and your side keeps the target. Adjacent sources are your own uncommitted garrisons; they are not an attack plan. Defenders, recruitment, travel, orders, war votes, alliance notice, tenure, and other players can change before arrival. Use plan_attack or preview for a chosen target.'
+    nearbyTargets: targets, readyDevelopments, developmentChoices, possibleIndependentPartners: partners,
+    assumptions: 'Static public board only. Capture comparisons assume the current industry level survives, no other province changes, and your side keeps the target. Partner point estimates assume the current industry ratio, full alliance maturity at finish, and the listed rank or decisive win; they are not a prediction that the alliance will win. Adjacent sources are your own uncommitted garrisons; they are not an attack plan. Defenders, recruitment, travel, orders, war votes, alliance notice, tenure, and other players can change before arrival. Use plan_attack or preview for a chosen target.'
   };
 }

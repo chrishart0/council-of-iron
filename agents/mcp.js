@@ -39,7 +39,7 @@ tool('situation','Read a concise board and delivered diplomacy without full batt
 tool('match_leaderboard','Read the current match ranking by completed industry. Includes every alliance (solo sides too), each player’s industry, current strength-weighted victory share and conditional payouts. This is not persistent cross-match standings.',
   {},[],async()=>{const o=await client.observe(0);return {status:o.status,tick:o.tick,economyThreshold:o.economyThreshold,
     leaderboard:o.leaderboard,outcome:o.outcome};},true);
-tool('strategic_options','Compare your industry gap, adjacent targets and development choices. Development choices show cost, uncommitted local manpower and whether it is currently ready. Static board arithmetic only: this does not predict combat, acceptance, or future orders.',
+tool('strategic_options','Compare your industry gap, adjacent targets, payable development, and possible partners. Each partner has a current-strength victory share and optimistic full-maturity Prestige by decisive win or deadline rank; use these before proposing an alliance. readyDevelopments lists provinces where develop can be issued NOW; if it is empty, do not call develop until the board changes. Static board arithmetic only: this does not predict combat, acceptance, or future orders.',
   {},[],async()=>strategicOptions(await client.observe(0),await client.map()),true);
 tool('alliance_victory_share','Read your current alliance victory share and conditional point forecasts. Decisive assumes your side completes a 60% hold; deadline assumes current industry ranking stays final. This spends no command.',
   {},[],async()=>{const o=await client.observe(0);if(!o.you)throw new Error('Join a country to read your own alliance share.');
@@ -51,9 +51,9 @@ tool('alliance_victory_share','Read your current alliance victory share and cond
       decisivePayoutIfWon:mine.projectedDecisivePayout,deadlinePayoutIfNow:mine.projectedDeadlinePayout,
       decisivePrestigeIfWon:mine.projectedPrestige,deadlinePrestigeIfNow:mine.projectedDeadlinePayout-100,
       assumption:o.leaderboard.assumption,actualResult:o.outcome?.scores.find(p=>p.country===o.you)??null};},true);
-tool('preview','Read exact static Risk-round capture odds against the current garrison. Defender wins ties. Reinforcements, recruitment and retreat can change the outcome.',
+tool('preview','Read exact static Risk-round capture odds against the current garrison. Amount must be positive and no more than the source’s uncommitted troops (see strategic_options.nearbyTargets[].adjacentSources[].availableNow). Defender wins ties. Reinforcements, recruitment and retreat can change the outcome.',
   {from:string,to:string,amount:integer},['from','to','amount'],a=>client.preview(a.from,a.to,a.amount),true);
-tool('move','Commit troops across one connection. Leave one behind. Attacking another country requires an active war first; use declare_war. Counts as one military command; executes next tick by default. Industrial scenario allows recall and distance-based travel. Supply exactly one of amount or percent; optional arriveAt schedules arrival.',
+tool('move','Commit troops across one connection. Leave one behind. For an enemy target, strategic_options.nearbyTargets[].requiresWar must be false; a pending declaration is not an active war. Amount must not exceed the source adjacentSources.availableNow. Counts as one military command; executes next tick by default. Industrial scenario allows recall and distance-based travel. Supply exactly one of amount or percent; optional arriveAt schedules arrival.',
   {from:string,to:string,amount:{type:'integer',minimum:1},percent:{type:'number',exclusiveMinimum:0,maximum:100},arriveAt:{type:'integer',minimum:1},...op},['from','to'],a=>client.action({type:'move',from:a.from,to:a.to,amount:a.amount,percent:a.percent,arriveAt:a.arriveAt},a.opId));
 tool('transit','March through 1–7 allied intermediate provinces to a final connected destination without gifting the troops. Alliance departure waits while troops are inside an ally’s borders.',
   {from:string,amount:{type:'integer',minimum:1},path:{type:'array',minItems:2,maxItems:8,items:string},...op},
@@ -67,11 +67,11 @@ tool('accept_alliance','Consent to this exact roster. Fully approved changes act
 tool('decline_alliance','Decline or withdraw an open alliance offer without changing allegiance.',
   {proposalId:string,...op},['proposalId'],a=>client.action({type:'decline',proposalId:a.proposalId},a.opId));
 tool('leave_alliance','Announce departure. After 30 seconds you become independent and your maturity starts over.',op,[],a=>client.action({type:'leave'},a.opId));
-tool('declare_war','Declare war on another country and its coalition. A solo declaration is immediate; a coalition needs majority approval within 60 game seconds.',
+tool('declare_war','Declare war on another country and its coalition. A solo declaration is immediate; a coalition needs majority approval within 60 game seconds. Check situation.diplomacy before calling: do not repeat a still-open war motion between these sides. Attack only after situation.wars shows active war.',
   {country:string,...op},['country'],a=>client.action({type:'declare_war',country:a.country},a.opId));
 tool('offer_peace','Offer peace to a country and its coalition. A coalition first needs a majority to send; the other side then needs a majority to accept within 60 game seconds.',
   {country:string,...op},['country'],a=>client.action({type:'offer_peace',country:a.country},a.opId));
-tool('vote_war','Approve your coalition’s pending war declaration.',{motionId:string,...op},['motionId'],a=>client.action({type:'vote_war',motionId:a.motionId},a.opId));
+tool('vote_war','Approve your coalition’s pending war declaration. Use only a voting war motion in situation.diplomacy with expiresAt greater than the current tick and your vote absent; these motions expire quickly.',{motionId:string,...op},['motionId'],a=>client.action({type:'vote_war',motionId:a.motionId},a.opId));
 tool('vote_peace','Approve sending a peace offer or accepting one addressed to your coalition.',{motionId:string,...op},['motionId'],a=>client.action({type:'vote_peace',motionId:a.motionId},a.opId));
 tool('send_message','Send untrusted in-game speech. One per ten game seconds across all channels, up to 500 characters. No compulsory reply or action acknowledgment.',
   {channel:{type:'string',enum:['world','alliance','dm']},to:string,text:{type:'string',maxLength:500},...op},['channel','text'],a=>client.action({type:'chat',channel:a.channel,to:a.to,text:a.text},a.opId));
@@ -95,7 +95,7 @@ tool('coordinated_attack','Commit connected source provinces to one target on th
   {...attackProperties,...op},['to','sources'],a=>{const {opId,...action}=a;return client.action({type:'attack',...action},opId);});
 tool('recall','Cancel a queued attack or recall an outbound army/group. Troops already marching return from their current position and remain vulnerable; they fight if home is now hostile.',
   {id:string,...op},['id'],a=>client.action({type:'recall',id:a.id},a.opId));
-tool('develop','Spend local uncommitted manpower to improve province recruitment and defense. Levels 2/3/4 cost 20/36/60 manpower and take 90/150/240 ticks. Level 2–3 adds 1 to the highest defender die; level 4 adds 2. Capture destroys unfinished work, not completed levels.',
+tool('develop','Develop only a province in strategic_options.readyDevelopments; otherwise this call will fail. Spend local uncommitted manpower to improve recruitment and defense. Levels 2/3/4 cost 20/36/60 manpower and take 90/150/240 ticks. Level 2–3 adds 1 to the highest defender die; level 4 adds 2. Capture destroys unfinished work, not completed levels.',
   {from:string,...op},['from'],a=>client.action({type:'develop',from:a.from},a.opId));
 
 let initialized=false,ready=false;

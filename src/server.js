@@ -41,7 +41,8 @@ async function body(req) {
 function json(res, status, data) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); }
 /** `clockScale` accelerates ALL game timing in local tests; no HTTP endpoint can advance time. */
 export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScale = 1,
-  publicOrigin = process.env.PUBLIC_ORIGIN || '', league = process.env.LEAGUE_MODE === '1', automatic = true } = {}) {
+  publicOrigin = process.env.PUBLIC_ORIGIN || '', league = process.env.LEAGUE_MODE === '1', automatic = true,
+  gameIdFactory = () => randomUUID().slice(0,8) } = {}) {
   const store = new Store(dbPath), games = new Map(store.load()
     .filter(g=>g.scenario===MAP.id && (g.rules?.economyShare===.6 || g.status==='finished' && g.afterAction))
     .map(g=>[g.id,g]));
@@ -127,7 +128,9 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         requireRule(Object.hasOwn(PRESETS,data.preset || 'standard'),'Unknown time preset.');
         requireRule([...games.values()].filter(g=>g.status!=='finished').length<32,'This prototype supports 32 active rooms.',429);
         requireRule(data.scenario===undefined || data.scenario===MAP.id,'Unknown scenario.');
-        const g=createGame({id:randomUUID().slice(0,8),name:data.name || 'Council chamber',hostId:me.id,
+        const gameId=gameIdFactory();
+        requireRule(typeof gameId==='string' && /^[a-zA-Z0-9-]{1,32}$/.test(gameId) && !games.has(gameId),'Invalid or duplicate room ID.');
+        const g=createGame({id:gameId,name:data.name || 'Council chamber',hostId:me.id,
           speed:PRESETS[data.preset || 'standard'],eligible:league},MAP);
         games.set(g.id,g);save(g);return json(res,201,{id:g.id});
       }

@@ -30,6 +30,12 @@ test('strategic options distinguish taking rival industry from taking neutral in
   assert.equal(mexico.industryGapAfterCapture,9);
   assert.equal(result.possibleIndependentPartners[0].country,'britain');
   assert.equal(result.possibleIndependentPartners[0].industryGapTogether,0);
+  const partner = result.possibleIndependentPartners[0];
+  const share = 11 ** .75 / (11 ** .75 + partner.industry ** .75);
+  assert.ok(Math.abs(partner.victoryShareIfJoinedNow - share) < 1e-10);
+  assert.ok(Math.abs(partner.decisivePrestigeAtFullMaturityIfWon - (200 * share - 100)) < 1e-10);
+  assert.deepEqual(partner.deadlinePrestigeAtFullMaturityByRank,
+    [.5, .25, .25].map(fraction => 200 * share * fraction - 100));
   const east = result.developmentChoices.find(p=>p.province==='east-us');
   assert.equal(east.availableNow, game.provinces.find(p=>p.id==='east-us').troops-1);
   assert.equal(east.manpowerReady, east.availableNow>=east.cost);
@@ -43,12 +49,16 @@ test('strategic development options exclude reserved manpower', () => {
   start(game);
   const province=game.provinces.find(p=>p.id==='east-us');
   province.troops=100;
-  const ready=strategicOptions(observe(game,'usa'),map).developmentChoices.find(p=>p.province==='east-us');
+  const readyOptions=strategicOptions(observe(game,'usa'),map);
+  const ready=readyOptions.developmentChoices.find(p=>p.province==='east-us');
   assert.equal(ready.manpowerReady,true);
+  assert.ok(readyOptions.readyDevelopments.some(p=>p.province==='east-us'));
   game.orders.push({type:'move',country:'usa',from:'east-us',to:'west-us',amount:90,executeAt:game.tick+1});
-  const reserved=strategicOptions(observe(game,'usa'),map).developmentChoices.find(p=>p.province==='east-us');
+  const reservedOptions=strategicOptions(observe(game,'usa'),map);
+  const reserved=reservedOptions.developmentChoices.find(p=>p.province==='east-us');
   assert.equal(reserved.availableNow,9);
   assert.equal(reserved.manpowerReady,false);
+  assert.ok(!reservedOptions.readyDevelopments.some(p=>p.province==='east-us'));
 });
 
 test('strategic options require a player seat', () => {

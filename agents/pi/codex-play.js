@@ -21,7 +21,9 @@ mkdirSync(output, { recursive: true, mode: 0o700 });
 const preset = arg('--preset', 'quick');
 const access = arg('--access', 'mcp');
 const maxMinutes = Number(arg('--max-minutes', '12'));
+const combatSeed = arg('--combat-seed', undefined);
 if (!['quick', 'standard'].includes(preset) || !['mcp', 'cli'].includes(access) || !Number.isFinite(maxMinutes) || maxMinutes <= 0) throw new Error('Invalid preset, access, or minutes');
+if (combatSeed && !/^[a-zA-Z0-9-]{1,32}$/.test(combatSeed)) throw new Error('Combat seed must be 1–32 letters, digits, or hyphens.');
 if (playerModel === 'luna') {
   const source = process.env.CODEX_AUTH_PATH || resolve(process.env.HOME, '.codex/auth.json');
   const destination = resolve(home, 'auth.json');
@@ -32,11 +34,13 @@ const runId = new Date().toISOString().replace(/[:.]/g, '-');
 const file = resolve(output, `${runId}-codex.json`);
 const modelId = playerModel === 'luna' ? 'gpt-6-luna' : 'qwen3.8-27b-unsloth-q4';
 const label = playerModel === 'luna' ? 'Luna x-high Codex' : 'Qwen3.8-27B Unsloth Q4 Codex';
-const record = { runId, client: 'codex', access, model: modelId, preset, startedAt: new Date().toISOString(), events: [], actions: [], httpActions: [], turnLog: [], usage: null };
+const record = { runId, client: 'codex', access, model: modelId, preset, combatSeed: combatSeed || null,
+  startedAt: new Date().toISOString(), events: [], actions: [], httpActions: [], turnLog: [], usage: null };
 const save = () => writeFileSync(file, JSON.stringify(record, null, 2), { mode: 0o600 });
 let app, child;
 try {
-  app = makeServer({ dbPath: resolve(output, `${runId}-codex.db`), league: false });
+  app = makeServer({ dbPath: resolve(output, `${runId}-codex.db`), league: false,
+    ...(combatSeed ? { gameIdFactory: () => combatSeed } : {}) });
   app.server.prependListener('request', (req, res) => {
     if (req.method !== 'POST' || !/^\/api\/games\/[^/]+\/actions$/.test(req.url?.split('?')[0] || '')) return;
     res.once('finish', () => { record.httpActions.push({ status: res.statusCode, at: new Date().toISOString() }); save(); });
@@ -127,6 +131,10 @@ try {
     if (state.status === 'finished') { record.outcome = state.outcome; break; }
     if (child.exitCode !== null || child.signalCode !== null) break;
     await sleep(3000);
+  }
+  if (record.status === 'finished' && child.exitCode === null && child.signalCode === null) {
+    const graceUntil = Date.now() + 30000;
+    while (Date.now() < graceUntil && child.exitCode === null && child.signalCode === null) await sleep(1000);
   }
   if (child.exitCode === null) { child.kill('SIGTERM'); await sleep(1000); if (child.exitCode === null) child.kill('SIGKILL'); }
   const final = await client.observe(0);

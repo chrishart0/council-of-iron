@@ -39,7 +39,7 @@
     th,td { padding:11px 14px; text-align:left; border-top:1px solid var(--line); white-space:nowrap; }
     th { color:var(--muted); background:#102733; }
     tbody tr:hover { background:#244150; }
-    td:nth-child(n+6) { text-align:right; }
+    td:nth-child(n+7) { text-align:right; }
     .client { font-weight:700; }
     .client.pi { color:var(--pi); }
     .client.codex { color:var(--codex); }
@@ -55,13 +55,14 @@
 <body>
 <main>
   <header>
-    <div><div class="eyebrow">Council of Iron / experiment ledger</div><h1>Agent <em>trials</em></h1><p>Britain against seven practice bots. Each mark is a completed, isolated match. Compare runs within the same model and clock speed; the rooms do not share a combat seed.</p></div>
+    <div><div class="eyebrow">Council of Iron / integration trial ledger</div><h1>Agent <em>trials</em></h1><p>Britain against seven practice bots. These runs expose tool failures and latency; a few quick rooms do not establish playing strength. A shared seed fixes combat rolls for the same state, but agents create different states.</p></div>
     <div class="seal" aria-hidden="true">IRON<br>COUNCIL<br>LAB</div>
   </header>
   <section class="controls" aria-label="Filter benchmark results">
-    <label>Model <select id="model"><option value="all">Both models</option><option value="qwen">Qwen</option><option value="luna">Luna</option></select></label>
+    <label>Model <select id="model"><option value="all">All models</option><option value="qwen">Qwen</option><option value="luna">Luna</option><option value="external">External profile</option></select></label>
     <label>Clock <select id="preset"><option value="all">Both speeds</option><option value="standard">Normal</option><option value="quick">Quick</option></select></label>
-    <label>Measure <select id="measure"><option value="prestige">Final Prestige</option><option value="failedToolCalls">Failed tool calls</option><option value="failureRatePct">Failure rate</option><option value="totalTokens">Total tokens</option><option value="tokensPerAction">Tokens per accepted action</option><option value="meanTurnSeconds">Seconds per turn</option></select></label>
+    <label>Combat seed <select id="seed"><option value="all">All rooms</option></select></label>
+    <label>Measure <select id="measure"><option value="prestige">Final Prestige</option><option value="failedToolCalls">Failed tool calls</option><option value="rejectedActions">Rejected game orders</option><option value="failureRatePct">Failure rate</option><option value="totalTokens">Total tokens</option><option value="uncachedTokens">Uncached tokens</option><option value="tokensPerAction">Tokens per accepted action</option><option value="meanTurnSeconds">Seconds per turn</option><option value="firstActionSeconds">Seconds to first action</option></select></label>
   </section>
   <div id="error" role="alert" hidden></div>
   <section class="stats" aria-label="Selected run summary">
@@ -77,9 +78,13 @@
   </section>
   <section class="surface" aria-labelledby="table-title">
     <div class="surface-heading"><h2 id="table-title">Match ledger</h2><p>— means the original runner did not record that metric.</p></div>
-    <div class="table-wrap"><table><thead><tr><th>Started</th><th>Model</th><th>Client</th><th>Clock</th><th>Strategy</th><th>Prestige</th><th>Accepted</th><th>Failed / calls</th><th>Tokens</th><th>Seconds / turn</th></tr></thead><tbody id="rows"></tbody></table></div>
+    <div class="table-wrap"><table><thead><tr><th>Started</th><th>Model</th><th>Client</th><th>Clock</th><th>Seed</th><th>Strategy</th><th>Prestige</th><th>Accepted</th><th>Rejected orders</th><th>Failed / calls</th><th>Tokens</th><th>First action (s)</th><th>Seconds / turn</th></tr></thead><tbody id="rows"></tbody></table></div>
   </section>
-  <div class="notes"><p><span class="note-label">Reading the score</span>Prestige includes the game's alliance share and maturity rules. A winning ally may finish below zero. Deadline and domination games have different reward pools.</p><p><span class="note-label">Benchmark boundary</span>Different bot rooms and client tool paths are shown separately. A lower score in one run does not prove a weaker client. Historical token fields are blank because usage was not captured then.</p></div>
+  <section class="surface" aria-labelledby="pair-title">
+    <div class="surface-heading"><h2 id="pair-title">Same-seed run deltas</h2><p>Pi minus Codex. Positive Prestige and negative failure, rejection or token deltas favor Pi; these are separate games.</p></div>
+    <div class="table-wrap"><table><thead><tr><th>Model</th><th>Clock</th><th>Seed</th><th>Prestige Δ</th><th>Failed calls Δ</th><th>Rejected orders Δ</th><th>Tokens Δ</th><th>Pi path</th><th>Codex path</th></tr></thead><tbody id="pairs"></tbody></table></div>
+  </section>
+  <div class="notes"><p><span class="note-label">Reading the score</span>Prestige includes the game's alliance share and maturity rules. A winning ally may finish below zero. Deadline and domination games have different reward pools. Surviving passively can also earn a deadline prize.</p><p><span class="note-label">Benchmark boundary</span>Quick rooms run the whole clock 6× faster, including diplomatic offers. Qwen Codex used shell commands while Pi used Council MCP, and provider token counters may differ. Compare first-action time and rejected game orders separately from final score. Historical token fields are blank where usage was not recorded.</p></div>
 </main>
 <script type="module">
 const $ = id => document.getElementById(id);
@@ -90,7 +95,7 @@ const mean = values => values.length ? values.reduce((sum,value)=>sum+value,0)/v
 const el = (name, attrs={}) => { const node=document.createElementNS(NS,name); for(const [key,value] of Object.entries(attrs)) node.setAttribute(key,String(value)); return node; };
 let runs=[];
 function draw() {
-  const selected = runs.filter(run => ($('model').value==='all'||run.modelGroup===$('model').value) && ($('preset').value==='all'||run.preset===$('preset').value));
+  const selected = runs.filter(run => ($('model').value==='all'||run.modelGroup===$('model').value) && ($('preset').value==='all'||run.preset===$('preset').value) && ($('seed').value==='all'||run.combatSeed===$('seed').value));
   const metric=$('measure').value, measurable=selected.filter(run=>Number.isFinite(run[metric]));
   $('count').textContent=selected.length;
   $('pi-score').textContent=fmt(mean(selected.filter(run=>run.client==='Pi').map(run=>run.prestige)));
@@ -115,12 +120,17 @@ function draw() {
   const tbody=$('rows');tbody.replaceChildren();
   for(const run of [...selected].reverse()) {
     const tr=document.createElement('tr');
-    const cells=[new Date(run.startedAt).toLocaleString(),run.modelGroup.toUpperCase(),`${run.client} ${run.access}`,run.preset,run.strategy||'full observation',fmt(run.prestige),fmt(run.acceptedActions),`${run.failedToolCalls} / ${run.toolCalls}`,fmt(run.totalTokens),fmt(run.meanTurnSeconds)];
-    for(let i=0;i<cells.length;i++){const td=document.createElement('td');td.textContent=cells[i];if(i===2)td.className=`client ${run.client.toLowerCase()}`;if(i===5)td.className=run.prestige<0?'negative':'positive';tr.append(td);}tbody.append(tr);
+    const cells=[new Date(run.startedAt).toLocaleString(),run.modelGroup.toUpperCase(),`${run.client} ${run.access}`,run.preset,run.combatSeed||'—',`${run.strategy||'full observation'}${run.sessionMode?` · ${run.sessionMode}`:''}`,fmt(run.prestige),fmt(run.acceptedActions),fmt(run.rejectedActions),`${run.failedToolCalls} / ${run.toolCalls}`,fmt(run.totalTokens),fmt(run.firstActionSeconds),fmt(run.meanTurnSeconds)];
+    for(let i=0;i<cells.length;i++){const td=document.createElement('td');td.textContent=cells[i];if(i===2)td.className=`client ${run.client.toLowerCase()}`;if(i===6)td.className=run.prestige<0?'negative':'positive';tr.append(td);}tbody.append(tr);
   }
+  const pairRows=$('pairs');pairRows.replaceChildren();
+  const bySeed=new Map();
+  for(const run of selected.filter(run=>run.combatSeed)) {const key=`${run.modelGroup}|${run.preset}|${run.combatSeed}`;const pair=bySeed.get(key)||{};pair[run.client]=run;bySeed.set(key,pair);}
+  for(const [key,pair] of bySeed) {if(!pair.Pi||!pair.Codex)continue;const [model,preset,seed]=key.split('|');const diff=(field)=>Number.isFinite(pair.Pi[field])&&Number.isFinite(pair.Codex[field])?fmt(pair.Pi[field]-pair.Codex[field]):'—';const cells=[model.toUpperCase(),preset,seed,diff('prestige'),diff('failedToolCalls'),diff('rejectedActions'),diff('totalTokens'),`${pair.Pi.strategy} · ${pair.Pi.sessionMode}`,`${pair.Codex.access}`];const tr=document.createElement('tr');for(const value of cells){const td=document.createElement('td');td.textContent=value;tr.append(td);}pairRows.append(tr);}
+  if(!pairRows.children.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=9;td.textContent='No completed Pi/Codex pair for this selection yet.';tr.append(td);pairRows.append(tr);}
 }
-for(const id of ['model','preset','measure']) $(id).addEventListener('change',draw);
-try { const response=await fetch('./benchmarks.json',{cache:'no-store'});if(!response.ok)throw new Error(`HTTP ${response.status}`);const data=await response.json();if(data.schemaVersion!==1||!Array.isArray(data.runs))throw new Error('Unsupported benchmark file');runs=data.runs;draw(); }
+for(const id of ['model','preset','seed','measure']) $(id).addEventListener('change',draw);
+try { const response=await fetch('./benchmarks.json',{cache:'no-store'});if(!response.ok)throw new Error(`HTTP ${response.status}`);const data=await response.json();if(data.schemaVersion!==1||!Array.isArray(data.runs))throw new Error('Unsupported benchmark file');runs=data.runs;for(const seed of [...new Set(runs.map(run=>run.combatSeed).filter(Boolean))].sort()){const option=document.createElement('option');option.value=seed;option.textContent=seed;$('seed').append(option);}draw(); }
 catch(error){$('error').hidden=false;$('error').textContent=`Could not load benchmarks.json (${error.message}). Serve this folder with: python -m http.server 8000`;}
 </script>
 </body>
