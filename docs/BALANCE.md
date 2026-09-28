@@ -4,7 +4,19 @@
 
 ## Map v6 (2026-09-28)
 
-The published map became `imperial-1910-v6`: 59 larger provinces in eight regions, smoothed borders, Hawaii as the only mid-Pacific crossing, and new starting setups. The full analysis, static exposure table and self-play comparison are in [MAP-V6.md](MAP-V6.md). Over 256 diplomacy matches the spread of winning-side appearances fell from 143/40 (SD 41.4) on v5 to 131/70 (SD 20.6) on v6. In solo mode it fell from 108/0 to 79/3. Britain in solo (4/256) is the watch item. These are heuristic bots, not humans.
+The published map became `imperial-1910-v6`:
+- 59 larger provinces in eight regions, with smoothed borders;
+- five impassable borders: the Himalayas, the Urals, the Alps between Italy and France, and the Sahara (twice);
+- Hawaii as the only mid-Pacific crossing;
+- new starting setups.
+
+The full analysis, the static exposure table and the self-play comparison are in [MAP-V6.md](MAP-V6.md).
+
+On the merged engine (border attack rule), over 256 matches the spread of winning-side appearances fell:
+- diplomacy: from 143/40 (SD 41.4) on v5 to 145/66 (SD 25.9) on v6;
+- solo: from 108/0 to 83/3.
+
+The watch items are the USA's lead, Japan, and Britain in solo mode. These results come from heuristic bots, not humans.
 
 ## Simplification pass (2026-09-28)
 
