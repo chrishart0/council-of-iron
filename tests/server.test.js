@@ -151,7 +151,8 @@ test('stdio MCP negotiates, validates schemas, joins an agent, calls real HTTP, 
   ].map(x=>JSON.stringify(x)).join('\n')+'\n';
   const result=await subprocess('agents/mcp.js',[],env,input);assert.equal(result.code,0,result.stderr);
   const output=result.stdout.trim().split('\n').map(x=>JSON.parse(x));assert.equal(output.length,7);
-  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,30);
+  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,32);
+  assert.ok(output[1].result.tools.some(t=>t.name==='turn_around')&&output[1].result.tools.some(t=>t.name==='preview_turn_around'));
   assert.equal(JSON.parse(output[2].result.content[0].text).country,'britain');
   assert.equal(JSON.parse(output[3].result.content[0].text).you,'britain');
   assert.equal(output[4].error.code,-32602);assert.equal(output[5].error.code,-32602);assert.deepEqual(output[6].result,{});
@@ -298,4 +299,36 @@ test('HTTP declare-and-march shares the engine path, retry receipt and command b
   assert.deepEqual(retry.data,first.data);assert.equal(g.orders.length,1);
   const view=(await f.call(`/api/games/${id}`,'GET',undefined,sa.token)).data;
   assert.deepEqual(view.wars,['britain:usa']);assert.equal(view.commandBudget.remaining,2);
+});
+
+test('turn around over HTTP, CLI and MCP: recall outbound, preview and resume a returning army, survive restart',async t=>{
+  const f=await fixture(t,{disk:true}),host=await f.register('Host'),other=await f.register('Other');
+  const id=await f.room(host),usa=await f.seat(id,host,'usa');await f.seat(id,other,'britain');
+  await f.call(`/api/games/${id}/start`,'POST',{},usa.token);
+  const moved=(await f.call(`/api/games/${id}/actions`,'POST',{opId:'out',action:{type:'move',from:'west-us',to:'mexico',amount:5}},usa.token)).data;
+  f.app.step(f.app.games.get(id),20);
+  const army=f.app.games.get(id).armies.find(a=>a.orderId===moved.orderId);
+  const back=await f.call(`/api/games/${id}/actions`,'POST',{opId:'back',action:{type:'turn_around',armyId:army.id}},usa.token);
+  assert.equal(back.status,200,JSON.stringify(back.data));assert.equal(back.data.mode,'recall');
+  f.app.step(f.app.games.get(id),10);
+  const preview=await f.call(`/api/games/${id}/turn-around?army=${army.id}`,'GET',undefined,usa.token);
+  assert.equal(preview.status,200);assert.equal(preview.data.mode,'resume');assert.equal(preview.data.to,'mexico');
+  assert.equal((await f.call(`/api/games/${id}/turn-around?army=${army.id}`,'GET',undefined,(await f.seat(id,other,'britain')).token)).status,403);
+  const env={COUNCIL_URL:f.url,COUNCIL_SESSION:pathJoin(f.dir,'turn.session.json'),COUNCIL_TOKEN:usa.token,COUNCIL_MATCH:id};
+  const cli=await subprocess('agents/cli.js',['turn-around',army.id],env);assert.equal(cli.code,0,cli.stderr);
+  const receipt=JSON.parse(cli.stdout);assert.equal(receipt.mode,'resume');assert.equal(receipt.arrivesAt,preview.data.arrivesAt);
+  f.app.step(f.app.games.get(id),1);await f.restart();
+  const restored=(await f.call(`/api/games/${id}`,'GET',undefined,usa.token)).data;
+  const resumed=restored.armies.find(a=>a.id===army.id);
+  assert.equal(resumed.to,'mexico');assert.equal(resumed.returning,undefined);assert.equal(resumed.turnArounds,1);
+  assert.equal(resumed.arrivesAt,preview.data.arrivesAt);assert.equal(restored.turnAroundLimit,2);
+  assert.ok(restored.events.some(e=>e.type==='army_turned_around'&&e.armyId===army.id));
+  const mcp=await subprocess('agents/mcp.js',[],{...env,COUNCIL_URL:f.url},[
+    {jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-06-18'}},{jsonrpc:'2.0',method:'notifications/initialized'},
+    {jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'preview_turn_around',arguments:{armyId:army.id}}},
+    {jsonrpc:'2.0',id:3,method:'tools/call',params:{name:'turn_around',arguments:{armyId:army.id,opId:'mcp-turn'}}},
+  ].map(x=>JSON.stringify(x)).join('\n')+'\n');
+  const out=mcp.stdout.trim().split('\n').map(x=>JSON.parse(x));
+  assert.equal(JSON.parse(out[1].result.content[0].text).mode,'recall',JSON.stringify(out[1]));
+  assert.equal(JSON.parse(out[2].result.content[0].text).mode,'recall',JSON.stringify(out[2]));
 });

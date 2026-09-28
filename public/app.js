@@ -9,7 +9,7 @@ import { viewerOf, commsItems, systemCopy, threadOf, countryThread, allianceThre
 import { LeaderboardPanel } from './leaderboard-panel.js';
 import { ExpandableMap } from './expand.js';
 // Relations and alliance colours: the same DOM-free helpers the atlas and agent tools use.
-import { relationsOf, allianceColors } from './relations.js';
+import { relationsOf, allianceColors, threatening } from './relations.js';
 import { SoundBoard } from './sound.js';
 /* v0.8 — one map, two nouns. A PROVINCE (troops) opens the order card; a COUNTRY (diplomacy) opens the
  * country card; your own standard opens your alliance card. Each card has one primary action. */
@@ -82,7 +82,7 @@ const attention=()=>seated() && state.status!=='lobby'?attentionFor(state,railIt
 /* ── History rail ── */
 function threatItems(){
   const me=myPlayer();if(!me || spectating || state.status!=='running')return [];
-  return state.armies.filter(a=>!a.returning && playerOf(a.country)?.side!==me.side && prov(a.to)?.owner===state.you)
+  return state.armies.filter(a=>threatening(state,a,state.you))
     .map(a=>({id:`t-${a.id}`,seq:cursor,tick:a.departedAt ?? state.tick,type:'threat',country:a.country,to:a.to,amount:a.amount,arrivesAt:a.arrivesAt,threads:['mine'],army:a.id}));
 }
 function renderFeed(live){
@@ -92,6 +92,9 @@ function renderFeed(live){
   railItems=commsItems(history,state.dominanceBreaks||[],{you:state.you});
   const threats=threatItems(),fresh=worldFeed.update([...railItems,...threats.filter(t=>!worldFeed.keys.has(`e${t.id}`))],{live,you:state.you});
   if(live)for(const item of fresh)noticeFor(item);
+  // A threat that turned back, was destroyed or arrived is withdrawn: no stale toast or "Incoming" row.
+  const current=new Set(threats.map(t=>t.army));
+  for(const army of seenThreats)if(!current.has(army)){notifier.withdraw(`et-${army}`);worldFeed.withdraw(`et-${army}`);seenThreats.delete(army);}
   for(const t of threats)seenThreats.add(t.army);
   renderReply();renderAttention();
   // Collapsed rail = a one-line ticker of the latest row (text only; chat is player text).
@@ -174,7 +177,7 @@ async function rooms(){
     return found.length?`<section class="room-group"><h3>${title} <small>${found.length}</small></h3>${found.map(g=>`<div class="room-card"><div><p>${esc(g.name)}</p><small>${g.players.length}/8 SEATS · ${g.speed===1?'30 MIN':'5 MIN'} · ${status==='running'?`${time(g.tick)} elapsed · `:''}${esc(g.id)}</small></div><div class="room-entry-actions">${status==='running' && g.you?`<button data-room="${esc(g.id)}" data-resume="true">Resume</button>`:''}<button data-room="${esc(g.id)}" data-spectate="${status==='running'}">${label} →</button></div></div>`).join('')}</section>`:'';
   }).join(''):'<p class="muted">The chamber is empty. Open the first council.</p>';
   const standingsData=await request('/api/standings');
-  $('standings').innerHTML=standingsData.standings.length?standingsData.standings.map(p=>`<div class="standing-row"><span>${esc(p.name)} <small class="muted">${p.provisional?'PROVISIONAL':''} · ${p.matches} matches</small></span><b>${signed(p.prestige)}</b></div>`).join(''):'<p class="muted small">No decisive matches recorded yet. Results persist on this server.</p>';
+  $('standings').innerHTML=standingsData.standings.length?standingsData.standings.map(p=>`<div class="standing-row"><span>${esc(p.name)} <small class="muted">${p.matches} ${p.matches===1?'match':'matches'}</small></span><b>${signed(p.prestige)}</b></div>`).join(''):'<p class="muted small">No decisive matches recorded yet. Results persist on this server.</p>';
 }
 function clearSelection(){sources=[];target=null;armyId=null;proposing=false;}
 async function openRoom(id,watch=false){
@@ -187,7 +190,7 @@ async function openRoom(id,watch=false){
   const epoch=generation,loaded=await request(`/api/games/${id}/map`,'GET',undefined,watch?null:identity?.token);
   if(epoch!==generation || matchId!==id)return;
   map=loaded;initMap();mapReadyFor=id;
-  await poll();
+  await poll();syncInsets();atlas.world();
 }
 async function poll(){
   if(!matchId || mapReadyFor!==matchId || state?.status==='finished' && review?.id===matchId)return;
@@ -208,7 +211,7 @@ async function poll(){
     }
     if(!state.hasMore)messageCatchupComplete=true;
     announce(liveDeclarations);sounds.update(state,liveDeclarations,live);
-    setConnection(state.status==='finished'?'Review':'Live');render();renderFeed(live);renderCard();coach();
+    setConnection(state.status==='finished'?'Review':'Live');render();renderFeed(live);renderCard();coach();syncInsets();
   }catch(e){if(e.name!=='AbortError' && epoch===generation){setConnection('Reconnecting');toast(e.message,true);}}
   finally{if(polling===epoch)polling=false;}
 }
@@ -255,6 +258,13 @@ function view(){
   return {insets:{top,right:rail && rail.left>stage.width/2?stage.right-rail.left:0,left:panel && !sheet?panel.right-stage.left:0,bottom}};
 }
 /** Home: your country, close enough on phones to drag from a province counter. */
+/** Panels that stay over the map on wide screens (the right column): the atlas keeps the map beside them. */
+function syncInsets(){
+  if(!atlas)return;const stage=$('stage').getBoundingClientRect(),rail=document.querySelector('.right-rail');
+  const box=!compact.matches && rail?.checkVisibility()?[...rail.children].filter(e=>e.checkVisibility()).map(e=>e.getBoundingClientRect()):[];
+  const left=box.length?Math.min(...box.map(r=>r.left)):stage.right;
+  atlas.setInsets({left:0,right:box.length?Math.max(0,stage.right-left):0});
+}
 function focusCountry(){if(state?.you)atlas.home(state.you,{...view(),width:compact.matches?Math.max(120,$('stage').clientWidth/2.8):undefined});}
 /** Phones: if the bottom sheet now covers the chosen province, pan (no zoom) so it sits above the sheet. */
 function revealUnderCard(id){
@@ -735,7 +745,7 @@ function renderLobby(){
   const selected=country($('country-choice').value);
   $('starting-holdings').textContent=state.you?'':startingSummary(selected);
   $('join-form').querySelector('button').disabled=!selected;
-  $('lobby-note').textContent=state.you?`You command ${country(state.you).name}. ${state.isHost?'Invite players, attach agents, or add practice bots. You control when play begins.':'Waiting for the host to start.'}`:'You are observing. Choose an open country above to join.';
+  $('lobby-note').textContent=state.you?`You command ${country(state.you).name}. ${state.isHost?'Invite players, attach agents, or add bots. You control when play begins.':'Waiting for the host to start.'}`:'You are observing. Choose an open country above to join.';
 }
 /** One sound control: in the ☰ menu during a live room, in the masthead on the home page and in review. */
 function placeSound(){
@@ -748,7 +758,7 @@ function render(){
   document.body.dataset.status=state.status;
   if(state.status!=='running' && card)closeCard();
   document.querySelector('.scenario-note').textContent=map.notice;
-  $('game-name').textContent=state.name;$('lobby-room').textContent=state.name;$('room-label').textContent=`COUNCIL ${state.id.toUpperCase()} · ${state.eligible?'LEAGUE':'EXPERIMENTAL'} · ${state.players.length}/8 SEATS`;
+  $('game-name').textContent=state.name;$('lobby-room').textContent=state.name;$('room-label').textContent=`COUNCIL ${state.id.toUpperCase()} · ${state.eligible?'LEAGUE · ':''}${state.players.length}/8 SEATS`;
   renderLobby();
   $('phase').textContent=state.status==='lobby'?'ASSEMBLING':state.status==='finished'?'CONCLUDED':seated()?'IN SESSION':'SPECTATING';
   $('clock').textContent=`${time(state.tick)} / 30:00`;$('pace-badge').textContent=state.speed===1?'STANDARD · 1×':`QUICK · ${state.speed}×`;
@@ -935,4 +945,5 @@ compact.addEventListener('change',event=>{
   let saved=null;try{saved=localStorage.getItem('coi.leaderboard');}catch{}standings.setOpen(saved!=='collapsed');
 });
 try{map=await request('/map.json','GET',undefined,null);initMap();showIdentity();const params=new URL(location).searchParams,initial=params.get('match');if(initial)await openRoom(initial,params.get('spectate')==='1');else await rooms();setConnection(state?.status==='finished'?'Review':'Live');}catch(e){toast(e.message,true);}
+addEventListener('resize',()=>requestAnimationFrame(syncInsets));
 setInterval(()=>{if(matchId)poll();},750);

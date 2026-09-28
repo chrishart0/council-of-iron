@@ -1,4 +1,4 @@
-import { travelTicks, journeyPoint } from '../public/movement.js';
+import { travelTicks, journeyPoint, turnAroundArrival } from '../public/movement.js';
 import { feedItems, feedPage, isWorldMessage } from '../public/feed-model.js';
 /** Authoritative, deterministic rules. Time is an integer simulation second.
  * No HTTP, random numbers, timers, credentials, or persistence in this module.
@@ -8,7 +8,7 @@ export const RULES = Object.freeze({ duration: 1800, recruit: 20,
   orderLimit: 3, chatWindow: 10, messageLength: 500, proposalLife: 120,
   diplomacyLife: 60, warRequired: true,
   marchSetup: 15, kmPerTick: 35, maxScheduleDelay: 300, maxAttackSources: 16,
-  maxTransitHops: 8,
+  maxTransitHops: 8, maxTurnArounds: 2,
   maxDevelopment: 3, developmentCosts: [0, 12, 24], developmentTicks: [0, 60, 90] });
 export const gameRules = g => g.rules;
 export const reservedTroops = (g, country, from) => g.orders
@@ -294,6 +294,7 @@ function recall(g, p, action) {
   requireRule(items.length > 0, 'This order has already arrived, been cancelled, or is returning.', 409);
   requireRule(items.every(item => item.country === p.id), 'You cannot recall another country’s troops.', 403);
   requireRule(!g.orders.some(o => o.type === 'recall' && o.target === action.id), 'Recall is already queued.', 409);
+  requireRule(!g.orders.some(o => o.type === 'turn_around' && o.target === action.id), 'A turn-around is already queued for this army.', 409);
   checkBudget(g, p); useBudget(g, p);
   const order = { id: identifier(g, 'order-'), type: 'recall', country: p.id, target: action.id, executeAt: g.tick + 1 };
   g.orders.push(order);
@@ -313,16 +314,85 @@ function executeRecall(g, order) {
     country: order.country, orderId: order.id, cancelled: waiting.length, returning: returned,
     ...(!waiting.length && !returned ? { reason: 'The selected troops are no longer recallable.' } : {}) }, [order.country]);
 }
-function turnArmy(g,a,reason) {
+/** Reverse a marching army from its actual position. `reason` is 'manual' for a player's recall;
+ * automatic reasons add `province` (where it was heading) and cause-specific detail. */
+function turnArmy(g,a,reason,detail={}) {
   const battle=(g.battles || []).find(b=>b.province===a.to && a.engaged);
   if(battle)battle.withdrawn+=a.amount;
   const startPoint=journeyPoint(a,g.positions,g.tick);
+  // An army that already turned around measures its way back by its distance from home,
+  // not by the time since its last turn (unchanged for every army that never turned around).
   const travelBack=a.transit?Math.max(1,g.tick-a.originDepartedAt):
+    a.turnArounds?turnAroundArrival(a,g.travelTimes,g.tick)-g.tick:
     Math.max(1,Math.min(a.arrivesAt-a.departedAt,g.tick-a.departedAt));
-  const originalFrom=a.transit?a.origin:a.from;
+  const originalFrom=a.transit?a.origin:a.from,heading=a.to;
   Object.assign(a,{from:a.to,to:originalFrom,startPoint,returning:true,engaged:false,departedAt:g.tick,arrivesAt:g.tick+travelBack});
   event(g,'army_recalled',{country:a.country,armyId:a.id,to:a.to,amount:a.amount,arrivesAt:a.arrivesAt,
-    ...(reason==='manual'?{}:{reason})});
+    ...(reason==='manual'?{}:{reason,province:heading,...detail})});
+}
+/** Why an arriving, non-allied army that did not join the attack is turned back. */
+function refusal(g,army,target,battle,chosen) {
+  if(!mayEnter(g,army.country,target.owner))return {reason:'no_war',owner:target.owner};
+  if(battle && battle.attackerSide!==player(g,army.country).side)
+    return {reason:'battle_in_progress',battleAttackerSide:battle.attackerSide,owner:target.owner};
+  // Two sides reached the same province on the same tick; the stronger arrival has first claim.
+  return {reason:'rival_arrival',rivalSide:chosen,owner:target.owner};
+}
+/** Read-only check for turning one of your moving armies around at tick `at` (default: the next
+ * tick, when the order executes). An advancing army turning around is a recall; a returning one
+ * resumes toward the province it had been heading for, from where it actually is. */
+export function turnAroundPlan(g, country, armyId, at = g.tick + 1) {
+  alive(g, country);
+  requireRule(typeof armyId === 'string' && armyId.length > 0 && armyId.length <= 80, 'Specify an army ID.');
+  const army = g.armies.find(a => a.id === armyId);
+  requireRule(army, 'That army has already arrived or no longer exists.', 409);
+  requireRule(army.country === country, 'You cannot turn another country’s troops around.', 403);
+  requireRule(!army.engaged, 'That army is fighting; recall it to withdraw.', 409);
+  if (!army.returning) return { armyId, mode: 'recall', to: army.transit ? army.origin : army.from,
+    arrivesAt: army.transit ? at + Math.max(1, at - army.originDepartedAt) :
+      army.turnArounds ? turnAroundArrival(army, g.travelTimes, at) :
+      at + Math.max(1, Math.min(army.arrivesAt - army.departedAt, at - army.departedAt)) };
+  requireRule(!army.transit, 'A transit column cannot turn around; let it return home, then send a new order.', 409);
+  const limit = gameRules(g).maxTurnArounds ?? RULES.maxTurnArounds;
+  requireRule((army.turnArounds || 0) < limit, `An army can turn back toward its target at most ${limit} times.`, 409);
+  const target = province(g, army.from);
+  requireRule(mayEnter(g, country, target.owner), 'Declare war before attacking another country.', 409);
+  const arrivesAt = turnAroundArrival(army, g.travelTimes, at);
+  requireRule(arrivesAt !== null, 'This army cannot turn around.', 409);
+  requireRule(arrivesAt <= gameRules(g).duration, 'The army would arrive after the match deadline.');
+  const battle = (g.battles || []).find(b => b.province === target.id);
+  return { armyId, mode: 'resume', to: target.id, owner: target.owner, amount: army.amount, arrivesAt,
+    turnArounds: (army.turnArounds || 0) + 1, limit,
+    ...(battle && !allied(g, country, target.owner) ? { battleInProgress: { attackerSide: battle.attackerSide,
+      joins: battle.attackerSide === player(g, country).side } } : {}),
+    warning: 'Checked again when the order executes next tick. Ownership, wars and battles can change before arrival.' };
+}
+function turnAround(g, p, action) {
+  const plan = turnAroundPlan(g, p.id, action.armyId);
+  if (plan.mode === 'recall') return { mode: 'recall', ...recall(g, p, { id: action.armyId }) };
+  requireRule(!g.orders.some(o => ['recall', 'turn_around'].includes(o.type) && o.target === action.armyId),
+    'A turn-around or recall is already queued for this army.', 409);
+  checkBudget(g, p); useBudget(g, p);
+  const order = { id: identifier(g, 'order-'), type: 'turn_around', country: p.id, target: action.armyId, executeAt: g.tick + 1 };
+  g.orders.push(order);
+  event(g, 'order_accepted', { country: p.id, orderId: order.id, executeAt: order.executeAt }, [p.id]);
+  return { mode: 'resume', orderId: order.id, executeAt: order.executeAt, to: plan.to, arrivesAt: plan.arrivesAt };
+}
+function executeTurnAround(g, order) {
+  let plan;
+  try { plan = turnAroundPlan(g, order.country, order.target, g.tick); }
+  catch (error) {
+    if (!(error instanceof RuleError)) throw error;
+    event(g, 'order_failed', { country: order.country, orderId: order.id, reason: error.message }, [order.country]); return;
+  }
+  const a = g.armies.find(x => x.id === order.target);
+  if (plan.mode !== 'resume') {
+    event(g, 'order_failed', { country: order.country, orderId: order.id, reason: 'The army is already heading for its target.' }, [order.country]); return;
+  }
+  const startPoint = journeyPoint(a, g.positions, g.tick), origin = a.to;
+  delete a.returning;
+  Object.assign(a, { from: origin, to: plan.to, startPoint, departedAt: g.tick, arrivesAt: plan.arrivesAt, turnArounds: plan.turnArounds });
+  event(g, 'army_turned_around', { country: a.country, armyId: a.id, from: origin, to: a.to, amount: a.amount, arrivesAt: a.arrivesAt });
 }
 function locked(g, id) {
   return g.departures.some(d => d.country === id) ||
@@ -432,7 +502,7 @@ function peaceAccepted(g, motion) {
   for(const army of g.armies)if(!army.returning &&
     ((left.has(army.country)&&right.has(province(g,army.path?.at(-1)||army.to).owner)) ||
       (right.has(army.country)&&left.has(province(g,army.path?.at(-1)||army.to).owner)))) {
-    turnArmy(g,army,'peace');recalled++;
+    turnArmy(g,army,'peace',{owner:province(g,army.path?.at(-1)||army.to).owner});recalled++;
   }
   event(g,'peace_accepted',{from:motion.fromSide,to:motion.toSide,fromRoster:motion.fromRoster,toRoster:motion.toRoster,
     cancelled:cancelled.length,recalled});
@@ -508,6 +578,7 @@ export function act(g, map, country, action, opId) {
     case 'attack': result = march(g, map, p, action, () => coordinated(g, map, p, action)); break;
     case 'transit': result = march(g, map, p, action, () => transit(g,map,p,action)); break;
     case 'recall': result = recall(g, p, action); break;
+    case 'turn_around': result = turnAround(g, p, action); break;
     case 'develop': result = develop(g, p, action); break;
     case 'propose': result = propose(g, p, action); break;
     case 'accept': result = accept(g, p, action); break;
@@ -580,8 +651,10 @@ function departArmy(g, country, from, to, amount, automatic = false, order = nul
 function executeOrders(g) {
   // Cancellation received before the arrival/departure tick wins that boundary.
   // No troop is refunded instantly if it has already left its garrison.
-  for (const o of g.orders.filter(o => o.type === 'recall' && o.executeAt <= g.tick)) executeRecall(g, o);
-  for (const o of g.orders.filter(o => o.type !== 'recall' && o.executeAt <= g.tick)) {
+  // Recalls and turn-arounds run in submission order before any departure or arrival.
+  for (const o of g.orders.filter(o => ['recall', 'turn_around'].includes(o.type) && o.executeAt <= g.tick))
+    if (o.type === 'recall') executeRecall(g, o); else executeTurnAround(g, o);
+  for (const o of g.orders.filter(o => !['recall', 'turn_around'].includes(o.type) && o.executeAt <= g.tick)) {
     const source = province(g, o.from);
     let error = source.owner !== o.country ? 'Source is no longer yours.' : null;
     if (['move', 'transit', 'develop'].includes(o.type) && o.amount >= source.troops) error = 'Not enough troops remain.';
@@ -687,7 +760,8 @@ function resolveArrivals(g) {
           army.from=target.id;army.pathIndex++;army.to=army.path[army.pathIndex];
           army.departedAt=g.tick;army.arrivesAt=g.tick+journeyTicks(g,army.from,army.to);
           g.armies.push(army);event(g,'army_transited',{country:army.country,province:target.id,to:army.to,amount:army.amount});
-        } else {turnArmy(g,army,'transit_blocked');g.armies.push(army);}
+        } else {turnArmy(g,army,'transit_blocked',{owner:target.owner,
+          ...(allied(g,army.country,target.owner)?{battleAttackerSide:g.battles.find(b=>b.province===target.id).attackerSide}:{})});g.armies.push(army);}
       } else arriving.push(army);
     }
     if(!arriving.length)continue;
@@ -712,7 +786,7 @@ function resolveArrivals(g) {
             attackerSide:chosen,defenderSide,startedAt:g.tick});}
         army.engaged=true;g.armies.push(army);battle.arrivals.push({country:army.country,amount:army.amount});battle.engaged+=army.amount;
       } else if(army.returning)event(g,'army_interned',{country:army.country,armyId:army.id,province:target.id,amount:army.amount});
-      else {turnArmy(g,army,'no_war');g.armies.push(army);}
+      else {const {reason,...detail}=refusal(g,army,target,battle,chosen);turnArmy(g,army,reason,detail);g.armies.push(army);}
     }
     if(reinforced)event(g,'reinforced',{province:target.id,owner:target.owner,troops:target.troops,amount:reinforced});
   }
@@ -723,7 +797,8 @@ function resolveBattleRounds(g) {
     if(battle.startedAt>=g.tick)continue;
     const target=province(g,battle.province);
     const attackers=g.armies.filter(a=>a.engaged && a.to===target.id);
-    for(const army of attackers)if(target.owner && !atWar(g,army.country,target.owner))turnArmy(g,army,'no_war');
+    for(const army of attackers)if(target.owner && !atWar(g,army.country,target.owner))
+      turnArmy(g,army,'no_war',{owner:target.owner,...(allied(g,army.country,target.owner)?{allied:true}:{})});
     const fighting=attackers.filter(a=>a.engaged),strength=()=>fighting.reduce((n,a)=>n+a.amount,0);
     let attackerLoss=0,defenderLoss=0,attackDice=[],defendDice=[];
     if(strength()>0 && target.troops>0) {
@@ -863,7 +938,7 @@ export function observe(g, country = null, after = 0, limit = 200) {
   return { id: g.id, name: g.name, status: g.status, tick: g.tick, speed: g.speed, rules: gameRules(g), scenario: g.scenario, travelTimes: g.travelTimes,
     eligible: g.eligible, you: country, players: g.players.map(({ profileId, orderTicks, lastChat, ...p }) => p),
     provinces: g.provinces, armies: g.armies, battles: g.battles || [], sides: sides(g), wars: g.wars || [], economyThreshold: economyThreshold(g), projections: score(g),
-    dominanceBreaks: g.dominanceBreaks || [],
+    dominanceBreaks: g.dominanceBreaks || [], turnAroundLimit: gameRules(g).maxTurnArounds ?? RULES.maxTurnArounds,
     diplomacy: (g.diplomacy || []).filter(m=>['voting','offered'].includes(m.status) &&
       (m.fromRoster.includes(country) || m.status==='offered' && m.toRoster.includes(country))),
     proposals: g.proposals.filter(q => q.status === 'pending' || q.status === 'open' && q.roster.includes(country))

@@ -23,6 +23,8 @@ const help=`Council of Iron CLI (Node 22.13+)
       Harmless when no declaration is needed. Coalition members must use war + vote-war first.
   plan TO PERCENT FROM [FROM...]     Preview shared arrival; does not issue orders
   recall ARMY_OR_GROUP_ID            Cancel waiting orders; march outbound troops home
+  turn-around ARMY_ID [--preview]    Reverse a moving army: outbound ones head home (recall);
+                                     returning ones resume toward their target from where they are
   develop FROM                       Invest local manpower in province industry
   route FROM TO|clear                Set or clear a recruitment arrow
   preview FROM TO AMOUNT             Preview against the current garrison
@@ -45,8 +47,8 @@ const help=`Council of Iron CLI (Node 22.13+)
 Environment: COUNCIL_URL, COUNCIL_MATCH, COUNCIL_TOKEN (match-scoped),
 COUNCIL_SESSION (default .council.session.json; use one file per agent).
 Keep credentials out of chat. No screenshots or browser scraping needed.`;
-const argv=process.argv.slice(2),declareWar=argv.includes('--declare-war');
-const [command,...args]=argv.filter(a=>a!=='--declare-war');
+const argv=process.argv.slice(2),declareWar=argv.includes('--declare-war'),previewOnly=argv.includes('--preview');
+const [command,...args]=argv.filter(a=>a!=='--declare-war' && a!=='--preview');
 const war=declareWar?{declareWar:true}:{};
 try {
   const client=new CouncilClient();let result;
@@ -70,6 +72,7 @@ try {
     }
     case 'transit':result=await client.action({type:'transit',from:args[0],amount:Number(args[1]),path:args.slice(2),...war});break;
     case 'recall':result=await client.action({type:'recall',id:args[0]});break;
+    case 'turn-around':result=previewOnly?await client.turnAroundPreview(args[0]):await client.turnAround(args[0]);break;
     case 'develop':result=await client.action({type:'develop',from:args[0]});break;
     case 'route':result=await client.action({type:'route',from:args[0],to:args[1]==='clear'?null:args[1]});break;
     case 'preview':result=await client.preview(args[0],args[1],Number(args[2]));break;

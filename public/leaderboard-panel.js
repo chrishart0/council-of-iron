@@ -50,14 +50,15 @@ export class LeaderboardPanel {
     this.toggle.setAttribute('aria-expanded', String(open));
     this.root.classList.toggle('collapsed', !open);
   }
+  /** 'teams' | 'players' | 'wars' (the war fronts, a tab instead of a list stacked under the rows). */
   setMode(mode) {
-    this.mode = mode;
+    this.mode = mode; this.root.dataset.mode = mode;
     for (const b of this.modes) b.setAttribute('aria-pressed', String(b.dataset.lbMode === mode));
   }
   label(row) { return row.kind === 'alliance' ? row.name : (this.names.short ?? this.names.country)(row.id); }
   update(state, limit = 5) {
     this.state = state; this.limit = limit;
-    const board = leaderboard(state, { mode: this.mode, you: state.you, limit });
+    const board = leaderboard(state, { mode: this.mode === 'wars' ? 'teams' : this.mode, you: state.you, limit });
     const now = Date.now(), sameMode = this.lastMode === this.mode;
     for (const row of board.rows) {
       const before = this.previous.get(row.id);
@@ -164,11 +165,14 @@ export class LeaderboardPanel {
   /** Teams view: the war pairs between blocs (names are player text → textContent). */
   renderFronts(state) {
     if (!this.fronts) return;
-    const fronts = this.mode === 'teams' ? warsOf(state) : []; // every active war, side vs side
-    this.fronts.hidden = !fronts.length;
+    const fronts = warsOf(state); // every active war, side vs side
+    this.fronts.hidden = this.mode !== 'wars';
+    const tab = this.modes.find(b => b.dataset.lbMode === 'wars');
+    if (tab) tab.textContent = fronts.length ? `Wars ${fronts.length}` : 'Wars';
     const key = JSON.stringify([state.you, fronts.map(f => f.sides.map(s => [s.side, s.name, s.countries]))]);
     if (this.fronts.dataset.key === key) return;
     this.fronts.dataset.key = key;
+    if (!fronts.length) { const empty = node('li', 'lb-front-empty'); empty.textContent = state.rules?.warRequired === false ? 'Open war: this room needs no declaration.' : 'No wars: every country is at peace.'; this.fronts.replaceChildren(empty); return; }
     this.fronts.replaceChildren(...fronts.map(f => {
       const li = node('li', `lb-front${state.you && f.sides.some(x => x.countries.includes(state.you)) ? ' involved' : ''}`);
       const [a, b] = f.sides.map(s => s.name || s.countries.map(this.names.country).join(' + '));

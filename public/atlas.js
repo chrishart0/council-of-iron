@@ -1,6 +1,6 @@
 import { journeyPoint } from './movement.js';
 import { borderNetwork, insideRings, provinceRings } from './map-geometry.js';
-import { allianceColors, atWar, battleColors, coalitions, formingAlliances, relationsOf, teamColor, warKey } from './relations.js';
+import { allianceColors, atWar, battleColors, coalitions, formingAlliances, relationsOf, teamColor, threatening, warKey } from './relations.js';
 import { faction } from './presentation.js';
 /** Presentation only: the server decides every movement, battle and ownership change.
  * Every SVG fragment below is an authored constant; player text never enters map markup.
@@ -254,7 +254,11 @@ export class Atlas {
     return null;
   }
   /** The x of the repeated copy nearest the view centre. */
-  near(x) { const cx = this.view.x + this.view.w / 2; return cx + wrapDelta(x - cx); }
+  near(x) {
+    const rect = { width: this.rectWidth || 0 }, l = this.insets?.left || 0, r = this.insets?.right || 0; // cached per view change
+    const cx = rect.width > l + r ? this.view.x + (l + (rect.width - r)) / 2 * this.view.w / rect.width : this.view.x + this.view.w / 2;
+    return cx + wrapDelta(x - cx);
+  }
   pan(dx, dy) { this.view.x += dx; this.view.y += dy; this.applyView(); }
   hover(event) {
     const { cluster, id, army } = this.hit(event);
@@ -293,10 +297,20 @@ export class Atlas {
   /** [min, max] view width in map units: max zoom is MAX_PX_PER_UNIT on this element's width;
    * zoom-out stops at one world width, so each province and counter is seen once. */
   widthLimits(rect = this.svg.getBoundingClientRect()) {
-    return [rect.width > 0 ? Math.min(WORLD, rect.width / MAX_PX_PER_UNIT) : 135, WORLD];
+    // With a persistent side panel over the map (setInsets), one world width fits the uncovered part.
+    const covered = Math.min(rect.width * .6, (this.insets?.left || 0) + (this.insets?.right || 0));
+    return [rect.width > 0 ? Math.min(WORLD, rect.width / MAX_PX_PER_UNIT) : 135, rect.width > 0 ? WORLD * rect.width / (rect.width - covered) : WORLD];
+  }
+  /** Optional (v0.8.1): screen px permanently covered by the host's panels ({left,right}). World view,
+   * the zoom-out limit and the copy chosen for counters and names use the uncovered part of the map. */
+  setInsets(insets) {
+    const next = { left: Math.max(0, insets?.left || 0), right: Math.max(0, insets?.right || 0) };
+    if (this.insets && next.left === this.insets.left && next.right === this.insets.right) return;
+    this.insets = next; this.applyView();
   }
   applyView() {
     const rect = this.svg.getBoundingClientRect(), aspect = rect.width > 0 && rect.height > 0 ? rect.width / rect.height : 0;
+    this.rectWidth = rect.width;
     const cx = this.view.x + this.view.w / 2, cy = this.view.y + this.view.h / 2;
     if (aspect) {
       // The viewBox takes the element's own aspect (no letterboxing), so portrait phones fill
@@ -325,7 +339,10 @@ export class Atlas {
     this.view = { x: anchor.x - (anchor.x - this.view.x) * ratio, y: anchor.y - (anchor.y - this.view.y) * ratio, w, h: this.view.h * ratio };
     this.applyView();
   }
-  world() { this.view = { x: 0, y: 0, w: 1280, h: 680 }; this.applyView(); }
+  world() {
+    const rect = this.svg.getBoundingClientRect(), [, maxW] = this.widthLimits(rect), l = this.insets?.left || 0;
+    this.view = { x: -l * maxW / (rect.width || 1), y: 0, w: maxW, h: 680 * maxW / WORLD }; this.applyView();
+  }
   europe() { this.view = { x: 595, y: 105, w: 210, h: 111.6 }; this.applyView(); }
   /** Optional trailing `{ insets: {top,right,bottom,left} px, width: map units }`: centre the target in the
    * part of the screen the host's overlays leave uncovered; `width` sets the zoom (default 390 units). */
@@ -454,8 +471,8 @@ export class Atlas {
     const hits = r => placed.some(q => r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.y + q.h && q.y < r.y + r.h);
     for (const u of units) {
       const battle = u.members.length === 1 && this.battleInfo.get(u.members[0]);
-      // Zoomed in, the footprint also reserves the industry pips below the counter.
-      const badge = u.members.length > 1 ? 4 : 0, pips = level === 'near' && !battle && u.members.length === 1 ? 8 : 0;
+      // The footprint reserves the industry row below every counter (pips, or a merged total), at every zoom.
+      const badge = u.members.length > 1 ? 4 : 0, pips = !battle && u.owner ? (u.members.length > 1 ? 12 : 8) : 0;
       const titled = battle && level !== 'far';
       u.w = battle ? Math.max(battle.width + 6, titled ? this.places.get(u.members[0]).name.length * 5.8 + 4 : 0) : counterWidth(u.troops) + badge * 1.5;
       u.h = (battle ? 32 : COUNTER_H) + badge + pips + (titled ? 14 : 0);
@@ -481,7 +498,6 @@ export class Atlas {
         if (this.battleInfo.has(id)) { const mark = this.battleMarks.get(id); mark?.group.setAttribute('transform', at); mark?.group.classList.toggle('named', level !== 'far'); continue; }
         const marker = this.markers.get(id); shownMarkers.add(id);
         marker.group.setAttribute('transform', at);
-        marker.industry.style.display = level === 'near' ? '' : 'none';
         // Names: reserved space when zoomed in, only where uncrowded at mid, never at country level.
         // Try above the counter, then below it; otherwise the name waits for more zoom.
         const width = this.places.get(id).name.length * 5.8 + 4;
@@ -514,8 +530,16 @@ export class Atlas {
       const disc = node('rect', { y: -10, height: COUNTER_H, rx: 1, class: 'counter-body' }), stripe = node('rect', { y: -10, width: 4, height: COUNTER_H, class: 'counter-stripe' });
       const text = node('text', { x: 2, y: .5, class: 'counter-value' }), badge = node('g', { class: 'cluster-badge' }), bloc = node('rect', { y: -10, width: 2.5, height: COUNTER_H, class: 'counter-bloc' });
       const badgeBody = node('rect', { y: -16, height: 12, rx: 6 }), badgeText = node('text', { y: -9.6 });
-      badge.append(badgeBody, badgeText); group.append(bloc, disc, stripe, text, badge); this.clusterLayer.append(group);
-      this.clusters.set(key, { group, disc, stripe, bloc, text, badgeBody, badgeText });
+      badge.append(badgeBody, badgeText);
+      // Merged industry: one pip and the members' combined development, where single counters show pips.
+      const industry = node('g', { class: 'industry-pips cluster-industry', 'aria-hidden': 'true' });
+      const industryBody = node('rect', { y: 12, height: 10, rx: 2, class: 'cluster-industry-body' });
+      const industryText = node('text', { y: 17.4, class: 'cluster-industry-value' });
+      // A drawn factory (saw-tooth roof and stack): no font glyph dependency.
+      const factory = node('path', { class: 'cluster-industry-icon', d: 'M0,21V16l2,-1.5V16l2,-1.5V16l2,-1.5V13h1.2V21Z' });
+      industry.append(industryBody, factory, industryText);
+      group.append(bloc, disc, stripe, text, badge, industry); this.clusterLayer.append(group);
+      this.clusters.set(key, { group, disc, stripe, bloc, text, badgeBody, badgeText, industry, industryText, industryBody, factory });
     }
     return this.clusters.get(key);
   }
@@ -528,9 +552,14 @@ export class Atlas {
     cluster.text.textContent = u.troops; cluster.badgeText.textContent = count;
     const bw = 6 + count.length * 6; cluster.badgeBody.setAttribute('width', bw); cluster.badgeBody.setAttribute('x', width / 2 - bw + 4);
     cluster.badgeText.setAttribute('x', width / 2 - bw / 2 + 4);
-    cluster.group.dataset.total = u.troops; cluster.group.dataset.owner = u.owner || '';
+    const industry = u.owner ? u.members.reduce((n, id) => n + (this.state.provinces.find(p => p.id === id)?.development || 0), 0) : 0;
+    cluster.industry.style.display = industry ? '' : 'none'; cluster.industryText.textContent = industry;
+    const tagW = 12 + String(industry).length * 5.4, left = -tagW / 2;
+    cluster.industryBody.setAttribute('x', left); cluster.industryBody.setAttribute('width', tagW);
+    cluster.factory.setAttribute('transform', `translate(${left + 2} 0)`); cluster.industryText.setAttribute('x', left + 10.5);
+    cluster.group.dataset.total = u.troops; cluster.group.dataset.owner = u.owner || ''; cluster.group.dataset.industry = industry;
     cluster.group.classList.toggle('owned', Boolean(u.owner && u.owner === this.state.you));
-    cluster.group.setAttribute('aria-label', `${this.countries.get(u.owner)?.name || 'Uncontrolled'}: ${u.members.length} provinces, ${u.troops} troops combined. Activate to zoom in.`);
+    cluster.group.setAttribute('aria-label', `${this.countries.get(u.owner)?.name || 'Uncontrolled'}: ${u.members.length} provinces, ${u.troops} troops${industry ? `, industry ${industry}` : ''} combined. Activate to zoom in.`);
   }
   /** Screen rectangles swept by each visible army over the next interpolation window. */
   armyObstacles(px) {
@@ -617,8 +646,8 @@ export class Atlas {
     this.byId = new Map(state.provinces.map(p => [p.id, p]));
     const me = state.players.find(p => p.id === state.you), sides = new Map(state.players.map(p => [p.id, p.side]));
     const neighbors = this.places.get(source)?.neighbors || [];
-    // Provinces of the viewer that a hostile army is marching on get a red ring (v0.8: no alert stack).
-    const threatened = new Set(me ? state.armies.filter(a => !a.returning && sides.get(a.country) !== me.side).map(a => a.to).filter(id => state.provinces.some(p => p.id === id && p.owner === state.you)) : []);
+    // Provinces of the viewer that an army at war with it is marching on get a red ring (v0.8: no alert stack).
+    const threatened = new Set(me ? state.armies.filter(a => threatening(state, a, state.you)).map(a => a.to) : []);
     for (const p of state.provinces) {
       const shape = this.shapes.get(p.id), marker = this.markers.get(p.id);
       if (!shape) continue;
@@ -668,7 +697,7 @@ export class Atlas {
         body.append(halo, disc); group.append(body, pill, label, node('circle', { class: 'army-hit', r: 6.5 })); this.marches.append(group);
         this.armies.set(army.id, { group, body, disc, pill, label });
       }
-      const entry = this.armies.get(army.id), hostile = me && sides.get(army.country) !== me.side && state.provinces.some(p => p.id === army.to && p.owner === state.you);
+      const entry = this.armies.get(army.id), hostile = Boolean(me) && threatening(state, army, state.you);
       const origin = army.startPoint || this.places.get(army.from), target = this.places.get(army.to), dx = wrapDelta(target.x - origin.x);
       entry.body.setAttribute('transform', `rotate(${Math.atan2(target.y - origin.y, dx) * 180 / Math.PI})`);
       const color = this.countries.get(army.country)?.color || NEUTRAL;

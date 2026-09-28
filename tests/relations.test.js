@@ -111,3 +111,17 @@ test('unknown or missing input is empty, never throws', () => {
   assert.deepEqual(relationsOf({ players: [] }, 'usa'), { allies: [], enemies: [], neutral: [] });
   assert.equal(atWar({ players: [{ id: 'a', side: 'x' }], wars: ['a:b'], rules: { warRequired: true } }, 'a', 'b'), false);
 });
+
+test('only armies at war with the viewer threaten its provinces', async () => {
+  const { threatening } = await import('../public/relations.js');
+  const base = { rules: { warRequired: true }, wars: [],
+    players: [{ id: 'britain', side: 'solo:britain' }, { id: 'france', side: 'solo:france' }],
+    provinces: [{ id: 'brazil', owner: 'britain' }] };
+  const army = { id: 'a1', country: 'france', to: 'brazil', returning: false };
+  // France raced Britain to neutral Brazil; Britain arrived first. France is not at war with Britain: its army turns back.
+  assert.equal(threatening(base, army, 'britain'), false);
+  assert.equal(threatening({ ...base, wars: ['britain:france'] }, army, 'britain'), true);
+  assert.equal(threatening({ ...base, wars: ['britain:france'] }, { ...army, returning: true }, 'britain'), false);
+  // Legacy rooms without formal war: every non-ally is hostile.
+  assert.equal(threatening({ ...base, rules: {} }, army, 'britain'), true);
+});

@@ -107,6 +107,12 @@ export class WorldFeed {
     this.showUnread();
     return fresh;
   }
+  /** Remove a row whose subject no longer applies (e.g. an incoming army that turned back). */
+  withdraw(key) {
+    if (!this.keys.delete(key)) return;
+    [...this.list.children].find(li => li.dataset.feedKey === key)?.remove();
+    if (!this.list.children.length) this.list.append(node('li', 'feed-empty', 'No headlines or messages yet.'));
+  }
   /** Expand or collapse one clamped text. */
   expand(clamp) {
     const open = clamp.getAttribute('aria-expanded') !== 'true';
@@ -210,6 +216,11 @@ export class Notifier {
     if (!this.current) this.next();
   }
   dismiss() { if (!this.current) return false; clearTimeout(this.timer); this.next(); return true; }
+  /** Drop a notice that no longer applies, whether showing or waiting. */
+  withdraw(key) {
+    this.queue = this.queue.filter(q => q.key !== key);
+    if (this.current?.key === key) { clearTimeout(this.timer); this.next(); }
+  }
   next() {
     this.current = this.queue.shift() || null; this.root.hidden = !this.current;
     if (!this.current) { this.root.replaceChildren(); return; }
