@@ -191,6 +191,7 @@ async function runCommand() {
     s.latest = o;
     s.sinceTurn = [...s.sinceTurn, ...events].slice(-400);
     const items = inboxItems(events, s.country, o.players);
+    if (s.child) for (const item of items) item.duringTurn = true;
     if (items.length) { s.inbox.push(...items); log(`${s.slot}: inbox +${items.length} (${items.map(i => i.kind).join(', ')})`); }
     const sideOf = new Map(o.players.map(p => [p.id, p.side]));
     for (const e of events.filter(e => e.type === 'message'))
