@@ -61,6 +61,9 @@ test('host can add a bounded number of practice seats and leave a human place op
   assert.equal(view.players.length,2);
   assert.equal((await f.call(`/api/games/${id}/bots`,'POST',{count:2},host.token)).data.players,2);
   assert.equal((await f.call(`/api/games/${id}/bots`,'POST',{count:3},host.token)).data.players,3);
+  const started=await f.call(`/api/games/${id}/start`,'POST',{},host.token);
+  assert.equal(started.status,200);
+  assert.equal(started.data.status,'opening');
 });
 test('private server ID factory supports paired combat trials without a public seed parameter',async t=>{
   const f=await fixture(t,{gameIdFactory:()=> 'paired-01'}),host=await f.register('Benchmark host');
