@@ -106,11 +106,9 @@ const PROVINCES = [
 const BARRIERS = [
   ['india', 'tibet', 'mountains', 'Himalayas', 'India is reached through Afghanistan or Indochina, or by sea.'],
   ['west-russia', 'siberia', 'mountains', 'Urals', 'European Russia and Siberia meet only through Central Asia.'],
-  ['italy', 'south-france', 'mountains', 'Alps', 'Italy is reached through the Danube lands, or by sea from the Maghreb or the Balkans.'],
-  ['danube', 'south-france', 'mountains', 'Alps', 'France and the Danube lands meet only through Bavaria and the Rhineland.'],
+  ['italy', 'south-france', 'mountains', 'Alps', 'Italy is reached through the Danube lands (the eastern passes), or by sea from the Maghreb or the Balkans.'],
   ['maghreb', 'sahara', 'desert', 'Sahara', 'The Maghreb is reached by sea; the Sahara from West Africa, the Congo or up the Nile from Egypt.'],
   ['maghreb', 'west-africa', 'desert', 'Sahara', 'The Maghreb is reached by sea; West Africa by the Sahel or by sea.'],
-  ['egypt', 'sahara', 'desert', 'Libyan Desert', 'Egypt reaches Africa up the Nile, through the Congo and East Africa.'],
 ];
 
 /** Every connection that is not a shared land border. [a, b, why]. Travel time follows map distance. */
