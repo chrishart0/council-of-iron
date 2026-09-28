@@ -24,7 +24,8 @@ const help=`Council of Iron CLI (Node 22.13+)
                                      --declare-war declares war on the target's owner in the same
                                      action (nothing happens if the march is invalid).
   preview TO AMOUNT|N% FROM [FROM...] Forecast that march: paths, arrival, battle odds
-  recall ARMY_OR_GROUP_ID            Cancel waiting orders; turn marching troops home
+  turn-around ID [--preview]         Bring a march (group or army ID) home from where it is; a returning
+                                     army ID marches again toward its target (at most twice per army)
   rally FROM[,FROM...] TO|clear [--preview]
                                      New troops from FROM march to your province TO at each recruitment
   develop FROM                       Spend local troops to raise the province's industry
@@ -70,7 +71,11 @@ try {
     case 'map':{const map=await client.map();result={...map,provinces:map.provinces.map(({path,...province})=>province)};break;}
     case 'march':result=await client.action({...marchAction(args),...(declareWar?{declareWar:true}:{})});break;
     case 'preview':result=await client.plan(marchAction(args));break;
-    case 'recall':result=await client.action({type:'recall',id:args[0]});break;
+    case 'turn-around': {
+      if(previewOnly){result=await client.plan({type:'turn_around',armyId:args[0]});break;}
+      const army=(await client.observe(Number.MAX_SAFE_INTEGER)).armies.find(a=>a.id===args[0]);
+      result=await client.action(army?.returning?{type:'turn_around',armyId:args[0]}:{type:'recall',id:args[0]});break;
+    }
     case 'rally': {
       const from=args[0].split(','),action={type:'rally',from:from.length===1?from[0]:from,to:args[1]==='clear'?null:args[1]};
       result=previewOnly?await client.plan(action):await client.action(action);break;

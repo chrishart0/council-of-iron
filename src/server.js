@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { Store } from './store.js';
-import { RULES, act, rallyPlan, createGame, displayName, join, observe, preview, start, tick, worldFeed, RuleError, requireRule, text } from './engine.js';
+import { RULES, act, rallyPlan, turnAroundPlan, createGame, displayName, join, observe, preview, start, tick, worldFeed, RuleError, requireRule, text } from './engine.js';
 import { buildReview, unavailableReview } from './review.js';
 import { replayReader } from '../public/replay-model.js';
 import { operationalInsights } from '../public/insights.js';
@@ -214,9 +214,10 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         }
         if(endpoint==='plan' && req.method==='POST') {
           const p=seat(), data=await body(req);
-          // Read-only: a rally plan (quickest friendly paths + ETAs) or a march forecast (paths, arrival, odds).
+          // Read-only: a rally plan, a turn-around (recall / march again) forecast, or a march forecast.
           requireRule(g.status==='running','The match is not running.',409);
-          return json(res,200,data.type==='rally'?rallyPlan(g,p.id,data):preview(g,gameMap,p.id,data));
+          return json(res,200,data.type==='rally'?rallyPlan(g,p.id,data):data.type==='turn_around'?turnAroundPlan(g,p.id,data.armyId)
+            :preview(g,gameMap,p.id,data));
         }
         if(endpoint==='join' && req.method==='POST') {
           const me=auth(g.id),data=await body(req);

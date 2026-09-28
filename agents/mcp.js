@@ -61,8 +61,12 @@ tool('preview','Forecast a march without sending it: the path each source takes,
   marchProperties,['to'],a=>client.plan(marchAction(a)),true);
 tool('march','Send troops to a province. One source: from + amount (or percent of its free troops). Several sources attacking together: sources:[{from, amount|percent}] — they all arrive on the same tick. Each column takes the quickest path through your own and allied land (twice as fast there), so the target can be a neighbour or anything beyond your land. Leave one troop at home (board.own[].available already does). Attacking another country needs a war: set declareWar:true to declare war on the owner in the same action (nothing happens if the march is invalid). Friendly targets are reinforced; troops sent to an ally become the ally\'s.',
   {...marchProperties,declareWar:{type:'boolean'},...op},['to'],a=>client.action(marchAction(a),a.opId));
-tool('recall','Turn back a march: cancels its waiting sources and sends marching troops home from where they are (they take as long as they have been out). Pass an army ID or the march groupId.',
-  {id:string,...op},['id'],a=>client.action({type:'recall',id:a.id},a.opId));
+tool('turn_around','Bring troops back, or send them back again. Pass a march groupId or an advancing army ID: waiting sources are cancelled and marching troops turn home from where they are (they take as long as they have been out). Pass a RETURNING army ID (recalled, or turned back automatically; see the army_recalled reason): it marches again toward the target it had been heading for, from where it is now, if that is still a legal march (at war, neutral or allied). At most twice per army; engaged armies cannot. preview:true only forecasts (mode recall|resume, arrivesAt, any battle already there).',
+  {id:string,preview:{type:'boolean'},...op},['id'],async a=>{
+    const o=await client.observe(Number.MAX_SAFE_INTEGER),army=o.armies.find(x=>x.id===a.id && x.country===o.you);
+    if(a.preview)return client.plan({type:'turn_around',armyId:a.id});
+    return client.action(army?.returning?{type:'turn_around',armyId:a.id}:{type:'recall',id:a.id},a.opId);
+  });
 tool('rally','Rally point: at every recruitment, the new troops of each source province march to one of your own provinces along the quickest path through your or allied land. They never attack. to:null clears. Set it once and your fronts are fed without further orders. preview:true only forecasts the paths.',
   {from:{type:['string','array'],minItems:1,maxItems:16,items:string},to:{type:['string','null']},preview:{type:'boolean'},...op},['from','to'],
   a=>a.preview?client.plan({type:'rally',from:a.from,to:a.to}):client.action({type:'rally',from:a.from,to:a.to},a.opId));

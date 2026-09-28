@@ -231,9 +231,9 @@ test('stdio MCP negotiates, validates schemas, joins an agent, calls real HTTP, 
   ].map(x=>JSON.stringify(x)).join('\n')+'\n';
   const result=await subprocess('agents/mcp.js',[],env,input);assert.equal(result.code,0,result.stderr);
   const output=result.stdout.trim().split('\n').map(x=>JSON.parse(x));assert.equal(output.length,11);
-  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,26);
-  assert.ok(['board','news','preview','march','rally','recall','declare_war','offer_peace','accept_peace'].every(name=>output[1].result.tools.some(t=>t.name===name)));
-  assert.ok(!['move','transit','coordinated_attack','turn_around','vote_war','lock_opening','situation'].some(name=>output[1].result.tools.some(t=>t.name===name)));
+  assert.equal(output[0].result.protocolVersion,'2025-06-18');assert.equal(output[1].result.tools.length,27);
+  assert.ok(['board','decision_view','news','preview','march','rally','turn_around','declare_war','offer_peace','accept_peace'].every(name=>output[1].result.tools.some(t=>t.name===name)));
+  assert.ok(!['move','transit','coordinated_attack','recall','vote_war','lock_opening','situation'].some(name=>output[1].result.tools.some(t=>t.name===name)));
   assert.equal(JSON.parse(output[2].result.content[0].text).country,'britain');
   const observed=JSON.parse(output[3].result.content[0].text);assert.equal(observed.you,'britain');
   assert.equal(output[4].error.code,-32602);assert.equal(output[5].error.code,-32602);assert.deepEqual(output[6].result,{});
@@ -420,28 +420,38 @@ test('HTTP declare-and-march shares the engine path and retry receipt',async t=>
   assert.deepEqual(view.wars,['britain:usa']);assert.equal(view.orders.length,1);
 });
 
-test('recall over HTTP, CLI and MCP turns marching troops home and survives restart',async t=>{
+test('turn around over HTTP, CLI and MCP: bring a march home, march a returning army again, survive restart',async t=>{
   const f=await fixture(t,{disk:true}),host=await f.register('Host'),other=await f.register('Other');
   const id=await f.room(host),usa=await f.seat(id,host,'usa');await f.seat(id,other,'britain');
   await f.launch(id,usa.token);
   const post=(opId,action)=>f.call(`/api/games/${id}/actions`,'POST',{opId,action},usa.token);
+  const env={COUNCIL_URL:f.url,COUNCIL_SESSION:pathJoin(f.dir,'turn.session.json'),COUNCIL_TOKEN:usa.token,COUNCIL_MATCH:id};
   const first=(await post('out-1',{type:'march',from:'west-us',to:'mexico',amount:3})).data;
   const second=(await post('out-2',{type:'march',from:'central-us',to:'mexico',amount:3})).data;
   f.app.step(f.app.games.get(id),10);
-  const back=await post('back',{type:'recall',id:first.groupId});assert.equal(back.status,200,JSON.stringify(back.data));
+  // CLI: a march group ID brings it home.
+  const cli=await subprocess('agents/cli.js',['turn-around',first.groupId],env);assert.equal(cli.code,0,cli.stderr);
+  f.app.step(f.app.games.get(id),1);
+  const army=f.app.games.get(id).armies.find(a=>a.groupId===first.groupId);assert.equal(army.returning,true);
+  const plan=await f.call(`/api/games/${id}/plan`,'POST',{type:'turn_around',armyId:army.id},usa.token);
+  assert.equal(plan.status,200,JSON.stringify(plan.data));assert.equal(plan.data.mode,'resume');assert.equal(plan.data.to,'mexico');
+  // MCP: the same tool sends the returning army back toward Mexico.
+  const mcp=await subprocess('agents/mcp.js',[],env,[
+    {jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-06-18'}},{jsonrpc:'2.0',method:'notifications/initialized'},
+    {jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'turn_around',arguments:{id:army.id,preview:true}}},
+    {jsonrpc:'2.0',id:3,method:'tools/call',params:{name:'turn_around',arguments:{id:army.id,opId:'mcp-again'}}},
+    {jsonrpc:'2.0',id:4,method:'tools/call',params:{name:'turn_around',arguments:{id:second.groupId,opId:'mcp-home'}}},
+  ].map(x=>JSON.stringify(x)).join('\n')+'\n');
+  const out=mcp.stdout.trim().split('\n').map(x=>JSON.parse(x));
+  assert.equal(JSON.parse(out[1].result.content[0].text).mode,'resume');
+  const again=JSON.parse(out[2].result.content[0].text);assert.equal(again.mode,'resume',JSON.stringify(out[2]));assert.equal(again.arrivesAt,plan.data.arrivesAt);
+  assert.equal(JSON.parse(out[3].result.content[0].text).ok,true,JSON.stringify(out[3]));
   f.app.step(f.app.games.get(id),1);await f.restart();
   const restored=(await f.call(`/api/games/${id}`,'GET',undefined,usa.token)).data;
-  assert.equal(restored.armies.find(a=>a.groupId===first.groupId).returning,true);
-  assert.equal((await post('turn',{type:'turn_around',armyId:'army-1'})).status,400,'turn_around is not an order');
-  const env={COUNCIL_URL:f.url,COUNCIL_SESSION:pathJoin(f.dir,'recall.session.json'),COUNCIL_TOKEN:usa.token,COUNCIL_MATCH:id};
-  const cli=await subprocess('agents/cli.js',['recall',second.groupId],env);assert.equal(cli.code,0,cli.stderr);
-  const again=await subprocess('agents/mcp.js',[],env,[
-    {jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-06-18'}},{jsonrpc:'2.0',method:'notifications/initialized'},
-    {jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'recall',arguments:{id:second.groupId,opId:'mcp-recall'}}},
-  ].map(x=>JSON.stringify(x)).join('\n')+'\n');
-  const out=again.stdout.trim().split('\n').map(x=>JSON.parse(x));
-  assert.equal(out[1].result.isError,true,'already recalled');assert.match(JSON.parse(out[1].result.content[0].text).error,/already queued|returning/);
-  f.app.step(f.app.games.get(id),1);
-  assert.ok(f.app.games.get(id).armies.filter(a=>a.country==='usa').every(a=>a.returning));
+  const resumed=restored.armies.find(a=>a.id===army.id);
+  assert.equal(resumed.returning,undefined);assert.equal(resumed.to,'mexico');assert.equal(resumed.turnArounds,1);
+  assert.ok(restored.events.some(e=>e.type==='army_turned_around'&&e.armyId===army.id&&e.arrivesAt===plan.data.arrivesAt));
+  assert.ok(restored.armies.filter(a=>a.groupId===second.groupId).every(a=>a.returning));
 });
+
 

@@ -130,9 +130,9 @@ try {
   record.match = created.id;
   record.url = gameUrl;
   save();
-  const gameToolNames = new Set(['map', 'observe', 'news', 'board', 'decision_view', 'preview', 'march', 'recall', 'rally', 'develop', 'propose_alliance', 'accept_alliance', 'decline_alliance', 'leave_alliance', 'declare_war', 'offer_peace', 'accept_peace', 'send_message', 'after_action_report', 'replay_state', 'standings']);
+  const gameToolNames = new Set(['map', 'observe', 'news', 'board', 'decision_view', 'preview', 'march', 'turn_around', 'rally', 'develop', 'propose_alliance', 'accept_alliance', 'decline_alliance', 'leave_alliance', 'declare_war', 'offer_peace', 'accept_peace', 'send_message', 'after_action_report', 'replay_state', 'standings']);
   if (vision) gameToolNames.add('view_map');
-  const actionTypes = new Map([['march', 'march'], ['recall', 'recall'], ['rally', 'rally'], ['develop', 'develop'], ['propose_alliance', 'propose'], ['accept_alliance', 'accept'], ['decline_alliance', 'decline'], ['leave_alliance', 'leave'], ['declare_war', 'declare_war'], ['offer_peace', 'offer_peace'], ['accept_peace', 'accept_peace'], ['send_message', 'chat']]);
+  const actionTypes = new Map([['march', 'march'], ['turn_around', 'turn_around'], ['rally', 'rally'], ['develop', 'develop'], ['propose_alliance', 'propose'], ['accept_alliance', 'accept'], ['decline_alliance', 'decline'], ['leave_alliance', 'leave'], ['declare_war', 'declare_war'], ['offer_peace', 'offer_peace'], ['accept_peace', 'accept_peace'], ['send_message', 'chat']]);
   mcp = new LocalMcpClient(process.execPath, [resolve(root, 'agents/mcp.js')], { ...process.env, COUNCIL_URL: gameUrl, COUNCIL_SESSION: client.sessionPath, COUNCIL_MATCH: '', COUNCIL_TOKEN: '' });
   const advertised = (await mcp.initialize()).tools;
   const gameTools = advertised.filter(tool => gameToolNames.has(tool.name)).map(tool => ({

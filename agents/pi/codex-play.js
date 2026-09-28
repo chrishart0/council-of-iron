@@ -147,7 +147,7 @@ try {
               exitCode: item.exit_code, output: item.output || item.aggregated_output, result: item.result,
               error: item.error || item.text || item.message, message: event.message };
             record.events.push(short);
-            if (item.type?.includes('mcp') && short.name && ['march','recall','rally','develop','propose_alliance','accept_alliance','decline_alliance','leave_alliance','declare_war','offer_peace','accept_peace','send_message'].some(name => short.name.endsWith(name))) {
+            if (item.type?.includes('mcp') && short.name && ['march','turn_around','rally','develop','propose_alliance','accept_alliance','decline_alliance','leave_alliance','declare_war','offer_peace','accept_peace','send_message'].some(name => short.name.endsWith(name))) {
               if (event.type === 'item.completed') record.actions.push(short);
             }
             save();

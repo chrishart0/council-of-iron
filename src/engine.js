@@ -13,7 +13,7 @@ export const RULES = Object.freeze({ duration: 1800, recruit: 20,
   // ally's when the leg departs, sea lanes included) a further ×2. Battle rounds 25% slower
   // (4 rounds per 5 ticks, same dice per round). Development: 24/120 then 48/180. Evidence: docs/BALANCE.md.
   marchSetup: 15, kmPerTick: 35, moveSpeedPercent: 120, internalSpeedPercent: 200, battleSlowdownPercent: 125,
-  maxSources: 16, maxDevelopment: 3, developmentCosts: [0, 24, 48], developmentTicks: [0, 120, 180] });
+  maxSources: 16, maxTurnArounds: 2, maxDevelopment: 3, developmentCosts: [0, 24, 48], developmentTicks: [0, 120, 180] });
 export const gameRules = g => g.rules;
 export const reservedTroops = (g, country, from) => g.orders
   .filter(o => o.country === country && o.from === from && ['march', 'develop'].includes(o.type))
@@ -328,7 +328,7 @@ function recall(g, p, action) {
     .filter(item => matchesRecall(item, action.id));
   requireRule(items.length > 0, 'This order has already arrived, been cancelled, or is returning.', 409);
   requireRule(items.every(item => item.country === p.id), 'You cannot recall another country’s troops.', 403);
-  requireRule(!g.orders.some(o => o.type === 'recall' && o.target === action.id), 'Recall is already queued.', 409);
+  requireRule(!g.orders.some(o => ['recall', 'turn_around'].includes(o.type) && o.target === action.id), 'Recall is already queued.', 409);
   checkBudget(g, p); useBudget(g, p);
   const order = { id: identifier(g, 'order-'), type: 'recall', country: p.id, target: action.id, executeAt: g.tick + 1 };
   g.orders.push(order);
@@ -346,21 +346,83 @@ function executeRecall(g, order) {
     ...(!waiting.length && !returned ? { reason: 'The selected troops are no longer recallable.' } : {}) }, [order.country]);
 }
 /** Ticks a moving army needs to get home if it turns back at `tick`: as long as it has been out
- * (a column measures from its first departure), never longer than a single leg. */
+ * (a column or a resumed army measures from its first departure), never longer than a single leg. */
 export function returnTicks(army, tick) {
-  return Math.max(1, army.path ? tick - army.originDepartedAt : Math.min(army.arrivesAt - army.departedAt, tick - army.departedAt));
+  return Math.max(1, army.originDepartedAt !== undefined ? tick - army.originDepartedAt
+    : Math.min(army.arrivesAt - army.departedAt, tick - army.departedAt));
 }
 /** Reverse a marching army from its actual position. `reason` is 'manual' for a player's recall;
- * automatic reasons add `province` (where it was heading) and cause-specific detail. */
+ * automatic reasons add `province` (where it was heading) and cause-specific detail. The army
+ * remembers where it was going (`resume`) so its owner can send it back ("march again"). */
 function turnArmy(g,a,reason,detail={}) {
   const battle=g.battles.find(b=>b.province===a.to && a.engaged);
   if(battle)battle.withdrawn+=a.amount;
   const startPoint=journeyPoint(a,g.positions,g.tick),back=returnTicks(a,g.tick);
-  const home=a.path?a.origin:a.from,heading=a.to;
+  const home=a.origin ?? a.from,heading=a.to;
+  a.resume={to:heading,target:a.path?.at(-1) ?? heading,remaining:Math.max(0,a.arrivesAt-g.tick),turnedAt:g.tick};
   Object.assign(a,{from:a.to,to:home,startPoint,returning:true,engaged:false,departedAt:g.tick,arrivesAt:g.tick+back});
-  delete a.path;delete a.pathIndex;
+  delete a.path;delete a.pathIndex;delete a.origin;delete a.originDepartedAt;
   event(g,'army_recalled',{country:a.country,armyId:a.id,to:a.to,amount:a.amount,arrivesAt:a.arrivesAt,
     ...(reason==='manual'?{}:{reason,province:heading,...detail})});
+}
+/** Read-only check for turning one of your moving armies around at tick `at` (default: next tick,
+ * when the order executes). An advancing army turns home (a recall). A returning army marches again
+ * toward the target it had been heading for, from where it actually is: the time it has spent
+ * coming back plus what it still had to go, then on along friendly land if the target was further. */
+export function turnAroundPlan(g, country, armyId, at = g.tick + 1) {
+  alive(g, country);
+  requireRule(typeof armyId === 'string' && armyId.length > 0 && armyId.length <= 80, 'Specify an army ID.');
+  const army = g.armies.find(a => a.id === armyId);
+  requireRule(army, 'That army has already arrived or no longer exists.', 409);
+  requireRule(army.country === country, 'You cannot turn another country’s troops around.', 403);
+  requireRule(!army.engaged, 'That army is fighting; recall it to withdraw.', 409);
+  if (!army.returning) return { armyId, mode: 'recall', to: army.origin ?? army.from, arrivesAt: at + returnTicks(army, at) };
+  const limit = gameRules(g).maxTurnArounds;
+  requireRule((army.turnArounds || 0) < limit, `An army can march again at most ${limit} times.`, 409);
+  const { to, target } = army.resume;
+  const onward = target === to ? null : friendlyPath(g, country, to, target);
+  requireRule(target === to || onward, `No route from ${to} to ${target} through your or allied land.`, 409);
+  if (target !== to) requireRule(allied(g, country, province(g, to).owner), `${to} is no longer friendly land to pass through.`, 409);
+  const owner = province(g, target).owner;
+  requireRule(mayEnter(g, country, owner), 'Declare war before attacking another country.', 409);
+  const first = army.resume.remaining + (at - army.resume.turnedAt);
+  const arrivesAt = at + first + (onward?.travel ?? 0);
+  const battle = g.battles.find(b => b.province === target);
+  return { armyId, mode: 'resume', to: target, via: to, owner, amount: army.amount, arrivesAt,
+    turnArounds: (army.turnArounds || 0) + 1, limit,
+    ...(battle && !allied(g, country, owner) ? { battleInProgress: { attackerSide: battle.attackerSide,
+      joins: battle.attackerSide === player(g, country).side } } : {}),
+    warning: 'Checked again when the order executes next tick. Ownership, wars and battles can change before arrival.' };
+}
+function turnAround(g, p, action) {
+  const plan = turnAroundPlan(g, p.id, action.armyId);
+  if (plan.mode === 'recall') return { mode: 'recall', ...recall(g, p, { id: action.armyId }) };
+  requireRule(!g.orders.some(o => ['recall', 'turn_around'].includes(o.type) && o.target === action.armyId),
+    'A turn-around is already queued for this army.', 409);
+  checkBudget(g, p); useBudget(g, p);
+  const order = { id: identifier(g, 'order-'), type: 'turn_around', country: p.id, target: action.armyId, executeAt: g.tick + 1 };
+  g.orders.push(order);
+  event(g, 'order_accepted', { country: p.id, orderId: order.id, executeAt: order.executeAt }, [p.id]);
+  return { mode: 'resume', orderId: order.id, executeAt: order.executeAt, to: plan.to, arrivesAt: plan.arrivesAt };
+}
+function executeTurnAround(g, order) {
+  let plan;
+  try { plan = turnAroundPlan(g, order.country, order.target, g.tick); }
+  catch (error) {
+    if (!(error instanceof RuleError)) throw error;
+    event(g, 'order_failed', { country: order.country, orderId: order.id, reason: error.message }, [order.country]); return;
+  }
+  if (plan.mode !== 'resume') {
+    event(g, 'order_failed', { country: order.country, orderId: order.id, reason: 'The army is already heading for its target.' }, [order.country]); return;
+  }
+  const a = g.armies.find(x => x.id === order.target), home = a.to;
+  const startPoint = journeyPoint(a, g.positions, g.tick), out = Math.max(0, a.arrivesAt - g.tick);
+  const onward = plan.to === plan.via ? null : friendlyPath(g, a.country, plan.via, plan.to);
+  delete a.returning; delete a.resume;
+  Object.assign(a, { from: home, to: plan.via, startPoint, departedAt: g.tick, origin: home, originDepartedAt: g.tick - out,
+    arrivesAt: g.tick + (plan.arrivesAt - g.tick - (onward?.travel ?? 0)), turnArounds: plan.turnArounds,
+    ...(onward ? { path: [plan.via, ...onward.path], pathIndex: 0 } : {}) });
+  event(g, 'army_turned_around', { country: a.country, armyId: a.id, from: home, to: plan.to, amount: a.amount, arrivesAt: plan.arrivesAt });
 }
 /** Why an arriving, non-allied army that did not join the attack is turned back. */
 function refusal(g,army,target,battle,chosen) {
@@ -531,6 +593,7 @@ export function act(g, map, country, action, opId) {
     case 'march': result = marchWithWar(g, map, p, action); break;
     case 'rally': result = rally(g, p, action); break;
     case 'recall': result = recall(g, p, action); break;
+    case 'turn_around': result = turnAround(g, p, action); break;
     case 'develop': result = develop(g, p, action); break;
     case 'propose': result = propose(g, p, action); break;
     case 'accept': result = accept(g, p, action); break;
@@ -608,8 +671,10 @@ function departArmy(g, country, from, path, amount, { order = null, rally = fals
 function executeOrders(g) {
   // Cancellation received before the arrival/departure tick wins that boundary.
   // No troop is refunded instantly if it has already left its garrison.
-  for (const o of g.orders.filter(o => o.type === 'recall' && o.executeAt <= g.tick)) executeRecall(g, o);
-  for (const o of g.orders.filter(o => o.type !== 'recall' && o.executeAt <= g.tick)) {
+  // Recalls and turn-arounds run in submission order before any departure or arrival.
+  for (const o of g.orders.filter(o => ['recall', 'turn_around'].includes(o.type) && o.executeAt <= g.tick))
+    if (o.type === 'recall') executeRecall(g, o); else executeTurnAround(g, o);
+  for (const o of g.orders.filter(o => !['recall', 'turn_around'].includes(o.type) && o.executeAt <= g.tick)) {
     if (o.type === 'rally') { executeRally(g, o); continue; }
     const source = province(g, o.from);
     let error = source.owner !== o.country ? 'Source is no longer yours.' : o.amount >= source.troops ? 'Not enough troops remain.' : null;
