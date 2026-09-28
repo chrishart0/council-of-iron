@@ -31,7 +31,7 @@ def load_bridge(page, url, saved=None):
     html = re.sub(r'<script[^>]+src="/app.js"[^>]*></script>', '', html)
     html = re.sub(r'<link[^>]+href="/(?:style|review|map-layers|feed).css"[^>]*>', '', html)
     page.set_content(html)
-    for name in ['style.css', 'review.css', 'map-layers.css', 'feed.css']:
+    for name in ['style.css', 'review.css', 'map-layers.css', 'comms.css']:
         page.add_style_tag(content=(ROOT / 'public' / name).read_text())
     page.evaluate('''saved => {
         const storage = saved || {};
@@ -49,3 +49,29 @@ def load_bridge(page, url, saved=None):
             cache[name] = 'data:text/javascript;base64,' + base64.b64encode(source(name).encode()).decode()
         return cache[name]
     page.add_script_tag(type='module', content=source('app.js'))
+
+# v0.9 Messages helpers (public/comms.js): the World thread is the history; one toast lane per match.
+def lane(page):
+    """The one toast region of a match (#toasts); #toast is only used on the title and lobby screens."""
+    return page.locator('#toasts')
+
+def open_thread(page, key):
+    """Open one Messages conversation ('world', 'alliance' or 'dm:<country>'), from the docked list on desktop
+    or through the Messages button on compact screens."""
+    from playwright.sync_api import expect
+    comms = page.locator('#comms')
+    if not comms.is_visible():
+        page.locator('#comms-button').click(); expect(comms).to_be_visible()
+    if comms.get_attribute('data-view') == 'thread':
+        page.locator('#comms .cx-back').click(); expect(comms).to_have_attribute('data-view', 'list')
+    page.locator(f'#comms [data-conv="{key}"]').first.click()
+    expect(comms).to_have_attribute('data-view', 'thread')
+    return page.locator('#comms .cx-rows')
+
+def close_comms(page):
+    """Back to the resting state: the docked list on desktop, closed on compact screens."""
+    docked = page.evaluate('innerWidth>=1024 && innerHeight>=500')
+    for _ in range(3):
+        view = page.evaluate('document.body.dataset.comms')
+        if view == 'closed' or (docked and view == 'list'): return
+        page.locator('#comms .cx-back' if view == 'thread' else '#comms .cx-close').click()

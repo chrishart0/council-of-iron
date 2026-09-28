@@ -1,7 +1,8 @@
-/** Sound cue selection (v0.7). Pure: no DOM, Web Audio, clock or storage, so it is unit-tested.
- * Cues are chosen only from things the viewer can already see: engine headlines (World feed and
- * banners), public world chat (feed row), hostile armies aimed at the viewer's land (threat strip)
- * and the viewer's own committed orders (toast). A sound never carries information alone.
+/** Sound cue selection (v0.7; v0.9 follows the comms tiers). Pure: no DOM, Web Audio, clock or storage.
+ * Cues are chosen only from things the viewer can already see. v0.9 tiers (public/comms-model.js):
+ * ACTION (an offer, vote or peace offer that needs you) → the `dispatch` stinger; PERSONAL (a DM or alliance
+ * message to you) → the soft `chat` blip; headlines that affect you keep their banner stingers; WORLD
+ * (other people's news, world chat) → silent. Threat music and your own orders are unchanged.
  */
 import { isWorldMessage, affectsViewer } from './feed-model.js';
 import { threatening } from './relations.js';
@@ -28,13 +29,13 @@ const KNOWN = new Set(['war', 'peace', 'alliance', 'departure', 'dissolved', 'el
 const request = (cue, mine = false) => ({ cue, priority: PRIORITY[cue] + (mine ? 2 : 0), mine });
 
 /** Cue for one classified headline. `viewer` = viewerOf(state) (you/side null for spectators).
- * Loud stingers only for headlines that affect the viewer; other people's news is a quiet,
- * rate-limited blip (the `chat` cue), like the rail row it accompanies. */
+ * Stingers only for headlines that affect the viewer (they also get a banner); other people's news is
+ * WORLD tier and silent (the World thread only pulses). The match result is heard by everyone. */
 export function headlineCue(item, viewer = {}) {
   const h = item?.headline, you = viewer.you ?? null;
   if (!h) return null;
   if (!KNOWN.has(h.kind)) return null;
-  if (!affectsViewer(item, viewer)) return request('chat');
+  if (!affectsViewer(item, viewer)) return null;
   const mine = Boolean(you) && [h.from, h.to, h.countries, [h.country, h.owner, h.previousOwner]].flat().includes(you);
   switch (h.kind) {
     case 'war': return request('war', mine);
@@ -55,12 +56,16 @@ export function headlineCue(item, viewer = {}) {
   }
 }
 
-/** Requests for events received after catch-up. The caller must never pass catch-up events. */
+/** Requests for events received after catch-up. The caller must never pass catch-up events.
+ * Events are already recipient-filtered: a private row exists only because it was delivered to this seat. */
 export function eventCues(events, viewer = {}) {
-  const out = [];
+  const out = [], you = viewer.you ?? null;
   for (const e of events) {
-    if (e.headline) { const r = headlineCue(e, viewer); if (r) out.push(r); }
-    else if (isWorldMessage(e) && e.from !== viewer.you) out.push(request('chat'));
+    if (e.headline) { const r = headlineCue(e, viewer); if (r) out.push(r); continue; }
+    if (!you || isWorldMessage(e)) continue; // WORLD: silent
+    if (e.type === 'message' && (e.channel === 'dm' || e.channel === 'alliance') && e.from !== you) out.push(request('chat')); // PERSONAL
+    else if ((e.type === 'alliance_offer' || e.type === 'war_vote' || e.type === 'peace_vote' || e.type === 'peace_offered') && e.from !== you
+      && !(e.fromRoster || []).includes(you)) out.push(request('dispatch', true)); // ACTION: a decision addressed to you
   }
   return out;
 }

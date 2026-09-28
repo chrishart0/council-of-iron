@@ -12,24 +12,24 @@ const cue = (item, viewer) => headlineCue(item, viewer)?.cue;
 
 test('every headline kind maps to one cue; loud stingers only when it affects the viewer', () => {
   const me = { you: 'france', side: 'france' }, spectator = {};
-  // Other people's news is a quiet blip (the rail row), not a stinger.
-  assert.equal(cue(h('war', { from: ['germany'], to: ['russia'] }), me), 'chat');
+  // Other people's news is WORLD tier: silent (the World thread row only), never a stinger.
+  assert.equal(cue(h('war', { from: ['germany'], to: ['russia'] }), me), undefined);
   assert.equal(cue(h('war', { from: ['germany'], to: ['france'] }), me), 'war');
   assert.equal(headlineCue(h('war', { from: ['germany'], to: ['france'] }), me).priority, PRIORITY.war + 2);
-  assert.equal(cue(h('peace', { from: ['a'], to: ['b'] }), me), 'chat');
+  assert.equal(cue(h('peace', { from: ['a'], to: ['b'] }), me), undefined);
   assert.equal(cue(h('peace', { from: ['a'], to: ['france'] }), me), 'peace');
-  assert.equal(cue(h('alliance', { countries: ['a', 'b'], side: 's' }), me), 'chat');
+  assert.equal(cue(h('alliance', { countries: ['a', 'b'], side: 's' }), me), undefined);
   assert.equal(cue(h('alliance', { countries: ['france', 'b'], side: 's' }), me), 'alliance');
-  assert.equal(cue(h('departure', { country: 'a', side: 's' }), me), 'chat');
+  assert.equal(cue(h('departure', { country: 'a', side: 's' }), me), undefined);
   assert.equal(cue(h('departure', { country: 'a', side: 'france' }), me), 'dispatch');
   assert.equal(cue(h('dissolved', { side: 'france' }), me), 'dispatch');
-  assert.equal(cue(h('eliminated', { country: 'russia' }), me), 'chat');
+  assert.equal(cue(h('eliminated', { country: 'russia' }), me), undefined);
   assert.equal(cue(h('eliminated', { country: 'russia' }), { ...me, allies: ['russia'] }), 'fallen');
   assert.equal(cue(h('eliminated', { country: 'france' }), me), 'defeat');
-  assert.equal(cue(h('eliminated', { country: 'france' }), spectator), 'chat');
-  assert.equal(cue(h('major_battle', { province: 'p', owner: 'a', previousOwner: 'b' }), me), 'chat');
+  assert.equal(cue(h('eliminated', { country: 'france' }), spectator), undefined);
+  assert.equal(cue(h('major_battle', { province: 'p', owner: 'a', previousOwner: 'b' }), me), undefined);
   assert.equal(headlineCue(h('major_battle', { province: 'p', owner: 'a', previousOwner: 'france' }), me).mine, true);
-  assert.equal(cue(h('industry_up', { province: 'p', level: 3 }), me), 'chat');
+  assert.equal(cue(h('industry_up', { province: 'p', level: 3 }), me), undefined);
   assert.equal(cue(h('industry_down', { province: 'p', level: 2, owner: 'france' }), me), 'industry_down');
   assert.equal(cue(h('dominance', { side: 'x' }), me), 'countdown');
   assert.equal(headlineCue(h('dominance', { side: 'france' }), me).mine, true);
@@ -46,16 +46,19 @@ test('every headline kind maps to one cue; loud stingers only when it affects th
   }
 });
 
-test('events: headlines and other people’s world chat only; stopped holds by seq', () => {
+test('events follow the comms tiers: ACTION stinger, PERSONAL blip, WORLD silent; stopped holds by seq', () => {
   const viewer = { you: 'france', side: 'france' };
   const events = [
     { id: 1, type: 'message', channel: 'world', from: 'germany', text: 'hi' },
     { id: 2, type: 'message', channel: 'world', from: 'france', text: 'mine' },
-    { id: 3, type: 'message', channel: 'alliance', from: 'germany', text: 'private', recipients: ['germany'] },
+    { id: 3, type: 'message', channel: 'dm', from: 'germany', to: 'france', text: 'private' },
     { id: 4, type: 'order_accepted' },
     { id: 5, type: 'war_declared', ...h('war', { from: ['germany'], to: ['russia'] }) },
+    { id: 6, type: 'alliance_offer', from: 'germany', roster: ['germany', 'france'], name: 'Pact' },
+    { id: 7, type: 'message', channel: 'dm', from: 'france', to: 'germany', text: 'my own' },
   ];
-  assert.deepEqual(eventCues(events, viewer).map(r => r.cue), ['chat', 'chat'], 'a third-party war is a quiet blip');
+  assert.deepEqual(eventCues(events, viewer).map(r => [r.cue, r.mine]), [['chat', false], ['dispatch', true]], 'world chat and third-party news are silent');
+  assert.deepEqual(eventCues(events, {}).map(r => r.cue), [], 'spectators hear only headlines that affect them (none here)');
   const breaks = [{ seq: 4, ...h('dominance_broken', { side: 'x' }) }, { seq: 9, ...h('dominance_broken', { side: 'france' }) }, { seq: 12 }];
   assert.deepEqual(breakCues(breaks, 4, viewer).map(r => [r.cue, r.mine]), [['countdown_stop', true]]);
 });
@@ -126,7 +129,7 @@ test('server: audio assets and sound modules are served with correct types under
     const csp = html.headers.get('content-security-policy');
     assert.match(csp, /default-src 'self'/); assert.match(csp, /connect-src 'self'/); // fetch + decodeAudioData
     assert.doesNotMatch(csp, /media-src/); // falls back to default-src 'self'
-    for (const [path, type] of [['/sound.js', 'text/javascript'], ['/sound-model.js', 'text/javascript'], ['/sound.css', 'text/css'], ['/audio/manifest.json', 'application/json']]) {
+    for (const [path, type] of [['/sound.js', 'text/javascript'], ['/sound-model.js', 'text/javascript'], ['/comms.css', 'text/css'], ['/fonts/barlow-condensed-medium.woff2', 'font/woff2'], ['/audio/manifest.json', 'application/json']]) {
       const r = await fetch(url + path); assert.equal(r.status, 200, path); assert.match(r.headers.get('content-type'), new RegExp(type), path);
     }
     let total = 0;

@@ -2,7 +2,7 @@
    The report is one plate over the dimmed final map; the replay is its own stage grid (top bar, map,
    standings + history column, timeline band). Every panel is a named region; none overlap. */
 .after-action{position:absolute;inset:0;z-index:20;color:var(--ivory)}
-.after-action[data-view=report]{display:grid;grid-template-columns:minmax(0,1320px);justify-content:center;align-items:stretch;padding:24px 20px;background:radial-gradient(ellipse at 50% 40%,#0d1417a0,#0b1012f0)}
+.after-action[data-view=report]{display:grid;grid-template-columns:minmax(0,1320px);justify-content:center;align-items:stretch;padding:24px 20px;background:radial-gradient(ellipse at 50% 40%,#0d1417e0,#0b1012f4)}
 .aar-loading{align-self:center;justify-self:center;padding:24px 28px;max-width:520px;text-align:center}
 .aar-loading h2{margin:0 0 6px;font:700 26px var(--title);color:var(--brass-hi)}
 .aar-report{min-height:0;max-height:100%}
@@ -24,7 +24,7 @@
 .v-medal b{font:700 25px/1 var(--title)}.v-medal small{font:600 13px/1.1 var(--ui);max-width:90px}
 /* Tabs and panels */
 .aar-tabs{flex:none;margin:8px 12px 0;align-self:flex-start}
-.aar-tabs button{min-height:34px;padding:2px 16px;color:var(--text-2)}
+.aar-tabs button{justify-content:center;min-height:34px;padding:2px 16px;color:var(--text-2)}
 .aar-panels{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
 .aar-panel{flex:1 1 auto;min-height:0;overflow:auto;padding:4px 0 10px;scrollbar-width:thin;scrollbar-color:var(--brass-lo) transparent}
 .aar-panel:not(.aar-overview){padding:8px 16px 12px}
@@ -183,6 +183,7 @@
   .r-table,.r-side{padding:0 10px 8px}.r-side{border:0}
   .after-action td,.after-action tbody th,.after-action thead th{padding:5px 6px;font-size:15px}
   #aar-standings .mem th{padding-left:12px}
+  #aar-standings .c-forces,#aar-standings .c-earned{display:none}
   #aar-standings .grp th{font-size:17px}
   .aar-facts{grid-template-columns:repeat(2,minmax(0,1fr))}
   .aar-panel:not(.aar-overview){padding:6px 10px 10px}
@@ -214,6 +215,8 @@
   .after-action[data-view=report]{padding:0}
   .victory-band{padding:8px 14px}.v-standards{display:none}.v-title h1{font-size:22px}
   .v-medal{width:64px;height:64px}
+  .report-foot{flex-wrap:nowrap;padding:6px 10px}.report-foot .btn{min-height:38px}.report-foot .btn-primary{flex-basis:auto;order:0}
+  .aar-tabs{margin-top:4px}
   .aar-replay{grid-template-columns:minmax(0,1fr) min(300px,40vw);grid-template-rows:calc(var(--top) + var(--safe-t)) minmax(0,1fr) auto;grid-template-areas:"top top" "map side" "time side"}
   .replay-stage{grid-row:2/4}
   .replay-side{max-height:none;border-top:0;border-left:2px solid;border-image:var(--rim) 1}
