@@ -62,6 +62,8 @@ Open `http://127.0.0.1:8000/bench.html` to filter [the benchmark page](bench.htm
 
 The page also reads [task-benchmarks.json](task-benchmarks.json) for the paused task. Qwen launched through Codex with Council MCP configured used shell commands instead; that observed path is labeled `shell fallback`. The supported Qwen Codex comparison uses the CLI explicitly. Luna uses Council MCP in both clients.
 
+The match ledger records capped model turns when the runner captured them. Older runs without a per-turn timeout flag show a blank value; a blank value is not zero. This separates a slow response that hit its cap from an ordinary turn with the same wall time.
+
 Quick rooms are integration and latency trials: at 6× speed, a 120-second model turn uses twelve game minutes and a 60-game-second diplomatic offer lasts ten wall-clock seconds. A common `--combat-seed` controls combat rolls only when game state and tick match; the models' different decisions immediately create different positions. Final Prestige is the authoritative game outcome but a passive seat can earn a deadline prize. For a playing-strength claim, use repeated normal-speed rooms, rotate the country, and report first-action latency, accepted/rejected orders, final industry and Prestige separately. Provider token totals and Codex's CLI fallback are not identical instruments; treat token comparisons as directional until both clients use the same tool transport and accounting basis.
 
 The Pi record names the selected model, endpoint, context and every accepted or failed tool call. It does not record API keys.

@@ -44,6 +44,10 @@ export function summarizeRun(raw, modelGroup) {
   const firstAcceptedAt = client === 'Pi' ? (raw.actions || []).find(action => action.ok && action.at)?.at
     : raw.httpActions?.find(action => action.status === 200)?.at;
   const turns = raw.turnLog || [];
+  const timedOutTurns = client === 'Pi'
+    ? turns.length && turns.every(turn => typeof turn.timedOut === 'boolean')
+      ? turns.filter(turn => turn.timedOut).length : null
+    : number(raw.timedOutTurns);
   const usedSituation = client === 'Pi' ? calls.some(call => call.name === 'situation')
     : completed.some(event => event.name === 'situation' || event.name?.endsWith('__situation'));
   const usedNews = client === 'Pi' ? calls.some(call => call.name === 'news')
@@ -84,6 +88,7 @@ export function summarizeRun(raw, modelGroup) {
       : Math.max(0, inputTokens - (client === 'Codex' ? cacheReadTokens || 0 : 0)) + outputTokens,
     tokensPerAction: totalTokens !== null && acceptedActions ? round(totalTokens / acceptedActions) : null,
     turns: turns.length || null,
+    timedOutTurns,
     meanTurnSeconds: totalTurnMs !== null ? round(totalTurnMs / turns.length / 1000) : null,
     durationSeconds: round(durationSeconds),
   };

@@ -63,7 +63,7 @@
     <label>Country <select id="country"><option value="all">All countries</option></select></label>
     <label>Clock <select id="preset"><option value="all">Both speeds</option><option value="standard">Normal</option><option value="quick">Quick</option></select></label>
     <label>Combat seed <select id="seed"><option value="all">All rooms</option></select></label>
-    <label>Measure <select id="measure"><option value="prestige">Final Prestige</option><option value="failedToolCalls">Failed tool calls</option><option value="rejectedActions">Rejected game orders</option><option value="failureRatePct">Failure rate</option><option value="totalTokens">Total tokens</option><option value="uncachedTokens">Uncached tokens</option><option value="tokensPerAction">Tokens per accepted action</option><option value="meanTurnSeconds">Seconds per turn</option><option value="firstActionSeconds">Seconds to first action</option></select></label>
+    <label>Measure <select id="measure"><option value="prestige">Final Prestige</option><option value="failedToolCalls">Failed tool calls</option><option value="rejectedActions">Rejected game orders</option><option value="failureRatePct">Failure rate</option><option value="totalTokens">Total tokens</option><option value="uncachedTokens">Uncached tokens</option><option value="tokensPerAction">Tokens per accepted action</option><option value="meanTurnSeconds">Seconds per turn</option><option value="timedOutTurns">Capped turns</option><option value="firstActionSeconds">Seconds to first action</option></select></label>
   </section>
   <div id="error" role="alert" hidden></div>
   <section class="stats" aria-label="Selected run summary">
@@ -79,7 +79,7 @@
   </section>
   <section class="surface" aria-labelledby="table-title">
     <div class="surface-heading"><h2 id="table-title">Match ledger</h2><p>— means the original runner did not record that metric.</p></div>
-    <div class="table-wrap"><table><thead><tr><th>Started</th><th>Model</th><th>Country</th><th>Client</th><th>Clock</th><th>Seed</th><th>Strategy / version</th><th>Prestige</th><th>Accepted</th><th>Rejected orders</th><th>Failed / calls</th><th>Tokens</th><th>First action (s)</th><th>Seconds / turn</th></tr></thead><tbody id="rows"></tbody></table></div>
+    <div class="table-wrap"><table><thead><tr><th>Started</th><th>Model</th><th>Country</th><th>Client</th><th>Clock</th><th>Seed</th><th>Strategy / version</th><th>Prestige</th><th>Accepted</th><th>Rejected orders</th><th>Failed / calls</th><th>Tokens</th><th>First action (s)</th><th>Seconds / turn</th><th>Capped turns</th></tr></thead><tbody id="rows"></tbody></table></div>
   </section>
   <section class="surface" aria-labelledby="pair-title">
     <div class="surface-heading"><h2 id="pair-title">Same-seed run deltas</h2><p>Each Pi run uses the nearest-in-time Codex run with the same model, country, clock and seed. Positive Prestige and negative rejected-order or token deltas favor Pi. Failed-call deltas reflect different tool transports; these are separate games.</p></div>
@@ -126,7 +126,7 @@ function draw() {
   const tbody=$('rows');tbody.replaceChildren();
   for(const run of [...selected].reverse()) {
     const tr=document.createElement('tr');
-    const cells=[new Date(run.startedAt).toLocaleString(),run.modelGroup.toUpperCase(),run.country||'britain',`${run.client} ${run.access}`,run.preset,run.combatSeed||'—',`${run.strategy||'full observation'}${run.sessionMode?` · ${run.sessionMode}`:''}${run.interfaceVersion?` · ${run.interfaceVersion}`:''}`,fmt(run.prestige),fmt(run.acceptedActions),fmt(run.rejectedActions),`${run.failedToolCalls} / ${run.toolCalls}`,fmt(run.totalTokens),fmt(run.firstActionSeconds),fmt(run.meanTurnSeconds)];
+    const cells=[new Date(run.startedAt).toLocaleString(),run.modelGroup.toUpperCase(),run.country||'britain',`${run.client} ${run.access}`,run.preset,run.combatSeed||'—',`${run.strategy||'full observation'}${run.sessionMode?` · ${run.sessionMode}`:''}${run.interfaceVersion?` · ${run.interfaceVersion}`:''}`,fmt(run.prestige),fmt(run.acceptedActions),fmt(run.rejectedActions),`${run.failedToolCalls} / ${run.toolCalls}`,fmt(run.totalTokens),fmt(run.firstActionSeconds),fmt(run.meanTurnSeconds),fmt(run.timedOutTurns)];
     for(let i=0;i<cells.length;i++){const td=document.createElement('td');td.textContent=cells[i];if(i===3)td.className=`client ${run.client.toLowerCase()}`;if(i===7)td.className=run.prestige<0?'negative':'positive';tr.append(td);}tbody.append(tr);
   }
   const pairRows=$('pairs');pairRows.replaceChildren();

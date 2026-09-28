@@ -185,6 +185,7 @@ try {
       const timer = setTimeout(() => { timedOut = true; turnChild.kill('SIGTERM'); }, Math.min(maxTurnSeconds * 1000, Math.max(1000, deadline - Date.now())));
       const exitCode = await turnEnded;
       clearTimeout(timer);
+      if (timedOut) record.timedOutTurns = (record.timedOutTurns || 0) + 1;
       if (timedOut || exitCode !== 0) {
         record.usageIncomplete = true;
         // A capped response is an ordinary incomplete turn in the Pi runner too.

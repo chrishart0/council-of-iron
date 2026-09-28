@@ -9,7 +9,7 @@ test('benchmark export keeps aggregate Pi metrics and excludes private run conte
     match: 'abcd1234', status: 'finished', preset: 'quick', finalTick: 1800, outcome: { reason: 'deadline' }, score,
     endpoint: 'http://private-endpoint', apiKey: 'secret', lastResponse: 'private conversation',
     toolCalls: [{ ok: true }, { ok: false }], actions: [{ ok: true, at: '2026-09-28T00:00:12Z' }, { ok: false }],
-    usage: { input: 1000, output: 300, cacheRead: 400 }, turnLog: [{ wallMs: 20000 }, { wallMs: 30000 }] };
+    usage: { input: 1000, output: 300, cacheRead: 400 }, turnLog: [{ wallMs: 20000, timedOut: false }, { wallMs: 30000, timedOut: true }] };
   const run = summarizeRun(raw, 'luna');
   assert.equal(run.prestige, 27.57);
   assert.equal(run.interfaceVersion,'board-turn-v2');
@@ -18,6 +18,7 @@ test('benchmark export keeps aggregate Pi metrics and excludes private run conte
   assert.equal(run.failedToolCalls, 1);
   assert.equal(run.totalTokens, 1300);
   assert.equal(run.meanTurnSeconds, 25);
+  assert.equal(run.timedOutTurns, 1);
   assert.equal(run.firstActionSeconds, 12);
   assert.equal(run.country, 'britain');
   assert.doesNotMatch(JSON.stringify(run), /private|secret|endpoint/);
@@ -39,6 +40,7 @@ test('benchmark export does not invent missing historical action or token counts
   assert.equal(run.totalTokens, null);
   assert.equal(run.firstActionSeconds, null);
   assert.equal(run.meanTurnSeconds, null);
+  assert.equal(run.timedOutTurns, null);
   const noOrders = summarizeRun({ runId: 'zero', startedAt: '2026-09-28T00:00:00Z', match: 'abcd1234',
     status: 'finished', score, client: 'codex', access: 'cli', events: [], httpActions: [] }, 'qwen');
   assert.equal(noOrders.acceptedActions, 0);
@@ -49,6 +51,7 @@ test('benchmark export does not invent missing historical action or token counts
     turnLog: [{ wallMs: 1000 }] }, 'luna');
   assert.equal(partial.totalTokens, null);
   assert.equal(partial.meanTurnSeconds, null);
+  assert.equal(partial.timedOutTurns, null);
   assert.equal(summarizeRun({ ...rawForCodex(), turnMode: 'episodic' }, 'qwen').sessionMode, 'episodic');
   const resumed = summarizeRun({ ...rawForCodex(), turnMode: 'episodic',
     usage: { input: 450, output: 45, cacheRead: 360, total: 495 },
@@ -57,6 +60,7 @@ test('benchmark export does not invent missing historical action or token counts
   assert.equal(resumed.totalTokens, 385);
   assert.equal(resumed.uncachedTokens, 105);
   assert.equal(resumed.meanTurnSeconds, 1.5);
+  assert.equal(summarizeRun({ ...rawForCodex(), timedOutTurns: 2 }, 'qwen').timedOutTurns, 2);
   const direct = summarizeRun({ ...rawForCodex(), events: [{ itemType: 'command_execution',
     command: 'curl http://127.0.0.1:1234/api/games/test/actions -H "Authorization: secret"' }] }, 'qwen');
   assert.equal(direct.access, 'shell HTTP');

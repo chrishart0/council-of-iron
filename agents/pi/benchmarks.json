@@ -32,6 +32,7 @@
       "uncachedTokens": null,
       "tokensPerAction": null,
       "turns": 7,
+      "timedOutTurns": null,
       "meanTurnSeconds": 50.22,
       "durationSeconds": 355.46
     },
@@ -65,6 +66,7 @@
       "uncachedTokens": null,
       "tokensPerAction": null,
       "turns": 15,
+      "timedOutTurns": null,
       "meanTurnSeconds": 76.15,
       "durationSeconds": 1150.29
     },
@@ -98,6 +100,7 @@
       "uncachedTokens": null,
       "tokensPerAction": null,
       "turns": null,
+      "timedOutTurns": null,
       "meanTurnSeconds": null,
       "durationSeconds": 302.04
     },
@@ -131,6 +134,7 @@
       "uncachedTokens": null,
       "tokensPerAction": null,
       "turns": 2,
+      "timedOutTurns": null,
       "meanTurnSeconds": 186.81,
       "durationSeconds": 374.97
     },
@@ -164,6 +168,7 @@
       "uncachedTokens": null,
       "tokensPerAction": null,
       "turns": null,
+      "timedOutTurns": null,
       "meanTurnSeconds": null,
       "durationSeconds": 302.14
     },
@@ -197,6 +202,7 @@
       "uncachedTokens": null,
       "tokensPerAction": null,
       "turns": null,
+      "timedOutTurns": null,
       "meanTurnSeconds": null,
       "durationSeconds": 878.1
     },
@@ -230,6 +236,7 @@
       "uncachedTokens": null,
       "tokensPerAction": null,
       "turns": 2,
+      "timedOutTurns": null,
       "meanTurnSeconds": 909.79,
       "durationSeconds": 1820.92
     },
@@ -263,6 +270,7 @@
       "uncachedTokens": 151194,
       "tokensPerAction": null,
       "turns": 4,
+      "timedOutTurns": 4,
       "meanTurnSeconds": 60.01,
       "durationSeconds": 260.43
     },
@@ -296,6 +304,7 @@
       "uncachedTokens": 183674,
       "tokensPerAction": 598640,
       "turns": 2,
+      "timedOutTurns": 2,
       "meanTurnSeconds": 120.02,
       "durationSeconds": 241.43
     },
@@ -329,6 +338,7 @@
       "uncachedTokens": 54470,
       "tokensPerAction": 125847.33,
       "turns": 2,
+      "timedOutTurns": 1,
       "meanTurnSeconds": 113.43,
       "durationSeconds": 228.24
     },
@@ -362,6 +372,7 @@
       "uncachedTokens": 68862,
       "tokensPerAction": 127581.09,
       "turns": 6,
+      "timedOutTurns": 0,
       "meanTurnSeconds": 34.59,
       "durationSeconds": 210.97
     },
@@ -395,6 +406,7 @@
       "uncachedTokens": null,
       "tokensPerAction": null,
       "turns": null,
+      "timedOutTurns": null,
       "meanTurnSeconds": null,
       "durationSeconds": 208.67
     },
@@ -428,6 +440,7 @@
       "uncachedTokens": 178317,
       "tokensPerAction": 89593,
       "turns": 6,
+      "timedOutTurns": 1,
       "meanTurnSeconds": 53.74,
       "durationSeconds": 325.84
     },
@@ -461,6 +474,7 @@
       "uncachedTokens": 99540,
       "tokensPerAction": 114741,
       "turns": 3,
+      "timedOutTurns": 2,
       "meanTurnSeconds": 112.32,
       "durationSeconds": 343.34
     },
@@ -494,6 +508,7 @@
       "uncachedTokens": 86298,
       "tokensPerAction": 82374.5,
       "turns": 3,
+      "timedOutTurns": 2,
       "meanTurnSeconds": 107.52,
       "durationSeconds": 328.98
     },
@@ -527,6 +542,7 @@
       "uncachedTokens": 155233,
       "tokensPerAction": 90272.28,
       "turns": 6,
+      "timedOutTurns": 1,
       "meanTurnSeconds": 47.25,
       "durationSeconds": 291.36
     },
@@ -560,6 +576,7 @@
       "uncachedTokens": 35744,
       "tokensPerAction": null,
       "turns": 1,
+      "timedOutTurns": null,
       "meanTurnSeconds": 313.72,
       "durationSeconds": 315.02
     },
@@ -593,6 +610,7 @@
       "uncachedTokens": 117203,
       "tokensPerAction": 355882.2,
       "turns": 1,
+      "timedOutTurns": null,
       "meanTurnSeconds": 321.73,
       "durationSeconds": 324.08
     },
@@ -626,6 +644,7 @@
       "uncachedTokens": 629366,
       "tokensPerAction": 58884.54,
       "turns": 4,
+      "timedOutTurns": 1,
       "meanTurnSeconds": 75.05,
       "durationSeconds": 302.63
     },
@@ -659,6 +678,7 @@
       "uncachedTokens": 223008,
       "tokensPerAction": 48132.29,
       "turns": 2,
+      "timedOutTurns": 1,
       "meanTurnSeconds": 81.38,
       "durationSeconds": 164.13
     },
@@ -692,6 +712,7 @@
       "uncachedTokens": 228368,
       "tokensPerAction": 251400,
       "turns": 3,
+      "timedOutTurns": 2,
       "meanTurnSeconds": 105.23,
       "durationSeconds": 317.54
     },
@@ -725,6 +746,7 @@
       "uncachedTokens": 54289,
       "tokensPerAction": 452017.25,
       "turns": 1,
+      "timedOutTurns": null,
       "meanTurnSeconds": 190.39,
       "durationSeconds": 191.53
     },
@@ -758,6 +780,7 @@
       "uncachedTokens": 75985,
       "tokensPerAction": 672721,
       "turns": 1,
+      "timedOutTurns": null,
       "meanTurnSeconds": 263.19,
       "durationSeconds": 264.74
     },
@@ -791,6 +814,7 @@
       "uncachedTokens": 99335,
       "tokensPerAction": 75806.71,
       "turns": 3,
+      "timedOutTurns": 0,
       "meanTurnSeconds": 53.54,
       "durationSeconds": 162.49
     },
@@ -824,6 +848,7 @@
       "uncachedTokens": 75151,
       "tokensPerAction": 2395769,
       "turns": 1,
+      "timedOutTurns": null,
       "meanTurnSeconds": 327.84,
       "durationSeconds": 329.1
     },
@@ -857,6 +882,7 @@
       "uncachedTokens": 148671,
       "tokensPerAction": 103146.33,
       "turns": 2,
+      "timedOutTurns": 1,
       "meanTurnSeconds": 111.15,
       "durationSeconds": 223.66
     },
@@ -890,6 +916,7 @@
       "uncachedTokens": 83023,
       "tokensPerAction": 530471.5,
       "turns": 1,
+      "timedOutTurns": null,
       "meanTurnSeconds": 281.34,
       "durationSeconds": 283.11
     },
@@ -923,6 +950,7 @@
       "uncachedTokens": 275673,
       "tokensPerAction": 69050.75,
       "turns": 3,
+      "timedOutTurns": 2,
       "meanTurnSeconds": 116.56,
       "durationSeconds": 351.58
     },
@@ -956,6 +984,7 @@
       "uncachedTokens": 40041,
       "tokensPerAction": 66458.2,
       "turns": 1,
+      "timedOutTurns": null,
       "meanTurnSeconds": 329.18,
       "durationSeconds": 330.1
     },
@@ -989,6 +1018,7 @@
       "uncachedTokens": 126176,
       "tokensPerAction": 107765.33,
       "turns": 3,
+      "timedOutTurns": 2,
       "meanTurnSeconds": 105.42,
       "durationSeconds": 322.63
     },
@@ -1022,6 +1052,7 @@
       "uncachedTokens": 90401,
       "tokensPerAction": 431888.5,
       "turns": 1,
+      "timedOutTurns": null,
       "meanTurnSeconds": 329.04,
       "durationSeconds": 332.06
     },
@@ -1055,6 +1086,7 @@
       "uncachedTokens": 399210,
       "tokensPerAction": 137372.83,
       "turns": 3,
+      "timedOutTurns": 2,
       "meanTurnSeconds": 107.64,
       "durationSeconds": 324.79
     },
@@ -1089,6 +1121,7 @@
       "uncachedTokens": 949382,
       "tokensPerAction": 135813.58,
       "turns": 10,
+      "timedOutTurns": 5,
       "meanTurnSeconds": 189.75,
       "durationSeconds": 1902.84
     },
@@ -1123,6 +1156,7 @@
       "uncachedTokens": 173504,
       "tokensPerAction": 69385.73,
       "turns": 5,
+      "timedOutTurns": 1,
       "meanTurnSeconds": 68.26,
       "durationSeconds": 348.68
     },
@@ -1157,6 +1191,7 @@
       "uncachedTokens": 98973,
       "tokensPerAction": 107956.33,
       "turns": 2,
+      "timedOutTurns": 2,
       "meanTurnSeconds": 120.02,
       "durationSeconds": 245.88
     },
@@ -1191,6 +1226,7 @@
       "uncachedTokens": null,
       "tokensPerAction": null,
       "turns": null,
+      "timedOutTurns": null,
       "meanTurnSeconds": null,
       "durationSeconds": 1067.33
     },
@@ -1225,6 +1261,7 @@
       "uncachedTokens": null,
       "tokensPerAction": null,
       "turns": null,
+      "timedOutTurns": null,
       "meanTurnSeconds": null,
       "durationSeconds": 1187.46
     },
@@ -1259,6 +1296,7 @@
       "uncachedTokens": 1342702,
       "tokensPerAction": 116427.37,
       "turns": 7,
+      "timedOutTurns": 6,
       "meanTurnSeconds": 220.4,
       "durationSeconds": 1546.72
     },
@@ -1293,6 +1331,7 @@
       "uncachedTokens": 871964,
       "tokensPerAction": 83721.16,
       "turns": 9,
+      "timedOutTurns": 5,
       "meanTurnSeconds": 174.59,
       "durationSeconds": 1586.32
     },
@@ -1328,6 +1367,7 @@
       "uncachedTokens": 45238,
       "tokensPerAction": 189406.5,
       "turns": 5,
+      "timedOutTurns": null,
       "meanTurnSeconds": 42.46,
       "durationSeconds": 216.42
     },
@@ -1362,6 +1402,7 @@
       "uncachedTokens": 191478,
       "tokensPerAction": 60306.8,
       "turns": 20,
+      "timedOutTurns": 0,
       "meanTurnSeconds": 15.29,
       "durationSeconds": 316.28
     },
@@ -1396,6 +1437,7 @@
       "uncachedTokens": 87178,
       "tokensPerAction": 106821,
       "turns": 3,
+      "timedOutTurns": 3,
       "meanTurnSeconds": 90.01,
       "durationSeconds": 276.41
     },
@@ -1431,6 +1473,7 @@
       "uncachedTokens": null,
       "tokensPerAction": null,
       "turns": 2,
+      "timedOutTurns": null,
       "meanTurnSeconds": null,
       "durationSeconds": 343.52
     },
@@ -1466,6 +1509,7 @@
       "uncachedTokens": 301211,
       "tokensPerAction": 103242.65,
       "turns": 40,
+      "timedOutTurns": 0,
       "meanTurnSeconds": 34.58,
       "durationSeconds": 1532.34
     },
@@ -1501,6 +1545,7 @@
       "uncachedTokens": 900421,
       "tokensPerAction": 196509.24,
       "turns": 22,
+      "timedOutTurns": 4,
       "meanTurnSeconds": 82.04,
       "durationSeconds": 1820.74
     },
@@ -1536,6 +1581,7 @@
       "uncachedTokens": 197951,
       "tokensPerAction": 222122.36,
       "turns": 57,
+      "timedOutTurns": null,
       "meanTurnSeconds": 18.53,
       "durationSeconds": 1815.19
     },
@@ -1571,6 +1617,7 @@
       "uncachedTokens": null,
       "tokensPerAction": null,
       "turns": 30,
+      "timedOutTurns": null,
       "meanTurnSeconds": null,
       "durationSeconds": 1648.14
     },
@@ -1606,6 +1653,7 @@
       "uncachedTokens": 845630,
       "tokensPerAction": 54430.49,
       "turns": 33,
+      "timedOutTurns": 1,
       "meanTurnSeconds": 30.12,
       "durationSeconds": 1308.52
     },
@@ -1641,6 +1689,7 @@
       "uncachedTokens": 438588,
       "tokensPerAction": 37218.49,
       "turns": 19,
+      "timedOutTurns": 10,
       "meanTurnSeconds": 95.45,
       "durationSeconds": 1837.03
     },
@@ -1676,6 +1725,7 @@
       "uncachedTokens": 476612,
       "tokensPerAction": 67400.88,
       "turns": 27,
+      "timedOutTurns": 0,
       "meanTurnSeconds": 30.56,
       "durationSeconds": 1773.04
     }
