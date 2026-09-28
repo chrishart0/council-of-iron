@@ -59,6 +59,8 @@ test('decision view adds feasible frontier and filters delivered outcomes', () =
   assert.ok(view.frontier.some(p => p.id === 'low-countries' &&
     p.sources.some(source => source.id === 'england' && source.available === england.available)));
   assert.equal(view.position.industryGap, strategicOptions(seen, MAP).industryGap);
+  assert.equal(view.position.currentVictoryShare,
+    seen.leaderboard.players.find(p => p.country === 'britain').victoryShare);
   assert.equal(view.eventCursor, seen.cursor);
   assert.deepEqual(view.recentOutcomes, [{ tick: 2, type: 'battle', country: 'britain', to: 'france' }]);
   assert.doesNotMatch(JSON.stringify(view), /private player speech|untrusted reason/);

@@ -236,6 +236,8 @@ try {
     if (view) record.positionLog.push({ tick: before,
       ownProvinces: view.own.length, ownIndustry: view.position.ownIndustry,
       sideIndustry: view.position.sideIndustry, industryGap: view.position.industryGap,
+      sideMembers: view.sides.find(side => side.members.includes(country))?.members ?? [country],
+      victoryShare: view.position.currentVictoryShare,
       frontierTargets: view.frontier.length, activeWars: view.wars?.length ?? 0,
       remainingCommands: view.commandBudget.remaining,
       decisionViewBytes: Buffer.byteLength(JSON.stringify(view)) });

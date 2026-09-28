@@ -47,7 +47,7 @@ The harness uses Pi's extension API to replace bulky old tool responses and old 
 
 `decision-turn-v1` gives Pi and episodic Codex the same recipient-filtered decision view with a per-run event cursor. Earlier board-turn results are a separate interface version; compare outcomes only with this version recorded in both runners.
 
-Each `decision-turn-v1` raw run also records a `positionLog` before every model turn: tick, owned province count, own and alliance industry, industry gap, reachable target count, active war count, command budget, and decision-view size. This stays in the ignored private run artifact. Compare the trace with accepted orders and final score to distinguish slow execution from choices that lose territory; it does not include player messages.
+Each `decision-turn-v1` raw run also records a `positionLog` before every model turn: tick, owned province count, own and alliance industry, industry gap, alliance members and current victory share, reachable target count, active war count, command budget, and decision-view size. This stays in the ignored private run artifact. Compare the trace with accepted orders and final score to distinguish slow execution from choices that lose territory; it does not include player messages.
 
 For paired trials, pass the same `--combat-seed trial01` to Pi and Codex runners. Each runner has its own database; the seed fixes the room ID used by deterministic combat rolls. The map and bot policy are already fixed. Opponent decisions still diverge when the players make different moves, so this controls a source of variation without making the games identical.
 
