@@ -1,12 +1,11 @@
 /** v0.9 comms model: one triage for notifications and messages. Pure: no DOM, clock or I/O.
- * Tiers: ACTION (a decision that is mine, or an attack about to land on me), PERSONAL (to me, no decision),
+ * Tiers: ACTION (an alliance offer or a peace offer to me, or an attack about to land on me), PERSONAL (to me, no decision),
  * WORLD (everything else). Input is the viewer's own observation (already recipient-filtered by the server),
  * so it never widens visibility. Rows are keyed by event seq (as a string) or `threat:<armyId>`.
  */
 import { commsItems, affectsViewer, viewerOf, decisionsFor } from './feed-model.js';
 import { threatening } from './relations.js';
 
-export const TIERS = Object.freeze(['action', 'personal', 'world']);
 /** An incoming attack is an ACTION when it lands on one of my provinces within this many game seconds. */
 export const THREAT_WINDOW = 30;
 
@@ -17,10 +16,11 @@ export function inbox(state, { read = new Set(), dismissed = new Set(), items = 
   items ??= commsItems(history, state.dominanceBreaks || [], { you });
   const proposals = new Map((state.proposals || []).map(q => [q.id, q]));
   const decisions = decisionsFor(state), decided = new Set(decisions.map(d => d.id));
+  const peaceMade = new Set(history.filter(e => e.type === 'peace_accepted').map(e => e.offerId));
   const rows = [];
   for (const i of items) {
     const key = i.id === null ? `b${i.seq}:${i.side}` : String(i.seq);
-    const mine = Boolean(you) && (i.from === you || i.system === 'accepted' && i.country === you);
+    const mine = Boolean(you) && (i.from === you || i.by === you || i.system === 'accepted' && i.country === you);
     let tier = 'world', status = null, decision = null;
     if (i.system === 'offer') {
       const q = proposals.get(i.proposalId);
@@ -29,10 +29,9 @@ export function inbox(state, { read = new Set(), dismissed = new Set(), items = 
       // A decision for me: the offer to join, or (as a member) approving a new member of my coalition.
       tier = you && q && decided.has(q.id) ? 'action' : you ? 'personal' : 'world';
       if (tier === 'action') decision = decisions.find(d => d.id === q.id);
-    } else if (i.system === 'vote' || i.system === 'peace_offer') {
-      decision = decisions.find(d => d.id === i.motionId) || null;
-      const m = (state.diplomacy || []).find(m => m.id === i.motionId);
-      status = decision ? 'open' : !m ? 'closed' : ['voting', 'offered'].includes(m.status) ? 'waiting' : m.status === 'enacted' ? 'accepted' : 'closed';
+    } else if (i.system === 'peace_offer') {
+      decision = decisions.find(d => d.id === i.offerId) || null;
+      status = decision ? 'open' : peaceMade.has(i.offerId) ? 'accepted' : (state.peaceOffers || []).some(o => o.id === i.offerId) ? 'waiting' : 'closed';
       tier = decision ? 'action' : you ? 'personal' : 'world';
     } else if (you && (i.channel === 'dm' || i.channel === 'alliance' || i.system)) tier = 'personal';
     else if (you && i.headline && affectsViewer(i, viewer)) tier = 'personal';

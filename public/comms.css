@@ -21,7 +21,7 @@
 .cx-composer{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .cx-input{flex:1 1 120px;min-width:0}
 .cx-note{flex-basis:100%;order:-1}.cx-note:empty{display:none}
-.cx-toasts,.toast-lane{display:flex;flex-direction:column;gap:6px;min-height:0}
+.toast-lane{display:flex;flex-direction:column;gap:6px;min-height:0}
 .cx-toast{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto auto;align-items:center;gap:8px;position:relative;touch-action:pan-y}
 .cx-toast p{margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2}
 .cx-toast[data-tier=flash]{grid-template-columns:minmax(0,1fr) auto}

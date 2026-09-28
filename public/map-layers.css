@@ -32,9 +32,7 @@
 .atlas-modes{position:absolute;z-index:7;display:flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:min(260px,calc(100% - 20px));pointer-events:none;--atlas-legend-inset:10px}
 /* Placement: class at-<corner>; the host can also override --atlas-legend-inset or mount the key elsewhere. */
 .atlas-modes.at-bottom-left{left:calc(var(--atlas-map-left,0px) + var(--atlas-legend-inset));bottom:calc(var(--atlas-map-bottom,0px) + var(--atlas-legend-inset))}
-.atlas-modes.at-bottom-right{right:calc(var(--atlas-map-right,0px) + var(--atlas-legend-inset));bottom:calc(var(--atlas-map-bottom,0px) + var(--atlas-legend-inset));align-items:flex-end}
 .atlas-modes.at-top-left{left:calc(var(--atlas-map-left,0px) + var(--atlas-legend-inset));top:calc(var(--atlas-map-top,0px) + var(--atlas-legend-inset));flex-direction:column-reverse}
-.atlas-modes.at-top-right{right:calc(var(--atlas-map-right,0px) + var(--atlas-legend-inset));top:calc(var(--atlas-map-top,0px) + var(--atlas-legend-inset));align-items:flex-end;flex-direction:column-reverse}
 .atlas-modes.at-bottom-left,.atlas-modes.at-top-left{align-items:flex-start}
 .atlas-key-toggle{font:600 10px var(--map-sans,system-ui,sans-serif);letter-spacing:.6px;min-height:24px;padding:3px 9px;background:#0e222aee;color:#c9b27f;border:1px solid #5f716290;border-radius:12px;cursor:pointer}
 .atlas-key-toggle[hidden]{display:none}
@@ -103,13 +101,9 @@
 .fx-ring.fx-late{animation-delay:.35s;opacity:0}
 .fx-industry-up .fx-ring{stroke:#e7c677}
 .fx-industry-up .fx-icon{fill:#f2d9a0;stroke:#2a1f0e;stroke-width:.8}
-.fx-disc{fill:#15303a;stroke:#e7c677;stroke-width:1.6}.fx-industry-down .fx-disc{fill:#2d1512;stroke:#e0553b}
-.fx-rise{animation:fx-rise 2.2s ease-out forwards}.fx-burst{transform-box:fill-box;transform-origin:center;animation:fx-pop 2.2s ease-out forwards}
-.fx-industry-down .fx-ring{stroke:#e0553b}
-.fx-smoke{fill:#6d5b55;opacity:.5;transform-box:fill-box;transform-origin:center;animation:fx-smoke 2.1s ease-out forwards}
-.fx-crack{fill:none;stroke:#ff6b4f;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;animation:fx-fade 2.1s ease-in forwards}
+.fx-disc{fill:#15303a;stroke:#e7c677;stroke-width:1.6}
+.fx-rise{animation:fx-rise 2.2s ease-out forwards}
 .fx-level{font:800 11px var(--map-sans,system-ui,sans-serif);text-anchor:middle;paint-order:stroke;stroke:#10232b;stroke-width:3;fill:#f6dfa3;animation:fx-fade 2.1s ease-in forwards}
-.fx-industry-down .fx-level{fill:#ff9a82}
 .fx-fill{fill-opacity:.55;stroke:none;animation:fx-fill 2.2s ease-out forwards}
 .fx-outline{fill:none;stroke-width:3.2;stroke-linejoin:round;vector-effect:non-scaling-stroke;animation:fx-fade 2.2s ease-in forwards}
 .fx-captured-ring .fx-ring{stroke-width:3}.fx-captured-ring .fx-shadow{stroke:#10232b;stroke-width:6;stroke-opacity:.6}
@@ -123,8 +117,6 @@
 .fx-fade-border{fill:none;stroke-width:3;vector-effect:non-scaling-stroke;animation:fx-fade 2.2s ease-in forwards}
 @keyframes fx-ring{from{transform:scale(.35);opacity:1}to{transform:scale(1.9);opacity:0}}
 @keyframes fx-rise{0%{transform:translateY(10px);opacity:0}20%{transform:translateY(0);opacity:1}80%{opacity:1}100%{transform:translateY(-8px);opacity:0}}
-@keyframes fx-pop{0%{transform:scale(.3);opacity:0}15%{transform:scale(1.15);opacity:1}25%{transform:scale(1)}80%{opacity:1}100%{opacity:0}}
-@keyframes fx-smoke{from{transform:scale(.4);opacity:.8}to{transform:scale(2.1) translateY(-4px);opacity:0}}
 @keyframes fx-fade{0%,55%{opacity:1}100%{opacity:0}}
 @keyframes fx-fill{0%{fill-opacity:.2}15%{fill-opacity:.8}100%{fill-opacity:0}}
 @keyframes fx-glow{0%{stroke-opacity:0}30%,70%{stroke-opacity:.8}100%{stroke-opacity:0}}
@@ -134,7 +126,7 @@
 @keyframes fx-ash{0%{fill-opacity:0}35%{fill-opacity:.6}100%{fill-opacity:0}}
 /* Reduced motion: no pulse or travel; effects are a brief static highlight. */
 .map-effect.still *,.map-effect.still{animation:none!important}
-.map-effect.still .fx-ring.fx-late,.map-effect.still .fx-smoke{display:none}
+.map-effect.still .fx-ring.fx-late{display:none}
 @media(prefers-reduced-motion:reduce){.war-front-glow,.battle-pulse,.round-loss,.battle-counter.battle-hit .battle-body{animation:none!important}.battle-attack-bar,.battle-divider{transition:none!important}.battle-pulse{opacity:.5}}
 .atlas-v6:focus{outline:none}.atlas-v6:focus-visible{outline:2px solid #e2c993;outline-offset:-2px}
 
@@ -142,8 +134,8 @@
 :root{--map-serif:Georgia,'Times New Roman',serif;--map-sans:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
 .province{cursor:pointer;stroke:#e7dfbd82;stroke-width:.75;vector-effect:non-scaling-stroke;fill-opacity:.88}.province:hover{fill-opacity:1}.province.selected{stroke:#ffe1a0;stroke-width:2.3;fill-opacity:1}.province.destination{stroke:#ffb896;stroke-width:2.5;fill-opacity:1}.province.neighbor{stroke:#f2e2b8;stroke-width:1.4}
 .atlas-grid path{stroke:#c4cfaa0d;stroke-width:.8;fill:none;vector-effect:non-scaling-stroke}.ocean-names text{fill:#c3cba64d;font:italic 12px var(--map-serif);letter-spacing:4px;text-anchor:middle}.sea-connections path{fill:none;stroke:#e0d5a444;stroke-width:1;stroke-dasharray:2 8;vector-effect:non-scaling-stroke}.sea-connections .selected-connection{stroke:#e8d8a496}
-.adjacent-connection{stroke:#ead8a56a;stroke-width:1;stroke-dasharray:3 5;fill:none;vector-effect:non-scaling-stroke}.target-connection{stroke:#ffe0a1;stroke-width:2;fill:none;vector-effect:non-scaling-stroke}.recruit-connection{stroke:#b6d0a6b0;stroke-width:1;stroke-dasharray:2 5;fill:none;vector-effect:non-scaling-stroke}
-.map-counter{cursor:pointer}.counter-body{fill:#172b34;stroke-width:1}.counter-stripe{pointer-events:none}.counter-value{font:650 11px var(--map-sans);fill:#fff0cd;text-anchor:middle;dominant-baseline:central;pointer-events:none}.map-counter.selected .counter-body{fill:#e2c993;stroke:#fff0b5;stroke-width:1.6}.map-counter.selected .counter-value{fill:#172730}.map-counter.destination .counter-body{stroke:#ffb396;stroke-width:2}.map-counter .province-name{font:11px var(--map-serif);fill:#f6ebcf;text-anchor:middle;paint-order:stroke;stroke:#16313a;stroke-width:3;stroke-linejoin:round;pointer-events:none}.industry-label{fill:#e5cf9e;font:700 9px var(--map-sans);paint-order:stroke;stroke:#132b34;stroke-width:2;pointer-events:none;text-anchor:middle}.map-counter.counter-hidden{visibility:hidden}.map-counter.counter-hidden:focus{visibility:visible}
+.adjacent-connection{stroke:#ead8a56a;stroke-width:1;stroke-dasharray:3 5;fill:none;vector-effect:non-scaling-stroke}.target-connection{stroke:#ffe0a1;stroke-width:2;fill:none;vector-effect:non-scaling-stroke}
+.map-counter{cursor:pointer}.counter-body{fill:#172b34;stroke-width:1}.counter-stripe{pointer-events:none}.counter-value{font:650 11px var(--map-sans);fill:#fff0cd;text-anchor:middle;dominant-baseline:central;pointer-events:none}.map-counter.selected .counter-body{fill:#e2c993;stroke:#fff0b5;stroke-width:1.6}.map-counter.selected .counter-value{fill:#172730}.map-counter.destination .counter-body{stroke:#ffb396;stroke-width:2}.map-counter .province-name{font:11px var(--map-serif);fill:#f6ebcf;text-anchor:middle;paint-order:stroke;stroke:#16313a;stroke-width:3;stroke-linejoin:round;pointer-events:none}
 .moving-army path{stroke:#ffe0aa;stroke-width:1}.moving-army text{font:700 10px var(--map-sans);text-anchor:middle;fill:#fff0cb;paint-order:stroke;stroke:#16313a;stroke-width:2.5}.moving-army.hostile path{stroke:#ffd4b2;stroke-width:1.6}.army-trail{fill:none;stroke:#ead19d;stroke-opacity:.32;stroke-width:1;stroke-dasharray:4 6;vector-effect:non-scaling-stroke}.army-trail.returning{stroke:#c6d8b9;stroke-dasharray:2 5}
 @keyframes signal-arrive{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
 .atlas-tooltip{position:absolute;z-index:8;pointer-events:none;background:#0e222af5;border:1px solid #b99d64a0;padding:11px 14px;box-shadow:0 5px 25px #0004;max-width:255px;color:#eae6d4}.atlas-tooltip strong{display:block;font:19px var(--map-serif);margin-bottom:4px}.atlas-tooltip span{font-size:11px;color:#bfc8b5}

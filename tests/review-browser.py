@@ -53,21 +53,23 @@ def main():
             expect(page.locator('#aar-standings tr[data-result-country]')).to_have_count(8)
             expect(page.locator('#aar-standings tr[data-result-alliance]')).to_have_count(3)
             outcome=api('/api/games/review-fixture/review')
-            usa=next(p for p in outcome['players'] if p['country']=='usa');winner=next(a for a in outcome['alliances'] if a['won'])
-            sign=lambda n:('+' if n>=0 else '−')+f"{abs(n):,.2f}".rstrip('0').rstrip('.')
-            expect(page.locator('[data-result-country="usa"]')).to_contain_text(sign(usa['prestige']))
-            expect(page.locator('#aar-standings tr[data-result-alliance]').first).to_contain_text(sign(winner['prestige']))  # alliance = sum of member Prestige
-            expect(page.locator('[data-result-country="usa"] .c-share')).to_contain_text('%')
+            winner=next(a for a in outcome['alliances'] if a['won'])
+            for p in outcome['players']:
+                row=page.locator(f'[data-result-country="{p["country"]}"]')
+                expect(row).to_contain_text({'win':'Won','loss':'Lost','draw':'Draw'}[p['result']]);expect(row.locator('td').nth(1)).to_have_text(str(p['industry']))
+            first=page.locator('#aar-standings tr[data-result-alliance]').first
+            expect(first).to_have_attribute('data-result-alliance',winner['id']);expect(first).to_contain_text('Victor');expect(first.locator('td').nth(1)).to_have_text(str(winner['economy']))
+            expect(page.locator('.v-title h1')).to_contain_text('Victory for the Atlantic Accord')
             # The report covers the finished match: no live command surface is reachable under it.
             assert page.evaluate('''() => { const r=document.querySelector('#result').getBoundingClientRect(); return r.width>=innerWidth-1 && r.height>=innerHeight-1 && document.querySelector('#result').contains(document.elementFromPoint(innerWidth/2, innerHeight/2)); }''')
             assert page.locator('#result [data-act], #result #primary, #result .cx-composer').count()==0
             capture(page,'01-overview.png',1000)
-            report['assertions'].append('Finished room opens the after-action report: all eight player scores grouped under three alliance totals (sum of member Prestige); the report covers every live command surface.')
+            report['assertions'].append('Finished room opens the after-action report: all eight players (win or loss, final industry) grouped under three alliances, the winning alliance first; the report covers every live command surface.')
             page.locator('#aar-tab-replay').click()
             expect(page.locator('#replay-stage')).to_be_visible()
             expect(page.locator('#replay-stage')).to_have_attribute('data-tick','0')
             opening_fill=page.locator('#review-map-province-mexico').get_attribute('fill')
-            for tick in [500,0,335,622,532,500]:
+            for tick in [500,0,335,553,463,500]:
                 page.locator('#replay-slider').fill(str(tick))
                 expect(page.locator('#replay-stage')).to_have_attribute('data-tick',str(tick))
                 board=api(f'/api/games/review-fixture/replay?tick={tick}')
@@ -94,14 +96,14 @@ def main():
             page.wait_for_timeout(160);assert page.locator('#replay-slider').input_value()==paused
             page.locator('#replay-slider').focus();page.keyboard.press('ArrowRight')
             assert int(page.locator('#replay-slider').input_value())==int(paused)+1
-            page.locator('#replay-slider').fill('532')
+            page.locator('#replay-slider').fill('463')
             expect(page.locator('#replay-event-label')).to_contain_text('victory countdown')
-            page.locator('[data-aar-event="next"]').click();assert int(page.locator('#replay-slider').input_value())>532
+            page.locator('[data-aar-event="next"]').click();assert int(page.locator('#replay-slider').input_value())>463
             page.locator('[data-aar-transport="end"]').click()
-            expect(page.locator('#replay-stage')).to_have_attribute('data-tick','622')
-            page.locator('#replay-slider').fill('621');page.locator('#replay-play').click()
+            expect(page.locator('#replay-stage')).to_have_attribute('data-tick','553')
+            page.locator('#replay-slider').fill('552');page.locator('#replay-play').click()
             expect(page.locator('#replay-play')).to_have_attribute('aria-label','Play replay')
-            expect(page.locator('#replay-stage')).to_have_attribute('data-tick','622')
+            expect(page.locator('#replay-stage')).to_have_attribute('data-tick','553')
             report['assertions'].append('Play, pause, rate change, keyboard slider, event jumps, opening/final controls and automatic end-of-replay stop work.')
             page.locator('#replay-exit').click()
             for kind in ['military','economy']:
@@ -111,23 +113,22 @@ def main():
                 assert page.locator('#'+kind+'-chart polyline').count()==1
                 page.locator(f'[data-chart="{kind}"][data-compare="all"]').click()
                 capture(page,'04-'+kind+'.png')
-            expect(page.locator('.aar-accounting')).to_contain_text('2,920')
+            expect(page.locator('.aar-accounting')).to_contain_text('2,584')
             page.locator('#aar-tab-military').click()
             page.locator('.aar-ledger [data-aar-seek]').first.click()
-            assert int(page.locator('#replay-stage').get_attribute('data-tick')) <= 622
+            assert int(page.locator('#replay-stage').get_attribute('data-tick')) <= 553
             page.locator('#replay-exit').click()
             page.locator('#aar-tab-diplomacy').click()
-            expect(page.locator('.aar-tenure-row')).to_have_count(8)
             expect(page.locator('#aar-diplomacy')).to_contain_text('victory countdown')
             capture(page,'05-diplomacy.png')
-            report['assertions'].append('Military/economy comparison charts filter by country; battle links seek exact history; diplomacy shows membership intervals and the victory countdown.')
+            report['assertions'].append('Military/economy comparison charts filter by country; battle links seek exact history; diplomacy lists the turning points including the victory countdown.')
             page.locator('#aar-tab-diplomacy').focus();page.keyboard.press('Home')
             expect(page.locator('#aar-tab-overview')).to_be_focused()
             expect(page.locator('#aar-overview')).to_be_visible()
             page.set_viewport_size({'width':390,'height':844})
             capture(page,'06-mobile-overview.png')
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1')
-            page.locator('#aar-tab-replay').click();page.locator('#replay-slider').fill('532')
+            page.locator('#aar-tab-replay').click();page.locator('#replay-slider').fill('463')
             capture(page,'07-mobile-replay.png')
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1')
             page.locator('#replay-exit').click()
@@ -142,14 +143,15 @@ def main():
             if args.gif:
                 page.locator('#aar-tab-replay').click();page.locator('[data-aar-map="world"]').click()
                 page.evaluate('''() => {const n=document.createElement('div');n.textContent='RECORDED MATCH REPLAY · ACTUAL BROWSER CAPTURE · SINGLE-CONTROLLER TEST';n.style.cssText='position:fixed;right:15px;bottom:10px;background:#203942;color:#f1eddd;padding:7px 12px;font:10px system-ui;z-index:20';document.body.append(n);}''')
-                for tick in range(0,623,18):
+                for tick in range(0,554,18):
                     page.locator('#replay-slider').fill(str(tick));capture(page,delay=140)
                 page.locator('#replay-exit').click()
             before=api('/api/games/review-fixture/review')
             page.locator('#aar-back').click()
             page.locator('[data-room="draw-fixture"]').click()
-            expect(page.locator('#aar-standings tr[data-result-country]')).to_have_count(2)
-            expect(page.locator('#result')).to_contain_text('A negotiated peace')
+            expect(page.locator('#aar-standings tr[data-result-country]')).to_have_count(4)
+            expect(page.locator('#result')).to_contain_text('The council ends in a draw')
+            expect(page.locator('#aar-standings .pr')).to_have_text(['Draw']*4)
             assert page.locator('#result img').count()==0
             assert not page.evaluate('Boolean(window.REVIEW_XSS)')
             page.locator('#aar-tab-replay').click();expect(page.locator('#replay-stage')).to_be_visible()
@@ -159,7 +161,7 @@ def main():
             page.locator('#replay-exit').click();page.locator('#aar-back').click();page.locator('[data-room="old-fixture"]').click()
             expect(page.locator('#aar-standings tr[data-result-country]')).to_have_count(8)
             page.locator('#aar-tab-replay').click();expect(page.locator('#aar-replay')).to_contain_text('History unavailable')
-            report['assertions'].append('Negotiated draw renders correctly, malicious coalition name stays inert, and a match without its recorded opening fails closed while scores remain visible.')
+            report['assertions'].append('A drawn match (equal industry at the deadline) renders as a draw for every seat, a malicious alliance name stays inert, and a match without its recorded opening fails closed while results remain visible.')
             page.locator('#replay-exit').click();page.locator('#aar-back').click();page.locator('[data-room="review-fixture"]').click()
             expect(page.locator('#aar-standings tr[data-result-country]')).to_have_count(8)
             assert api('/api/games/review-fixture/review')==before

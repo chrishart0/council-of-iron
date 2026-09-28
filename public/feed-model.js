@@ -44,17 +44,15 @@ export function headlineCopy(item, names) {
     case 'dissolved': return { tone: 'broken', icon: 'council', title: 'Alliance dissolved',
       detail: `${s(h.side)} no longer exists.`, focus: null };
     case 'eliminated': return { tone: 'fallen', icon: 'fallen', title: `${c(h.country)} has fallen`,
-      detail: `${c(h.country)} is eliminated: no provinces or armies remain. Its earned share is frozen.`, focus: { country: h.country } };
-    case 'dominance': return { tone: 'victory', icon: 'prestige', title: 'Victory countdown',
-      detail: `${s(h.side)} holds 60% of industry; wins at ${names.time(h.winsAt)} unless stopped.`, focus: null };
-    case 'dominance_broken': return { tone: 'broken', icon: 'prestige', title: 'Countdown stopped',
+      detail: `${c(h.country)} is eliminated: no provinces or armies remain.`, focus: { country: h.country } };
+    case 'dominance': return { tone: 'victory', icon: 'laurel', title: 'Victory countdown',
+      detail: `${s(h.side)} holds enough of the world's industry to win at ${names.time(h.winsAt)} unless stopped.`, focus: null };
+    case 'dominance_broken': return { tone: 'broken', icon: 'laurel', title: 'Countdown stopped',
       detail: `${s(h.side)}${h.cause === 'membership' ? '’s membership changed; the hold restarts.' : ` fell below the threshold (${h.economy}/${h.threshold} industry).`}`, focus: null };
-    case 'finished': return { tone: 'victory', icon: 'prestige', title: 'Match concluded',
+    case 'finished': return { tone: 'victory', icon: 'laurel', title: 'Match concluded',
       detail: h.draw ? 'The match ends in a draw.' : `${s(h.winningSide)} wins.`, focus: null };
     case 'industry_up': return { tone: 'industry', icon: 'gear', title: 'Industry built',
       detail: `${p(h.province)} reaches industrial level ${h.level}${h.country ? ` for ${c(h.country)}` : ''}.`, focus: { province: h.province } };
-    case 'industry_down': return { tone: 'industry-lost', icon: 'gear', title: 'Factory damaged',
-      detail: `${p(h.province)} falls to industrial level ${h.level} after capture.`, focus: { province: h.province } };
     case 'major_battle': return { tone: 'battle', icon: 'military', title: `Major battle at ${p(h.province)}`,
       detail: `${h.casualties} troops lost${h.captured ? `; ${h.owner ? c(h.owner) : 'nobody'} takes the province` : '; defenders hold'}.`,
       focus: { province: h.province } };
@@ -88,7 +86,6 @@ export function affectsViewer(item, viewer = {}) {
     case 'dissolved': return sides.has(h.side);
     case 'eliminated': return friends.has(h.country);
     case 'major_battle': return h.owner === you || h.previousOwner === you || (item.arrivals || []).some(a => a.country === you);
-    case 'industry_down': return h.owner === you;
     case 'dominance': case 'dominance_broken': return true;
     default: return false; // industry_up and anything new: rail only
   }
@@ -101,7 +98,7 @@ export function affectsViewer(item, viewer = {}) {
  * Chat keeps `untrusted: true`; alliance names and chat are player text for textContent only.
  * Diplomatic system rows (`system`) carry structured facts, never player speech beyond the name. */
 export function commsItems(events, breaks = [], { you = null } = {}) {
-  const sideOf = new Map(), offers = new Map(), motions = new Map(), items = [];
+  const sideOf = new Map(), offers = new Map(), peace = new Map(), items = [];
   const coalitionOf = id => sideOf.get(id) ?? null;
   const own = () => coalitionOf(you);
   const push = (e, threads, extra = {}) => items.push({ ...e, seq: e.id, threads, ...extra });
@@ -131,16 +128,13 @@ export function commsItems(events, breaks = [], { you = null } = {}) {
       }
       case 'alliance_notice': { const o = offers.get(e.proposalId); push(e, ['world', ...(o && you && e.roster.includes(you) ? offerThreads(o) : [])], { system: 'notice' }); break; }
       case 'departure_notice': push(e, ['world'], { system: 'leaving' }); break;
-      case 'war_vote': case 'peace_vote':
-        motions.set(e.motionId, { kind: e.type === 'war_vote' ? 'war' : 'peace', from: e.from, to: e.to, threads: [`alliance:${e.from}`] });
-        push(e, [`alliance:${e.from}`], { system: 'vote', kind: e.type === 'war_vote' ? 'war' : 'peace' }); break;
+      // A peace offer between two sides: filed under your alliance chat, or the conversation with the other side.
       case 'peace_offered': {
-        const threads = e.to && !String(e.to).startsWith('solo:') ? [`alliance:${e.to}`] : ['dm', `dm:${e.fromRoster?.[0]}`];
-        motions.set(e.motionId, { kind: 'peace', from: e.from, to: e.to, threads }); push(e, threads, { system: 'peace_offer', kind: 'peace' }); break;
+        const mine = (e.fromRoster || []).includes(you), roster = mine ? e.fromRoster : e.toRoster || [], other = mine ? e.toRoster?.[0] : e.by;
+        const threads = roster.length > 1 && own() ? [`alliance:${own()}`] : ['dm', `dm:${other}`];
+        peace.set(e.offerId, threads); push(e, threads, { system: 'peace_offer' }); break;
       }
-      case 'diplomacy_approved': case 'diplomacy_expired': {
-        const m = motions.get(e.motionId); push(e, m?.threads ?? (own() ? [`alliance:${own()}`] : ['dm']), { system: e.type === 'diplomacy_approved' ? 'approved' : 'expired', kind: e.kind ?? m?.kind ?? null }); break;
-      }
+      case 'peace_expired': push(e, peace.get(e.offerId) ?? ['dm'], { system: 'expired' }); break;
       // Your own army turned back automatically (never a recall you ordered yourself: that has no reason).
       case 'army_recalled': if (you && e.country === you && e.reason) push(e, ['mine'], { system: 'turned_back' }); break;
       default: break;
@@ -150,8 +144,6 @@ export function commsItems(events, breaks = [], { you = null } = {}) {
     items.push({ id: null, seq: b.seq, tick: b.tick, type: 'dominance_broken', side: b.side, economy: b.economy, threshold: b.threshold, headline: b.headline, threads: ['world'] });
   return items.sort((a, b) => a.seq - b.seq || (a.id === null) - (b.id === null));
 }
-/** Private items (a DM or alliance message, or a diplomatic row) that count as "for you" when unread. */
-export const isPersonal = (item, you) => Boolean(you) && (item.channel === 'dm' || item.channel === 'alliance' || Boolean(item.system && item.recipients) || item.system === 'turned_back') && item.from !== you;
 
 /** Why one of your armies was turned back, in game voice (from the engine's `reason` and detail). */
 export function turnedBackReason(item, names) {
@@ -160,64 +152,37 @@ export function turnedBackReason(item, names) {
     case 'battle_in_progress': return `${s(item.battleAttackerSide)}’s battle there was already under way`;
     case 'no_war': return item.allied ? `${c(item.owner)} is now your ally` : item.owner ? `you are not at war with ${c(item.owner)}` : 'they could not attack there';
     case 'rival_arrival': return `${s(item.rivalSide)} arrived at the same moment with a larger force`;
-    case 'transit_blocked': return item.battleAttackerSide ? 'a battle blocked the allied route' : 'the allied route was blocked';
+    case 'transit_blocked': return item.battleAttackerSide ? 'a battle blocked the route' : 'the route was blocked';
+    case 'rally_blocked': return 'the rally province is no longer friendly';
     case 'peace': return item.owner ? `peace was signed with ${c(item.owner)}` : 'peace was signed';
     default: return 'they could not attack there';
   }
 }
-/** Plain-text copy for a diplomatic system row. `names` as for headlineCopy (+ optional `players` count). */
+/** Plain-text copy for a diplomatic system row. `names` as for headlineCopy. */
 export function systemCopy(item, names) {
   const c = names.country, s = names.side, t = names.time, list = ids => (ids || []).map(c).join(' + ');
   switch (item.system) {
     case 'offer': return { tone: 'alliance', icon: 'ribbon', title: 'Alliance offer',
-      detail: `${c(item.from)} invites ${item.candidate ? c(item.candidate) : 'a new member'} into ${item.name}: ${list(item.roster)}.${names.players ? ` Maximum share ${(100 * names.players / item.roster.length).toFixed(1)} points each.` : ''}` };
+      detail: `${c(item.from)} invites ${item.candidate ? c(item.candidate) : 'a new member'} into ${item.name}: ${list(item.roster)}.` };
     case 'accepted': return { tone: 'alliance', icon: 'ribbon', title: 'Offer accepted', detail: `${c(item.country)} accepted${item.name ? ` ${item.name}` : ''}.` };
     case 'cancelled': return { tone: 'broken', icon: 'council', title: 'Offer closed', detail: `${item.name ?? 'The offer'} was withdrawn, declined or expired${item.reason ? ` (${item.reason})` : ''}.` };
     case 'notice': return { tone: 'alliance', icon: 'ribbon', title: 'Alliance forming', detail: `${item.name}: ${list(item.roster)} · active at ${t(item.activateAt)}.` };
     case 'leaving': return { tone: 'broken', icon: 'council', title: 'Leaving a coalition', detail: `${c(item.country)} leaves at ${t(item.activateAt)}.` };
-    case 'vote': return { tone: item.kind === 'war' ? 'war' : 'peace', icon: item.kind === 'war' ? 'war' : 'treaty', title: item.kind === 'war' ? 'War vote' : 'Peace vote',
-      detail: `${s(item.from)} → ${s(item.to)} · open until ${t(item.expiresAt)}.` };
     case 'peace_offer': return { tone: 'peace', icon: 'treaty', title: 'Peace offered', detail: `${list(item.fromRoster)} offer peace to ${list(item.toRoster)} · open until ${t(item.expiresAt)}.` };
-    case 'approved': return { tone: 'broken', icon: 'council', title: 'Vote cast', detail: `${c(item.country)} approved the ${item.kind ?? ''} motion.`.replace('  ', ' ') };
     case 'turned_back': return { tone: 'war', icon: 'military', title: 'Troops turned back',
       detail: `Your ${item.amount} troops turned back${item.province ? ` from ${names.province(item.province)}` : ''}: ${turnedBackReason(item, names)}. They reach ${names.province(item.to)} at ${t(item.arrivesAt)}.` };
-    case 'expired': return { tone: 'broken', icon: 'council', title: 'Motion expired', detail: `The ${item.kind ?? ''} motion closed: ${item.reason ?? 'expired'}`.replace('  ', ' ') };
+    case 'expired': return { tone: 'broken', icon: 'council', title: 'Peace offer closed', detail: item.reason ?? 'The peace offer expired.' };
     default: return { tone: 'broken', icon: 'journal', title: 'Council', detail: '' };
   }
 }
 
-/** v0.8 threads: where a rail item belongs in the cards. A DM or a diplomatic row between two countries
- * belongs to the other country's card (`dm:<country>`); coalition chat and votes belong to the alliance
- * card (`alliance:<side>`). Public items belong to no card. Pure, from `commsItems` threads only. */
-export function threadOf(item) {
-  const threads = item?.threads || [];
-  const dm = threads.find(t => t.startsWith('dm:')), alliance = threads.find(t => t.startsWith('alliance:'));
-  if (dm) return { kind: 'country', id: dm.slice(3) };
-  if (alliance) return { kind: 'alliance', id: alliance.slice(9) };
-  return null;
-}
-/** The conversation shown in a country card: DMs and diplomatic rows with that country. */
-export const countryThread = (items, country) => items.filter(i => i.threads?.includes(`dm:${country}`));
-/** The conversation shown in the alliance card: chat and motions of that coalition. */
-export const allianceThread = (items, side) => items.filter(i => i.threads?.includes(`alliance:${side}`));
-
-/** Decisions waiting for this seat: open offers it is a party to and has not accepted (not its own),
- * war/peace votes of its coalition it has not approved, and peace treaties offered to it. */
+/** Decisions waiting for this seat: open alliance offers it is a party to and has not accepted (not its own),
+ * and peace offered to its side. */
 export function decisionsFor(state) {
   const you = state?.you; if (!you) return [];
   const offers = (state.proposals || []).filter(q => q.status === 'open' && q.roster.includes(you) && !q.accepted.includes(you))
     .map(q => ({ kind: 'offer', id: q.id, country: q.creator, proposal: q }));
-  const motions = (state.diplomacy || []).filter(m => m.status === 'voting' && m.fromRoster.includes(you) && !m.fromYes.includes(you) ||
-    m.status === 'offered' && m.toRoster.includes(you) && !m.toYes.includes(you))
-    .map(m => m.status === 'voting' ? { kind: `${m.kind}_vote`, id: m.id, motion: m } : { kind: 'peace_offer', id: m.id, country: m.fromRoster[0], motion: m });
-  return [...offers, ...motions];
-}
-/** The one attention list behind the HUD badge: decisions first, then unread private messages (oldest
- * first). `read` is a Set of item seqs already seen. Each entry says which card answers it. */
-export function attentionFor(state, items, read = new Set()) {
-  const you = state?.you; if (!you) return [];
-  const decisions = decisionsFor(state).map(d => ({ ...d, card: d.kind.endsWith('_vote') ? { kind: 'alliance' } : { kind: 'country', id: d.country } }));
-  const unread = items.filter(i => i.type === 'message' && i.channel !== 'world' && i.from !== you && !read.has(i.seq))
-    .map(i => ({ kind: 'message', id: i.seq, item: i, card: i.channel === 'dm' ? { kind: 'country', id: i.from } : { kind: 'alliance' } }));
-  return [...decisions, ...unread];
+  const peace = (state.peaceOffers || []).filter(o => o.status === 'offered' && o.toRoster.includes(you))
+    .map(o => ({ kind: 'peace_offer', id: o.id, country: o.by, offer: o }));
+  return [...offers, ...peace];
 }

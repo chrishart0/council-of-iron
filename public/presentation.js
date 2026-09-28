@@ -2,12 +2,11 @@
  * All SVG fragments are authored constants; player speech never enters SVG markup.
  */
 const icons = {
-  // v0.9 engraved line set (original drawings, 24-unit grid). Older names are kept as aliases.
+  // v0.9 engraved line set (original drawings, 24-unit grid). Aliases name what the icon stands for.
   troops: '<path d="M5 15a7 7 0 0 1 14 0v1H5zM3 16h18M12 8V4m-2 0h4M8 19l-1 2m9-2 1 2"/>',
   land: '<path d="M6 21V4m0 0h11l-2.5 3.5L17 11H6M3 21h18"/>',
   industry: '<path d="M3 21h18M4 21v-9l5 3v-3l5 3V5h4v16M15 3h2"/>',
   clock: '<path d="M12 7v5l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z"/>',
-  bell: '<path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4zm4 4a2 2 0 0 0 4 0"/>',
   seal: '<path d="M12 2.5a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM12 6l1.2 2.5 2.7.3-2 1.8.6 2.7-2.5-1.4-2.5 1.4.6-2.7-2-1.8 2.7-.3zM8 15.5 6 21.5l3-1.2 1.6 2.4 1.4-5.2m4-2 2 6-3-1.2-1.6 2.4-1.4-5.2"/>',
   war: '<path d="M5 4l12 12M19 4 7 16m7 2 4-4m-8 4-4-4m10 2 3 3M8 16l-3 3"/>',
   ally: '<path d="M9 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm6 0a5 5 0 1 0 0 10 5 5 0 0 0 0-10z"/>',
@@ -18,7 +17,6 @@ const icons = {
   minus: '<path d="M5 12h14"/>',
   dispatches: '<path d="M3 6h18v12H3zm0 0 9 7 9-7"/>',
   economy: '<path d="M4 20h16M6 20v-6h4v6m0 0V9h4v11m0 0v-8h4v8"/>',
-  mic: '<path d="M9 5a3 3 0 0 1 6 0v6a3 3 0 0 1-6 0zm-4 6a7 7 0 0 0 14 0m-7 7v3m-3 0h6"/>',
   send: '<path d="M4 12 20 4l-5 16-3-6zm8 2 8-10"/>',
   play: '<path d="M8 5v14l11-7z"/>',
   pause: '<path d="M8 5v14m8-14v14"/>',
@@ -29,28 +27,16 @@ const icons = {
   last: '<path d="M18 5v14M6 5l9 7-9 7z"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
   down: '<path d="M6 9l6 6 6-6"/>',
-  up: '<path d="M6 15l6-6 6 6"/>',
-  right: '<path d="M9 6l6 6-6 6"/>',
   laurel: '<path d="M12 21v-9m0 0C8 12 6 9 6 5c3 0 6 2 6 7zm0 0c4 0 6-3 6-7-3 0-6 2-6 7zM8 21h8"/>',
-  speaker: '<path d="M4 9h4l5-4v14l-5-4H4zm12 0a4 4 0 0 1 0 6m2.5-8.5a8 8 0 0 1 0 11"/>',
   door: '<path d="M14 4H5v16h9m-4-8h11m-4-4 4 4-4 4"/>',
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
-  eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zm10-3a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/>',
   march: '<path d="M3 12h14m-4-5 5 5-5 5"/>',
-  develop: '<path d="M12 20V8m-4 4 4-4 4 4M5 20h14"/>',
-  key: '<path d="M8 10a4 4 0 1 0 0 .1zM12 10h9m-3 0v3m-3-3v2"/>',
-  help: '<path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm-2.5 6.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.7m0 3v.01"/>',
   battle: '<path d="M12 3l1.8 5 5-2.2-2.2 5 5 1.8-5 1.8 2.2 5-5-2.2-1.8 5-1.8-5-5 2.2 2.2-5-5-1.8 5-1.8-2.2-5 5 2.2z"/>',
-  crown: '<path d="M4 18h16M5 18 4 8l5 4 3-6 3 6 5-4-1 10"/>',
   book: '<path d="M4 5c3-1 6-1 8 1v14c-2-2-5-2-8-1zm16 0c-3-1-6-1-8 1v14c2-2 5-2 8-1z"/>',
-  user: '<path d="M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4 21a8 8 0 0 1 16 0"/>',
   refresh: '<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>',
-  expand: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
-  collapse: '<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>',
   threat: '<path d="M12 3l9 17H3zm0 6v5m0 3v.5"/>',
-  turn: '<path d="M7 7h9a4 4 0 0 1 0 8H6m3-3-3 3 3 3"/>',
 };
-for (const [alias, name] of Object.entries({"coordinate": "ally", "council": "economy", "prestige": "laurel", "journal": "book", "overview": "eye", "replay": "play", "military": "war", "diplomacy": "seal", "compass": "globe", "treaty": "seal", "ribbon": "ally", "fallen": "close"})) icons[alias] = icons[name];
+for (const [alias, name] of Object.entries({"council": "economy", "journal": "book", "military": "war", "compass": "globe", "treaty": "seal", "ribbon": "ally", "fallen": "close"})) icons[alias] = icons[name];
 
 const factions = {
   britain: { code: 'BR', short: 'Britain', motif: '<path d="M13 29l-3-12 9 6 5-11 5 11 9-6-3 12H13Zm0 5h22M20 9h8m-4-4v8"/>' },

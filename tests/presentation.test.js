@@ -11,7 +11,7 @@ test('eight original insignia are distinct constants, decorative SVG never accep
   }
 });
 test('shared icons contain no external URLs, duplicate IDs or execution hooks',()=>{
-  for(const key of ['march','coordinate','develop','council','dispatches','land','troops','prestige','replay','war','treaty','ribbon','gear','fallen','constructor']){
+  for(const key of ['march','council','dispatches','land','troops','laurel','play','war','treaty','ribbon','gear','fallen','threat','constructor']){
     const svg=icon(key);assert.match(svg,/viewBox="0 0 24 24"/);
     assert.doesNotMatch(svg,/(?:https?:|href=|<script|\sid=|onerror=|function Object)/);
   }
@@ -25,7 +25,7 @@ test('battle signals distinguish capture, defense and loss only from completed b
   assert.equal(loss.title,'Province lost');assert.equal(loss.tone,'lost');assert.equal(loss.troops,7);
 });
 test('battle signals ignore old, future, unrelated, spectator and finished-match events',()=>{
-  for(const e of [{...battle,tick:20},{...battle,tick:51},{...battle,type:'attack_accepted'},{...battle,owner:'russia'}])assert.equal(battleSignal(state,[e]),null);
+  for(const e of [{...battle,tick:20},{...battle,tick:51},{...battle,type:'order_accepted'},{...battle,owner:'russia'}])assert.equal(battleSignal(state,[e]),null);
   assert.equal(battleSignal({...state,you:null},[battle]),null);
   assert.equal(battleSignal({...state,status:'finished'},[battle]),null);
   assert.equal(battleSignal(state,[battle,{...battle,id:102,tick:50}]).id,102);

@@ -206,10 +206,10 @@ body[data-screen=match] #home{display:none}
 .card-relation{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:8px 12px;background:var(--well);border-left:4px solid var(--muted);font-size:15px;color:var(--text-2);line-height:1.35}
 .card-relation.big{flex-direction:column;align-items:stretch}
 .card-relation .rel{font:700 20px var(--title);letter-spacing:.02em;color:#e2dcc6}
-.card-relation:has(.rel-war),.card-relation:has(.rel-enemy),.card-relation:has(.rel-open){border-left-color:var(--oxblood-hi)}
+.card-relation:has(.rel-war),.card-relation:has(.rel-enemy){border-left-color:var(--oxblood-hi)}
 .card-relation:has(.rel-ally),.card-relation:has(.rel-forming),.card-relation:has(.rel-offer){border-left-color:var(--verdigris)}
 .card-relation:has(.rel-own),.card-relation:has(.rel-you){border-left-color:var(--brass)}
-.rel-war,.rel-enemy,.rel-open,.rel-fallen{color:var(--war)!important}.rel-ally,.rel-forming,.rel-offer{color:var(--verdigris-hi)!important}.rel-own,.rel-you{color:var(--brass-hi)!important}
+.rel-war,.rel-enemy,.rel-fallen{color:var(--war)!important}.rel-ally,.rel-forming,.rel-offer{color:var(--verdigris-hi)!important}.rel-own,.rel-you{color:var(--brass-hi)!important}
 .card-relation .card-hint{color:var(--text-2)}
 .card-strength{font-size:16px;color:var(--ivory)}
 .card-bloc{display:flex;align-items:center;gap:6px;overflow-wrap:anywhere}
@@ -261,7 +261,6 @@ body[data-screen=match] #home{display:none}
 .march-row.returning{opacity:.8}
 .count{display:inline-block;min-width:20px;padding:0 5px;border-radius:9px;background:var(--brass);color:var(--ink);font:600 13px/19px var(--ui);text-align:center}
 .proposal{display:flex;flex-direction:column;gap:6px;padding:10px;background:var(--well);border:1px dashed #c29a5255}
-.thread-empty{color:var(--muted)}
 /* Map area: the toast lane (top), a banner slot (under it) and the camera (bottom-right); none overlap. */
 .maparea{grid-area:map;grid-row:2/4;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;grid-template-areas:"lane" "banner" "." "camera";padding:var(--gap);gap:8px;pointer-events:none}
 .maparea>*{pointer-events:auto}
@@ -337,6 +336,7 @@ body[data-comms=thread] .powers .lb-summary{display:block}
 .menu-hint{margin:0;color:var(--muted);font-size:14px}
 .menu-room{flex-direction:row!important;flex-wrap:wrap}.menu-room .btn{flex:1 1 45%;min-height:40px;font-size:16px}
 .scenario-note{margin:8px 0 0;color:var(--muted);font-size:14px}
+.how-to-play{margin:6px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:15px;line-height:1.35;color:var(--text-2)}.how-to-play b{color:var(--brass-hi)}
 .keys{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;margin:0;font-size:15px}.keys dt{color:var(--brass-hi);font-weight:600}.keys dd{margin:0;color:var(--text-2)}
 .map-key .atlas-modes{position:static;max-width:none;box-shadow:none;pointer-events:auto}.map-key .atlas-key-toggle{display:none}
 .map-key .atlas-legend{font-size:15px;background:var(--well);border-color:#c29a5244}.map-key .atlas-mode-toggle{min-height:36px;font-size:15px;background:linear-gradient(180deg,#2d3537,#1f2527);border-color:var(--brass-lo);color:var(--ivory)}
@@ -390,9 +390,7 @@ dialog.letter footer .btn{flex:1}
 /* ── Lobby: choose your country (a dossier and a rack of standards over the live atlas) ── */
 .lobby{position:absolute;inset:0;z-index:8;display:grid;grid-template-columns:400px minmax(0,1fr);grid-template-rows:var(--top) minmax(0,1fr) auto;grid-template-areas:"top top" "dossier ." "rack rack";pointer-events:none}
 .lobby>*{pointer-events:auto}
-body:is([data-status=lobby],[data-status=opening]) .war-room>:is(.topbar#hud,.strip,.left,.maparea,.powers,.comms,.dock){display:none}
-.opening-countdown{margin:0;font:700 24px/1.1 var(--title);color:var(--brass-hi)}
-.opening-form{display:flex;flex-direction:column;gap:8px}.slot textarea{flex:1;min-width:0;min-height:64px;padding:8px 12px;resize:vertical;border:0;background:transparent;color:var(--ivory);font:500 17px var(--ui);outline:none}.slot textarea::placeholder{color:#8f8c7a}
+body[data-status=lobby] .war-room>:is(.topbar#hud,.strip,.left,.maparea,.powers,.comms,.dock){display:none}
 .lobby-bar{grid-area:top}
 .lobby-title{display:flex;flex-direction:column;margin-right:auto;min-width:0}
 .lobby-title b{font:700 22px/1.05 var(--title);color:var(--brass-hi);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -520,7 +518,6 @@ body:is([data-status=lobby],[data-status=opening]) .war-room>:is(.topbar#hud,.st
   .lobby{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:calc(var(--top) + var(--safe-t)) minmax(0,1fr);grid-template-areas:"top top" "dossier rack"}
   .rack{flex-wrap:wrap;align-content:center;border-top:0;border-left:2px solid;border-image:var(--rim) 1}
   .dossier{overflow:auto;min-height:0;max-height:100%;align-self:stretch}
-  .slot textarea{min-height:44px}.opening-countdown{font-size:19px}
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 /* Sound settings (public/sound.js): a brass toggle with a popover on the title screen; inline in the menu. */

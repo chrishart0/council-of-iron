@@ -9,20 +9,19 @@
 import { inbox, arrivals } from './comms-model.js';
 import { headlineCopy, systemCopy } from './feed-model.js';
 import { icon, insignia, faction } from './presentation.js';
-import { escapeHTML as esc } from './ui.js';
+import { escapeHTML as esc, clock } from './ui.js';
 import { relationsOf } from './relations.js';
 
 const QUICK = ['Agreed.', 'Not now.', 'Let us talk terms.'];
-const clock = n => `${Math.floor(Math.max(0, n) / 60).toString().padStart(2, '0')}:${Math.floor(Math.max(0, n) % 60).toString().padStart(2, '0')}`;
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export class Comms {
   /** opts: { button, toasts, panel, names, docked(): boolean, onAct(action) → Promise, onView(row), onSend(channel,to,text) → Promise,
-   *  onRead(keys: Set), onOpen(view), sfx(cue) } */
+   *  onRead(keys: Set), onOpen(view), onPropose(country|null), onNotice(act, arg) } */
   constructor(opts) {
     Object.assign(this, { button: opts.button, toasts: opts.toasts, panel: opts.panel, names: opts.names, docked: opts.docked || (() => false),
       onAct: opts.onAct || (async () => null), onView: opts.onView || (() => {}), onSend: opts.onSend || (async () => null), onRead: opts.onRead || (() => {}),
-      onOpen: opts.onOpen || (() => {}), onPropose: opts.onPropose || (() => {}), onNotice: opts.onNotice || (() => {}), sfxHook: opts.sfx || (() => {}) });
+      onOpen: opts.onOpen || (() => {}), onPropose: opts.onPropose || (() => {}), onNotice: opts.onNotice || (() => {}) });
     this.reset();
     this.build(); this.bind();
   }
@@ -35,16 +34,16 @@ export class Comms {
   }
   /* ── shell ── */
   build() {
-    const b = this.button; b.classList.add('cx-button'); b.type = 'button'; b.dataset.sfx = 'press'; b.setAttribute('aria-keyshortcuts', 'C');
+    const b = this.button; b.classList.add('cx-button'); b.type = 'button'; b.setAttribute('aria-keyshortcuts', 'C');
     b.setAttribute('aria-controls', this.panel.id); b.setAttribute('aria-expanded', 'false');
     this.toasts.innerHTML = '<div class="cx-live" aria-live="assertive" data-tier="action"></div><div class="cx-live" aria-live="polite" data-tier="personal"></div>';
     this.toasts.dataset.state = 'empty';
     const p = this.panel; p.classList.add('cx-panel'); p.setAttribute('aria-label', 'Messages');
-    p.innerHTML = `<header class="cx-head plaque"><button type="button" class="cx-back" aria-label="All conversations" data-sfx="press">${icon('back')}</button><h2 class="cx-title">Messages</h2><button type="button" class="cx-readall" data-sfx="press">Mark all read</button><button type="button" class="cx-close" aria-label="Close messages" data-sfx="press">${icon('close')}</button></header>
+    p.innerHTML = `<header class="cx-head plaque"><button type="button" class="cx-back" aria-label="All conversations">${icon('back')}</button><h2 class="cx-title">Messages</h2><button type="button" class="cx-readall">Mark all read</button><button type="button" class="cx-close" aria-label="Close messages">${icon('close')}</button></header>
 <ol class="cx-list" aria-label="Conversations"></ol>
-<section class="cx-thread" aria-label="Conversation"><nav class="cx-switch" aria-label="Switch conversation"></nav><div class="cx-members" hidden></div><ol class="cx-rows" aria-live="polite" aria-relevant="additions"></ol><button type="button" class="cx-jump" hidden data-sfx="press"></button>
+<section class="cx-thread" aria-label="Conversation"><nav class="cx-switch" aria-label="Switch conversation"></nav><div class="cx-members" hidden></div><ol class="cx-rows" aria-live="polite" aria-relevant="additions"></ol><button type="button" class="cx-jump" hidden></button>
 <div class="cx-quick" role="group" aria-label="Quick replies"></div>
-<form class="cx-composer composer"><label class="sr-only" for="cx-text">Message</label><textarea id="cx-text" class="cx-input" maxlength="500" rows="1" autocomplete="off" enterkeyhint="send" data-voice required></textarea><button type="submit" class="cx-send" data-sfx="confirm">${icon('send')}<span class="cx-send-label">Send</span></button><small class="cx-note"></small></form></section>`;
+<form class="cx-composer composer"><label class="sr-only" for="cx-text">Message</label><textarea id="cx-text" class="cx-input" maxlength="500" rows="1" autocomplete="off" enterkeyhint="send" data-voice required></textarea><button type="submit" class="cx-send">${icon('send')}<span class="cx-send-label">Send</span></button><small class="cx-note"></small></form></section>`;
     this.render();
   }
   $(s) { return this.panel.querySelector(s); }
@@ -99,7 +98,6 @@ export class Comms {
       const visible = got.personal.filter(g => !(this.view === 'thread' && g.thread === this.conv));
       if (visible.length) { this.toast.personal = visible.at(-1); clearTimeout(this.personalTimer); this.personalTimer = setTimeout(() => { this.toast.personal = null; this.renderToasts(); }, 4200); }
       if (got.worldPulse && this.conv !== 'world') this.pulse = true;
-      this.sfx(got.actions.length ? 'action' : got.personal.length ? 'personal' : null);
       // New rows in the open thread: stay put if the reader scrolled up, and offer "↓ N new".
       if (this.view === 'thread') {
         const rows = this.$('.cx-rows'), atBottom = rows.scrollHeight - rows.scrollTop - rows.clientHeight < 32;
@@ -112,7 +110,6 @@ export class Comms {
     this.render();
   }
   refresh() { if (this.state) { this.box = inbox(this.state, { read: this.read, dismissed: this.dismissed, history: this.history }); this.render(); } }
-  setRead(keys) { this.read = new Set(keys); this.refresh(); }
   /* ── navigation ── */
   /** The most important conversation; for an unread message (no decision waiting) the composer is focused, ready to reply. */
   openBest() { const c = this.box?.conversations.find(c => c.action || c.unread); c ? this.openThread(c.key, { focusComposer: !c.action }) : this.showList(); }
@@ -165,9 +162,9 @@ export class Comms {
   /** A PERSONAL notice that is not a message (a battle result, an army turned back). `buttons`: [{label, act, arg,
    * primary}] handled by onNotice(act, arg); `sticky` notices stay until handled, dismissed or withdrawn. */
   notify({ key, title, detail = '', standard = null, view = null, buttons = [], sticky = false }) {
-    this.toast.personal = { from: standard, thread: null, count: 1, notice: { key, title, detail, view, buttons }, rows: [{ key, item: {} }] };
+    this.toast.personal = { from: standard, thread: null, count: 1, notice: { key, title, detail, view, buttons }, rows: [{ key, item: {} }] }; this.toast.flash = null;
     clearTimeout(this.personalTimer); if (!sticky) this.personalTimer = setTimeout(() => { this.toast.personal = null; this.renderToasts(); }, 5200);
-    this.renderToasts(); this.sfx('personal');
+    this.renderToasts();
   }
   /** Withdraw a toast whose subject no longer applies (the inbox withdraws threat rows by itself). */
   withdraw(key) { if (this.toast.personal?.notice?.key === key) { this.toast.personal = null; this.renderToasts(); } }
@@ -187,12 +184,10 @@ export class Comms {
   async decide(row, choice) {
     if (!row || this.readOnly) return;
     const d = row.decision; if (!d) return;
-    const action = d.kind === 'offer' ? { type: choice === 'accept' ? 'accept' : 'decline', proposalId: d.id }
-      : d.kind === 'war_vote' ? { type: 'vote_war', motionId: d.id } : { type: 'vote_peace', motionId: d.id };
+    const action = d.kind === 'offer' ? { type: choice === 'accept' ? 'accept' : 'decline', proposalId: d.id } : { type: 'accept_peace', offerId: d.id };
     this.toast.actions = this.toast.actions.filter(r => r.key !== row.key); this.read.add(row.key); this.onRead(this.read);
     this.renderToasts();
     await this.onAct(action, row);
-    this.sfx(choice === 'accept' ? 'seal' : 'press');
   }
   async send() {
     const input = this.$('.cx-input'), text = input.value.trim(), conv = this.conv; if (!text || !conv || this.readOnly || this.$('.cx-send').disabled) return;
@@ -202,7 +197,6 @@ export class Comms {
     if (ok) { this.drafts.delete(conv); if (this.conv === conv && input.value.trim() === text) input.value = ''; this.grow(); this.toBottom(false); input.focus({ preventScroll: true }); }
   }
   grow() { const i = this.$('.cx-input'); i.style.height = 'auto'; i.style.height = `${Math.min(i.scrollHeight, 108)}px`; }
-  sfx(cue) { if (cue) this.sfxHook(cue); }
   /* ── rendering ── */
   render() {
     document.body.dataset.comms = this.view;
@@ -226,43 +220,43 @@ export class Comms {
     const live = new Set((this.box?.rows || []).filter(r => r.pending).map(r => r.key));
     this.toast.actions = this.toast.actions.filter(r => live.has(r.key) && !this.dismissed.has(r.key));
     const a = this.toast.actions, p = this.toast.personal, f = this.toast.flash;
-    // ONE lane: a decision owns it; otherwise a personal toast; otherwise a brief confirmation.
-    const loudHTML = a.length ? this.actionToast(a[0], a.length - 1) : '', quietHTML = !a.length && p ? this.personalToast(p) : !a.length && f ? this.flashToast(f) : '';
+    // ONE lane: a decision owns it; otherwise the answer to your own last order (brief); otherwise a personal toast.
+    const loudHTML = a.length ? this.actionToast(a[0], a.length - 1) : '', quietHTML = a.length ? '' : f ? this.flashToast(f) : p ? this.personalToast(p) : '';
     if (loud.dataset.html !== loudHTML) { loud.dataset.html = loudHTML; loud.innerHTML = loudHTML; }
     if (quiet.dataset.html !== quietHTML) { quiet.dataset.html = quietHTML; quiet.innerHTML = quietHTML; }
-    this.toasts.dataset.state = a.length ? 'action' : p ? 'personal' : f ? 'flash' : 'empty';
+    this.toasts.dataset.state = a.length ? 'action' : f ? 'flash' : p ? 'personal' : 'empty';
   }
   actionToast(r, more) {
     const i = r.item, n = this.names;
     let text, buttons;
     if (i.type === 'threat') {
       text = `<b>${esc(n.country(i.army.country))}</b> attacks ${esc(n.province(i.army.to))} in ${Math.max(0, i.army.arrivesAt - this.state.tick)}s`;
-      buttons = `<button type="button" class="cx-primary" data-do="view" data-sfx="press">View</button>`;
+      buttons = `<button type="button" class="cx-primary" data-do="view">View</button>`;
     } else if (i.system === 'offer') {
       text = i.candidate && i.candidate !== this.state.you ? `<b>${esc(n.country(i.from))}</b> proposes <b>${esc(n.country(i.candidate))}</b> for the <b>${esc(i.name)}</b>`
         : `<b>${esc(n.country(i.from))}</b> offers you the <b>${esc(i.name)}</b>`;
-      buttons = `<button type="button" class="cx-primary" data-do="accept" data-sfx="seal">Accept</button><button type="button" class="cx-secondary" data-do="view" data-sfx="press">Read</button>`;
+      buttons = `<button type="button" class="cx-primary" data-do="accept">Accept</button><button type="button" class="cx-secondary" data-do="view">Read</button>`;
     } else {
       const c = systemCopy(i, { ...n, time: clock });
       text = `<b>${esc(c.title)}</b> ${esc(c.detail)}`;
-      buttons = `<button type="button" class="cx-primary" data-do="accept" data-sfx="press">${r.decision?.kind === 'peace_offer' ? 'Accept peace' : 'Approve'}</button><button type="button" class="cx-secondary" data-do="view" data-sfx="press">Read</button>`;
+      buttons = `<button type="button" class="cx-primary" data-do="accept">Accept peace</button><button type="button" class="cx-secondary" data-do="view">Read</button>`;
     }
-    const standard = i.type === 'threat' ? icon('threat') : insignia(i.from || i.fromRoster?.[0] || null);
-    return `<div class="cx-toast" data-tier="action" data-key="${esc(r.key)}" data-thread="${esc(r.thread)}" tabindex="0"><span class="cx-standard">${standard}</span><p>${text}</p>${buttons}<button type="button" class="cx-dismiss" data-do="dismiss" aria-label="Dismiss (it stays in Messages)" data-sfx="press">${icon('close')}</button>${more ? `<span class="cx-more" aria-label="${more} more waiting">+${more}</span>` : ''}</div>`;
+    const standard = i.type === 'threat' ? icon('threat') : insignia(i.by || i.from || null);
+    return `<div class="cx-toast" data-tier="action" data-key="${esc(r.key)}" data-thread="${esc(r.thread)}" tabindex="0"><span class="cx-standard">${standard}</span><p>${text}</p>${buttons}<button type="button" class="cx-dismiss" data-do="dismiss" aria-label="Dismiss (it stays in Messages)">${icon('close')}</button>${more ? `<span class="cx-more" aria-label="${more} more waiting">+${more}</span>` : ''}</div>`;
   }
   personalToast(g) {
     const n = this.names;
     if (g.notice) {
-      const buttons = g.notice.buttons?.length ? g.notice.buttons.map(x => `<button type="button" class="${x.primary ? 'cx-primary' : 'cx-secondary'}" data-notice-act="${esc(x.act)}" data-arg="${esc(x.arg ?? '')}" data-sfx="press">${esc(x.label)}</button>`).join('')
-        : g.notice.view ? `<button type="button" class="cx-secondary" data-do="view" data-sfx="press">View</button>` : '';
-      return `<div class="cx-toast${g.notice.buttons?.length > 1 ? ' cx-wide' : ''}" data-tier="personal" data-key="${esc(g.notice.key)}" tabindex="0"><span class="cx-standard">${g.from ? insignia(g.from) : icon('battle')}</span><p><b>${esc(g.notice.title)}</b> <span class="cx-line">${esc(g.notice.detail)}</span></p>${buttons}<button type="button" class="cx-dismiss" data-do="dismiss" aria-label="Dismiss" data-sfx="press">${icon('close')}</button></div>`;
+      const buttons = g.notice.buttons?.length ? g.notice.buttons.map(x => `<button type="button" class="${x.primary ? 'cx-primary' : 'cx-secondary'}" data-notice-act="${esc(x.act)}" data-arg="${esc(x.arg ?? '')}">${esc(x.label)}</button>`).join('')
+        : g.notice.view ? `<button type="button" class="cx-secondary" data-do="view">View</button>` : '';
+      return `<div class="cx-toast${g.notice.buttons?.length > 1 ? ' cx-wide' : ''}" data-tier="personal" data-key="${esc(g.notice.key)}" tabindex="0"><span class="cx-standard">${g.from ? insignia(g.from) : icon('battle')}</span><p><b>${esc(g.notice.title)}</b> <span class="cx-line">${esc(g.notice.detail)}</span></p>${buttons}<button type="button" class="cx-dismiss" data-do="dismiss" aria-label="Dismiss">${icon('close')}</button></div>`;
     }
     const r = g.rows.at(-1), i = r.item, who = g.from ? n.country(g.from) : 'News';
     const line = g.count > 1 ? `${g.count} messages` : i.type === 'message' ? String(i.text).split('\n')[0] : i.headline ? headlineCopy(i, { ...n, time: clock }).title : systemCopy(i, { ...n, time: clock }).title;
     const label = i.type === 'message' ? (i.channel === 'dm' ? 'Reply' : 'Open') : 'Open';
-    return `<div class="cx-toast" data-tier="personal" data-key="${esc(r.key)}" data-thread="${esc(r.thread)}" tabindex="0"><span class="cx-standard">${g.from ? insignia(g.from) : icon('globe')}</span><p><b>${esc(who)}${i.channel === 'alliance' ? ' · alliance' : ''}</b> <span class="cx-line">${esc(line)}</span></p><button type="button" class="cx-secondary" data-do="view" data-sfx="press">${label}</button><button type="button" class="cx-dismiss" data-do="dismiss" aria-label="Dismiss" data-sfx="press">${icon('close')}</button></div>`;
+    return `<div class="cx-toast" data-tier="personal" data-key="${esc(r.key)}" data-thread="${esc(r.thread)}" tabindex="0"><span class="cx-standard">${g.from ? insignia(g.from) : icon('globe')}</span><p><b>${esc(who)}${i.channel === 'alliance' ? ' · alliance' : ''}</b> <span class="cx-line">${esc(line)}</span></p><button type="button" class="cx-secondary" data-do="view">${label}</button><button type="button" class="cx-dismiss" data-do="dismiss" aria-label="Dismiss">${icon('close')}</button></div>`;
   }
-  flashToast(f) { return `<div class="cx-toast${f.error ? ' error' : ''}" data-tier="flash" data-key="${esc(f.key)}" role="${f.error ? 'alert' : 'status'}"><p>${esc(f.text)}</p><button type="button" class="cx-dismiss" data-do="dismiss" aria-label="Dismiss" data-sfx="press">${icon('close')}</button></div>`; }
+  flashToast(f) { return `<div class="cx-toast${f.error ? ' error' : ''}" data-tier="flash" data-key="${esc(f.key)}" role="${f.error ? 'alert' : 'status'}"><p>${esc(f.text)}</p><button type="button" class="cx-dismiss" data-do="dismiss" aria-label="Dismiss">${icon('close')}</button></div>`; }
   convTitle(c) { return c.kind === 'world' ? 'World' : c.kind === 'alliance' ? (c.side ? this.names.side(c.side) : 'Alliance') : this.names.country(c.country); }
   /** Pinned first: your alliance (or how to get one), then World and every power, sorted by what needs you. */
   ordered() {
@@ -284,7 +278,7 @@ export class Comms {
       const tag = c.kind === 'dm' ? this.relationTag(c.country) : '';
       const glyph = c.kind === 'dm' ? insignia(c.country) : icon(c.kind === 'world' ? 'globe' : 'ally');
       const title = c.kind === 'alliance' ? (c.side ? `Your alliance: ${this.names.side(c.side)}` : 'No alliance yet') : this.convTitle(c);
-      const propose = noAlliance && !this.readOnly && this.state.status === 'running' ? '<button type="button" class="cx-propose" data-propose="" data-sfx="press">Propose an alliance</button>' : '';
+      const propose = noAlliance && !this.readOnly && this.state.status === 'running' ? '<button type="button" class="cx-propose" data-propose="">Propose an alliance</button>' : '';
       return `<li${c.kind === 'alliance' ? ' class="cx-pinned"' : ''}><button type="button" class="cx-conv" aria-current="${c.key === this.conv && this.view === 'thread'}" data-conv="${esc(c.key)}" data-kind="${c.kind}" data-state="${c.action ? 'action' : c.unread ? 'unread' : 'read'}"${c.kind === 'world' && this.pulse ? ' data-pulse="1"' : ''}><span class="cx-standard">${glyph}</span><span class="cx-conv-main"><b>${esc(title)}</b><span class="cx-preview">${esc(preview)}</span></span><span class="cx-conv-meta"><time>${c.last ? clock(c.last.tick) : ''}</time>${tag ? `<small class="cx-rel" data-rel="${esc(tag)}">${esc(tag)}</small>` : ''}${chip}${badge}</span></button>${propose}</li>`;
     }).join('');
     if (list.dataset.html !== html) { list.dataset.html = html; list.innerHTML = html; }
@@ -296,14 +290,14 @@ export class Comms {
     return this.systemLine(r).text;
   }
   systemLine(r) {
-    const i = r.item, n = this.names, c = systemCopy(i, { ...n, time: clock, players: this.state.players.length });
+    const i = r.item, n = this.names, c = systemCopy(i, { ...n, time: clock });
     if (i.system === 'offer') {
       if (r.status === 'accepted') return { text: `${r.mine || (this.state.you && this.state.proposals?.find(q => q.id === i.proposalId)?.accepted.includes(this.state.you)) ? 'You accepted' : 'Accepted'} · ${i.name}`, state: 'resolved' };
       if (r.status === 'closed' || r.status === 'expired') return { text: `Offer closed · ${i.name}`, state: 'expired' };
       if (r.status === 'open' && !r.pending) return { text: `Alliance offer · ${i.name}: waiting for ${r.item.candidate ? n.country(r.item.candidate) : 'the others'}`, state: 'info' };
     }
     if (i.system === 'accepted') return { text: `${i.country === this.state.you ? 'You' : n.country(i.country)} accepted${i.name ? ` · ${i.name}` : ''}`, state: 'resolved' };
-    if ((i.system === 'vote' || i.system === 'peace_offer') && !r.pending) return { text: `${c.title}${r.status === 'accepted' ? ' · passed' : r.status === 'waiting' ? ' · waiting for the others' : ' · closed'}`, state: r.status === 'accepted' ? 'resolved' : r.status === 'waiting' ? 'info' : 'expired' };
+    if (i.system === 'peace_offer' && !r.pending) return { text: `${c.title}${r.status === 'accepted' ? ' · accepted' : r.status === 'waiting' ? ' · waiting for their answer' : ' · closed'}`, state: r.status === 'accepted' ? 'resolved' : r.status === 'waiting' ? 'info' : 'expired' };
     return { text: `${c.title}: ${c.detail}`, state: 'info' };
   }
   renderThread() {
@@ -317,13 +311,9 @@ export class Comms {
     composer.hidden = !canWrite; quick.hidden = !canWrite || conv.kind !== 'dm';
     const input = this.$('.cx-input'), n = this.names;
     input.placeholder = conv.kind === 'world' ? 'Message everyone…' : conv.kind === 'alliance' ? 'Message your alliance…' : `Message ${faction(conv.country).short}…`;
-    const wait = Math.max(0, (this.state.commandBudget?.chatReadyAt || 0) - this.state.tick);
-    // The chat cooldown is on the button itself; the draft stays in the box meanwhile.
-    this.$('.cx-send').disabled = wait > 0; const label = wait ? `Send · ${wait}s` : 'Send';
-    if (this.$('.cx-send-label').textContent !== label) this.$('.cx-send-label').textContent = label;
     this.$('.cx-note').textContent = conv.kind === 'alliance' && this.state.rules?.revealAllianceChatAfterMatch ? 'Alliance chat becomes public in the replay after the match ends.' : '';
     this.renderSwitch(conv); this.renderMembers(conv);
-    const qhtml = QUICK.map(q => `<button type="button" data-quick="${esc(q)}" data-sfx="press">${esc(q)}</button>`).join('');
+    const qhtml = QUICK.map(q => `<button type="button" data-quick="${esc(q)}">${esc(q)}</button>`).join('');
     if (quick.dataset.html !== qhtml) { quick.dataset.html = qhtml; quick.innerHTML = qhtml; }
     let minute = -1, html = '';
     for (const r of conv.rows) {
@@ -333,7 +323,7 @@ export class Comms {
       if (r.key === this.divider) html += '<li class="cx-divider" role="separator"><span>Unread</span></li>';
       html += this.row(r);
     }
-    if (!conv.rows.length) html = `<li class="cx-empty">${conv.kind === 'alliance' && !conv.side ? `You are independent. Propose an alliance to open a group chat.${this.readOnly ? '' : `<span class="cx-propose-list">${(this.state.players || []).filter(p => p.id !== this.state.you && p.eliminatedAt == null).map(p => `<button type="button" data-propose="${esc(p.id)}" data-sfx="press">${insignia(p.id)}<span>${esc(faction(p.id).short)}</span></button>`).join('')}</span>`}` : conv.kind === 'alliance' ? 'No alliance messages yet. Write below.' : conv.kind === 'world' ? 'Nothing has happened yet.' : `No messages with ${esc(n.country(conv.country))} yet.${canWrite ? ' Write below.' : ''}`}</li>`;
+    if (!conv.rows.length) html = `<li class="cx-empty">${conv.kind === 'alliance' && !conv.side ? `You are independent. Propose an alliance to open a group chat.${this.readOnly ? '' : `<span class="cx-propose-list">${(this.state.players || []).filter(p => p.id !== this.state.you && p.eliminatedAt == null).map(p => `<button type="button" data-propose="${esc(p.id)}">${insignia(p.id)}<span>${esc(faction(p.id).short)}</span></button>`).join('')}</span>`}` : conv.kind === 'alliance' ? 'No alliance messages yet. Write below.' : conv.kind === 'world' ? 'Nothing has happened yet.' : `No messages with ${esc(n.country(conv.country))} yet.${canWrite ? ' Write below.' : ''}`}</li>`;
     if (rowsEl.dataset.html !== html) { rowsEl.dataset.html = html; const keep = rowsEl.scrollTop, bottom = rowsEl.scrollHeight - rowsEl.scrollTop - rowsEl.clientHeight < 32; rowsEl.innerHTML = html; rowsEl.scrollTop = bottom ? rowsEl.scrollHeight : keep; requestAnimationFrame(() => this.clampCheck()); }
     const unreadKeys = new Set(conv.rows.filter(r => r.unread).map(r => r.key));
     for (const li of rowsEl.querySelectorAll('[data-key]')) li.classList.toggle('cx-is-unread', unreadKeys.has(li.dataset.key));
@@ -342,7 +332,7 @@ export class Comms {
   renderSwitch(conv) {
     const nav = this.$('.cx-switch');
     const items = this.ordered().filter(c => c.kind !== 'dm' || c.active || c.key === conv.key || !this.readOnly);
-    const html = this.readOnly ? '' : items.map(c => `<button type="button" data-conv="${esc(c.key)}" aria-current="${c.key === conv.key}" title="${esc(c.kind === 'alliance' ? (c.side ? this.names.side(c.side) : 'Alliance') : this.convTitle(c))}" aria-label="${esc(c.kind === 'alliance' ? 'Alliance chat' : this.convTitle(c))}${c.unread ? `, ${c.unread} unread` : ''}" data-sfx="press">${c.kind === 'dm' ? insignia(c.country) : icon(c.kind === 'world' ? 'globe' : 'ally')}${c.unread || c.action ? '<i class="cx-dot"></i>' : ''}</button>`).join('');
+    const html = this.readOnly ? '' : items.map(c => `<button type="button" data-conv="${esc(c.key)}" aria-current="${c.key === conv.key}" title="${esc(c.kind === 'alliance' ? (c.side ? this.names.side(c.side) : 'Alliance') : this.convTitle(c))}" aria-label="${esc(c.kind === 'alliance' ? 'Alliance chat' : this.convTitle(c))}${c.unread ? `, ${c.unread} unread` : ''}">${c.kind === 'dm' ? insignia(c.country) : icon(c.kind === 'world' ? 'globe' : 'ally')}${c.unread || c.action ? '<i class="cx-dot"></i>' : ''}</button>`).join('');
     if (nav.dataset.html !== html) { nav.dataset.html = html; nav.innerHTML = html; }
     nav.hidden = !html;
   }
@@ -358,30 +348,29 @@ export class Comms {
     const i = r.item, n = this.names, unread = '', time = `<time>${clock(r.tick)}</time>`;
     if (i.type === 'message') {
       const open = this.expanded.has(r.key) ? ' data-open="1"' : '';
-      return `<li class="cx-msg${unread}" data-key="${esc(r.key)}" data-mine="${r.mine}"><header><span class="cx-standard">${insignia(i.from)}</span><b>${r.mine ? 'You' : esc(n.country(i.from))}</b>${time}</header><p class="cx-text"${open}>${esc(i.text)}</p><button type="button" class="cx-more-btn" hidden data-sfx="press">More</button></li>`;
+      return `<li class="cx-msg${unread}" data-key="${esc(r.key)}" data-mine="${r.mine}"><header><span class="cx-standard">${insignia(i.from)}</span><b>${r.mine ? 'You' : esc(n.country(i.from))}</b>${time}</header><p class="cx-text"${open}>${esc(i.text)}</p><button type="button" class="cx-more-btn" hidden>More</button></li>`;
     }
-    if (i.type === 'threat') return `<li class="cx-sys cx-threat${unread}" data-key="${esc(r.key)}" data-tier="action" data-state="open">${icon('threat')}<p><b>Incoming attack</b> ${i.army.amount} ${esc(faction(i.army.country).short)} troops reach ${esc(n.province(i.army.to))} at ${clock(i.army.arrivesAt)}</p><button type="button" class="cx-secondary" data-do="view" data-province="${esc(i.army.to)}" data-sfx="press">View</button></li>`;
+    if (i.type === 'threat') return `<li class="cx-sys cx-threat${unread}" data-key="${esc(r.key)}" data-tier="action" data-state="open">${icon('threat')}<p><b>Incoming attack</b> ${i.army.amount} ${esc(faction(i.army.country).short)} troops reach ${esc(n.province(i.army.to))} at ${clock(i.army.arrivesAt)}</p><button type="button" class="cx-secondary" data-do="view" data-province="${esc(i.army.to)}">View</button></li>`;
     if (i.headline) {
       const h = headlineCopy(i, { ...n, time: clock }), marker = ['war', 'peace', 'alliance', 'eliminated', 'dominance', 'dominance_broken', 'finished'].includes(i.headline.kind);
       const focus = h.focus?.province ? ` data-province="${esc(h.focus.province)}"` : h.focus?.country ? ` data-country="${esc(h.focus.country)}"` : '';
       return `<li class="${marker ? 'cx-marker' : 'cx-headline'}${unread}" data-key="${esc(r.key)}" data-tone="${esc(h.tone)}" data-tier="${r.tier}" data-kind="${esc(i.headline.kind)}"${focus}><p><b>${esc(h.title)}</b> ${esc(h.detail)}</p>${time}</li>`;
     }
     if (r.pending && !this.readOnly) {
-      const c = systemCopy(i, { ...n, time: clock, players: this.state.players.length });
+      const c = systemCopy(i, { ...n, time: clock });
       if (i.system === 'offer') {
         const q = this.state.proposals?.find(q => q.id === i.proposalId);
-        return `<li class="cx-sys cx-letter${unread}" data-key="${esc(r.key)}" data-tier="action" data-state="open"><header>${icon('seal')}<b>Alliance offer · ${esc(i.name)}</b>${time}</header><p>${esc(this.offerTerms(i))}</p><p class="cx-expiry">Open until ${clock(q?.expiresAt ?? r.tick)}</p><div class="cx-actions"><button type="button" class="cx-primary" data-do="accept" data-sfx="seal">Accept</button><button type="button" class="cx-secondary" data-do="decline" data-sfx="press">Decline</button></div></li>`;
+        return `<li class="cx-sys cx-letter${unread}" data-key="${esc(r.key)}" data-tier="action" data-state="open"><header>${icon('seal')}<b>Alliance offer · ${esc(i.name)}</b>${time}</header><p>${esc(this.offerTerms(i))}</p><p class="cx-expiry">Open until ${clock(q?.expiresAt ?? r.tick)}</p><div class="cx-actions"><button type="button" class="cx-primary" data-do="accept">Accept</button><button type="button" class="cx-secondary" data-do="decline">Decline</button></div></li>`;
       }
-      return `<li class="cx-sys cx-letter${unread}" data-key="${esc(r.key)}" data-tier="action" data-state="open"><header>${icon(r.decision?.kind === 'war_vote' ? 'war' : 'seal')}<b>${esc(c.title)}</b>${time}</header><p>${esc(c.detail)}</p><div class="cx-actions"><button type="button" class="cx-primary" data-do="accept" data-sfx="press">${r.decision?.kind === 'peace_offer' ? 'Accept peace' : 'Approve'}</button></div></li>`;
+      return `<li class="cx-sys cx-letter${unread}" data-key="${esc(r.key)}" data-tier="action" data-state="open"><header>${icon('seal')}<b>${esc(c.title)}</b>${time}</header><p>${esc(c.detail)}</p><div class="cx-actions"><button type="button" class="cx-primary" data-do="accept">Accept peace</button></div></li>`;
     }
     const line = this.systemLine(r);
     return `<li class="cx-sys${unread}" data-key="${esc(r.key)}" data-tier="${r.tier}" data-state="${line.state}">${icon(line.state === 'resolved' ? 'seal' : 'ally')}<p>${esc(line.text)}</p>${time}</li>`;
   }
-  /** Offer terms in game voice: who is in it and the most each member can win. */
+  /** Offer terms in game voice: who is in it and what the alliance plays for. */
   offerTerms(i) {
-    const you = this.state.you, others = (i.roster || []).filter(id => id !== you).map(id => faction(id).short);
-    const share = Math.round(100 * this.state.players.length / Math.max(1, (i.roster || []).length));
-    return `Members: ${others.join(', ')} and you. Up to ${share} Prestige each if the alliance wins.`;
+    const you = this.state.you, others = (i.roster || []).filter(id => id !== you).map(id => faction(id).short), r = this.state.rules;
+    return `Members: ${others.join(', ')} and you. Every member wins if the alliance holds ${Math.round(r.economyShare * 100)}% of the world's industry for ${r.hold} s.`;
   }
   rowClick(e) {
     const b = e.target.closest('button'), li = e.target.closest('[data-key]');

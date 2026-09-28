@@ -18,7 +18,7 @@ talks.rules.revealAllianceChatAfterMatch=true;talks.rules.duration=150;start(tal
 while(talks.status==='running'){
   if(talks.tick===1){const q=act(talks,MAP,'usa',{type:'propose',country:'japan',name:'Pacific Pact'},'ui-chat-p');act(talks,MAP,'japan',{type:'accept',proposalId:q.proposalId},'ui-chat-a');}
   if(talks.tick===45)act(talks,MAP,'usa',{type:'chat',channel:'alliance',text:'Hold the Pacific <b>line</b>.'},'ui-chat-c');
-  if(talks.tick===60)act(talks,MAP,'usa',{type:'move',from:'west-us',to:'mexico',amount:10},'ui-chat-m');  // arrives 02:02, captures 02:05
+  if(talks.tick===60)act(talks,MAP,'usa',{type:'march',from:'west-us',to:'mexico',amount:10},'ui-chat-m');  // arrives 02:02, captures 02:05
   tick(talks);}
 app.games.set(talks.id,talks);app.store.save(talks);
 const finished=replay().game;finished.id='ui-review';finished.name='The Atlantic campaign';app.games.set(finished.id,finished);app.store.save(finished);
@@ -31,11 +31,11 @@ const w=warRoom('ui-war','The Rhine front');
 const taskRooms=Object.fromEntries(['ui-tasks-m','ui-tasks-d'].map(id=>[id,warRoom(id,'The Rhine front · walkthrough')]));
 // Britain (the browser seat) also declares war on the USA at tick 0: no armies move on that front, so the
 // recorded battles are unchanged, but the viewer has a real war for the v0.7 relation UI.
-const warOrders={0:[['britain',{type:'declare_war',country:'usa'}],['russia',{type:'declare_war',country:'ottoman'}],['russia',{type:'move',from:'ukraine',to:'east-anatolia',amount:10}],['germany',{type:'declare_war',country:'france'}]],
-  25:[['germany',{type:'move',from:'rhineland',to:'alpine-france',amount:11}]],
+const warOrders={0:[['britain',{type:'declare_war',country:'usa'}],['russia',{type:'declare_war',country:'ottoman'}],['russia',{type:'march',from:'ukraine',to:'east-anatolia',amount:10}],['germany',{type:'declare_war',country:'france'}]],
+  25:[['germany',{type:'march',from:'rhineland',to:'alpine-france',amount:11}]],
   // Columns still on the march at tick 55, for army-layer checks.
-  56:[['britain',{type:'move',from:'scotland',to:'ireland',amount:6}]],
-  40:[['britain',{type:'move',from:'england',to:'low-countries',amount:8}],['france',{type:'move',from:'occitania',to:'iberia',amount:8}],['germany',{type:'move',from:'saxony',to:'balkans',amount:8}]]};
+  56:[['britain',{type:'march',from:'scotland',to:'ireland',amount:6}]],
+  40:[['britain',{type:'march',from:'england',to:'low-countries',amount:8}],['france',{type:'march',from:'occitania',to:'iberia',amount:8}],['germany',{type:'march',from:'saxony',to:'balkans',amount:8}]]};
 // Tick 50: an approved alliance still inside its activation delay (a "forming" bloc).
 const pact=room=>{const q=act(room,MAP,'usa',{type:'propose',country:'japan',name:'Pacific Pact'},`${room.id}-pact`);act(room,MAP,'japan',{type:'accept',proposalId:q.proposalId},`${room.id}-pact-accept`);};
 const stepRoom=(room,to)=>{while(room.tick<to){for(const [country,action] of warOrders[room.tick]||[])act(room,MAP,country,action,`${room.id}-${room.tick}-${country}-${action.type}`);if(room.tick===50)pact(room);tick(room);}};

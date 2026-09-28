@@ -3,7 +3,6 @@ import { relationsOf, formingAlliances } from './relations.js';
  * Each front lists its country pairs; derived only from the public observation. */
 export function warsOf(view) {
   const sideOf = id => view.players.find(p => p.id === id)?.side ?? `solo:${id}`;
-  // Formal wars only (legacy rooms have none: every non-ally is hostile there, see relations.js).
   // Coalitions carry their (player-chosen) name; an independent side has none: show its country.
   const label = side => side.startsWith('solo:') ? null : view.sides.find(s => s.id === side)?.name ?? null;
   const fronts = new Map();
@@ -79,5 +78,5 @@ export function leaderboard(view, { mode = 'players', you = null, limit = Infini
   const shown = rows.slice(0, limit), own = rows.find(r => r.you);
   if (own && !shown.includes(own)) shown.push(own);
   return { mode, provinces: total, rows: shown, count: rows.length,
-    rule: 'Rank by provinces held, then total troops (garrisons + all own armies on the map, including marching, returning and engaged), then ID. In teams mode an alliance row is the sum of its nested members; shareOfAlliance is each member\'s share of the alliance troops. atWarWith and relation come from relations.js (public wars and coalition sides; legacy rooms: every non-ally is hostile). Public data only.' };
+    rule: 'Rank by provinces held, then total troops (garrisons + all own armies on the map, including marching, returning and engaged), then ID. In teams mode an alliance row is the sum of its nested members; shareOfAlliance is each member\'s share of the alliance troops. atWarWith and relation come from relations.js (public wars and coalition sides). Public data only.' };
 }

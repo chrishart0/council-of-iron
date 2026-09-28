@@ -1,6 +1,6 @@
 import { icon, insignia, faction } from './presentation.js';
 import { Atlas } from './atlas.js';
-import { escapeHTML as esc, setHTML } from './ui.js';
+import { escapeHTML as esc, setHTML, clock, seatType } from './ui.js';
 import { replayReader } from './replay-model.js';
 import { ExpandableMap } from './expand.js';
 import { LeaderboardPanel } from './leaderboard-panel.js';
@@ -8,13 +8,11 @@ import { allianceColors } from './relations.js';
 /* v0.9 after-action report and replay in the War Room system (plates, plaques, brass). Presentation only:
  * everything comes from the public review and replay endpoints. Player text (names, alliance names,
  * revealed alliance chat) is escaped or set with textContent; SVG fragments are authored constants. */
-const clock = n => `${Math.floor(n / 60).toString().padStart(2, '0')}:${Math.floor(n % 60).toString().padStart(2, '0')}`;
 const number = n => Number(n).toLocaleString('en', { maximumFractionDigits: 2 });
-const signed = n => `${n >= 0 ? '+' : '−'}${number(Math.abs(n))}`;
 const tabs = [['overview', 'Overview'], ['military', 'Military'], ['economy', 'Economy'], ['diplomacy', 'Diplomacy']];
 const SPEEDS = [1, 4, 16, 64];
 const NEUTRAL = '#a5a28c';
-const seatType = p => !p ? '' : p.kind === 'bot' || p.model?.startsWith('heuristic-') ? 'Bot' : p.kind === 'human' ? 'Human' : 'AI';
+const RESULT = { win: 'Won', loss: 'Lost', draw: 'Draw' };
 const TONE = { capture: 'war', war_declared: 'war', dominance_broken: 'war', eliminated: 'war', alliance_activated: 'alliance', peace_accepted: 'peace', departed: 'alliance', coalition_dissolved: 'war', dominance: 'victory', finished: 'victory', development_completed: 'industry', development_started: 'industry' };
 const TONE_ICON = { war: 'war', alliance: 'ally', peace: 'seal', victory: 'laurel', industry: 'industry' };
 const KEY_EVENTS = ['alliance_activated', 'departed', 'coalition_dissolved', 'war_declared', 'peace_accepted', 'dominance', 'dominance_broken', 'eliminated', 'finished'];
@@ -69,59 +67,54 @@ export class AfterAction {
     return allianceColors({ players: r.players.map(p => ({ id: p.country, side: p.side })), sides: r.alliances.map(a => ({ id: a.id, name: a.name, members: a.members })) });
   }
   render() {
-    this.report.events ||= []; this.report.series ||= [];
-    const r = this.report, economic = r.rules.economyShare !== undefined;
-    const winner = r.alliances.find(s => s.won) || null, solo = !winner && r.outcome.winningSide ? r.players.find(p => p.side === r.outcome.winningSide) : null;
-    const headline = r.outcome.draw ? (r.outcome.reason === 'negotiated_draw' ? 'A negotiated peace' : 'The council ends in a draw')
-      : winner ? `Victory for the ${this.side(winner.id)}` : `${this.side(r.outcome.winningSide)} prevails`;
-    const reason = r.outcome.reason === 'domination' ? (economic ? `Held 60% of active industry for ${r.rules.hold} seconds` : `Held ${r.rules.threshold} provinces for ${r.rules.hold} seconds`)
-      : r.outcome.reason === 'negotiated_draw' ? 'Every remaining country joined one alliance'
-      : r.outcome.draw ? `Equal ${economic ? 'industry' : 'territory'} at the deadline` : `Most ${economic ? 'industry' : 'territory'} at the deadline; first place takes half the prize, second and third a quarter each`;
-    const winners = winner?.members || (solo ? [solo.country] : []);
-    const mineSide = this.viewer ? r.alliances.find(s => s.members.includes(this.viewer)) : null;
-    const viewerRank = mineSide ? 1 + r.alliances.filter(s => s.economy > mineSide.economy).length : Infinity;
-    const verdict = r.outcome.draw ? 'Armistice' : this.viewer ? (winners.includes(this.viewer) ? 'Victory' : r.outcome.reason === 'deadline' && viewerRank <= 3 ? 'Placed' : 'Defeat') : 'After-action report';
+    const r = this.report;
+    const winner = r.alliances.find(s => s.won) || null, winners = winner?.members || [];
+    const headline = r.outcome.draw ? 'The council ends in a draw' : winner.members.length > 1 ? `Victory for the ${this.side(winner.id)}` : `${this.side(winner.id)} prevails`;
+    const reason = r.outcome.reason === 'domination' ? `Held ${Math.round(100 * r.rules.economyShare)}% of the world's industry for ${r.rules.hold} seconds`
+      : r.outcome.draw ? 'Equal industry at the deadline' : 'Most industry at the deadline';
+    const verdict = r.outcome.draw ? 'Draw' : this.viewer ? (winners.includes(this.viewer) ? 'Victory' : 'Defeat') : 'After-action report';
     this.root.dataset.verdict = verdict.toLowerCase();
-    const mine = this.viewer ? r.alliances.find(a => a.members.includes(this.viewer)) : null;
-    const medal = mine ? { value: mine.prestige, label: 'your alliance' } : winner ? { value: winner.prestige, label: 'alliance Prestige' } : this.viewer && this.player(this.viewer) ? { value: this.player(this.viewer).prestige, label: 'your Prestige' } : null;
-    const standards = (winners.length ? winners : r.alliances.find(a => a.members.length)?.members || []).slice(0, 4);
+    // Your score is your own industry at the end; a spectator sees the winners' total.
+    const me = this.viewer && this.player(this.viewer);
+    const medal = me ? { value: me.industry, label: 'your industry' } : winner ? { value: winner.economy, label: 'winning industry' } : null;
+    const standards = (winners.length ? winners : r.alliances.find(a => a.members.length > 1)?.members || []).slice(0, 4);
     this.root.innerHTML = `<section class="plate aar-report" data-region="report" aria-labelledby="aar-title">
 <header class="victory-band"><div class="v-standards" aria-hidden="true">${standards.map(id => `<figure>${insignia(id)}<figcaption>${esc(faction(id).short)}</figcaption></figure>`).join('')}</div>
-<div class="v-title"><small><span class="v-verdict">${verdict}</span> · ${esc(r.name || 'After-action report')} · ${clock(r.duration)}</small><h1 id="aar-title">${esc(headline)}</h1><p>${esc(reason)}${r.eligible ? ' · League result recorded' : ''}</p></div>
-${medal ? `<div class="v-medal">${icon('laurel')}<b>${signed(medal.value)}</b><small>${medal.label}</small></div>` : ''}</header>
-<nav class="aar-tabs tabs dark" role="tablist" aria-label="After-action report">${tabs.map(([id, name], i) => `<button id="aar-tab-${id}" role="tab" data-aar-tab="${id}" aria-selected="${i === 0}" aria-controls="aar-${id}" tabindex="${i === 0 ? 0 : -1}" data-sfx="press">${name}</button>`).join('')}</nav>
+<div class="v-title"><small><span class="v-verdict">${verdict}</span> · ${esc(r.name || 'After-action report')} · ${clock(r.duration)}</small><h1 id="aar-title">${esc(headline)}</h1><p>${esc(reason)}</p></div>
+${medal ? `<div class="v-medal">${icon('industry')}<b>${number(medal.value)}</b><small>${medal.label}</small></div>` : ''}</header>
+<nav class="aar-tabs tabs dark" role="tablist" aria-label="After-action report">${tabs.map(([id, name], i) => `<button id="aar-tab-${id}" role="tab" data-aar-tab="${id}" aria-selected="${i === 0}" aria-controls="aar-${id}" tabindex="${i === 0 ? 0 : -1}">${name}</button>`).join('')}</nav>
 <div class="aar-panels">${tabs.map(([id]) => `<section id="aar-${id}" class="aar-panel aar-${id}" role="tabpanel" aria-labelledby="aar-tab-${id}" ${id === 'overview' ? '' : 'hidden'}></section>`).join('')}</div>
-<footer class="card-foot report-foot"><button type="button" id="aar-back" class="btn btn-ghost" data-home="true" data-sfx="press">${icon('door')}<span>Back to rooms</span></button><button type="button" class="btn btn-ghost" data-aar-copy data-sfx="press">${icon('link')}<span>Copy report link</span></button><button type="button" id="aar-tab-replay" class="btn btn-primary" data-aar-tab="replay" data-sfx="confirm">${icon('play')}<span>Watch the replay</span></button></footer>
+<footer class="card-foot report-foot"><button type="button" id="aar-back" class="btn btn-ghost" data-home="true">${icon('door')}<span>Back to rooms</span></button><button type="button" class="btn btn-ghost" data-aar-copy>${icon('link')}<span>Copy report link</span></button><button type="button" id="aar-tab-replay" class="btn btn-primary" data-aar-tab="replay">${icon('play')}<span>Watch the replay</span></button></footer>
 </section>
 <section id="aar-replay" class="aar-replay" aria-label="Replay" hidden></section>`;
     this.overview();
     if (!r.historyAvailable) {
       const note = `<div class="aar-empty"><h3>History unavailable</h3><p>${esc(r.historyError || 'This match cannot be replayed exactly.')}</p><p>No estimated replay is shown. The Overview keeps the original scores.</p></div>`;
       for (const id of ['military', 'economy', 'diplomacy']) this.el(`aar-${id}`).innerHTML = note;
-      this.el('aar-replay').innerHTML = `<header class="topbar replay-bar" data-region="replay-top"><button type="button" class="bezel-btn" id="replay-exit" data-aar-tab="overview" aria-label="Back to the report" data-sfx="press">${icon('back')}</button><div class="lobby-title"><b>Replay</b><small>${esc(r.name || '')}</small></div></header><div class="replay-unavailable plate" data-region="replay-note">${note}</div>`;
+      this.el('aar-replay').innerHTML = `<header class="topbar replay-bar" data-region="replay-top"><button type="button" class="bezel-btn" id="replay-exit" data-aar-tab="overview" aria-label="Back to the report">${icon('back')}</button><div class="lobby-title"><b>Replay</b><small>${esc(r.name || '')}</small></div></header><div class="replay-unavailable plate" data-region="replay-note">${note}</div>`;
       return;
     }
     this.military(); this.economy(); this.diplomacy(); this.replayLayout();
   }
   overview() {
-    const r = this.report, colors = this.colors(), economic = r.rules.economyShare !== undefined;
-    const alliances = [...r.alliances].sort((a, b) => Number(b.won) - Number(a.won) || b.prestige - a.prestige);
+    const r = this.report, colors = this.colors();
+    const industry = (a, b) => b.industry - a.industry;
+    const alliances = r.alliances.filter(a => a.members.length > 1).sort((a, b) => Number(b.won) - Number(a.won) || b.economy - a.economy);
     const grouped = new Set(alliances.flatMap(a => a.members));
-    const independents = [...r.players].filter(p => !grouped.has(p.country)).sort((a, b) => b.prestige - a.prestige);
-    const memberRow = p => `<tr class="mem" data-result-country="${p.country}"><th scope="row">${insignia(p.country)}<span><b>${esc(this.country(p.country).name)}</b><small>${esc(this.seat(p.country))}${p.eliminatedAt !== null ? ' · fallen' : ''}</small></span></th><td>${p.land}</td>${economic ? `<td>${p.economy}</td>` : ''}<td class="c-forces">${p.troops}</td><td class="c-share">${p.victoryShare === undefined ? '—' : `${number(100 * p.victoryShare)}%`}</td><td class="c-earned">${number(p.maturity * 100)}%</td><td class="pr${p.prestige < 0 ? ' neg' : ''}">${signed(p.prestige)}</td></tr>`;
-    const rank = a => 1 + r.alliances.filter(s => s.economy > a.economy).length;
-    const placeTag = a => r.outcome.reason !== 'deadline' || r.outcome.draw || a.won || rank(a) > 3 ? '' : `<span class="tag">${rank(a) === 2 ? 'Second' : 'Third'}</span>`;
-    const body = alliances.map(a => `<tbody style="--c:${colors[a.id] || NEUTRAL}"><tr class="grp${a.won ? ' won' : ''}" data-result-alliance="${esc(a.id)}"><th scope="rowgroup"><i class="sw"></i><span class="grp-name">${esc(this.side(a.id))}</span>${a.won ? `<span class="tag">${icon('laurel')}Victor</span>` : r.outcome.draw ? '<span class="tag draw">Draw</span>' : placeTag(a)}</th><td>${a.provinces}</td>${economic ? `<td>${a.economy}</td>` : ''}<td class="c-forces">${a.members.reduce((n, id) => n + (this.player(id)?.troops || 0), 0)}</td><td class="c-share"></td><td class="c-earned"></td><td class="pr${a.prestige < 0 ? ' neg' : ''}">${signed(a.prestige)}</td></tr>${a.members.map(id => this.player(id)).filter(Boolean).sort((x, y) => y.prestige - x.prestige).map(memberRow).join('')}</tbody>`).join('')
-      + (independents.length ? `<tbody class="solo"><tr class="grp solo-head"><th scope="rowgroup" colspan="${economic ? 7 : 6}">Independent</th></tr>${independents.map(memberRow).join('')}</tbody>` : '');
+    const independents = r.players.filter(p => !grouped.has(p.country)).sort((a, b) => Number(b.result === 'win') - Number(a.result === 'win') || industry(a, b));
+    const result = p => `<td class="pr${p.result === 'loss' ? ' neg' : ''}">${RESULT[p.result]}</td>`;
+    const memberRow = p => `<tr class="mem" data-result-country="${p.country}"><th scope="row">${insignia(p.country)}<span><b>${esc(this.country(p.country).name)}</b><small>${esc(this.seat(p.country))}${p.eliminatedAt !== null ? ' · fallen' : ''}</small></span></th><td>${p.land}</td><td>${p.industry}</td><td class="c-forces">${p.troops}</td>${result(p)}</tr>`;
+    const body = alliances.map(a => `<tbody style="--c:${colors[a.id] || NEUTRAL}"><tr class="grp${a.won ? ' won' : ''}" data-result-alliance="${esc(a.id)}"><th scope="rowgroup"><i class="sw"></i><span class="grp-name">${esc(this.side(a.id))}</span>${a.won ? `<span class="tag">${icon('laurel')}Victor</span>` : r.outcome.draw ? '<span class="tag draw">Draw</span>' : ''}</th><td>${a.provinces}</td><td>${a.economy}</td><td class="c-forces">${a.members.reduce((n, id) => n + (this.player(id)?.troops || 0), 0)}</td><td></td></tr>${a.members.map(id => this.player(id)).filter(Boolean).sort(industry).map(memberRow).join('')}</tbody>`).join('')
+      + (independents.length ? `<tbody class="solo"><tr class="grp solo-head"><th scope="rowgroup" colspan="5">Independent</th></tr>${independents.map(memberRow).join('')}</tbody>` : '');
     const W = 520, H = 150, total = this.map.provinces.length || 1, scale = .7;
     const series = r.series || [];
     const lines = alliances.map(a => `<polyline points="${series.map(s => { const n = s.countries.filter(c => a.members.includes(c.country)).reduce((x, c) => x + c.land, 0); return `${(s.tick / Math.max(1, r.duration) * W).toFixed(1)},${(H - Math.min(1, n / total / scale) * H).toFixed(1)}`; }).join(' ')}" style="--c:${colors[a.id] || NEUTRAL}"><title>${esc(this.side(a.id))}</title></polyline>`).join('');
     const turning = (r.events || []).filter(e => KEY_EVENTS.includes(e.type));
     const totals = r.totals || {};
     this.el('aar-overview').innerHTML = `<div class="report-body">
-<section class="r-table"><h2 class="r-head">Final standings</h2><div class="r-scroll"><table id="aar-standings"><caption class="sr-only">Final standings by alliance: provinces, ${economic ? 'industry, ' : ''}forces, prize share, share earned and Prestige</caption><thead><tr><th scope="col">Alliance / country</th><th scope="col">Land</th>${economic ? '<th scope="col">Industry</th>' : ''}<th scope="col" class="c-forces">Forces</th><th scope="col" class="c-share">Share</th><th scope="col" class="c-earned">Earned</th><th scope="col">Prestige</th></tr></thead>${body}</table></div>
-<p class="fine">Alliance Prestige is the total of its members' Prestige. Prestige = payout − 100; a draw awards none. Share: each member's part of the alliance prize, by final industry. Earned: time held in the final allegiance. Forces include troops still marching at the finish.</p>
-<dl class="aar-facts"><div><dt>Length</dt><dd>${clock(r.duration)}</dd></div><div><dt>Battles</dt><dd>${totals.battles ?? '—'}</dd></div><div><dt>Prize awarded</dt><dd>${number(r.maximumPrize - r.unawardedPrize)}<small> / ${r.maximumPrize}</small></dd></div><div><dt>Unearned</dt><dd>${number(r.unawardedPrize)}</dd></div></dl></section>
+<section class="r-table"><h2 class="r-head">Final standings</h2><div class="r-scroll"><table id="aar-standings"><caption class="sr-only">Final standings by alliance: provinces, industry, forces and result</caption><thead><tr><th scope="col">Alliance / country</th><th scope="col">Land</th><th scope="col">Industry</th><th scope="col" class="c-forces">Forces</th><th scope="col">Result</th></tr></thead>${body}</table></div>
+<p class="fine">Everyone on the winning side wins. Industry is each country's completed factory levels at the end: its score within the side. Forces include troops still marching at the finish.</p>
+<dl class="aar-facts"><div><dt>Length</dt><dd>${clock(r.duration)}</dd></div><div><dt>Battles</dt><dd>${totals.battles ?? '—'}</dd></div><div><dt>Casualties</dt><dd>${totals.casualties === undefined ? '—' : number(totals.casualties)}</dd></div></dl></section>
 <section class="r-side"><h2 class="r-head">Share of the map</h2><figure class="chart land-chart"><svg viewBox="-4 -6 ${W + 8} ${H + 12}" preserveAspectRatio="none" role="img" aria-label="Provinces held by each alliance over the match"><line x1="0" x2="${W}" y1="0" y2="0" class="grid"/><line x1="0" x2="${W}" y1="${H / 2}" y2="${H / 2}" class="grid"/><line x1="0" x2="${W}" y1="${H}" y2="${H}" class="grid"/>${lines}</svg>
 <figcaption><span class="axis">Top line ${Math.round(scale * 100)}% of the map · 00:00 → ${clock(r.duration)}</span>${alliances.map(a => `<span style="--c:${colors[a.id] || NEUTRAL}"><i></i>${esc(this.side(a.id))}</span>`).join('')}</figcaption></figure>
 <h2 class="r-head">Turning points</h2><ol class="turning">${turning.map(e => { const tone = TONE[e.type] || 'neutral'; return `<li class="tone-${tone}"><button type="button" data-aar-seek="${e.tick}"${e.province ? ` data-aar-province="${e.province}"` : ''}><time>${clock(e.tick)}</time>${icon(TONE_ICON[tone] || 'dispatches')}<span>${esc(this.describe(e))}</span></button></li>`; }).join('')}</ol></section></div>`;
@@ -129,7 +122,7 @@ ${medal ? `<div class="v-medal">${icon('laurel')}<b>${signed(medal.value)}</b><s
   /** Chart panel: metric and comparison are brass chips (no browser form controls). */
   chartSection(kind, title, choices) {
     const s = this.chartState[kind];
-    return `<div class="aar-controls"><h2 class="r-head" id="${kind}-chart-title">${title}</h2><div class="seg" role="radiogroup" aria-label="Metric">${choices.map(([value, name]) => `<button type="button" role="radio" data-chart="${kind}" data-metric="${value}" aria-checked="${s.metric === value}" data-sfx="press">${name}</button>`).join('')}</div>
+    return `<div class="aar-controls"><h2 class="r-head" id="${kind}-chart-title">${title}</h2><div class="seg" role="radiogroup" aria-label="Metric">${choices.map(([value, name]) => `<button type="button" role="radio" data-chart="${kind}" data-metric="${value}" aria-checked="${s.metric === value}">${name}</button>`).join('')}</div>
 <div class="compare" role="radiogroup" aria-label="Compare"><button type="button" role="radio" class="chip" data-chart="${kind}" data-compare="all" aria-pressed="${s.compare === 'all'}" aria-checked="${s.compare === 'all'}">All</button>${this.report.players.map(p => `<button type="button" role="radio" class="chip" data-chart="${kind}" data-compare="${p.country}" aria-pressed="${s.compare === p.country}" aria-checked="${s.compare === p.country}" title="${esc(this.country(p.country).name)}">${insignia(p.country)}<span>${esc(faction(p.country).short)}</span></button>`).join('')}</div></div>
 <div id="${kind}-chart" class="aar-chart"></div><p class="fine">Sampled every 10 game seconds and at the finish; peaks use every tick.</p>`;
   }
@@ -151,7 +144,7 @@ ${medal ? `<div class="v-medal">${icon('laurel')}<b>${signed(medal.value)}</b><s
   military() {
     this.el('aar-military').innerHTML = this.chartSection('military', 'The balance of force', [['land', 'Territory'], ['troops', 'Forces in play']]) +
       this.metricsTable([['captures', 'Captures'], ['provincesLost', 'Losses'], ['battles', 'Battles'], ['peakLand', 'Peak land'], ['peakTroops', 'Peak forces']]) +
-      `<h2 class="r-head">Battle ledger</h2><p class="fine">${number(this.report.totals.casualties)} casualties in all, including rounds still running at the deadline. Shared battles are not split into individual kills.</p><div class="r-scroll aar-ledger"><table><thead><tr><th scope="col">Time</th><th scope="col">Province</th><th scope="col">Garrison</th><th scope="col">Arriving armies</th><th scope="col">Result</th><th scope="col"><span class="sr-only">Watch</span></th></tr></thead><tbody>${[...this.report.battles].reverse().map(b => `<tr><td>${clock(b.tick)}</td><th scope="row">${esc(this.place(b.province))}</th><td>${esc(this.country(b.previousOwner)?.name || 'Neutral')} · ${b.before}</td><td>${b.arrivals.map(a => `${esc(this.country(a.country).name)} ${a.amount}`).join(' + ')}</td><td>${esc(this.country(b.owner)?.name || 'Neutral')} · ${b.troops} survive${b.duration ? ` · ${b.duration}s battle` : ''}${b.industryLost ? ' · industry damaged' : ''}</td><td><button type="button" class="chip" data-aar-seek="${b.tick}" data-aar-province="${b.province}" aria-label="Watch ${esc(this.place(b.province))} at ${clock(b.tick)}">Watch</button></td></tr>`).join('')}</tbody></table></div>`;
+      `<h2 class="r-head">Battle ledger</h2><p class="fine">${number(this.report.totals.casualties)} casualties in all, including rounds still running at the deadline. Shared battles are not split into individual kills.</p><div class="r-scroll aar-ledger"><table><thead><tr><th scope="col">Time</th><th scope="col">Province</th><th scope="col">Garrison</th><th scope="col">Arriving armies</th><th scope="col">Result</th><th scope="col"><span class="sr-only">Watch</span></th></tr></thead><tbody>${[...this.report.battles].reverse().map(b => `<tr><td>${clock(b.tick)}</td><th scope="row">${esc(this.place(b.province))}</th><td>${esc(this.country(b.previousOwner)?.name || 'Neutral')} · ${b.before}</td><td>${b.arrivals.map(a => `${esc(this.country(a.country).name)} ${a.amount}`).join(' + ')}</td><td>${esc(this.country(b.owner)?.name || 'Neutral')} · ${b.troops} survive${b.duration ? ` · ${b.duration}s battle` : ''}</td><td><button type="button" class="chip" data-aar-seek="${b.tick}" data-aar-province="${b.province}" aria-label="Watch ${esc(this.place(b.province))} at ${clock(b.tick)}">Watch</button></td></tr>`).join('')}</tbody></table></div>`;
     this.chart('military');
   }
   economy() {
@@ -164,7 +157,7 @@ ${medal ? `<div class="v-medal">${icon('laurel')}<b>${signed(medal.value)}</b><s
   diplomacy() {
     const history = this.report.events.filter(e => KEY_EVENTS.includes(e.type));
     const wire = (this.report.messages || []).length ? `<h2 class="r-head">What they said</h2><p class="fine">Public AI seats disclose their world messages, their messages to other public AI seats, and chat in alliances where every member was a public AI seat. Everyone else stays private.</p><div class="wire-shell"><nav id="wire-thread-list" class="wire-thread-list" aria-label="Disclosed conversations"></nav><section class="wire-reader" aria-label="Conversation"><div class="wire-reader-head"><h3 id="wire-heading"></h3><label class="field">Find<span class="slot"><input id="wire-search" type="search" placeholder="Words or countries" autocomplete="off"></span></label></div><ol id="wire-messages" class="wire-messages" aria-live="polite"></ol></section></div>` : '';
-    this.el('aar-diplomacy').innerHTML = `${wire}<h2 class="r-head">Alliances through the match</h2><p class="fine">Only active membership counts. Private offers stay private.</p><div class="aar-tenures">${this.report.players.map(p => `<div class="aar-tenure-row"><b>${insignia(p.country)}${esc(faction(p.country).short)}</b><div class="aar-tenure-track">${this.report.tenures.filter(t => t.country === p.country && t.end > t.start).map(t => `<button type="button" style="left:${100 * t.start / this.report.duration}%;width:${100 * (t.end - t.start) / this.report.duration}%" class="${t.side.startsWith('solo:') ? 'independent' : ''}" data-aar-seek="${t.start}" title="${esc(this.side(t.side))} · ${clock(t.start)}–${clock(t.end)}" aria-label="${esc(this.side(t.side))}, ${esc(this.country(p.country).name)}, ${clock(t.start)} to ${clock(t.end)}">${esc(this.side(t.side))}</button>`).join('')}</div></div>`).join('')}</div><h2 class="r-head">Turning points</h2><p class="fine">Open a moment to see the map at that exact time.</p><div class="aar-timeline">${history.map(e => this.eventButton(e)).join('')}</div>`;
+    this.el('aar-diplomacy').innerHTML = `${wire}<h2 class="r-head">Turning points</h2><p class="fine">Open a moment to see the map at that exact time.</p><div class="aar-timeline">${history.map(e => this.eventButton(e)).join('')}</div>`;
     if (wire) { if (this.el('wire-search')) this.el('wire-search').value = this.wireQuery; this.renderWire(); }
   }
   wireKey(m) { return m.channel === 'world' ? 'world' : m.channel === 'alliance' ? `alliance:${m.side}` : `dm:${[m.from, m.to].sort().join(':')}`; }
@@ -186,13 +179,13 @@ ${medal ? `<div class="v-medal">${icon('laurel')}<b>${signed(medal.value)}</b><s
       b.append(name, meta); return b;
     }));
     const query = this.wireQuery.trim().toLocaleLowerCase();
-    const shown = selected.messages.filter(m => !query || [m.text, m.leaderName, this.country(m.from)?.name, this.country(m.to)?.name, m.side && this.side(m.side)].some(v => String(v || '').toLocaleLowerCase().includes(query)));
+    const shown = selected.messages.filter(m => !query || [m.text, this.country(m.from)?.name, this.country(m.to)?.name, m.side && this.side(m.side)].some(v => String(v || '').toLocaleLowerCase().includes(query)));
     this.el('wire-heading').textContent = `${selected.label} · ${shown.length} ${shown.length === 1 ? 'message' : 'messages'}`;
     if (!shown.length) { const empty = document.createElement('li'); empty.className = 'wire-empty'; empty.textContent = 'No disclosed messages match this view.'; body.replaceChildren(empty); return; }
     body.replaceChildren(...shown.map(m => {
       const li = document.createElement('li'); li.className = 'wire-letter'; li.dataset.channel = m.channel;
       const head = document.createElement('header'), who = document.createElement('b'), to = document.createElement('small');
-      who.textContent = `${this.country(m.from)?.name || m.from}${m.leaderName ? ` · ${m.leaderName}` : ''}`;
+      who.textContent = this.country(m.from)?.name || m.from;
       to.textContent = `${m.channel === 'dm' ? `To ${this.country(m.to)?.name || m.to}` : m.channel === 'alliance' ? this.side(m.side) : 'To the world'} · ${clock(m.tick)}`;
       head.append(who, to);
       const text = document.createElement('p'); text.textContent = m.text;
@@ -214,8 +207,7 @@ ${medal ? `<div class="v-medal">${icon('laurel')}<b>${signed(medal.value)}</b><s
       case 'dominance_broken': return `${this.side(e.side)}’s countdown stops. ${e.reason}`;
       case 'development_started': return `${c(e.country)} invests ${e.cost} in ${this.place(e.province)}.`;
       case 'development_completed': return `${this.place(e.province)} reaches industry ${e.level}.`;
-      case 'army_recalled': return `${c(e.country)} recalls ${e.amount} toward ${this.place(e.to)}.`;
-      case 'army_turned_around': return `${c(e.country)} turns ${e.amount} troops back toward ${this.place(e.to)}.`;
+      case 'army_recalled': return `${c(e.country)} ${e.reason ? 'turns back' : 'recalls'} ${e.amount} toward ${this.place(e.to)}.`;
       case 'eliminated': return `${c(e.country)} is eliminated.`;
       case 'finished': return 'The match ends. Final scores are fixed.';
       case 'dispatch': return `${c(e.from)} sends a disclosed message.`;
@@ -231,14 +223,14 @@ ${medal ? `<div class="v-medal">${icon('laurel')}<b>${signed(medal.value)}</b><s
     const marks = r.events.filter(e => ['alliance_activated', 'war_declared', 'peace_accepted', 'dominance', 'dominance_broken', 'finished', 'capture', 'eliminated'].includes(e.type))
       .map(e => `<i class="mark m-${e.type}" style="--x:${e.tick / Math.max(1, r.duration)}"></i>`).join('');
     const allianceChat = r.allianceChatRevealed && r.allianceChat?.length, chat = allianceChat || r.messages?.length;
-    this.el('aar-replay').innerHTML = `<header class="topbar replay-bar" data-region="replay-top"><button type="button" class="bezel-btn" id="replay-exit" data-aar-tab="overview" aria-label="Back to the after-action report" title="After-action report" data-sfx="press">${icon('back')}</button>
-<div class="lobby-title"><b>Replay · ${esc(r.name || '')}</b><small>${esc(r.outcome.draw ? 'Ended in a draw' : winner ? `${this.side(winner.id)} won` : `${this.side(r.outcome.winningSide)} won`)}</small></div>
+    this.el('aar-replay').innerHTML = `<header class="topbar replay-bar" data-region="replay-top"><button type="button" class="bezel-btn" id="replay-exit" data-aar-tab="overview" aria-label="Back to the after-action report" title="After-action report">${icon('back')}</button>
+<div class="lobby-title"><b>Replay · ${esc(r.name || '')}</b><small>${esc(r.outcome.draw ? 'Ended in a draw' : `${this.side(winner.id)} won`)}</small></div>
 <div class="clock-plaque"><div class="clock-face">${icon('clock')}<b id="replay-clock-now">00:00</b><small>/ ${clock(r.duration)}</small></div><output id="replay-clock" class="sr-only" aria-live="off">00:00 / ${clock(r.duration)}</output><span class="victory">Drag the timeline or press play</span></div>
-<button id="replay-expand" class="bezel-btn expand-button" type="button" aria-pressed="false" data-sfx="press"></button></header>
+<button id="replay-expand" class="bezel-btn expand-button" type="button" aria-pressed="false"></button></header>
 <p id="replay-loading" class="replay-loading" role="status" data-region="replay-loading">Open the replay to load the recorded map.</p>
 <div id="replay-stage" class="replay-stage" data-tick="0" hidden>
 <svg id="review-map" class="replay-map" viewBox="0 0 1280 680" role="group" aria-label="Replay map; select a province to inspect it"></svg>
-<div class="replay-overlay"><div class="replay-left"><div id="replay-key" class="replay-key" data-region="replay-key"></div><section id="replay-inspector" class="plate replay-inspector" data-region="replay-inspector" aria-live="polite" hidden></section></div><div class="camera replay-camera" data-region="replay-camera" role="group" aria-label="Replay map view"><button type="button" class="bezel-btn zoom-button" data-aar-map="in" aria-label="Zoom replay in" data-sfx="press">${icon('plus')}</button><button type="button" class="bezel-btn zoom-button" data-aar-map="out" aria-label="Zoom replay out" data-sfx="press">${icon('minus')}</button><button type="button" class="bezel-btn" data-aar-map="europe" aria-label="Europe" title="Europe" data-sfx="press">${icon('land')}</button><button type="button" class="bezel-btn" data-aar-map="world" aria-label="World view" title="World view" data-sfx="press">${icon('globe')}</button></div></div></div>
+<div class="replay-overlay"><div class="replay-left"><div id="replay-key" class="replay-key" data-region="replay-key"></div><section id="replay-inspector" class="plate replay-inspector" data-region="replay-inspector" aria-live="polite" hidden></section></div><div class="camera replay-camera" data-region="replay-camera" role="group" aria-label="Replay map view"><button type="button" class="bezel-btn zoom-button" data-aar-map="in" aria-label="Zoom replay in">${icon('plus')}</button><button type="button" class="bezel-btn zoom-button" data-aar-map="out" aria-label="Zoom replay out">${icon('minus')}</button><button type="button" class="bezel-btn" data-aar-map="europe" aria-label="Europe" title="Europe">${icon('land')}</button><button type="button" class="bezel-btn" data-aar-map="world" aria-label="World view" title="World view">${icon('globe')}</button></div></div></div>
 <aside class="replay-side" aria-label="Standings and history at this moment">
 <section class="replay-leaderboard" data-region="replay-standings" aria-label="Standings at this moment"><header class="plaque"><h2><button class="lb-toggle" type="button" aria-expanded="true"><span id="replay-standings-title">Standings at 00:00</span></button></h2><span class="lb-summary plaque-note"></span><div class="tabs lb-modes" role="group" aria-label="Rank"><button type="button" data-lb-mode="teams" aria-pressed="true">Teams</button><button type="button" data-lb-mode="players" aria-pressed="false">Players</button></div></header>
 <div class="lb-body"><div class="lb-columns" aria-hidden="true"><span>#</span><span>Power</span><span>Land</span><span>Troops</span></div><ol class="lb-rows"></ol><h3 class="lb-fronts-title">${icon('war')}War fronts <small class="lb-front-count"></small></h3><ul class="lb-fronts" aria-label="Wars between blocs"></ul></div></section>
@@ -247,10 +239,10 @@ ${medal ? `<div class="v-medal">${icon('laurel')}<b>${signed(medal.value)}</b><s
 <div class="replay-side-tabs tabs dark" role="tablist" aria-label="Standings or history"><button type="button" role="tab" aria-selected="true" data-replay-pane="standings">Standings</button><button type="button" role="tab" aria-selected="false" data-replay-pane="history">History</button></div>
 </aside>
 <section class="plate timeline" data-region="replay-timeline" aria-label="Replay controls">
-<div class="transport"><button type="button" class="bezel-btn" data-aar-transport="start" aria-label="Go to the opening" data-sfx="press">${icon('first')}</button><button type="button" class="bezel-btn" data-aar-transport="back" aria-label="Back ten game seconds" data-sfx="press">${icon('rewind')}</button><button type="button" class="play" id="replay-play" data-aar-transport="play" aria-label="Play replay" disabled data-sfx="press">${icon('play')}<span class="sr-only play-word">Play</span></button><button type="button" class="bezel-btn" data-aar-transport="forward" aria-label="Forward ten game seconds" data-sfx="press">${icon('forward')}</button><button type="button" class="bezel-btn" data-aar-transport="end" aria-label="Go to the final moment" data-sfx="press">${icon('last')}</button>
-<div class="seg speed" id="replay-speed" role="radiogroup" aria-label="Replay speed">${SPEEDS.map(s => `<button type="button" role="radio" data-speed="${s}" aria-checked="${s === this.speed}" data-sfx="press">${s}×</button>`).join('')}</div></div>
+<div class="transport"><button type="button" class="bezel-btn" data-aar-transport="start" aria-label="Go to the opening">${icon('first')}</button><button type="button" class="bezel-btn" data-aar-transport="back" aria-label="Back ten game seconds">${icon('rewind')}</button><button type="button" class="play" id="replay-play" data-aar-transport="play" aria-label="Play replay" disabled>${icon('play')}<span class="sr-only play-word">Play</span></button><button type="button" class="bezel-btn" data-aar-transport="forward" aria-label="Forward ten game seconds">${icon('forward')}</button><button type="button" class="bezel-btn" data-aar-transport="end" aria-label="Go to the final moment">${icon('last')}</button>
+<div class="seg speed" id="replay-speed" role="radiogroup" aria-label="Replay speed">${SPEEDS.map(s => `<button type="button" role="radio" data-speed="${s}" aria-checked="${s === this.speed}">${s}×</button>`).join('')}</div></div>
 <div class="scrub"><div class="track" style="--p:0">${marks}<i class="done"></i><b class="head"><span id="replay-head">00:00</span></b><label class="sr-only" for="replay-slider">Replay game time</label><input id="replay-slider" type="range" min="0" max="${r.duration}" value="0" step="1" disabled aria-valuetext="00:00"></div><div class="scale"><span>00:00</span><span>${clock(r.duration / 2)}</span><span>${clock(r.duration)}</span></div></div>
-<div class="next"><button type="button" class="chip" data-aar-event="previous" aria-label="Previous event" data-sfx="press">${icon('rewind')}</button><p id="replay-event-label">The opening position</p><button type="button" class="chip" data-aar-event="next" aria-label="Next event" data-sfx="press">${icon('forward')}</button></div>
+<div class="next"><button type="button" class="chip" data-aar-event="previous" aria-label="Previous event">${icon('rewind')}</button><p id="replay-event-label">The opening position</p><button type="button" class="chip" data-aar-event="next" aria-label="Next event">${icon('forward')}</button></div>
 </section>`;
     this.el('aar-replay').dataset.pane = 'standings';
     this.buildHistory();
@@ -386,7 +378,7 @@ ${medal ? `<div class="v-medal">${icon('laurel')}<b>${signed(medal.value)}</b><s
     if (p) {
       const incoming = board.armies.filter(a => a.to === p.id).sort((a, b) => a.arrivesAt - b.arrivesAt);
       const lastBattle = this.report.battles.filter(b => b.province === p.id && b.tick <= tick).at(-1);
-      setHTML(box, `<header class="plaque"><h2>${esc(this.place(p.id))}</h2><button type="button" class="bezel-btn mini" data-aar-inspect-close aria-label="Close" data-sfx="press">${icon('close')}</button></header><div class="inspector-body"><p>${p.owner ? insignia(p.owner) : ''}<span>${esc(this.country(p.owner)?.name || 'Neutral')}${p.owner ? ` · ${esc(this.seat(p.owner))}` : ''}</span></p><p><b>${p.troops}</b> troops · industry ${p.development}${p.route ? ` · recruits walk to ${esc(this.place(p.route))}` : ''}</p>${lastBattle ? `<p class="fine">Last battle ${clock(lastBattle.tick)}: ${lastBattle.troops} survived.</p>` : ''}<h3>Incoming waves</h3>${incoming.length ? incoming.slice(0, 4).map(a => `<p class="fine">${a.amount} ${esc(this.country(a.country).name)} · ${a.returning ? 'returning' : 'marching'} · ${clock(a.arrivesAt)}${a.arrivesAt > duration ? ' (after the finish)' : ''}</p>`).join('') : '<p class="fine">None on the way at this moment.</p>'}</div>`);
+      setHTML(box, `<header class="plaque"><h2>${esc(this.place(p.id))}</h2><button type="button" class="bezel-btn mini" data-aar-inspect-close aria-label="Close">${icon('close')}</button></header><div class="inspector-body"><p>${p.owner ? insignia(p.owner) : ''}<span>${esc(this.country(p.owner)?.name || 'Neutral')}${p.owner ? ` · ${esc(this.seat(p.owner))}` : ''}</span></p><p><b>${p.troops}</b> troops · industry ${p.development}</p>${lastBattle ? `<p class="fine">Last battle ${clock(lastBattle.tick)}: ${lastBattle.troops} survived.</p>` : ''}<h3>Incoming waves</h3>${incoming.length ? incoming.slice(0, 4).map(a => `<p class="fine">${a.amount} ${esc(this.country(a.country).name)} · ${a.returning ? 'returning' : 'marching'} · ${clock(a.arrivesAt)}${a.arrivesAt > duration ? ' (after the finish)' : ''}</p>`).join('') : '<p class="fine">None on the way at this moment.</p>'}</div>`);
     }
   }
   pause() {

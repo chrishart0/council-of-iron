@@ -9,7 +9,7 @@
 /* Victory band */
 .victory-band{flex:none;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:22px;padding:16px 24px;background:linear-gradient(180deg,#3d1b17,#2a1512);border-bottom:2px solid;border-image:var(--rim) 1}
 .after-action[data-verdict=defeat] .victory-band{background:linear-gradient(180deg,#22292b,#171c1e)}
-.after-action[data-verdict=armistice] .victory-band{background:linear-gradient(180deg,#1f3530,#15231f)}
+.after-action[data-verdict=draw] .victory-band{background:linear-gradient(180deg,#1f3530,#15231f)}
 .v-standards{display:flex;gap:10px}
 .v-standards figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:2px}
 .v-standards .insignia{width:48px;height:58px}
@@ -87,12 +87,6 @@
 .aar-ledger td:last-child{padding:3px 6px}.aar-ledger .chip{min-height:30px}
 .aar-accounting{margin-top:12px;padding:10px 14px;background:var(--well);border-left:3px solid var(--brass)}
 .aar-accounting p{margin:0 0 4px;font-size:16px}.aar-accounting b{color:var(--brass-hi)}
-.aar-tenures{display:flex;flex-direction:column;gap:4px}
-.aar-tenure-row{display:grid;grid-template-columns:130px minmax(0,1fr);align-items:center;gap:10px}
-.aar-tenure-row>b{display:flex;align-items:center;gap:6px;font-weight:600}.aar-tenure-row .insignia{width:18px;height:22px}
-.aar-tenure-track{position:relative;height:28px;background:#0f1416;box-shadow:inset 0 1px 3px #000}
-.aar-tenure-track button{position:absolute;top:3px;bottom:3px;overflow:hidden;padding:0 6px;font:600 13px var(--ui);color:var(--ink);background:var(--face);white-space:nowrap;text-overflow:ellipsis;border-right:1px solid #0008}
-.aar-tenure-track button.independent{background:#3a4346;color:var(--text-2)}
 .aar-timeline{display:flex;flex-direction:column}
 /* Disclosed messages of public AI seats (Diplomacy): conversations on the left, the thread on the right. */
 .wire-shell{display:grid;grid-template-columns:minmax(170px,230px) minmax(0,1fr);gap:0;min-height:260px;max-height:460px;border:1px solid #ffffff14;background:#0f1416aa}
@@ -200,11 +194,10 @@
   .r-table,.r-side{padding:0 10px 8px}.r-side{border:0}
   .after-action td,.after-action tbody th,.after-action thead th{padding:5px 6px;font-size:15px}
   #aar-standings .mem th{padding-left:12px}
-  #aar-standings .c-forces,#aar-standings .c-earned,#aar-standings .c-share{display:none}
+  #aar-standings .c-forces{display:none}
   #aar-standings .grp th{font-size:17px}
   .aar-facts{grid-template-columns:repeat(2,minmax(0,1fr))}
   .aar-panel:not(.aar-overview){padding:6px 10px 10px}
-  .aar-tenure-row{grid-template-columns:96px minmax(0,1fr)}
   .report-foot{padding-bottom:calc(10px + var(--safe-b))}
   .report-foot .btn{flex:1;padding:6px 8px}.report-foot .btn-primary{min-width:0;flex-basis:100%;order:-1}
   .report-foot [data-aar-copy]{display:none}

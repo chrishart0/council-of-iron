@@ -1,6 +1,6 @@
 /** Sound cue selection (v0.7; v0.9 follows the comms tiers). Pure: no DOM, Web Audio, clock or storage.
  * Cues are chosen only from things the viewer can already see. v0.9 tiers (public/comms-model.js):
- * ACTION (an offer, vote or peace offer that needs you) → the `dispatch` stinger; PERSONAL (a DM or alliance
+ * ACTION (an alliance or peace offer that needs you) → the `dispatch` stinger; PERSONAL (a DM or alliance
  * message to you) → the soft `chat` blip; headlines that affect you keep their banner stingers; WORLD
  * (other people's news, world chat) → silent. Threat music and your own orders are unchanged.
  */
@@ -11,13 +11,13 @@ import { threatening } from './relations.js';
  * A cue that names the viewer's own country gets +2 (see `mine`). */
 export const PRIORITY = {
   click: 1, march: 1, chat: 1,
-  battle: 2, industry_up: 2, industry_down: 2, dispatch: 2,
+  battle: 2, industry_up: 2, dispatch: 2,
   war: 3, alliance: 3, peace: 3, fallen: 3, countdown: 3, countdown_stop: 3, victory: 3, draw: 3, warning: 3,
   defeat: 5,
 };
 /** Minimum seconds between two plays of the same cue. */
 export const COOLDOWN = {
-  click: 0.06, march: 0.3, chat: 6, battle: 6, industry_up: 5, industry_down: 5, dispatch: 4,
+  click: 0.06, march: 0.3, chat: 6, battle: 6, industry_up: 5, dispatch: 4,
   war: 2.5, alliance: 2.5, peace: 2.5, fallen: 2.5, countdown: 5, countdown_stop: 5, warning: 8,
   victory: 0, draw: 0, defeat: 0,
 };
@@ -25,7 +25,7 @@ export const STINGER_GAP = 2.5;        // seconds before an equal-or-lower prior
 export const STINGER_WINDOW = [20, 4]; // at most 4 stingers in 20 s (priority ≥ 5 always passes)
 export const isStinger = cue => PRIORITY[cue] >= 2;
 
-const KNOWN = new Set(['war', 'peace', 'alliance', 'departure', 'dissolved', 'eliminated', 'major_battle', 'industry_up', 'industry_down', 'dominance', 'dominance_broken', 'finished']);
+const KNOWN = new Set(['war', 'peace', 'alliance', 'departure', 'dissolved', 'eliminated', 'major_battle', 'industry_up', 'dominance', 'dominance_broken', 'finished']);
 const request = (cue, mine = false) => ({ cue, priority: PRIORITY[cue] + (mine ? 2 : 0), mine });
 
 /** Cue for one classified headline. `viewer` = viewerOf(state) (you/side null for spectators).
@@ -45,7 +45,6 @@ export function headlineCue(item, viewer = {}) {
     case 'eliminated': return h.country === you ? request('defeat') : request('fallen');
     case 'major_battle': return request('battle', mine);
     case 'industry_up': return request('industry_up', mine);
-    case 'industry_down': return request('industry_down', mine);
     case 'dominance': return request('countdown', Boolean(viewer.side) && h.side === viewer.side);
     case 'dominance_broken': return request('countdown_stop', Boolean(viewer.side) && h.side === viewer.side);
     case 'finished':
@@ -64,7 +63,7 @@ export function eventCues(events, viewer = {}) {
     if (e.headline) { const r = headlineCue(e, viewer); if (r) out.push(r); continue; }
     if (!you || isWorldMessage(e)) continue; // WORLD: silent
     if (e.type === 'message' && (e.channel === 'dm' || e.channel === 'alliance') && e.from !== you) out.push(request('chat')); // PERSONAL
-    else if ((e.type === 'alliance_offer' || e.type === 'war_vote' || e.type === 'peace_vote' || e.type === 'peace_offered') && e.from !== you
+    else if ((e.type === 'alliance_offer' || e.type === 'peace_offered') && e.from !== you
       && !(e.fromRoster || []).includes(you)) out.push(request('dispatch', true)); // ACTION: a decision addressed to you
   }
   return out;

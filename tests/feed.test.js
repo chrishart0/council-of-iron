@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createGame, join, start, act, tick, observe, worldFeed, classifyHeadline, majorBattleThreshold, battleCasualties, HEADLINES } from '../src/engine.js';
+import { createGame, join, start, act, tick, observe, worldFeed, classifyHeadline, majorBattleThreshold, HEADLINES } from '../src/engine.js';
 import { feedItems, feedPage, headlineCopy } from '../public/feed-model.js';
 import { presentHeadline } from '../public/feed.js';
 const map = JSON.parse(readFileSync(new URL('../public/imperial-map.json', import.meta.url)));
 let next = 0;
-function game(ids = ['usa', 'britain', 'france']) {
+function game(ids = ['usa', 'britain', 'france', 'germany']) {
   const g = createGame({ id: `feed-${++next}`, name: 'Feed rules', hostId: ids[0] }, map);
   for (const id of ids) join(g, map, { profileId: id, name: id, country: id });
   start(g); return g;
@@ -27,7 +27,6 @@ test('major battle rule: max(20, ceil(3% of all troops on the map)); minor battl
   assert.deepEqual(major, { kind: 'major_battle', province: 'mexico', casualties: 30, worldTroops: 1000, threshold: 30,
     captured: true, owner: 'usa', previousOwner: 'britain' });
   assert.equal(classifyHeadline(battle(500), {}), null, 'no troop context, no guess');
-  assert.equal(battleCasualties(battle(42)), 42);
 });
 
 test('only public diplomatic, elimination, victory and top-tier industry events are headlines', () => {
@@ -40,7 +39,6 @@ test('only public diplomatic, elimination, victory and top-tier industry events 
     [{ type: 'eliminated', country: 'france' }, 'eliminated'],
     [{ type: 'dominance', side: 'coalition-1', winsAt: 200 }, 'dominance'],
     [{ type: 'finished', winningSide: null, draw: true, reason: 'deadline' }, 'finished'],
-    [{ type: 'industry_damaged', province: 'ruhr', owner: 'france', level: 2 }, 'industry_down'],
   ];
   for (const [e, kind] of kinds) assert.equal(classifyHeadline(e, { maxDevelopment: 3 }).kind, kind, e.type);
   // Player text never enters a headline: clients read the alliance name from the event itself.
@@ -90,7 +88,7 @@ test('large phased battles are headlines at the end of their tick; small ones ar
   const target = province(small, 'mexico'); Object.assign(target, { owner: 'britain', troops: 4, development: 2, nextRecruit: 1000 });
   province(small, 'west-us').troops = 24;
   send(small, 'usa', { type: 'declare_war', country: 'britain' });
-  const move = send(small, 'usa', { type: 'move', from: 'west-us', to: 'mexico', amount: 9 });
+  const move = send(small, 'usa', { type: 'march', from: 'west-us', to: 'mexico', amount: 9 });
   advance(small, move.arrivesAt + 40);
   const fought = small.events.filter(e => e.type === 'battle');
   assert.ok(fought.length >= 1);
@@ -100,7 +98,7 @@ test('large phased battles are headlines at the end of their tick; small ones ar
   Object.assign(province(large, 'mexico'), { owner: 'britain', troops: 80, nextRecruit: 5000 });
   province(large, 'west-us').troops = 160;
   send(large, 'usa', { type: 'declare_war', country: 'britain' });
-  const big = send(large, 'usa', { type: 'move', from: 'west-us', to: 'mexico', amount: 150 });
+  const big = send(large, 'usa', { type: 'march', from: 'west-us', to: 'mexico', amount: 150 });
   advance(large, big.arrivesAt + 200);
   const e = large.events.find(e => e.type === 'battle' && e.province === 'mexico');
   const h = observe(large, null).events.find(x => x.id === e.id).headline;
@@ -159,7 +157,6 @@ test('popup policy: a third-party war is a rail row, a war on the viewer is one 
   for (const item of kinds) assert.equal(presentHeadline(item, names, { you: null }).banner, null, item.headline.kind);
   assert.equal(affectsViewer({ headline: { kind: 'finished' } }, {}), true, 'the result is the one thing spectators are shown big');
   assert.equal(affectsViewer({ headline: { kind: 'dissolved', side: 'c9' } }, { you: 'usa', side: 'solo:usa:3', pastSides: ['c9'] }), true);
-  assert.equal(affectsViewer({ headline: { kind: 'industry_down', province: 'p', owner: 'usa' } }, { you: 'usa' }), true);
   assert.equal(affectsViewer({ headline: { kind: 'dominance', side: 'c' } }, { you: 'usa' }), true, 'a countdown is for or against every seat');
 });
 
@@ -169,7 +166,7 @@ test('a real elimination reaches every client as the same feed headline', () => 
   Object.assign(province(g, 'mexico'), { owner: 'britain', troops: 1, nextRecruit: 5000 });
   province(g, 'west-us').troops = 40;
   send(g, 'usa', { type: 'declare_war', country: 'britain' });
-  const move = send(g, 'usa', { type: 'move', from: 'west-us', to: 'mexico', amount: 30 });
+  const move = send(g, 'usa', { type: 'march', from: 'west-us', to: 'mexico', amount: 30 });
   advance(g, move.arrivesAt + 10);
   const fallen = worldFeed(g).items.find(i => i.type === 'eliminated');
   assert.deepEqual(fallen.headline, { kind: 'eliminated', country: 'britain' });

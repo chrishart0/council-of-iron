@@ -1,4 +1,4 @@
-import { journeyPoint, ownedPath } from './movement.js';
+import { journeyPoint, friendlyPath } from './movement.js';
 import { borderNetwork, insideRings, provinceRings } from './map-geometry.js';
 import { allianceColors, atWar, battleColors, coalitions, formingAlliances, relationsOf, teamColor, threatening, warKey } from './relations.js';
 import { faction } from './presentation.js';
@@ -13,12 +13,12 @@ function node(tag, attributes = {}) {
 }
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 /** Decorative on-map effects other modules may request with `atlas.effect(kind, data)`. */
-export const MAP_EFFECTS = Object.freeze(['industry_up', 'industry_down', 'captured', 'alliance', 'war', 'peace', 'eliminated']);
+export const MAP_EFFECTS = Object.freeze(['industry_up', 'captured', 'alliance', 'war', 'peace', 'eliminated']);
 /** Map colouring modes: country colours, or relations relative to a focus country. */
 export const MAP_MODES = Object.freeze(['political', 'diplomacy']);
 const RELATION = Object.freeze({ focus: '#d9b45a', ally: '#4f9e94', enemy: '#b8483c', neutral: '#8f8d80', none: '#6d716a' });
 /** Where the map key sits inside the map (the host may also mount it elsewhere). */
-export const LEGEND_PLACEMENTS = Object.freeze(['bottom-left', 'bottom-right', 'top-left', 'top-right']);
+export const LEGEND_PLACEMENTS = Object.freeze(['bottom-left', 'top-left']);
 /** Zoom limit in screen pixels per map unit, identical on every device (phones included). */
 export const MAX_PX_PER_UNIT = 14;
 /** Level of detail by on-screen pixels per map unit: country totals, merged counters, every province. */
@@ -27,7 +27,6 @@ const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
 const NEUTRAL = '#a5a28c', ALLIANCE = '#f6d77f', COUNTER_H = 21, PAD = 3;
 const SWORDS = 'M-6-6L5 5M2.4 6.6L6.6 2.4M6-6L-5 5M-6.6 2.4L-2.4 6.6';
 const FACTORY = 'M-8 7V-1l4.5 3V-1l4.5 3V-7h3.5V7Z';
-const CRACK = 'M-2-9l3 5-3 3 4 3-2 7';
 const ARROW = 'M-6.5-5.5L7.5 0-6.5 5.5-3 0Z';
 const counterWidth = troops => Math.max(32, String(troops).length * 7 + 15);
 const networks = new WeakMap();
@@ -677,14 +676,13 @@ export class Atlas {
     for (const edge of this.seas.children) edge.classList.toggle('selected-connection', edge.dataset.edge.split('|').includes(source));
     this.connections.replaceChildren();
     for (const id of neighbors) this.connections.append(node('path', { d: this.path(source, id), class: id === destination ? 'target-connection' : 'adjacent-connection', ...(id === destination ? { 'marker-end': `url(#${this.prefix}march-head)` } : {}) }));
-    // A long march: the controlled route through your own provinces, leg by leg.
-    if (source && destination && !neighbors.includes(destination) && state.rules?.distanceMovement && state.you) {
-      const route = ownedPath(this.map, state.provinces, state.travelTimes, state.you, source, destination, true) || [];
+    // A longer march: the quickest route through your own and allied land, leg by leg (the server's route).
+    if (source && destination && !neighbors.includes(destination) && state.you && state.travelTimes) {
+      const route = friendlyPath(state, state.you, source, destination)?.path || [];
       route.forEach((id, i) => this.connections.append(node('path', { d: this.path(i ? route[i - 1] : source, id), class: 'target-connection route-leg',
         ...(i === route.length - 1 ? { 'marker-end': `url(#${this.prefix}march-head)` } : {}) })));
     }
     this.routes.replaceChildren();
-    for (const p of state.provinces) if (p.route && (p.owner === state.you || p.id === source)) this.routes.append(node('path', { d: this.path(p.id, p.route), class: 'recruit-connection', 'marker-end': `url(#${this.prefix}march-head)` }));
     // Your rally points (private to you): a dashed arrow in your colour from source to rally province.
     for (const r of state.rallies || []) this.routes.append(node('path', { d: this.path(r.from, r.to), class: 'rally-halo' }), node('path', { d: this.path(r.from, r.to), stroke: this.countries.get(r.country)?.color || NEUTRAL,
       class: `rally-connection${r.status === 'paused' ? ' paused' : ''}`, 'data-rally': r.from, 'marker-end': `url(#${this.prefix}march-head)` }));
@@ -939,15 +937,13 @@ export class Atlas {
       const province = typeof data.province === 'string' && this.places.get(data.province);
       const g = node('g', { class: `map-effect fx-${kind.replace('_', '-')}${still ? ' still' : ''}` });
       let point = null;
-      if (kind === 'industry_up' || kind === 'industry_down') {
+      if (kind === 'industry_up') {
         if (!province) return false;
-        const up = kind === 'industry_up';
         // Ring around the counter; the badge rises above it so the troop number stays readable.
         g.append(node('circle', { class: 'fx-ring', r: 24 }));
-        const badge = node('g', { transform: 'translate(0 -34)' }), icon = node('g', { class: up ? 'fx-rise' : 'fx-burst' });
+        const badge = node('g', { transform: 'translate(0 -34)' }), icon = node('g', { class: 'fx-rise' });
         icon.append(node('circle', { class: 'fx-disc', r: 13 }));
-        if (!up) for (const [cx, cy, r] of [[-6, -5, 7], [6, -8, 6], [0, 2, 8]]) icon.append(node('circle', { class: 'fx-smoke', cx, cy, r }));
-        icon.append(node('path', { class: up ? 'fx-icon' : 'fx-crack', d: up ? FACTORY : CRACK, transform: 'scale(1.25)' }));
+        icon.append(node('path', { class: 'fx-icon', d: FACTORY, transform: 'scale(1.25)' }));
         badge.append(icon); g.append(badge);
         const level = Number(data.level);
         if (Number.isInteger(level) && ROMAN[level]) { const t = node('text', { class: 'fx-level', y: -54 }); t.textContent = `Industry ${ROMAN[level]}`; g.append(t); }
@@ -1068,7 +1064,7 @@ export class Atlas {
   dragTo(clientX, clientY) {
     const from = this.gesture?.command; if (!from) return;
     if (!this.dragging) this.dragHooks?.begin?.(from);
-    // Legal targets: the optional drag hook (neighbours plus provinces reached through your own land), else neighbours.
+    // Legal targets: the optional drag hook (neighbours plus provinces reached through your own and allied land), else neighbours.
     const neighbors = this.dragHooks?.targets?.(from) || this.places.get(from)?.neighbors || [], point = this.coordinates(clientX, clientY), px = this.svg.getScreenCTM()?.a || 1;
     const el = document.elementFromPoint(clientX, clientY);
     let to = el?.closest?.('[data-province]')?.dataset.province || null;

@@ -127,18 +127,9 @@ def main():
                 page.locator('#fill-bots').click()
                 expect(page.locator('#room-label')).to_contain_text('8/8')
                 page.locator('#start-match').click()
-                expect(page.locator('#phase')).to_have_text('Opening council')
-                expect(page.locator('#opening-countdown')).to_contain_text('until the campaign begins')
-                page.locator('#leader-name').fill('President Meridian')
-                page.locator('#opening-message').fill('The republic enters the council with open eyes and steady resolve.')
-                page.locator('#opening-form button[type=submit]').click()
-                expect(page.locator('#opening-form')).to_be_hidden()
-                expect(page.locator('[data-country-seat="usa"] small')).to_contain_text('Ready')
-                cli('opening','Envoy Ash','Britain comes to listen, bargain, and stand by its allies.')
-                expect(page.locator('#phase')).to_have_text('In session')
-                opening=[e for e in http(f'/api/games/{room}?after=0')['events'] if e['type']=='message' and e.get('opening')]
-                assert {e['from'] for e in opening}==set(p['id'] for p in http(f'/api/games/{room}')['players']) and all(e['untrusted'] for e in opening)
-                report['assertions'].append('Separate CLI process joined Britain; six practice bots filled seats; host started the opening council; the browser and the CLI each locked a leader and a world introduction (bots got defaults), and the match began when all were ready.')
+                expect(page.locator('#phase')).to_have_text('In session')  # Start means start
+                assert http(f'/api/games/{room}')['status']=='running'
+                report['assertions'].append('Separate CLI process joined Britain; six practice bots filled seats; the host pressed Start and the match began at once.')
                 if args.gif:
                     page.evaluate('''() => { const note=document.createElement('div');note.textContent='ACTUAL BROWSER CAPTURE · 12× TEST CLOCK · HEURISTIC AGENTS';note.style.cssText='position:fixed;right:18px;bottom:10px;z-index:20;padding:6px 10px;background:#142c34ee;border:1px solid #c6a87280;color:#e4d6ae;font:9px system-ui;letter-spacing:.7px;border-radius:3px;pointer-events:none';document.body.append(note); }''')
                 capture(page,800)
@@ -149,7 +140,7 @@ def main():
                 if page.locator('#coach').is_visible():page.locator('#coach-skip').click()  # first-match tips (covered by ui-browser)
                 order(page,'west-us','mexico')
                 page.locator('[data-fraction="0.5"]').click()
-                expect(page.locator('#order-details')).to_contain_text('Risk-style rounds')
+                expect(page.locator('#order-details')).to_contain_text('dice rounds')
                 expect(page.locator('#sound-control')).to_have_attribute('data-loaded','ogg')  # decoded after the first click
                 page.locator('#primary').click()
                 confirmed(page,'Sent')
@@ -162,13 +153,15 @@ def main():
                 expect(page.locator('#comms .cx-rows [data-kind="war"]').first).to_contain_text('British Empire')
                 close_comms(page)
                 report['assertions'].append('A CLI war declaration appeared as a war marker in the browser’s World thread (the history).')
-                cli('move','england','north-france','6')
-                order(page,'central-us','west-us')
-                page.locator('#card-body details[data-part="route"] summary').click()
-                page.locator('#set-route').click()
-                province(page,'central-us');page.locator('#card-size').click()
-                expect(page.locator('#card-body')).to_contain_text('Recruitment arrow: new recruits',timeout=10000)
-                report['assertions'].append('Browser and CLI committed armies; browser set a standing reinforcement route.')
+                cli('march','north-france','6','england')
+                province(page,'central-us');page.locator('#rally-province').click()
+                confirmed(page,'Tap one of your provinces')
+                page.mouse.click(*centre(page.locator('#marker-west-us .counter-body')))
+                confirmed(page,'Rally set')
+                expect(page.locator('#map [data-rally="central-us"]').first).to_be_attached(timeout=10000)
+                province(page,'central-us');expect(page.locator('#rally-province')).to_contain_text('Rally →')
+                page.keyboard.press('Escape')
+                report['assertions'].append('Browser and CLI committed armies; the browser set a rally point (Central US → West US) that the map draws.')
                 capture(page,1000)
                 country_card(page,'britain')
                 page.locator('#primary').click()  # Propose alliance: an inline name field with a default
@@ -203,7 +196,7 @@ def main():
                 for cid in enemies:expect(page.locator(f'#lb-rows .lb-row[data-id="{cid}"]')).to_have_attribute('data-relation','enemy',timeout=5000)
                 page.locator('[data-lb-mode="teams"]').click()
                 report['assertions'].append(f'Relations: the HUD names the alliance (Atlantic Accord); the leaderboard marks Britain as ally and {enemies or "nobody"} as enemies, matching the public war list.')
-                report['assertions'].append('Browser proposed coalition; CLI accepted; public notice elapsed; both shared the coalition and payout projection.')
+                report['assertions'].append('Browser proposed an alliance; CLI accepted; after the public notice both shared the alliance.')
                 capture(page,1000)
                 # Cancellation must not file an accidental irreversible departure.
                 page.locator('#hud-standard').click();page.locator('#card-actions button',has_text='Leave alliance').click()
@@ -230,7 +223,7 @@ def main():
                     if not agent_state['hasMore']:break
                 assert any(e.get('text')=='Hold the Atlantic. This dispatch is private.' for e in agent_events)
                 cli('chat','dm','usa','<img src=x onerror="window.INJECTED=true"> Agreed. I will hold.')
-                page.wait_for_timeout(10000/12+200)  # shared chat cooldown on the 12x test clock
+                page.wait_for_timeout(2000/12+200)  # one message per 2 game seconds (anti-spam) on the 12x test clock
                 cli('chat','world','<img src=x onerror="window.INJECTED=true"> The envoy speaks to all.')
                 open_thread(page,'world')
                 expect(page.locator('#comms .cx-msg').last).to_contain_text('The envoy speaks to all.',timeout=10000)
@@ -370,8 +363,12 @@ def main():
                 assert json.loads(stdout)['scores']==result['outcome']['scores']
                 report['assertions'].append('Wall-clock match reached a final result; browser and external agent observed identical final scores.')
                 page.locator('#aar-back').click()
-                expect(page.locator('#standings')).to_contain_text('Browser Commander')
-                report['assertions'].append('Persistent Prestige standings included the browser player after returning to the rooms.')
+                page.locator('#tab-standings').click()
+                me=next(p for p in http('/api/standings')['standings'] if p['name']=='Browser Commander')
+                expect(page.locator('#standings .standing-row',has_text='Browser Commander')).to_contain_text(f"{me['wins']}–{me['draws']}–{me['losses']}")
+                assert me['matches']==1 and me['wins']==(next(s for s in result['outcome']['scores'] if s['country']=='usa')['result']=='win'),me
+                page.locator('#tab-rooms').click()
+                report['assertions'].append('The win–draw–loss record includes the browser player after returning to the rooms.')
                 # Local UI interactions: distinct source selection, keyboard tabs and a real next room.
                 page.locator('#room-name').fill('Second Council')
                 page.locator('#create-form button[type=submit]').click()
@@ -380,10 +377,6 @@ def main():
                 page.locator('#join-form button').click()
                 page.locator('#fill-bots').click()
                 page.locator('#start-match').click()
-                expect(page.locator('#phase')).to_have_text('Opening council')
-                page.locator('#leader-name').fill('President Meridian')
-                page.locator('#opening-message').fill('A second council meets under the republic’s watch.')
-                page.locator('#opening-form button[type=submit]').click()
                 expect(page.locator('#phase')).to_have_text('In session')
                 expect(page.locator('#card')).to_be_hidden()
                 if page.locator('#coach').is_visible():page.locator('#coach-skip').click()
@@ -454,13 +447,13 @@ def main():
                 order(page,'west-us','east-us')
                 expect(page.locator('#primary')).to_contain_text('Reinforce')
                 expect(page.locator('#order-details')).to_contain_text('Via',timeout=5000)
-                expect(page.locator('#primary')).to_be_enabled(timeout=10000)  # the three-orders-per-ten-seconds limit may still be recovering
+                expect(page.locator('#primary')).to_be_enabled(timeout=10000)
                 page.screenshot(path=str(artifacts/'10-long-march.png'))
                 page.locator('#primary').click();confirmed(page,'Sent')
                 deadline=time.monotonic()+8
-                while time.monotonic()<deadline and not any(a.get('controlledMarch') and a['path'][-1]=='east-us' for a in http(f'/api/games/{room2}')['armies']):page.wait_for_timeout(250)
-                assert any(a.get('controlledMarch') and a['path'][-1]=='east-us' for a in http(f'/api/games/{room2}')['armies'])
-                report['assertions'].append('Browser sent a long march from West US to East US through its own Central US: the card showed the controlled route and the server moved one transit column along it.')
+                while time.monotonic()<deadline and not any(a.get('path') and a['path'][-1]=='east-us' for a in http(f'/api/games/{room2}')['armies']):page.wait_for_timeout(250)
+                assert any(a.get('path') and a['path'][-1]=='east-us' for a in http(f'/api/games/{room2}')['armies']),lane(page).inner_text()
+                report['assertions'].append('Browser sent a long march from West US to East US through its own land: the card showed the route and the server moved one column along it.')
                 page.set_viewport_size({'width':390,'height':844})
                 assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1')
                 page.screenshot(path=str(artifacts/'09-mobile-orders.png'),full_page=True)
@@ -478,8 +471,8 @@ def main():
                 practice=http('/api/games')['games'][0]['id']
                 players=http(f'/api/games/{practice}')['players']
                 assert next(p for p in players if p['id']=='japan')['kind']=='human' and sum(p['kind']=='bot' for p in players)==7
-                page.locator('#start-match').click();expect(page.locator('#phase')).to_have_text('Opening council')
-                report['assertions'].append('A host who had not chosen a country took Japan and filled the other seven seats with bots in one step, then began the opening council.')
+                page.locator('#start-match').click();expect(page.locator('#phase')).to_have_text('In session')
+                report['assertions'].append('A host who had not chosen a country took Japan and filled the other seven seats with bots in one step, then started the match.')
 
                 assert not report['pageErrors'],report['pageErrors']
                 if args.gif:

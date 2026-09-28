@@ -173,7 +173,7 @@ export class SoundBoard {
     this.tension = tensionActive(state); this.applyGains();
   }
   /** The viewer's own committed order (the toast is the visible counterpart). */
-  order(action) { this.play([{ cue: ['move', 'transit', 'attack'].includes(action?.type) ? 'march' : 'click', priority: 1, mine: true }]); }
+  order(action) { this.play([{ cue: action?.type === 'march' ? 'march' : 'click', priority: 1, mine: true }]); }
   leave() { this.room = null; this.threats = null; this.tension = false; this.applyGains(); }
   play(requests) {
     if (!requests.length) return;

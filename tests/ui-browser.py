@@ -348,7 +348,7 @@ HOSTILE_NAME='''async () => {
   const host=document.createElement('div');host.style.cssText='position:fixed;left:0;top:0;width:800px;height:425px';
   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.id='hostile-test-map';svg.style.cssText='width:800px;height:425px';
   host.append(svg);document.body.append(host);
-  const atlas=new Atlas(svg,map,()=>{},{legend:{placement:'top-right'}});atlas.update(state,null,null);atlas.world();
+  const atlas=new Atlas(svg,map,()=>{},{legend:{placement:'top-left'}});atlas.update(state,null,null);atlas.world();
   await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));atlas.layout();
   const labels=[...svg.querySelectorAll('.alliance-label')].map(e=>e.textContent),legend=host.querySelector('.atlas-legend').textContent;
   const focus=atlas.setRelationFocus('germany');atlas.setMapMode('diplomacy');
@@ -366,7 +366,7 @@ HOSTILE_NAME='''async () => {
 def hostile_name_check(page,report):
     result=page.evaluate(HOSTILE_NAME)
     assert not result['injected'] and result['legendHasName'],result
-    assert 'at-top-right' in result['placement'] and 'at-bottom-left' not in result['placement'],result
+    assert 'at-top-left' in result['placement'] and 'at-bottom-left' not in result['placement'],result
     assert all(len(l)<=28 for l in result['labels']),result
     assert result['focus']=='germany' and not result['wrong'] and result['bad'] and not result['leaked'],result
     report['assertions'].append('A hostile alliance name renders only as capped text (no element injection); setRelationFocus/setMapMode recolour focus, allies, enemies and neutrals and reject unknown values.')
@@ -551,7 +551,7 @@ def relation_checks(page,server,report,capture):
     rows=open_thread(page,'world');expect(rows.locator('[data-kind="war"]').last).to_contain_text('French Republic',timeout=5000);close_comms(page)
     state=page.evaluate("fetch('/api/games/ui-war').then(r=>r.json())");assert 'britain:france' in state['wars'],state['wars']
     mine=page.evaluate("fetch('/api/games/ui-war',{headers:{Authorization:'Bearer '+JSON.parse(localStorage.getItem('coi.identity')).token}}).then(r=>r.json())")
-    assert any(o['type']=='move' and o['from']=='england' and o['to']=='north-france' for o in mine['commandBudget']['reserved']),mine['commandBudget']
+    assert any(o['type']=='march' and o['from']=='england' and o['to']=='north-france' for o in mine['orders']),mine['orders']
     page.wait_for_timeout(1200);assert page.evaluate('window.__banners.length')==1 and 'war declared' in page.evaluate('window.__banners[0]').lower(),page.evaluate('window.__banners')
     report['assertions'].append('Declare war & march (solo, keyboard): a neutral target makes the one primary read “Declare war on France & send N”; the confirmation names the whole target side with Cancel focused; Escape keeps the peace; confirming declares the war and reserves the march in one order, adds the war marker to the World thread and shows exactly one banner (it affects this seat).')
     report['assertions'].append('Relations (recorded war room, Britain at war with the USA): every leaderboard row’s relation marker matches the public war list; Powers always lists exactly the war fronts under the rows (count shown; every front row visible and hit-testable at 1366×768 and 1920×1080), marks the one involving the viewer and frames it on the map; country cards state AT WAR / NEUTRAL with Offer peace / Propose alliance as the primary; the order card states the target owner’s relation and its owner line opens that country’s card.')
@@ -575,10 +575,12 @@ def relation_checks(page,server,report,capture):
     rows=open_thread(page,'world');expect(rows.locator('[data-kind="alliance"]').last).to_contain_text(HOSTILE_ALLIANCE);assert rows.locator('b[onclick]').count()==0;close_comms(page)
     page.locator('#hud-standard').click();expect(page.locator('#card-title')).to_have_text(HOSTILE_ALLIANCE);expect(page.locator('#card-status')).to_contain_text('Qing')
     check_layout(page,'1366x768 alliance active');capture('18-alliance-relations.png');page.keyboard.press('Escape')
-    # Coalition member: war on a neutral country is a vote, never a march.
+    # Any member speaks for the alliance: a coalition member declares war directly, and the confirmation names the allies drawn in.
     page.locator('#lb-rows .lb-row[data-id="germany"]').click()
-    expect(page.locator('#card-actions')).to_contain_text('Call war vote');page.keyboard.press('Escape')
-    report['assertions'].append('As a coalition member, war on a neutral country is offered as “Call war vote” (no march is sent without the vote).')
+    page.locator('#card-actions button',has_text='Declare war').click();dialog=page.locator('#confirm-dialog');expect(dialog).to_be_visible()
+    expect(dialog.locator('.war-confirm')).to_contain_text('Your allies join you');expect(dialog.locator('.war-confirm')).to_contain_text('Qing')
+    page.keyboard.press('Escape');expect(dialog).to_be_hidden();page.keyboard.press('Escape')
+    report['assertions'].append('As an alliance member, war on a neutral country is one Declare war with a confirmation that names the allies drawn in (Escape keeps the peace).')
     expect(page.locator('#map .map-effect')).to_have_count(0,timeout=6000)  # the live alliance effect ends before the effect-scope check
     report['assertions'].append('Alliances from the country card: Propose alliance → name → Send; the card then reads ALLIANCE OFFER PENDING, then ALLIANCE FORMING (dashed band in the leaderboard) during the notice, then active in the HUD, the leaderboard and the alliance card; bands use the same colour as the shared allianceColors helper and the World thread shows the alliance marker (relations.js, also used by the map blocs); a hostile alliance name renders only as text.')
 
@@ -677,7 +679,7 @@ EFFECT_CHECK='''async () => {
   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.id='effect-test-map';svg.setAttribute('viewBox','0 0 1280 680');svg.style.cssText='width:640px;height:340px';
   host.append(svg);document.body.append(host);
   const atlas=new Atlas(svg,map,()=>{});atlas.update(state,null,null);
-  const good=[['industry_up',{province:'ruhr',level:3}],['industry_down',{province:'ruhr',level:2}],['captured',{province:'alpine-france',owner:'germany'}],
+  const good=[['industry_up',{province:'ruhr',level:3}],['captured',{province:'alpine-france',owner:'germany'}],
     ['alliance',{countries:['britain','france']}],['war',{from:['germany'],to:['france']}],['peace',{from:['usa'],to:['japan']}],['eliminated',{country:'qing'}]];
   const bad=[[],['nope',{}],['industry_up'],['industry_up',null],['industry_up',{province:'atlantis'}],['captured',{province:'ruhr',owner:'<b>x</b>'}],
     ['alliance',{countries:'britain'}],['alliance',{countries:['britain']}],['war',{from:['x'],to:['y']}],['peace',{from:null,to:[{}]}],['eliminated',{country:{}}],['eliminated',{country:'atlantis'}]];
@@ -704,9 +706,9 @@ EFFECT_CHECK='''async () => {
 
 def effect_checks(page,report):
     result=page.evaluate(EFFECT_CHECK)
-    assert result['kinds']==['industry_up','industry_down','captured','alliance','war','peace','eliminated'],result
+    assert result['kinds']==['industry_up','captured','alliance','war','peace','eliminated'],result
     assert all(result['accepted']),result;assert not any(result['rejected']),result;assert not result['threw']
-    assert result['count']>=7 and result['hidden']=='true' and result['ids']==0 and result['leaked']==0,result
+    assert result['count']>=6 and result['hidden']=='true' and result['ids']==0 and result['leaked']==0,result
     assert result['still'] and result['animations']==0,result
     assert result['pacificTrail']<640 and result['pacificMarkerFromOrigin']<=result['shortWay']/2+2,result
     report['assertions'].append('atlas.effect exposes the supported kinds, draws aria-hidden effects inside its own map instance only, returns false for unknown kinds/ids/malformed data without throwing, and is a static highlight under reduced motion.')
@@ -1075,10 +1077,7 @@ def main():
             select(page,'england','low-countries','peek');camera(page,'world');capture('06-order-world.png')
             # Templates with authored static symbols cannot execute arbitrary player inputs.
             ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
-            select(page,'england','midlands','full');page.locator('#card-body details[data-part="route"] summary').click();expect(page.locator('#set-route')).to_be_visible()
-            page.wait_for_timeout(850);assert page.locator('#card-body details[data-part="route"]').get_attribute('open') is not None
-            page.keyboard.press('Escape')
-            report['assertions'].append('Order, own-province and country cards render in the same card; the recruitment disclosure in "More" stays open through refresh; SVG IDs are unique.')
+            report['assertions'].append('Order, own-province and country cards render in the same card; SVG IDs are unique.')
             narrow=context.new_page();narrow.set_viewport_size({'width':390,'height':844})
             if args.bridge:load_bridge(narrow,url,{'coi.identity':json.dumps(identity)})
             else:narrow.goto(url)
@@ -1101,35 +1100,31 @@ def main():
             before=len(spy(page,'cues'))
             personal=page.locator('#toasts .cx-toast[data-tier="personal"]')
             threat=page.locator('#toasts .cx-toast[data-tier="action"]')
-            # Russia's army (at war with Britain's alliance) lands on the Netherlands at 08:50: within 30 s it is an ACTION.
+            # Russian columns (at war with Britain's alliance) land on Britain's provinces: within 30 s each is an ACTION.
             server.stdin.write('505\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==505
-            expect(threat).to_contain_text('attacks Netherlands',timeout=5000)
+            expect(threat).to_contain_text(re.compile('attacks (Netherlands|Northern India)'),timeout=5000)
             check_layout(page,'1600x1000 action toast')
-            threat.locator('[data-do="dismiss"]').click();expect(threat).to_have_count(0)
+            threat.locator('[data-do="dismiss"]').click()
             capture('11-incoming-attack.png')
-            # A recorded defence: Russia's 9 troops break on Northern India (a PERSONAL notice).
+            # Tick 579: Russia breaks on Northern India in a major battle: a PERSONAL notice with the troops left, a banner
+            # (it is Britain's battle) and exactly one audible cue.
+            page.wait_for_timeout(3000)  # past the 2.5 s stinger gap after the warning cue, as in real time
+            before=len(spy(page,'cues'))
             server.stdin.write('587\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==587
             expect(personal).to_contain_text('Line held · Northern India',timeout=8000)
-            expect(personal).to_contain_text('85 troops')
-            camera(page,'world');capture('12-line-held.png')
-            # Tick 646: France takes the Rhineland in a major battle (a World row; not Britain's battle, so no banner) and
-            # Britain's alliance starts a victory countdown (a banner: it affects every seat); exactly one audible cue.
-            page.wait_for_timeout(3000)  # past the 2.5 s stinger gap after the Line held cue, as in real time
-            before=len(spy(page,'cues'))
-            server.stdin.write('647\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==647
-            expect(page.locator('#declaration')).to_contain_text('holds 60%',timeout=5000)
+            expect(personal).to_contain_text('43 troops')
+            expect(page.locator('#declaration')).to_contain_text('Major battle at Northern India',timeout=5000)
             page.wait_for_timeout(1600);fresh_cues=spy(page,'cues')[before:]
             assert len([c for c in fresh_cues if c['audible']])==1,fresh_cues
-            report['sound']={'tick646':fresh_cues}
-            report['assertions'].append(f'The live tick-646 headlines (a major battle elsewhere and your alliance’s victory countdown) chose exactly one audible cue ({[c["cue"] for c in fresh_cues if c["audible"]][0]}).')
-            page.screenshot(path=str(out/'13-countdown-banner.png'))
+            report['sound']={'tick579':fresh_cues}
+            report['assertions'].append(f'The live tick-579 headline (a major battle on your own province) chose exactly one audible cue ({[c["cue"] for c in fresh_cues if c["audible"]][0]}).')
+            camera(page,'world');capture('12-line-held.png')
+            page.screenshot(path=str(out/'13-battle-banner.png'))
             check_layout(page,'1600x1000 banner')
-            server.stdin.write('657\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==657
             rows=open_thread(page,'world')
-            expect(rows.locator('[data-kind="major_battle"]').last).to_contain_text('Rhineland')
-            expect(rows.locator('[data-kind="dominance_broken"]').last).to_contain_text('Countdown stopped',timeout=5000)
+            expect(rows.locator('[data-kind="major_battle"]').last).to_contain_text('Northern India')
             close_comms(page)
-            report['assertions'].append('Recorded position stepped live: a hostile army due within 30 s is the one ACTION toast; a defence you won is a PERSONAL notice with the troops left; a major battle (casualties above max(20, 3% of all troops)) is a World row; your alliance’s victory countdown is a banner, and its end is a “Countdown stopped” row.')
+            report['assertions'].append('Recorded position stepped live: a hostile army due within 30 s is the one ACTION toast; a defence you won is a PERSONAL notice with the troops left and, as a major battle (casualties above max(20, 3% of all troops)) on your land, a banner and a World row.')
             feed_checks(page,report)
             page.wait_for_timeout(900);before=len(spy(page,'cues'))
             go_back(page);page.locator('[data-room="ui-fixture"][data-resume]').click()
@@ -1138,9 +1133,9 @@ def main():
             assert spy(page,'cues')[before:]==[],spy(page,'cues')[before:]
             sound_settings_checks(page,context,url,report,args.bridge)
             for banner in ['#declaration','#alliance-seal','#fallen-seal']:expect(page.locator(banner)).to_be_hidden()
-            rows=open_thread(page,'world');expect(rows.locator('[data-kind="major_battle"]').last).to_contain_text('Rhineland');close_comms(page)
+            rows=open_thread(page,'world');expect(rows.locator('[data-kind="major_battle"]').last).to_contain_text('Northern India');close_comms(page)
             report['assertions'].append('Reopening the room rebuilt the World thread without replaying banners or toasts.')
-            report['assertions'].append('Actual recorded losses and defense trigger factual, dismissible notices; broken hold explains itself; reopening suppresses old battle popups.')
+            report['assertions'].append('Actual recorded losses and defense trigger factual, dismissible notices; reopening suppresses old battle popups.')
             page.set_viewport_size({'width':1500,'height':1150});go_back(page)
             page.locator('#room-name').fill('Choose your standard');page.locator('#create-form button[type=submit]').click()
             expect(page.locator('#faction-choices button')).to_have_count(8)
@@ -1154,22 +1149,11 @@ def main():
                 page.set_viewport_size({'width':w,'height':h});page.wait_for_timeout(150);check_layout(page,f'lobby {w}x{h}')
             page.set_viewport_size({'width':1500,'height':1150})
             report['assertions'].append('Responsive layouts pass at 1024px, 390px and short landscape; faction standards select real seats, show the country in the dossier and disable occupied countries; the lobby regions never overlap.')
-            # The opening council: the same dossier and rack; bots are ready at once, your declaration starts the match.
+            # Start means start: no council phase between the lobby and play.
             page.locator('#fill-bots').click();expect(page.locator('#room-label')).to_contain_text('8/8')
-            page.locator('#start-match').click();expect(page.locator('#phase')).to_have_text('Opening council')
-            expect(page.locator('#dossier-title')).to_have_text('Opening council');expect(page.locator('#opening-form')).to_be_visible()
-            expect(page.locator('[data-country-seat="france"] small')).to_contain_text('Ready')
-            expect(page.locator('[data-country-seat="germany"] small')).to_contain_text('Choosing')
-            for w,h in [(1500,1150),(1366,768),(390,844),(844,390)]:
-                page.set_viewport_size({'width':w,'height':h});page.wait_for_timeout(150)
-                check_layout(page,f'opening {w}x{h}');check_contrast(page,f'opening {w}x{h}')
-                if w==390:capture('08b-opening-390.png')
-            page.set_viewport_size({'width':1500,'height':1150})
-            page.locator('#leader-name').fill('<b>Kaiser</b> Test');page.locator('#opening-message').fill('<img src=x onerror=window.OPENING_XSS=1> Germany arrives.')
-            page.locator('#opening-form button[type=submit]').click();expect(page.locator('#phase')).to_have_text('In session')
-            rows=open_thread(page,'world');expect(rows).to_contain_text('Germany arrives.');assert page.locator('#comms img').count()==0 and not page.evaluate('Boolean(window.OPENING_XSS)')
-            close_comms(page)
-            report['assertions'].append('The opening council reuses the lobby regions without overlap or contrast failures at 1500×1150, 1366×768, 390×844 and 844×390; bots are ready at once; your leader name and declaration (hostile markup stays text) go to the World thread and start the match.')
+            page.locator('#start-match').click();expect(page.locator('#phase')).to_have_text('In session')
+            expect(page.locator('#lobby')).to_be_hidden();check_layout(page,'1500x1150 match started')
+            report['assertions'].append('Start goes straight from the lobby to play.')
             go_back(page);page.locator('[data-room="ui-review"]').click()
             expect(page.locator('#aar-standings tr[data-result-country]')).to_have_count(8)
             expect(page.locator('.v-standards .insignia')).to_have_count(3)
@@ -1212,7 +1196,7 @@ def main():
                 # v0.8 core tasks, scripted like a player, with measured interaction counts (bounds in ui_tasks.BOUNDS).
                 report['tapCounts']={'390x844 touch':walkthrough(browser,url,identity,server,report,out,'ui-tasks-m',390,844,True),
                     '1366x768 mouse':walkthrough(browser,url,identity,server,report,out,'ui-tasks-d',1366,768,False)}
-                report['assertions'].append('Core tasks at 390×844 (touch) and 1366×768 (mouse), counted interactions within bounds: declare war on a neutral country and march ≤4, attack a neighbouring enemy with 50% ≤3 (drag on desktop, tap on phone), recall an army ≤2, propose an alliance ≤3, answer an alliance offer from the badge ≤2, reply to a DM ≤3 plus typing, develop a province ≤3 (actual counts in tapCounts; screenshots in tasks/).')
+                report['assertions'].append('Core tasks at 390×844 (touch) and 1366×768 (mouse), counted interactions within bounds: declare war on a neutral country and march ≤3, attack a neighbouring enemy with 50% ≤3 (drag on desktop, tap on phone), recall an army ≤2, propose an alliance ≤3, answer an alliance offer from the badge ≤2, reply to a DM ≤2 plus typing, develop a province ≤3, set a rally point ≤3, a DM/alliance conversation ≤7 (actual counts in tapCounts; screenshots in tasks/).')
             assert not report['pageErrors'],report['pageErrors'];report['status']='passed'
             browser.close()
         if args.gif:

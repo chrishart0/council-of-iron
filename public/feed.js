@@ -13,7 +13,6 @@ const node = (tag, className, text) => {
   if (text !== undefined) element.textContent = text;
   return element;
 };
-const reducedMotion = () => globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 const PRIORITY = { fallen: 3, war: 3, peace: 3, alliance: 3, defeat: 4, dominance: 2, broken: 2, battle: 1 };
 // Headlines naming the viewer's own country outrank the rest of the world's news.
@@ -104,14 +103,13 @@ export function presentHeadline(item, names, viewer = {}) {
       const own = h.country === you;
       banner = { kind: own ? 'defeat' : 'fallen', country: h.country, name: names.country(h.country),
         title: own ? 'Your country has fallen' : copy.title,
-        detail: own ? `${names.country(h.country)} has no provinces or armies left. Your earned share is frozen; you may keep watching the council.` : copy.detail };
+        detail: own ? `${names.country(h.country)} has no provinces or armies left. You may keep watching the council.` : copy.detail };
       effects.push(['eliminated', { country: h.country }]); break;
     }
-    case 'dominance': banner = { kind: 'dominance', label: 'Victory countdown', title: `${names.side(h.side)} holds 60%`, detail: copy.detail }; break;
+    case 'dominance': banner = { kind: 'dominance', label: 'Victory countdown', title: `${names.side(h.side)} is winning`, detail: copy.detail }; break;
     case 'major_battle': banner = { kind: 'battle', label: 'Major battle', title: copy.title, detail: `${h.casualties} troops lost${h.captured ? ` · ${h.owner ? names.country(h.owner) : 'nobody'} takes ${names.province(h.province)}` : ' · defenders hold'}.` };
       if (h.captured && h.owner) effects.push(['captured', { province: h.province, owner: h.owner }]); break;
     case 'industry_up': effects.push(['industry_up', { province: h.province, level: h.level }]); break;
-    case 'industry_down': effects.push(['industry_down', { province: h.province, level: h.level }]); break;
     default: break;
   }
   if (banner && !affectsViewer(item, viewer)) banner = null;

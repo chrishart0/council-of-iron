@@ -88,8 +88,6 @@ def main():
             http(f'/api/games/{room}/join', {'country': 'france', 'kind': 'human'}, me['token'])
             http(f'/api/games/{room}/bots', {}, me['token'])
             http(f'/api/games/{room}/start', {}, me['token'])
-            # The opening council: bots lock at once; this seat's introduction starts the match.
-            http(f'/api/games/{room}/opening', {'leaderName': 'Speaker', 'openingMessage': 'France listens.'}, me['token'])
 
             def ok(name):
                 report['assertions'].append(name)
@@ -146,7 +144,7 @@ def main():
 
                 page.wait_for_timeout(1500)
                 state = http(f'/api/games/{room}', token=me['token'])
-                assert not [e for e in state['events'] if e['type'] == 'message' and not e.get('opening')], 'voice input must not send chat'
+                assert not [e for e in state['events'] if e['type'] == 'message' and e['from'] == 'france'], 'voice input must not send chat'
                 expect(page.locator('#comms .cx-rows')).not_to_contain_text('proposes an alliance')
                 ok('transcript is not sent automatically')
 

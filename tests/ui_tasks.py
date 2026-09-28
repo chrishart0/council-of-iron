@@ -10,7 +10,7 @@ import json
 from playwright.sync_api import expect
 from browser_helpers import lane, close_comms
 
-BOUNDS = {'attack': 3, 'declare': 4, 'propose': 3, 'respond': 2, 'reply': 3, 'recall': 2, 'turn': 2, 'develop': 3, 'rally': 3, 'converse': 7}
+BOUNDS = {'attack': 3, 'declare': 3, 'propose': 3, 'respond': 2, 'reply': 2, 'recall': 2, 'develop': 3, 'rally': 3, 'converse': 7}
 
 class Walk:
     def __init__(self, page, server, room, touch, out, report):
@@ -105,7 +105,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     w.tap(dialog.locator('[value="confirm"]'), 'sent')
     expect(page.locator('#card')).to_be_hidden()
     s = w.state(); assert 'britain:france' in s['wars'], s['wars']
-    assert any(o['type'] == 'move' and o['to'] == 'north-france' and o['amount'] == amount for o in s['commandBudget']['reserved']), s['commandBudget']
+    assert any(o['type'] == 'march' and o['to'] == 'north-france' and o['amount'] == amount for o in s['orders']), s['orders']
     w.end()
 
     # (a) Attack a neighbouring enemy province with 50%: Normandy (France, now at war).
@@ -120,8 +120,8 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     expect(primary).to_contain_text('Attack Normandy with')
     w.tap(primary, 'sent')
     s = w.state()
-    free = before['england'] - 1 - sum(o['amount'] for o in s['commandBudget']['reserved'] if o['from'] == 'england' and o['to'] != 'normandy')
-    order = next(o for o in s['commandBudget']['reserved'] if o['to'] == 'normandy')
+    free = before['england'] - 1 - sum(o['amount'] for o in s['orders'] if o['from'] == 'england' and o['to'] != 'normandy')
+    order = next(o for o in s['orders'] if o['to'] == 'normandy')
     assert order['from'] == 'england' and order['amount'] == max(1, free // 2), (order, free)
     w.end()
 
@@ -135,7 +135,6 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
         if army and page.locator(f'[data-army="{army["id"]}"]:not(.tap-blocked) .army-hit').count(): break
         w.stdin(f'war {s["tick"] + 1}')
     assert army, 'no marching army to recall'
-    while not s['commandBudget']['remaining']: s = w.state() if w.stdin(f'war {s["tick"] + 1}') else s  # the fixture's own tick-56 order shares the 3-per-10 s budget
     hit = page.locator(f'[data-army="{army["id"]}"] .army-hit'); x, y = w.at(hit)
     if page.evaluate('([x,y])=>Boolean(document.elementFromPoint(x,y)?.closest("[data-army]"))', [x, y]):
         w.tap(hit, 'army'); w.results['recallPath'] = 'army marker'
@@ -145,28 +144,6 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
         w.tap(w.counter('england'), 'province'); w.results['recallPath'] = 'source province card'
         w.tap(page.locator('#card-actions button', has_text='→ Normandy'), 'recalled')
     expect(lane(page)).to_contain_text('Recall queued')
-    w.end()
-
-    # Turn around: the recalled column heads back to Normandy from where it is (one order, one tap after opening it).
-    w.begin('turn')
-    s = w.state()
-    for _ in range(12):
-        if not any(o['type'] == 'recall' for o in s['commandBudget']['reserved']) and s['commandBudget']['remaining']: break
-        w.stdin(f'war {s["tick"] + 1}'); page.wait_for_timeout(300); s = w.state()
-    back = next(a for a in s['armies'] if a['id'] == army['id'])
-    assert back.get('returning') and back['from'] == 'normandy', back
-    page.keyboard.press('Escape'); page.wait_for_timeout(900)  # start from a closed card (not counted)
-    hit = page.locator(f'[data-army="{army["id"]}"] .army-hit')
-    if hit.count() and page.evaluate('([x,y])=>Boolean(document.elementFromPoint(x,y)?.closest("[data-army]"))', list(w.at(hit))):
-        w.tap(hit, 'returning-army'); w.results['turnPath'] = 'army marker'
-        expect(page.locator('#card')).to_have_attribute('data-kind', 'army')
-        expect(primary).to_contain_text('Turn around → Normandy (arrives')
-        w.tap(primary, 'turned')
-    else:  # still on England's counter: the province card lists troops heading home there
-        w.tap(w.counter('england'), 'province'); w.results['turnPath'] = 'home province card'
-        w.tap(page.locator('#card-actions button', has_text='Turn around'), 'turned')
-    expect(lane(page)).to_contain_text('Turning around')
-    s = w.state(); assert any(o['type'] == 'turn_around' and o['target'] == army['id'] for o in s['commandBudget']['reserved']), s['commandBudget']
     w.end()
 
     # (c) Propose an alliance: tap Russia (the powers strip on phones, its leaderboard row on desktop).
@@ -225,7 +202,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     w.tap(develop, 'confirm-open')
     w.tap(page.locator('#confirm-dialog [value="confirm"]'), 'invested')
     expect(lane(page)).to_contain_text('Investment committed')
-    s = w.state(); assert any(o['type'] == 'develop' and o['from'] == 'east-canada' for o in s['commandBudget']['reserved']), s['commandBudget']
+    s = w.state(); assert any(o['type'] == 'develop' and o['from'] == 'east-canada' for o in s['orders']), s['orders']
     w.end()
 
     # Rally point: tap a province of yours → "Rally troops to…" → tap the rally province (Scotland → Southern England;
@@ -239,8 +216,8 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     expect(lane(page)).to_contain_text('Tap one of your provinces')
     w.tap(w.counter('england'), 'set')
     expect(lane(page)).to_contain_text('Rally set', timeout=5000)
-    s = w.state(); order = next(o for o in s['commandBudget']['reserved'] if o['type'] == 'rally')
-    assert order['sources'] == ['scotland'] and order['to'] == 'england' and order['keep'] is None, order
+    s = w.state(); order = next(o for o in s['orders'] if o['type'] == 'rally')
+    assert order['sources'] == ['scotland'] and order['to'] == 'england', order
     w.stdin('war 422'); page.wait_for_timeout(1500)
     expect(page.locator('[data-rally="scotland"]').first).to_be_attached(timeout=5000)
     w.snap('arrow')

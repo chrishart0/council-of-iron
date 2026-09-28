@@ -30,7 +30,6 @@ test('every headline kind maps to one cue; loud stingers only when it affects th
   assert.equal(cue(h('major_battle', { province: 'p', owner: 'a', previousOwner: 'b' }), me), undefined);
   assert.equal(headlineCue(h('major_battle', { province: 'p', owner: 'a', previousOwner: 'france' }), me).mine, true);
   assert.equal(cue(h('industry_up', { province: 'p', level: 3 }), me), undefined);
-  assert.equal(cue(h('industry_down', { province: 'p', level: 2, owner: 'france' }), me), 'industry_down');
   assert.equal(cue(h('dominance', { side: 'x' }), me), 'countdown');
   assert.equal(headlineCue(h('dominance', { side: 'france' }), me).mine, true);
   assert.equal(cue(h('dominance_broken', { side: 'x' }), me), 'countdown_stop');
@@ -111,7 +110,7 @@ test('threats and tension come from the same public observation as the threat st
   assert.equal(tensionActive(atWar), true, 'at war');
   assert.equal(tensionActive(observe(g, null, 0)), false, 'spectator without a countdown hears no war drums');
   {
-    act(g, map, 'germany', { type: 'move', from: route[0], to: route[1], amount: 2 }, 'm1');
+    act(g, map, 'germany', { type: 'march', from: route[0], to: route[1], amount: 2 }, 'm1');
     for (let i = 0; i < 3; i++) tick(g);
     const seen = observe(g, 'france', 0);
     assert.ok(threatIds(seen).size >= 1);

@@ -7,13 +7,13 @@
 import { leaderboard, warsOf } from './leaderboard.js';
 import { allianceColors } from './relations.js';
 import { insignia, icon } from './presentation.js';
+import { seatType } from './ui.js';
 
 const ARROW_MS = 4000;
 const node = (tag, className) => { const e = document.createElement(tag); e.className = className; return e; };
 const setText = (element, value) => { if (element.textContent !== value) element.textContent = value; };
 const RELATION = { enemy: ['war', 'at war with you'], ally: ['ally', 'allied with you'] };
 const percent = n => `${Math.round(n * 100)}%`;
-const seatType = player => player?.kind === 'bot' || player?.model?.startsWith('heuristic-') ? 'Bot' : player?.kind === 'agent' ? 'AI' : 'Human';
 
 export class LeaderboardPanel {
   /** `fronts` lists bloc-vs-bloc wars in the teams view; `onFocus(country|null)` fires when a row is

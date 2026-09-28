@@ -36,7 +36,7 @@ test('alliances sum their members; independents rank as themselves; own row alwa
 test('a live engine observation gives spectators and players the same totals', () => {
   const g = createGame({ id: 'lb', name: 'Board', hostId: 'usa' }, map);
   for (const id of ['usa', 'britain', 'france']) join(g, map, { profileId: id, name: id, country: id });
-  start(g); act(g, map, 'usa', { type: 'move', from: 'west-us', to: 'mexico', amount: 5 }, 'lb-1'); tick(g); tick(g);
+  start(g); act(g, map, 'usa', { type: 'march', from: 'west-us', to: 'mexico', amount: 5 }, 'lb-1'); tick(g); tick(g);
   const spectator = observe(g, null), player = observe(g, 'usa');
   assert.ok(spectator.armies.some(a => a.country === 'usa'), 'moving armies are public');
   const a = leaderboard(spectator), b = leaderboard(player, { you: 'usa' });

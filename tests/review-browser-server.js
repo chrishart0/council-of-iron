@@ -5,16 +5,18 @@ import { createGame, join, start, act, tick } from '../src/engine.js';
 const app = makeServer({dbPath: ':memory:', automatic: false});
 const game = replay().game; game.id = 'review-fixture'; game.name = 'The Atlantic campaign';
 app.games.set(game.id, game); app.store.save(game);
-const draw = createGame({id:'draw-fixture',name:'A negotiated peace',hostId:'usa'},MAP);
-for (const country of ['usa','britain']) join(draw, MAP, {country,name:country,profileId:country});
-start(draw);
-const {proposalId}=act(draw,MAP,'usa',{type:'propose',country:'britain',name:'<img src=x onerror=window.REVIEW_XSS=1>'},'propose');
-act(draw,MAP,'britain',{type:'accept',proposalId},'accept');
+// A drawn match: Qing and Japan (hostile alliance name) hold as much industry as the United States at the deadline.
+const draw = createGame({id:'draw-fixture',name:'A drawn council',hostId:'usa'},MAP);
+for (const country of ['usa','qing','japan','ottoman']) join(draw, MAP, {country,name:country,profileId:country});
+draw.rules.duration=60;start(draw);
+const {proposalId}=act(draw,MAP,'qing',{type:'propose',country:'japan',name:'<img src=x onerror=window.REVIEW_XSS=1>'},'propose');
+act(draw,MAP,'japan',{type:'accept',proposalId},'accept');
 while(draw.status==='running')tick(draw);
+if(!draw.outcome.draw)throw new Error('draw fixture did not draw');
 app.games.set(draw.id, draw);app.store.save(draw);
 const wire=createGame({id:'wire-fixture',name:'The opened wire',hostId:'usa'},MAP);
 wire.rules.duration=55;wire.rules.hold=1800;
-for(const [country,visibility] of [['usa','public'],['britain','public'],['france','private']])
+for(const [country,visibility] of [['usa','public'],['britain','public'],['france','private'],['germany','private']])
   join(wire,MAP,{country,name:country,profileId:`wire-${country}`,kind:'agent',visibility});
 start(wire);
 act(wire,MAP,'usa',{type:'chat',channel:'world',text:'<img src=x onerror=window.REVIEW_XSS=1> Public terms'},'wire-world');
