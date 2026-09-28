@@ -203,7 +203,6 @@ export function attackPlan(g, map, country, action) {
   const arrivesAt = action.arriveAt ?? earliest;
   requireRule(Number.isSafeInteger(arrivesAt) && arrivesAt >= earliest, `Earliest shared arrival is tick ${earliest}.`);
   requireRule(arrivesAt <= earliest + r.maxScheduleDelay, 'Arrival is scheduled too far ahead.');
-  requireRule(arrivesAt <= r.duration, 'The army would arrive after the match deadline.');
   const total=sources.reduce((n,s)=>n+s.amount,0);
   const defenseAtArrival=arrivalDefense(g,target,arrivesAt);
   return { to: action.to, earliest, arrivesAt, total, combat:combatForecast(total,target.troops,target.development),
@@ -239,7 +238,6 @@ function transit(g,map,p,action) {
   const available=source.troops-reservedTroops(g,p.id,source.id)-1;
   requireRule(Number.isSafeInteger(action.amount) && action.amount>0 && action.amount<=available,
     'Not enough uncommitted troops; leave one at home.');
-  requireRule(g.tick+1+travel<=r.duration,'The transit would arrive after the deadline.');
   checkBudget(g,p);useBudget(g,p);
   const order={id:identifier(g,'order-'),groupId:identifier(g,'transit-'),type:'transit',country:p.id,
     from:source.id,to:action.path[0],path:[...action.path],amount:action.amount,

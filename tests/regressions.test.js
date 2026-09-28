@@ -69,3 +69,10 @@ test('British province counters stay near their namesake land, not Greenland',()
     const p=map.provinces.find(p=>p.id===id);assert.ok(p.x>600 && p.x<650 && p.y>100 && p.y<180);
   }
 });
+
+test('marches are accepted even when they would land after the match deadline',()=>{
+  const g=game();g.tick=g.rules.duration-2;
+  const march=action(g,'usa',{type:'move',from:'west-us',to:'mexico',amount:2});
+  assert.ok(march.arrivesAt>g.rules.duration);
+  advance(g,3);assert.equal(g.status,'finished');
+});
