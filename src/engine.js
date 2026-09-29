@@ -566,16 +566,15 @@ function leave(g, p) {
   g.departures.push(departure); event(g, 'departure_notice', departure);
   return departure;
 }
-/** Two sides are at war as wholes: one warring pair puts every pair across them at war, except a pair
- * still under truce (a member who joined an alliance at war is drawn in when its truce ends). */
+/** Two sides are at war as wholes: one warring pair puts every pair across them at war. Joining an alliance
+ * by consent is not a declaration: a new member enters its wars at once, even against a truce partner. */
 function normalizeWars(g) {
   const pairs=new Set(g.wars), teams=[...new Set(g.players.map(p=>p.side))];
-  const truce=new Set(g.truces.filter(t=>t.until>g.tick).map(t=>t.countries.join(':')));
   const expanded=new Set();
   for(let i=0;i<teams.length;i++)for(let j=i+1;j<teams.length;j++) {
     const left=sideRoster(g,teams[i]),right=sideRoster(g,teams[j]);
     if(left.some(a=>right.some(b=>pairs.has(warKey(a,b)))))
-      for(const a of left)for(const b of right)if(!truce.has(warKey(a,b)))expanded.add(warKey(a,b));
+      for(const a of left)for(const b of right)expanded.add(warKey(a,b));
   }
   g.wars=[...expanded].sort();
 }

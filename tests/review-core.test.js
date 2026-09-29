@@ -43,18 +43,18 @@ test('the arrival forecast counts defenders ending at the target, not columns pa
   assert.equal(plan.defenseAtArrival.incoming, 4);
 });
 
-test('joining an alliance at war does not break a truce: the war reaches the new member only when the truce ends', () => {
+test('a truce blocks declarations, but joining an alliance at war brings you into its wars at once', () => {
   const g = game();
   send(g, 'usa', { type: 'declare_war', country: 'germany' });
   send(g, 'france', { type: 'declare_war', country: 'germany' });
   const offer = send(g, 'france', { type: 'offer_peace', country: 'germany' });
   const { truceUntil } = send(g, 'germany', { type: 'accept_peace', offerId: offer.offerId });
+  // While no war exists, the truce blocks declarations either way.
+  assert.throws(() => send(g, 'france', { type: 'declare_war', country: 'germany' }), /Truce with germany/);
+  assert.throws(() => send(g, 'germany', { type: 'declare_war', country: 'france' }), /Truce with france/);
   const q = send(g, 'usa', { type: 'propose', country: 'france', name: 'Accord' });
   send(g, 'france', { type: 'accept', proposalId: q.proposalId });
-  while (g.tick < truceUntil - 1) tick(g);
-  assert.equal(g.players.find(p => p.id === 'france').side, g.players.find(p => p.id === 'usa').side, 'the alliance formed');
-  assert.ok(g.wars.includes('germany:usa'));
-  assert.ok(!g.wars.includes('france:germany'), 'no war with Germany during the truce');
-  tick(g);
-  assert.ok(g.wars.includes('france:germany'), 'the alliance war reaches France when the truce ends');
+  while (g.players.find(p => p.id === 'france').side !== g.players.find(p => p.id === 'usa').side) tick(g);
+  assert.ok(g.tick < truceUntil, 'the alliance formed during the truce');
+  assert.ok(g.wars.includes('france:germany'), 'France joined the alliance war with Germany at once');
 });
