@@ -68,7 +68,7 @@ export class Atlas {
     // Multi-select (optional): `lasso(ids)` receives the provinces inside a Shift-drag rectangle (mouse); with
     // `longPress: true` a touch held still on a province calls onSelect(id, { toggle: true }) instead of a tap.
     this.dragHooks = options.drag || null; this.onArmy = options.onArmy || null; this.draftState = null;
-    this.lassoHook = options.lasso || null; this.longPress = Boolean(options.longPress);
+    this.lassoHook = options.lasso || null; this.longPress = Boolean(options.longPress); this.emptyTap = options.emptyTap || null;
     // `why(id) → string|null` (optional): a reason shown in the hover tooltip, e.g. why a province is not a destination.
     this.whyHook = options.why || null;
     this.positionsById = Object.fromEntries(map.provinces.map(p => [p.id, { x: p.x, y: p.y }]));
@@ -249,7 +249,7 @@ export class Atlas {
       const g = this.gesture;
       // Shift-drag with a mouse draws a selection rectangle (the host's `lasso` hook) instead of an arrow or a pan.
       if (event.shiftKey && event.button === 0 && this.lassoHook && event.pointerType !== 'touch') g.lasso = this.coordinates(event.clientX, event.clientY);
-      else if (g.id && !g.army && event.button === 0 && this.dragHooks?.start?.(g.id, { counter: Boolean(event.target.closest?.('.map-counter')) })) g.command = g.id;
+      else if (g.id && !g.army && event.button === 0 && this.dragHooks?.start?.(g.id, { counter: Boolean(event.target.closest?.('.map-counter')), touch: event.pointerType === 'touch' })) g.command = g.id;
       clearTimeout(this.pressTimer);
       if (this.longPress && event.pointerType === 'touch' && g.id && !g.army) this.pressTimer = setTimeout(() => {
         if (this.gesture !== g || this.dragged) return;
@@ -290,19 +290,22 @@ export class Atlas {
       this.dragTo(event.clientX, event.clientY); const to = this.dragging?.to ?? null;
       this.endDraft(gesture.command, to); if (!this.pointers.size) this.gesture = null; return;
     }
-    // Double tap zooms 2× at the tap; the first tap already selected, the second does not.
+    // Double tap zooms 2× at the tap; the first tap already selected, the second does not. Two quick taps on two
+    // different provinces (your province, then its neighbour) are two selections, never a zoom.
     if (event.pointerType === 'touch' && !this.dragged && gesture) {
-      const now = performance.now(), last = this.lastTap;
-      if (last && now - last.t < 350 && Math.hypot(event.clientX - last.x, event.clientY - last.y) < 30) {
+      const now = performance.now(), last = this.lastTap, on = gesture.army || gesture.cluster || gesture.id || null;
+      if (last && now - last.t < 350 && Math.hypot(event.clientX - last.x, event.clientY - last.y) < 30 && last.on === on) {
         this.lastTap = null; this.zoom(.5, event.clientX, event.clientY); if (!this.pointers.size) this.gesture = null; return;
       }
-      this.lastTap = { t: now, x: event.clientX, y: event.clientY };
+      this.lastTap = { t: now, x: event.clientX, y: event.clientY, on };
     }
     if (!this.dragged && gesture?.army && this.onArmy?.(gesture.army)) { this.tooltip.hidden = true; }
     else if (!this.dragged && gesture?.army) this.showArmy(gesture.army, { left: event.clientX - 14, top: event.clientY + 65, width: 0 });
     else if (!this.dragged && gesture?.cluster) this.fit(gesture.cluster.split(','));
     else if (!this.dragged && gesture?.barrier) this.showBarrier(gesture.barrier, event.clientX, event.clientY);
-    else if (!this.dragged && gesture?.id) this.onSelect(gesture.id, { shiftKey: gesture.shiftKey, toggle: gesture.shiftKey || event.ctrlKey || event.metaKey, target: gesture.target });
+    else if (!this.dragged && gesture?.id) this.onSelect(gesture.id, { shiftKey: gesture.shiftKey, toggle: gesture.shiftKey || event.ctrlKey || event.metaKey, target: gesture.target, point: { x: event.clientX, y: event.clientY }, touch: event.pointerType === 'touch' });
+    // Optional host hook: a tap on open map (sea, no counter) with its screen point, e.g. to snap to a nearby target.
+    else if (!this.dragged && gesture) this.emptyTap?.(event.clientX, event.clientY, { touch: event.pointerType === 'touch' });
     if (!this.pointers.size) this.gesture = null;
   }
   /** What a pointer event is on. A click on a repeated world copy resolves to the same province. */

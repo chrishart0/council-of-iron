@@ -6,6 +6,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
 from browser_helpers import load_bridge, lane, open_thread, close_comms
 from ui_tasks import walkthrough, multiselect
+from ui_phone import phone_checks
 ROOT=Path(__file__).resolve().parents[1]
 
 # Reads what the live map actually shows and compares it with the public room state.
@@ -587,7 +588,7 @@ def relation_checks(page,server,report,capture):
     report['assertions'].append('Alliances from the country card: Propose alliance → name → Send; the card then reads ALLIANCE OFFER PENDING, then ALLIANCE FORMING (dashed band in the leaderboard) during the notice, then active in the HUD, the leaderboard and the alliance card; bands use the same colour as the shared allianceColors helper and the World thread shows the alliance marker (relations.js, also used by the map blocs); a hostile alliance name renders only as text.')
 
 # iPhone Safari has no element Fullscreen API: simulate it, so only the CSS pseudo-fullscreen can work.
-NO_FULLSCREEN_API='Object.defineProperty(Document.prototype,"fullscreenEnabled",{get:()=>false,configurable:true});'
+NO_FULLSCREEN_API='for(const k of ["fullscreenEnabled","webkitFullscreenEnabled"])Object.defineProperty(Document.prototype,k,{get:()=>false,configurable:true});'
 VIEW_CENTRE='()=>{const [x,y,w,h]=document.querySelector("#review-map").getAttribute("viewBox").split(" ").map(Number);return [x+w/2,y+h/2];}'
 def expand_checks(browser,url,identity,report,out):
     for w,h in [(390,844),(844,390)]:
@@ -850,7 +851,7 @@ def coach_and_drag_checks(browser,url,identity,report,out):
     context.add_init_script('localStorage.setItem("coi.identity",'+json.dumps(json.dumps(identity))+');')
     page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
     page.goto(url+'/?match=ui-fixture');expect(page.locator('#commander-title')).to_have_text('Britain')
-    coach=page.locator('#coach');expect(coach).to_be_visible(timeout=5000);expect(coach).to_contain_text('Tip 1 of 3');expect(coach).to_contain_text('Drag from your province')
+    coach=page.locator('#coach');expect(coach).to_be_visible(timeout=5000);expect(coach).to_contain_text('Tip 1 of 3');expect(coach).to_contain_text('Tap your province, then any target')
     check_layout(page,'390 coach tip 1');page.screenshot(path=str(out/'21-coach-1.png'))
     page.locator('#coach-next').click();expect(coach).to_contain_text('Tap a country');check_layout(page,'390 coach tip 2')
     page.locator('#coach-next').click();expect(coach).to_contain_text('Messages button');expect(page.locator('#coach-next')).to_have_text('Got it')
@@ -863,8 +864,23 @@ def coach_and_drag_checks(browser,url,identity,report,out):
     def centre(sel):
         b=page.locator(sel).bounding_box();return b['x']+b['width']/2,b['y']+b['height']/2
     target='#marker-england .counter-body' if page.locator('#marker-england .counter-body').is_visible() else '#map .battle-counter[data-province="england"]'
-    (x0,y0),(x1,y1)=centre('#marker-ireland .counter-body'),centre(target)
     cdp=context.new_cdp_session(page)
+    def touch_drag(a,b,end=True):
+        (x0,y0),(x1,y1)=centre(a),centre(b)
+        cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':x0,'y':y0,'id':1}]})
+        for i in range(1,13):cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':x0+(x1-x0)*i/12,'y':y0+(y1-y0)*i/12,'id':1}]})
+        page.wait_for_timeout(80)
+        if end:cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]});page.wait_for_timeout(150)
+    # Gesture separation: a one-finger drag from a province you have not selected pans the map (no order arrow).
+    before=page.locator('#map').get_attribute('viewBox')
+    touch_drag('#marker-ireland .counter-body',target)
+    assert page.locator('#map').get_attribute('viewBox')!=before,'an unselected drag should pan'
+    expect(page.locator('#card')).to_be_hidden();assert page.locator('#map .draft-arrow').count()==0
+    page.locator('#home-view').click();page.wait_for_timeout(250)
+    # Tap Ireland (selected), then drag from its counter: now the drag marches.
+    target='#marker-england .counter-body' if page.locator('#marker-england .counter-body').is_visible() else '#map .battle-counter[data-province="england"]'
+    x,y=centre('#marker-ireland .counter-body');page.touchscreen.tap(x,y);expect(page.locator('#card-title')).to_have_text('Ireland')
+    (x0,y0),(x1,y1)=centre('#marker-ireland .counter-body'),centre(target)
     cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':x0,'y':y0,'id':1}]})
     for i in range(1,13):cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':x0+(x1-x0)*i/12,'y':y0+(y1-y0)*i/12,'id':1}]})
     page.wait_for_timeout(80)
@@ -878,7 +894,7 @@ def coach_and_drag_checks(browser,url,identity,report,out):
     page.screenshot(path=str(out/'23-after-drag.png'))
     assert not errors,errors
     context.close()
-    report['assertions'].append('First match: three dismissible tips (drag to attack, tap a country, the Messages button counts what needs you), stored per browser, replayable from the menu, closed by Escape, never overlapping other overlays. A real touch drag from a province counter draws a snapped order arrow with an ETA label, then opens the order card for that target with one primary action; drags elsewhere still pan.')
+    report['assertions'].append('First match: three dismissible tips (drag to attack, tap a country, the Messages button counts what needs you), stored per browser, replayable from the menu, closed by Escape, never overlapping other overlays. On touch, a one-finger drag from a province you have not selected pans the map; after a tap selects Ireland, a real touch drag from its counter draws a snapped order arrow with an ETA label, then opens the order card for that target with one primary action.')
 
 def turn_notice_checks(browser,url,identity,server,report,out):
     """Recorded position 'ui-turn': Britain's 5 troops reach Northern France (north-france) while Germany's battle is under way there and
@@ -1280,6 +1296,7 @@ def main():
             if not args.bridge:mobile_checks(browser,url,identity,report,out)
             if not args.bridge:
                 coach_and_drag_checks(browser,url,identity,report,out)
+                phone_checks(browser,url,identity,server,report,out,check_layout,check_contrast,check_commit)
                 turn_notice_checks(browser,url,identity,server,report,out)
                 truce_checks(browser,url,identity,report,out)
                 # v0.8 core tasks, scripted like a player, with measured interaction counts (bounds in ui_tasks.BOUNDS).

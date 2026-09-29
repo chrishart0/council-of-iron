@@ -31,6 +31,8 @@ Open **http://192.168.1.216:3107** (the default `npm start` binds all interfaces
 
 The room list shows running games first. **Spectate** opens the same map read-only with the public World history; **Resume** returns to your seat. Finished games open the after-action **Review**: the result, a replay of the whole match, battles and turning points.
 
+**Install on your phone** for true full screen: Share → *Add to Home Screen* (iPhone) or browser menu → *Add to Home screen / Install app* (Android); the web app manifest opens Council without browser bars (☰ says the same). On a phone, tap your province for a short list of targets with capture chances, or tap the target on the map.
+
 **Sound** starts after your first click (settings in ☰; **Shift+M** mutes). **Voice chat input**: every chat box has a mic; it uses OpenAI's transcription API when `OPENAI_API_KEY` is set, an optional local speech-to-text sidecar (`npm run stt`, then `STT_URL=http://127.0.0.1:3190 npm start`), or the browser's own recognition. Phones need HTTPS for the microphone: run `scripts/dev-cert.sh` once and `npm start` serves HTTPS. [Operations, HTTPS and voice](docs/OPERATIONS.md) · [UI design](docs/UI-DESIGN.md)
 
 For Internet hosting use an HTTPS reverse proxy and invited access; this is not a hardened public service.

@@ -101,7 +101,13 @@ A battle is major when `casualties ≥ max(20, ceil(3% × all troops on the map)
 
 ## Phones
 
-Below 1024 px: HUD, a strip of standards (one tap into diplomacy), the map, and a dock (Map / Powers / Menu). The card, Powers, Messages and the menu are sheets that replace the dock; the primary stays in the sheet's fixed footer. 44 px targets on coarse pointers; +/− are hidden there (pinch). The toast is compact (≤ 72 px) and clear of the order sheet. Phones need HTTPS for the microphone (`scripts/dev-cert.sh`, see [OPERATIONS.md](OPERATIONS.md)).
+Below 1024 px: HUD, a strip of standards (one tap into diplomacy), the map, and a dock (Map / Powers / Menu). The card, Powers, Messages and the menu are sheets that replace the dock; the primary stays in the sheet's fixed footer. 44 px targets on coarse pointers; +/− are hidden there (pinch). The toast is compact (≤ 72 px) and clear of the order sheet.
+
+- **Orders by thumb.** Tapping your province opens its card with up to four targets as big rows (best capture chance first; your provinces under attack or on the front line), each the same as tapping that province: province → row → send is 3 taps. Tapping the target on the map works as before; with your troops chosen, a tap on open map within a finger's radius (34 px) of a legal target snaps to it. Two quick taps on two different provinces are two selections, never a double-tap zoom. On touch, a one-finger drag marches only from the counter of a province you have already selected; every other drag pans.
+- **No ghost clicks.** A tap on the map can open a sheet right under the finger; the browser's synthetic click for that same tap is swallowed (it used to open the owner's country card or press whatever was there).
+- **Expand / full screen** (`public/expand.js`) is one state derived from the document: expanded ⇔ our pseudo-fullscreen class or real fullscreen we asked for. Any browser exit (Back, a swipe, Escape, rotation, switching apps; standard and `webkit` events) leaves the pseudo state too, and the button always toggles on what is true now. Without the Fullscreen API (iPhone) Expand gives the strip's and the dock's rows to the map; ☰ → Map explains *Add to Home Screen*, which is the only real full screen there (the manifest asks for `fullscreen`, then `standalone`).
+- **Messages you notice.** The Messages button rings once when something arrives for you; a DM or alliance message toasts for 9 s with the sender on its own line, the first line and a brass *Reply* that opens the thread with the keyboard up (focus inside the tap, as iOS requires). Unread conversations come first in the list, in bold with a dot; the thread switcher keeps a steady order. With the on-screen keyboard up (a shorter `visualViewport`), the War Room is sized to the visible area, the switcher and quick replies step aside, and a reader at the latest message stays there.
+- Every control is ≥ 44 px on coarse pointers (asserted at 360×780), fields use ≥ 16 px text (no zoom on focus), and short landscape puts the slider and the share chips on one row so the commit stays on screen. Phones need HTTPS for the microphone (`scripts/dev-cert.sh`, see [OPERATIONS.md](OPERATIONS.md)).
 
 ## Sound
 
@@ -158,6 +164,8 @@ The full `python tests/browser.py` run includes `tests/ui-browser.py` (recorded-
 |---|---|---:|
 | Declare war on a neutral country and march | tap target, primary, confirm | 3 |
 | Attack a neighbouring enemy province with 50 % | tap target (or drag), 50 %, send | 3 |
+| Attack from your province's target list (phone) | province, row, send | 3 |
+| Attack from every bordering province | target, Select all bordering, send | 3 (bound 4) |
 | Recall a marching army | army (or source province), Recall | 2 |
 | Send a returning army back | army (or its province), March again | 2 |
 | Long move across your own land | source, far target, send | 3 |
@@ -171,7 +179,7 @@ The full `python tests/browser.py` run includes `tests/ui-browser.py` (recorded-
 
 The walkthroughs also check no toast for the open thread and drafts kept across polling.
 
-Not verified: real devices and iOS Safari, screen-reader output beyond the asserted ARIA attributes, how anything sounds, and whether players find the UI clear or enjoyable.
+Not verified: real devices and iOS Safari (the keyboard is simulated with a shorter `visualViewport`; real fullscreen only in Chromium), screen-reader output beyond the asserted ARIA attributes, how anything sounds, and whether players find the UI clear or enjoyable.
 
 ## Known issues
 
