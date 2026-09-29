@@ -86,7 +86,7 @@ Casualties are one shared total; nobody is credited with kills in a shared battl
 | `declare_war` | `country` | Both whole alliances are at war at once. Receipt: `from`, `to`, `fromRoster`, `toRoster`. Refused (409, `truceUntil`) while any pair across the two sides is under truce |
 | `offer_peace` | `country` (one you are at war with) | Offer to the other side, open 60 s → `offerId`. One open offer per pair of sides; after an offer expires unanswered the same side cannot offer again for `peaceRetry` s (429, `retryAt`) |
 | `accept_peace` | `offerId` | Anyone on the receiving side: the sides make peace; attacks between them are cancelled or turned home; a truce holds for `truce` s between every pair of the two rosters (receipt and `peace_accepted` carry `truceUntil`) |
-| `propose` | `country` (independent), optional `name` | Exact-roster alliance offer (open 120 s). The roster may be at most `maxAlliance` countries (half the match) |
+| `propose` | `country` (independent), optional `name` | Exact-roster alliance offer (open 120 s). The roster may be at most `maxAlliance` countries (three or half the match, whichever is smaller) |
 | `accept` / `decline` | `proposalId` | Consent / decline or withdraw. With everyone's consent the alliance starts 30 s later |
 | `leave` | — | You become independent 30 s later |
 | `chat` | `channel` (`world`, `alliance`, `dm`), `text` (≤ 500), `to` for a DM | Recipient-scoped speech |
