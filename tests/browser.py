@@ -428,9 +428,13 @@ def main():
                 confirmed(page,'Sent')
                 page.wait_for_timeout(1400)
                 # Group recall is a browser control, never direct mutation of the game.
-                province(page,src);page.locator('#card-size').click()
                 recall_group=page.locator('[data-recall]').filter(has_text='Recall group')
-                expect(recall_group).to_be_visible(timeout=10000)
+                for _ in range(3):  # the live 12× match keeps re-rendering the card; open the source province until the row shows
+                    province(page,src)
+                    if page.locator('#card-size').is_visible() and page.locator('#card').get_attribute('data-size')!='full':page.locator('#card-size').click()
+                    try:expect(recall_group).to_be_visible(timeout=4000);break
+                    except AssertionError:page.keyboard.press('Escape');page.wait_for_timeout(300)
+                expect(recall_group).to_be_visible(timeout=6000)
                 recall_group.click()
                 confirmed(page,'Recall queued')
                 expect(page.locator('.march-row.returning').first).to_be_visible(timeout=5000)
