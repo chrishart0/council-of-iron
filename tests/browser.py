@@ -534,5 +534,9 @@ def main():
     voice_command=[sys.executable,str(ROOT/'tests/voice-browser.py'),'--artifacts',str(artifacts/'voice')]
     if args.executable:voice_command.extend(['--executable',args.executable])
     if not args.bridge:subprocess.run(voice_command,cwd=ROOT,check=True)
+    # Mobile performance budgets (docs/PERFORMANCE.md): a throttled phone during a busy live match.
+    perf_command=[sys.executable,str(ROOT/'tests/perf-browser.py'),'--artifacts',str(artifacts/'perf')]
+    if args.executable:perf_command.extend(['--executable',args.executable])
+    if not args.bridge:subprocess.run(perf_command,cwd=ROOT,check=True)
 
 if __name__=='__main__':main()

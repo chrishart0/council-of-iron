@@ -20,6 +20,7 @@
     "test:balance": "node scripts/tournament.js",
     "test:review": "python tests/review-browser.py",
     "test:voice": "python tests/voice-browser.py",
+    "test:perf": "python tests/perf-browser.py",
     "stt": "cd tools/stt && uv run server.py",
     "test:stt": "cd tools/stt && uv run test_sidecar.py",
     "bench:stt": "cd tools/stt && uv run bench.py"

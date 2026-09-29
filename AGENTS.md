@@ -75,3 +75,7 @@ The shell is one design system (docs/UI-DESIGN.md): blued-iron plates with brass
 - **Sound follows the tiers** (`sound-model.js`): ACTION → `dispatch` stinger, PERSONAL message → `chat` blip, headlines that affect you keep their banner stingers, WORLD → silent. Every sound repeats something visible.
 - **Start means start**: there is no opening phase. Long marches use the same order card, drag and tap as a neighbour march; the route is drawn leg by leg and the details show the server's arrival forecast (`combatAtArrival`, `defenseAtArrival`).
 - Keep the v0.8 interaction bounds (`tests/ui_tasks.py`), one loud primary per panel, press feedback on every control, 44 px targets on touch, visible focus, the Escape order (tip, banner, menu, war log, Messages thread → list, card, Powers sheet, expanded map), reduced motion, and the phone layouts 390×844 and 844×390.
+
+## Performance contract (phones)
+
+docs/PERFORMANCE.md has the measurements. Anything animating inside the map SVG repaints the whole map every frame: no endless or per-tick animation there, and map effects only for what concerns the viewer. Polling updates only what changed (keyed lists via `patchList` in `public/ui.js`; attribute/text writes only on change); never rebuild a panel with `innerHTML` per poll. The army loop idles when nothing moves or the page is hidden; polling stops while hidden. `tests/perf-browser.py` (in `python tests/browser.py`) holds the budgets.
