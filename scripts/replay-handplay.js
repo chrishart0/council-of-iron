@@ -24,7 +24,7 @@ export const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../tests/fixt
 // The recording is replayed on the published map. It was played on the 80-province v4 board; v6 merged
 // provinces (scripts/build-imperial-v6.js), so every recorded province id goes through this table.
 export const map = JSON.parse(readFileSync(new URL('../public/imperial-map.json', import.meta.url)));
-export const RECORDED_PROVINCE = Object.freeze({
+const RECORDED_PROVINCE = Object.freeze({
   'central-america':'mexico', amazonia:'brazil', patagonia:'andes', 'east-canada':'canada', 'west-canada':'canada',
   scotland:'england', midlands:'england', normandy:'north-france', occitania:'south-france', 'alpine-france':'south-france',
   belgium:'low-countries', rhineland:'ruhr', brandenburg:'prussia', saxony:'bavaria', 'south-italy':'italy',
@@ -32,15 +32,15 @@ export const RECORDED_PROVINCE = Object.freeze({
   sahel:'sahara', angola:'congo', 'north-india':'india', 'south-india':'india',
   'north-japan':'japan', 'south-japan':'japan', 'new-zealand':'australia' });
 const place = id => typeof id === 'string' ? RECORDED_PROVINCE[id] ?? id : id;
-export const projection = g => ({ tick:g.tick, status:g.status, provinces:g.provinces, armies:g.armies, sides:sides(g), outcome:g.outcome });
-export const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const projection = g => ({ tick:g.tick, status:g.status, provinces:g.provinces, armies:g.armies, sides:sides(g), outcome:g.outcome });
+const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const troopTotal = g => g.provinces.reduce((n,p)=>n+p.troops,0)+g.armies.reduce((n,a)=>n+a.amount,0);
 const counts = (items,key) => items.reduce((result,item)=>{const k=key(item);result[k]=(result[k]||0)+1;return result;},{});
 /** Recorded accept IDs, in creation order; the n-th recorded propose created the n-th of them. */
 const recordedOffers=[...new Set(fixture.actions.filter(a=>a.action.type==='accept').map(a=>a.action.proposalId))]
   .sort((a,b)=>Number(a.split('-')[1])-Number(b.split('-')[1]));
 /** The orders to submit for one recorded action, in order: [{country, action, opId}]. */
-export function adapt(g, a, offers) {
+function adapt(g, a, offers) {
   const recorded=structuredClone(a.action);
   // Province ids onto the current board; an order whose ends merged into one province is rejected and counted.
   for(const key of ['from','to'])if(key in recorded)recorded[key]=Array.isArray(recorded[key])?recorded[key].map(place):place(recorded[key]);
@@ -88,7 +88,6 @@ function play(g,a,offers,submit,skipped) {
     }
   }
 }
-/** `onTick(g)` (optional) sees the board at the start of every tick, before that tick's orders. */
 /** Seat the eight recorded countries and start. */
 export function seatRecorded(g, profiles = null) {
   for(const c of map.countries)join(g,map,{profileId:profiles?.[c.id]?.id ?? c.id,name:profiles?.[c.id]?.name ?? `Single-controller ${c.id}`,country:c.id,kind:'agent'});

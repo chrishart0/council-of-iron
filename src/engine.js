@@ -1,4 +1,4 @@
-import { travelTicks, journeyPoint, friendlyPath as sharedPath } from '../public/movement.js';
+import { travelTicks, journeyPoint, friendlyPath } from '../public/movement.js';
 import { feedItems, feedPage, isWorldMessage } from '../public/feed-model.js';
 import { combatForecast } from '../public/combat.js';
 import { truceUntil } from '../public/relations.js';
@@ -181,7 +181,6 @@ function useBudget(g, p) {
   p.orderTicks = p.orderTicks.filter(t => t > g.tick - gameRules(g).orderWindow);
   p.orderTicks.push(g.tick);
 }
-const friendlyPath = (g, country, from, to) => sharedPath(g, country, from, to);
 /** Why a border you can see is not a way through: the map's impassable terrain between the target and the source
  * (or any of your or your allies' provinces). Map data only; it adds words to an error, never a rule. */
 function barrierNote(g, map, country, from, to) {
@@ -213,7 +212,7 @@ function borderingSources(g, country, action, target) {
 const marchSources = action => action.sources ?? [{ from: action.from,
   ...(action.amount !== undefined ? { amount: action.amount } : {}), ...(action.percent !== undefined ? { percent: action.percent } : {}) }];
 /** An attack needs a border: `country` itself (not merely an ally) owns a province next to the target. */
-export const ownsBorder = (g, country, target) => g.provinces.some(p => p.owner === country && adjacent(g, p.id, target));
+const ownsBorder = (g, country, target) => g.provinces.some(p => p.owner === country && adjacent(g, p.id, target));
 /** Why `country` may not attack `target`, with the nearest provinces it holds (fewest links) and any allied border. */
 function noBorder(g, country, target) {
   const hops = new Map([[target, 0]]), queue = [target];
@@ -240,6 +239,7 @@ export function marchPlan(g, map, country, action, { assumeWar = false } = {}) {
   const truce = warRequired ? truceUntil(g, country, target.owner) : null;
   requireRule(assumeWar || !warRequired, truce === null ? 'Declare war before attacking another country.' : truceMessage(target.owner, truce), 409,
     truce === null ? null : { truceUntil: truce });
+  // The border rule is checked first for fromAllBordering (it picks the sources), otherwise after the sources.
   const border = () => { if (hostile) requireRule(ownsBorder(g, country, target.id), noBorder(g, country, target.id) + barrierNote(g, map, country, null, target.id), 409); };
   if (action.fromAllBordering) border();
   const inputs = action.fromAllBordering ? borderingSources(g, country, action, target) : marchSources(action);
@@ -253,7 +253,7 @@ export function marchPlan(g, map, country, action, { assumeWar = false } = {}) {
     requireRule(source.id !== target.id, 'Choose a different destination.');
     requireRule(!unique.has(source.id), 'Each source may appear only once.'); unique.add(source.id);
   }
-  border();
+  if (!action.fromAllBordering) border();
   const sources = inputs.map(input => {
     const source = province(g, input.from);
     const route = adjacent(g, source.id, target.id)
@@ -980,16 +980,19 @@ export function tick(g) {
     g.dominanceBreaks = g.dominanceBreaks.slice(-20);
   }
 }
+/** Index of the first event after cursor `after`: logarithmic, so a quiet poll never rescans a whole match. */
+const firstAfter = (g, after) => {
+  let lo = 0, hi = g.events.length;
+  while (lo < hi) { const mid = (lo + hi) >>> 1;
+    if (g.events[mid].id <= after) lo = mid + 1; else hi = mid; }
+  return lo;
+};
 /** A viewer gets only public events and inbox messages addressed to that seat at SEND time. */
 export function observe(g, country = null, after = 0, limit = 200) {
   requireRule(Number.isSafeInteger(after) && after >= 0, 'Invalid event cursor.');
   requireRule(Number.isSafeInteger(limit) && limit > 0 && limit <= 10000, 'Invalid event limit.');
-  // Cursor lookup is logarithmic; a quiet poll must not rescan a whole match.
-  let lo = 0, hi = g.events.length;
-  while (lo < hi) { const mid = (lo + hi) >>> 1;
-    if (g.events[mid].id <= after) lo = mid + 1; else hi = mid; }
   const visible = [];
-  for (let i = lo; i < g.events.length && visible.length <= limit; i++) {
+  for (let i = firstAfter(g, after); i < g.events.length && visible.length <= limit; i++) {
     const e = g.events[i];
     if (!e.recipients || e.recipients.includes(country)) visible.push(e);
   }
@@ -1008,12 +1011,6 @@ export function observe(g, country = null, after = 0, limit = 200) {
     events, cursor: hasMore ? events.at(-1).id : g.sequence, hasMore, outcome: g.outcome };
 }
 
-const firstAfter = (g, after) => {
-  let lo = 0, hi = g.events.length;
-  while (lo < hi) { const mid = (lo + hi) >>> 1;
-    if (g.events[mid].id <= after) lo = mid + 1; else hi = mid; }
-  return lo;
-};
 /** A seat's inbox: unread DMs and alliance messages delivered to it (the same recipient filter as
  * `observe`: addressed to that seat at send time, never its own), plus the decisions waiting on it
  * (alliance offers it has not accepted, peace offers to its side). Read-only.
@@ -1066,11 +1063,8 @@ export function attention(g, country) {
 export function worldFeed(g, after = 0, limit = 100) {
   requireRule(Number.isSafeInteger(after) && after >= 0, 'Invalid feed cursor.');
   requireRule(Number.isSafeInteger(limit) && limit > 0 && limit <= 500, 'Invalid feed limit.');
-  let lo = 0, hi = g.events.length;
-  while (lo < hi) { const mid = (lo + hi) >>> 1;
-    if (g.events[mid].id <= after) lo = mid + 1; else hi = mid; }
   const events = [];
-  for (let i = lo; i < g.events.length; i++) {
+  for (let i = firstAfter(g, after); i < g.events.length; i++) {
     const e = g.events[i];
     if (e.recipients || !(g.headlines[e.id] || isWorldMessage(e))) continue;
     events.push(g.headlines[e.id] ? { ...e, headline: g.headlines[e.id] } : { ...e });

@@ -296,7 +296,7 @@ async function runCommand() {
       if (++pollFailures % 5 === 1) log(`poll failed (${error.status ?? error.cause?.code ?? ''}): ${error.message}`);
     }
     if (gameStatus === 'running' && startTick === null) { startTick = tick; log(`match running at tick ${tick}`); }
-    if (gameStatus === 'lobby' && !opts.waitStart && !httpStatus) { reason = 'not-started'; log('The room is still in the lobby; use --wait-start to wait.'); break; }
+    if (gameStatus === 'lobby' && !opts.waitStart && !pollFailures) { reason = 'not-started'; log('The room is still in the lobby; use --wait-start to wait.'); break; }
     reason = stopReason({ status: gameStatus, httpStatus, interrupted, unreachable: pollFailures >= 60, deadlinePassed: Date.now() > deadline, allSeatsDone: seatState.every(s => (s.eliminated || maxTurns && s.turns >= maxTurns) && !s.child) });
     if (reason) break;
     for (const s of seatState.filter(s => !maxTurns || s.turns < maxTurns)) {
