@@ -64,7 +64,7 @@ function sideRoster(g, side) { return members(g, side).map(p => p.id); }
 export const maxAlliance = g => Math.min(3, Math.floor(g.players.length / 2));
 export function player(g, id) {
   const p = g.players.find(p => p.id === id);
-  requireRule(p, 'Country has no player.', 404); return p;
+  requireRule(p, 'That country is not in this match.', 404); return p;
 }
 export function displayName(p) {
   return p.kind==='agent' && p.model && !p.name.toLowerCase().includes(p.model.toLowerCase())
@@ -566,13 +566,16 @@ function leave(g, p) {
   g.departures.push(departure); event(g, 'departure_notice', departure);
   return departure;
 }
+/** Two sides are at war as wholes: one warring pair puts every pair across them at war, except a pair
+ * still under truce (a member who joined an alliance at war is drawn in when its truce ends). */
 function normalizeWars(g) {
   const pairs=new Set(g.wars), teams=[...new Set(g.players.map(p=>p.side))];
+  const truce=new Set(g.truces.filter(t=>t.until>g.tick).map(t=>t.countries.join(':')));
   const expanded=new Set();
   for(let i=0;i<teams.length;i++)for(let j=i+1;j<teams.length;j++) {
     const left=sideRoster(g,teams[i]),right=sideRoster(g,teams[j]);
     if(left.some(a=>right.some(b=>pairs.has(warKey(a,b)))))
-      for(const a of left)for(const b of right)expanded.add(warKey(a,b));
+      for(const a of left)for(const b of right)if(!truce.has(warKey(a,b)))expanded.add(warKey(a,b));
   }
   g.wars=[...expanded].sort();
 }

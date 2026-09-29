@@ -42,3 +42,19 @@ test('the arrival forecast counts defenders ending at the target, not columns pa
   const plan = preview(g, map, 'france', { to: 'ruhr', from: 'north-france', amount: 3 });
   assert.equal(plan.defenseAtArrival.incoming, 4);
 });
+
+test('joining an alliance at war does not break a truce: the war reaches the new member only when the truce ends', () => {
+  const g = game();
+  send(g, 'usa', { type: 'declare_war', country: 'germany' });
+  send(g, 'france', { type: 'declare_war', country: 'germany' });
+  const offer = send(g, 'france', { type: 'offer_peace', country: 'germany' });
+  const { truceUntil } = send(g, 'germany', { type: 'accept_peace', offerId: offer.offerId });
+  const q = send(g, 'usa', { type: 'propose', country: 'france', name: 'Accord' });
+  send(g, 'france', { type: 'accept', proposalId: q.proposalId });
+  while (g.tick < truceUntil - 1) tick(g);
+  assert.equal(g.players.find(p => p.id === 'france').side, g.players.find(p => p.id === 'usa').side, 'the alliance formed');
+  assert.ok(g.wars.includes('germany:usa'));
+  assert.ok(!g.wars.includes('france:germany'), 'no war with Germany during the truce');
+  tick(g);
+  assert.ok(g.wars.includes('france:germany'), 'the alliance war reaches France when the truce ends');
+});
