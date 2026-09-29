@@ -307,7 +307,7 @@ export class Comms {
     const title = this.$('.cx-title'); title.textContent = this.view === 'thread' && conv ? this.convTitle(conv) : 'Messages'; title.tabIndex = -1;
     this.$('.cx-readall').hidden = !this.box || this.readOnly;
     const composer = this.$('.cx-composer'), quick = this.$('.cx-quick');
-    if (this.view !== 'thread' || !conv) { if (rowsEl.firstChild) rowsEl.replaceChildren(); rowsEl.__conv = null; composer.hidden = quick.hidden = true; return; }
+    if (this.view !== 'thread' || !conv) { if (rowsEl.firstChild) rowsEl.replaceChildren(); rowsEl.__conv = rowsEl.__rendered = null; composer.hidden = quick.hidden = true; return; }
     const me = this.state.players?.find(p => p.id === this.state.you);
     const canWrite = !this.readOnly && this.state.status === 'running' && me?.eliminatedAt == null && (conv.kind !== 'alliance' || conv.side) && !(conv.kind === 'dm' && conv.eliminated);
     composer.hidden = !canWrite; quick.hidden = !canWrite || conv.kind !== 'dm';

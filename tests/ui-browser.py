@@ -410,7 +410,7 @@ def battle_checks(page,server,report,capture):
     assert all(r['transition'] in ('0s','0s, 0s') for r in page.evaluate(BATTLE_AUDIT)),page.evaluate(BATTLE_AUDIT)
     page.emulate_media(reduced_motion='no-preference')
     ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
-    report['assertions'].append('Battle tokens are a tug-of-war bar: team colours (coalition or country, kept ≥20 ΔE apart), split at attacker/(attacker+defender) within 1% (6% minimum per side), updating after a real stepped round; 0.4 s transition, none under reduced motion; unique IDs.')
+    report['assertions'].append('Battle tokens are a tug-of-war bar: team colours (coalition or country, kept ≥20 ΔE apart), split at attacker/(attacker+defender) within 1% (6% minimum per side), updating after a real stepped round; 0.4 s transition with a mouse (none on touch screens or under reduced motion); unique IDs.')
 
 def map_checks(page,server,report,capture):
     views=[('world',0),('europe',0),('europe',1),('europe',2),('europe',3)]

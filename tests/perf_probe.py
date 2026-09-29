@@ -33,6 +33,8 @@ INIT = r'''(() => {
     }
   }).observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
   try { new PerformanceObserver(l => { for (const e of l.getEntries()) P.longTasks.push(Math.round(e.duration)); }).observe({ type: 'longtask', buffered: true }); } catch {}
+  P.wire = [];
+  try { new PerformanceObserver(l => { for (const e of l.getEntries()) if (/\/api\/games\/[^/?]+\?after=/.test(e.name)) P.wire.push(e.encodedBodySize); }).observe({ type: 'resource', buffered: true }); } catch {}
 })();'''
 
 SNAPSHOT = r'''() => {
@@ -46,7 +48,7 @@ SNAPSHOT = r'''() => {
     if (s.boxShadow && s.boxShadow !== 'none') heavy.shadow++;
   }
   const anims = document.getAnimations().filter(a => a.playState === 'running');
-  return { polls: P.polls, pollBytes: P.pollBytes.slice(), added: P.added, addedTree: P.addedTree, removed: P.removed, attrs: P.attrs, text: P.text,
+  return { polls: P.polls, pollBytes: P.pollBytes.slice(), wire: P.wire.slice(), added: P.added, addedTree: P.addedTree, removed: P.removed, attrs: P.attrs, text: P.text,
     longTasks: P.longTasks.slice(), raf: P.raf, intervals: [...P.intervals.values()],
     nodes: all.length, svgNodes: document.querySelectorAll('#map *').length, uses: document.querySelectorAll('#map use').length,
     heavy, running: anims.length, infinite: anims.filter(a => a.effect?.getTiming().iterations === Infinity).length,
@@ -87,6 +89,7 @@ def window(page, cdp, seconds, trace_browser=None):
         'layout_per_s': round((b['LayoutCount'] - a['LayoutCount']) / wall, 1), 'style_per_s': round((b['RecalcStyleCount'] - a['RecalcStyleCount']) / wall, 1),
         'layout_ms_per_s': round(1000 * (b['LayoutDuration'] - a['LayoutDuration']) / wall, 1), 'style_ms_per_s': round(1000 * (b['RecalcStyleDuration'] - a['RecalcStyleDuration']) / wall, 1),
         'polls': sb['polls'] - sa['polls'], 'poll_kb': round(sum(sb['pollBytes'][len(sa['pollBytes']):]) / polls / 1024, 1),
+        'poll_wire_kb': round(sum(sb['wire'][len(sa['wire']):]) / max(1, len(sb['wire']) - len(sa['wire'])) / 1024, 1),
         'added_per_poll': round((sb['added'] - sa['added']) / polls, 1), 'added_tree_per_poll': round((sb['addedTree'] - sa['addedTree']) / polls, 1),
         'removed_per_poll': round((sb['removed'] - sa['removed']) / polls, 1), 'attrs_per_poll': round((sb['attrs'] - sa['attrs']) / polls, 1),
         'raf_per_s': round((sb['raf'] - sa['raf']) / wall, 1), 'long_tasks': sb['longTasks'][len(sa['longTasks']):],

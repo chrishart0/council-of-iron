@@ -44,6 +44,8 @@ class Walk:
         assert hit is True, ('covered', label, hit)
         if self.touch: self.page.touchscreen.tap(x, y)
         else: self.page.mouse.click(x, y)
+        # Let the page answer the tap (a camera move after opening the card runs on the next frame) before the next step.
+        self.page.evaluate('()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
         self.count += 1
         if label: self.snap(label)
     def counter(self, province):

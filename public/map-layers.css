@@ -82,6 +82,8 @@
 .battle-defend-bar,.battle-attack-bar,.battle-divider{pointer-events:none}
 .battle-attack-bar{transform-box:fill-box;transform-origin:left center}
 .battle-divider{fill:#10181b}
+/* The bar eases to each round's split with a mouse; on touch screens (phones) it steps: a transition every game second keeps the whole map repainting. */
+@media(pointer:fine){.battle-attack-bar,.battle-divider{transition:transform .4s ease}}
 .battle-counter.resolved .battle-pulse{display:none}
 .battle-name{display:none;font:11px var(--map-serif,Georgia,serif);fill:#ffe3cf;text-anchor:middle;paint-order:stroke;stroke:#2a110e;stroke-width:3;stroke-linejoin:round;pointer-events:none}
 .battle-counter.named .battle-name{display:inline}
