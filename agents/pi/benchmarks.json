@@ -5439,6 +5439,316 @@
       ]
     },
     {
+      "id": "2026-09-29T23-36-49-076Z-b96f7734",
+      "match": "v6-current-japan-03",
+      "mapId": "imperial-1910-v6",
+      "combatSeed": "v6-current-japan-03",
+      "startedAt": "2026-09-29T23:36:49.079Z",
+      "modelGroup": "qwen",
+      "modelId": "qwen3.8-27b-unsloth-q4-xl",
+      "client": "Pi",
+      "access": "MCP",
+      "harness": "Pi",
+      "arena": "seven practice bots",
+      "sourceRevision": "a73cd6530a2b",
+      "country": "japan",
+      "interfaceVersion": "decision-turn-v5",
+      "turnView": "decision",
+      "strategy": "decision view in prompt",
+      "maxTurnSeconds": 90,
+      "decisionIntervalTicks": 30,
+      "sessionMode": "fresh",
+      "preset": "standard",
+      "status": "finished",
+      "resultReason": "domination",
+      "finalTick": 1267,
+      "result": "win",
+      "won": true,
+      "industry": 11,
+      "acceptedActions": 88,
+      "rejectedActions": 12,
+      "toolCalls": 205,
+      "failedToolCalls": 17,
+      "firstActionSeconds": 6.31,
+      "failureRatePct": 8.29,
+      "inputTokens": 262423,
+      "outputTokens": 26273,
+      "cacheReadTokens": 1733847,
+      "totalTokens": 2022543,
+      "uncachedTokens": 288696,
+      "tokensPerAction": 22983.44,
+      "turns": 43,
+      "timedOutTurns": 0,
+      "meanTurnSeconds": 9.23,
+      "durationSeconds": 1295.62,
+      "progress": [
+        {
+          "tick": 0,
+          "ownIndustry": 6,
+          "sideIndustry": 6,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 30,
+          "ownIndustry": 6,
+          "sideIndustry": 6,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 60,
+          "ownIndustry": 6,
+          "sideIndustry": 14,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 90,
+          "ownIndustry": 6,
+          "sideIndustry": 15,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 120,
+          "ownIndustry": 6,
+          "sideIndustry": 15,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 150,
+          "ownIndustry": 6,
+          "sideIndustry": 16,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 180,
+          "ownIndustry": 6,
+          "sideIndustry": 17,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 210,
+          "ownIndustry": 6,
+          "sideIndustry": 16,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 240,
+          "ownIndustry": 8,
+          "sideIndustry": 18,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 270,
+          "ownIndustry": 8,
+          "sideIndustry": 20,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 300,
+          "ownIndustry": 8,
+          "sideIndustry": 21,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 330,
+          "ownIndustry": 8,
+          "sideIndustry": 21,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 360,
+          "ownIndustry": 8,
+          "sideIndustry": 21,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 390,
+          "ownIndustry": 8,
+          "sideIndustry": 23,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 420,
+          "ownIndustry": 8,
+          "sideIndustry": 24,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 450,
+          "ownIndustry": 9,
+          "sideIndustry": 25,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 480,
+          "ownIndustry": 9,
+          "sideIndustry": 25,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 510,
+          "ownIndustry": 9,
+          "sideIndustry": 26,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 540,
+          "ownIndustry": 9,
+          "sideIndustry": 27,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 570,
+          "ownIndustry": 9,
+          "sideIndustry": 28,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 600,
+          "ownIndustry": 8,
+          "sideIndustry": 28,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 630,
+          "ownIndustry": 8,
+          "sideIndustry": 29,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 660,
+          "ownIndustry": 8,
+          "sideIndustry": 29,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 690,
+          "ownIndustry": 8,
+          "sideIndustry": 29,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 720,
+          "ownIndustry": 8,
+          "sideIndustry": 30,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 750,
+          "ownIndustry": 8,
+          "sideIndustry": 30,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 780,
+          "ownIndustry": 8,
+          "sideIndustry": 30,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 810,
+          "ownIndustry": 8,
+          "sideIndustry": 30,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 840,
+          "ownIndustry": 8,
+          "sideIndustry": 34,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 870,
+          "ownIndustry": 10,
+          "sideIndustry": 36,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 900,
+          "ownIndustry": 10,
+          "sideIndustry": 37,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 931,
+          "ownIndustry": 10,
+          "sideIndustry": 38,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 961,
+          "ownIndustry": 10,
+          "sideIndustry": 55,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 991,
+          "ownIndustry": 10,
+          "sideIndustry": 56,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 1021,
+          "ownIndustry": 10,
+          "sideIndustry": 56,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 1051,
+          "ownIndustry": 10,
+          "sideIndustry": 56,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 1081,
+          "ownIndustry": 10,
+          "sideIndustry": 59,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 1111,
+          "ownIndustry": 10,
+          "sideIndustry": 59,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 1141,
+          "ownIndustry": 10,
+          "sideIndustry": 61,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 1171,
+          "ownIndustry": 11,
+          "sideIndustry": 62,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 1201,
+          "ownIndustry": 11,
+          "sideIndustry": 65,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 1231,
+          "ownIndustry": 11,
+          "sideIndustry": 65,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 1261,
+          "ownIndustry": 11,
+          "sideIndustry": 67,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 1267,
+          "ownIndustry": 11,
+          "sideIndustry": null,
+          "ownProvinces": null
+        }
+      ]
+    },
+    {
       "id": "2026-09-29T23-37-57-842Z-0f6a7e4f",
       "match": "v6-current-russia-04",
       "mapId": "imperial-1910-v6",
