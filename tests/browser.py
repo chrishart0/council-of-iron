@@ -401,7 +401,10 @@ def main():
                 page.keyboard.press('Escape');expect(page.locator('#card')).to_be_hidden()
                 page.locator('#hud-standard').focus();page.keyboard.press('Enter')
                 expect(page.locator('#card')).to_have_attribute('data-kind','alliance');expect(page.locator('#card-title')).to_be_focused()
-                page.keyboard.press('Escape');expect(page.locator('#card')).to_be_hidden();expect(page.locator('#hud-standard')).to_be_focused()
+                for _ in range(3):  # a live headline/banner may take Escape before the card
+                    page.keyboard.press('Escape')
+                    if page.locator('#card').is_hidden():break
+                expect(page.locator('#card')).to_be_hidden();expect(page.locator('#hud-standard')).to_be_focused()
                 report['assertions'].append('A second room starts with the same browser identity; map taps open a peeking order card (province, then neighbour); 100% and Shift-click adding a second source work; the standard opens and closes the alliance card by keyboard with focus returned.')
                 # Attack together: with the target chosen, tapping another of your provinces beside it adds a source.
                 # The practice bots have been playing against an idle USA for a few minutes, so pick two provinces the USA
