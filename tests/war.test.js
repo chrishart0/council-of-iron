@@ -137,7 +137,7 @@ test('industrial defense bonus lowers exact capture odds and matches rolled defe
 test('attack preview counts visible defender reinforcements due before arrival',()=>{
   const g=game(['usa','britain']),target=province(g,'mexico');target.owner='britain';target.troops=6;
   target.nextRecruit=g.tick+20;province(g,'west-us').troops=30;
-  g.armies.push({id:'visible-reinforcement',country:'britain',from:'central-america',to:'mexico',amount:20,departedAt:g.tick,arrivesAt:g.tick+5});
+  g.armies.push({id:'visible-reinforcement',country:'britain',from:'caribbean',to:'mexico',amount:20,departedAt:g.tick,arrivesAt:g.tick+5});
   const forecast=preview(g,map,'usa',{from:'west-us',to:'mexico',amount:20});
   assert.equal(forecast.warRequired,true,'forecast before the declaration');
   assert.equal(forecast.defenseAtArrival.incoming,20);
