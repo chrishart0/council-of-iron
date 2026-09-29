@@ -3769,6 +3769,1840 @@
           "ownProvinces": null
         }
       ]
+    },
+    {
+      "id": "2026-09-29T22-25-05-819Z-647e7cfd",
+      "match": "v6-current-france-01",
+      "mapId": "imperial-1910-v6",
+      "combatSeed": "v6-current-france-01",
+      "startedAt": "2026-09-29T22:25:05.823Z",
+      "modelGroup": "deepseek",
+      "modelId": "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
+      "client": "Pi",
+      "access": "MCP",
+      "harness": "Pi",
+      "arena": "seven practice bots",
+      "sourceRevision": "a73cd6530a2b",
+      "country": "france",
+      "interfaceVersion": "decision-turn-v4",
+      "turnView": "decision",
+      "strategy": "decision view in prompt",
+      "maxTurnSeconds": 120,
+      "decisionIntervalTicks": 30,
+      "sessionMode": "fresh",
+      "preset": "standard",
+      "status": "finished",
+      "resultReason": "domination",
+      "finalTick": 518,
+      "result": "win",
+      "won": true,
+      "industry": 24,
+      "acceptedActions": 37,
+      "rejectedActions": 3,
+      "toolCalls": 124,
+      "failedToolCalls": 4,
+      "firstActionSeconds": 5.63,
+      "failureRatePct": 3.23,
+      "inputTokens": 295308,
+      "outputTokens": 58249,
+      "cacheReadTokens": 990976,
+      "totalTokens": 1344533,
+      "uncachedTokens": 353557,
+      "tokensPerAction": 36338.73,
+      "turns": 16,
+      "timedOutTurns": 0,
+      "meanTurnSeconds": 26.74,
+      "durationSeconds": 553.38,
+      "progress": [
+        {
+          "tick": 0,
+          "ownIndustry": 10,
+          "sideIndustry": 10,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 30,
+          "ownIndustry": 10,
+          "sideIndustry": 10,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 82,
+          "ownIndustry": 11,
+          "sideIndustry": 23,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 123,
+          "ownIndustry": 11,
+          "sideIndustry": 40,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 153,
+          "ownIndustry": 11,
+          "sideIndustry": 40,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 183,
+          "ownIndustry": 12,
+          "sideIndustry": 41,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 213,
+          "ownIndustry": 12,
+          "sideIndustry": 43,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 249,
+          "ownIndustry": 14,
+          "sideIndustry": 44,
+          "ownProvinces": 10
+        },
+        {
+          "tick": 289,
+          "ownIndustry": 15,
+          "sideIndustry": 47,
+          "ownProvinces": 11
+        },
+        {
+          "tick": 319,
+          "ownIndustry": 16,
+          "sideIndustry": 47,
+          "ownProvinces": 12
+        },
+        {
+          "tick": 349,
+          "ownIndustry": 18,
+          "sideIndustry": 51,
+          "ownProvinces": 13
+        },
+        {
+          "tick": 379,
+          "ownIndustry": 19,
+          "sideIndustry": 53,
+          "ownProvinces": 14
+        },
+        {
+          "tick": 409,
+          "ownIndustry": 19,
+          "sideIndustry": 51,
+          "ownProvinces": 14
+        },
+        {
+          "tick": 446,
+          "ownIndustry": 23,
+          "sideIndustry": 58,
+          "ownProvinces": 16
+        },
+        {
+          "tick": 479,
+          "ownIndustry": 24,
+          "sideIndustry": 62,
+          "ownProvinces": 16
+        },
+        {
+          "tick": 509,
+          "ownIndustry": 24,
+          "sideIndustry": 65,
+          "ownProvinces": 16
+        },
+        {
+          "tick": 518,
+          "ownIndustry": 24,
+          "sideIndustry": null,
+          "ownProvinces": null
+        }
+      ]
+    },
+    {
+      "id": "2026-09-29T22-26-30-640Z-49a0020d",
+      "match": "v6-current-france-01",
+      "mapId": "imperial-1910-v6",
+      "combatSeed": "v6-current-france-01",
+      "startedAt": "2026-09-29T22:26:30.643Z",
+      "modelGroup": "qwen",
+      "modelId": "qwen3.8-27b-unsloth-q4-xl",
+      "client": "Pi",
+      "access": "MCP",
+      "harness": "Pi",
+      "arena": "seven practice bots",
+      "sourceRevision": "a73cd6530a2b",
+      "country": "france",
+      "interfaceVersion": "decision-turn-v4",
+      "turnView": "decision",
+      "strategy": "decision view in prompt",
+      "maxTurnSeconds": 120,
+      "decisionIntervalTicks": 30,
+      "sessionMode": "fresh",
+      "preset": "standard",
+      "status": "finished",
+      "resultReason": "domination",
+      "finalTick": 560,
+      "result": "win",
+      "won": true,
+      "industry": 18,
+      "acceptedActions": 42,
+      "rejectedActions": 5,
+      "toolCalls": 113,
+      "failedToolCalls": 7,
+      "firstActionSeconds": 14.17,
+      "failureRatePct": 6.19,
+      "inputTokens": 171853,
+      "outputTokens": 15040,
+      "cacheReadTokens": 1072079,
+      "totalTokens": 1258972,
+      "uncachedTokens": 186893,
+      "tokensPerAction": 29975.52,
+      "turns": 19,
+      "timedOutTurns": 0,
+      "meanTurnSeconds": 13.25,
+      "durationSeconds": 571.4,
+      "progress": [
+        {
+          "tick": 0,
+          "ownIndustry": 10,
+          "sideIndustry": 10,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 30,
+          "ownIndustry": 10,
+          "sideIndustry": 10,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 60,
+          "ownIndustry": 11,
+          "sideIndustry": 23,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 90,
+          "ownIndustry": 12,
+          "sideIndustry": 26,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 120,
+          "ownIndustry": 14,
+          "sideIndustry": 29,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 150,
+          "ownIndustry": 13,
+          "sideIndustry": 28,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 180,
+          "ownIndustry": 12,
+          "sideIndustry": 28,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 210,
+          "ownIndustry": 12,
+          "sideIndustry": 29,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 240,
+          "ownIndustry": 12,
+          "sideIndustry": 29,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 270,
+          "ownIndustry": 15,
+          "sideIndustry": 33,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 300,
+          "ownIndustry": 15,
+          "sideIndustry": 35,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 330,
+          "ownIndustry": 16,
+          "sideIndustry": 36,
+          "ownProvinces": 10
+        },
+        {
+          "tick": 360,
+          "ownIndustry": 16,
+          "sideIndustry": 37,
+          "ownProvinces": 10
+        },
+        {
+          "tick": 390,
+          "ownIndustry": 16,
+          "sideIndustry": 37,
+          "ownProvinces": 10
+        },
+        {
+          "tick": 420,
+          "ownIndustry": 16,
+          "sideIndustry": 42,
+          "ownProvinces": 10
+        },
+        {
+          "tick": 450,
+          "ownIndustry": 19,
+          "sideIndustry": 44,
+          "ownProvinces": 11
+        },
+        {
+          "tick": 480,
+          "ownIndustry": 20,
+          "sideIndustry": 61,
+          "ownProvinces": 11
+        },
+        {
+          "tick": 510,
+          "ownIndustry": 18,
+          "sideIndustry": 61,
+          "ownProvinces": 10
+        },
+        {
+          "tick": 540,
+          "ownIndustry": 18,
+          "sideIndustry": 62,
+          "ownProvinces": 10
+        },
+        {
+          "tick": 560,
+          "ownIndustry": 18,
+          "sideIndustry": null,
+          "ownProvinces": null
+        }
+      ]
+    },
+    {
+      "id": "2026-09-29T22-36-49-547Z-5afdf35d",
+      "match": "v6-current-qing-02",
+      "mapId": "imperial-1910-v6",
+      "combatSeed": "v6-current-qing-02",
+      "startedAt": "2026-09-29T22:36:49.550Z",
+      "modelGroup": "deepseek",
+      "modelId": "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
+      "client": "Pi",
+      "access": "MCP",
+      "harness": "Pi",
+      "arena": "seven practice bots",
+      "sourceRevision": "a73cd6530a2b",
+      "country": "qing",
+      "interfaceVersion": "decision-turn-v4",
+      "turnView": "decision",
+      "strategy": "decision view in prompt",
+      "maxTurnSeconds": 120,
+      "decisionIntervalTicks": 30,
+      "sessionMode": "fresh",
+      "preset": "standard",
+      "status": "finished",
+      "resultReason": "domination",
+      "finalTick": 1583,
+      "result": "win",
+      "won": true,
+      "industry": 4,
+      "acceptedActions": 93,
+      "rejectedActions": 6,
+      "toolCalls": 335,
+      "failedToolCalls": 27,
+      "firstActionSeconds": 4.68,
+      "failureRatePct": 8.06,
+      "inputTokens": 979144,
+      "outputTokens": 204450,
+      "cacheReadTokens": 2694912,
+      "totalTokens": 3878506,
+      "uncachedTokens": 1183594,
+      "tokensPerAction": 41704.37,
+      "turns": 39,
+      "timedOutTurns": 0,
+      "meanTurnSeconds": 34.02,
+      "durationSeconds": 1586.7,
+      "progress": [
+        {
+          "tick": 0,
+          "ownIndustry": 8,
+          "sideIndustry": 8,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 30,
+          "ownIndustry": 8,
+          "sideIndustry": 8,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 60,
+          "ownIndustry": 8,
+          "sideIndustry": 22,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 90,
+          "ownIndustry": 9,
+          "sideIndustry": 23,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 120,
+          "ownIndustry": 7,
+          "sideIndustry": 19,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 150,
+          "ownIndustry": 9,
+          "sideIndustry": 23,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 180,
+          "ownIndustry": 9,
+          "sideIndustry": 23,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 257,
+          "ownIndustry": 10,
+          "sideIndustry": 21,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 287,
+          "ownIndustry": 8,
+          "sideIndustry": 23,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 317,
+          "ownIndustry": 8,
+          "sideIndustry": 23,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 356,
+          "ownIndustry": 8,
+          "sideIndustry": 21,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 422,
+          "ownIndustry": 9,
+          "sideIndustry": 19,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 452,
+          "ownIndustry": 7,
+          "sideIndustry": 17,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 488,
+          "ownIndustry": 5,
+          "sideIndustry": 15,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 527,
+          "ownIndustry": 5,
+          "sideIndustry": 12,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 559,
+          "ownIndustry": 5,
+          "sideIndustry": 8,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 647,
+          "ownIndustry": 5,
+          "sideIndustry": 7,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 677,
+          "ownIndustry": 7,
+          "sideIndustry": 39,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 710,
+          "ownIndustry": 7,
+          "sideIndustry": 37,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 740,
+          "ownIndustry": 7,
+          "sideIndustry": 39,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 770,
+          "ownIndustry": 5,
+          "sideIndustry": 36,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 800,
+          "ownIndustry": 7,
+          "sideIndustry": 37,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 830,
+          "ownIndustry": 8,
+          "sideIndustry": 38,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 860,
+          "ownIndustry": 8,
+          "sideIndustry": 42,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 898,
+          "ownIndustry": 9,
+          "sideIndustry": 44,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 928,
+          "ownIndustry": 10,
+          "sideIndustry": 44,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 968,
+          "ownIndustry": 11,
+          "sideIndustry": 46,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 1061,
+          "ownIndustry": 5,
+          "sideIndustry": 44,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 1091,
+          "ownIndustry": 5,
+          "sideIndustry": 44,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 1121,
+          "ownIndustry": 5,
+          "sideIndustry": 44,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 1157,
+          "ownIndustry": 5,
+          "sideIndustry": 49,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 1214,
+          "ownIndustry": 3,
+          "sideIndustry": 54,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 1244,
+          "ownIndustry": 3,
+          "sideIndustry": 55,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 1303,
+          "ownIndustry": 3,
+          "sideIndustry": 54,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 1338,
+          "ownIndustry": 3,
+          "sideIndustry": 54,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 1368,
+          "ownIndustry": 3,
+          "sideIndustry": 55,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 1414,
+          "ownIndustry": 3,
+          "sideIndustry": 57,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 1444,
+          "ownIndustry": 3,
+          "sideIndustry": 57,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 1474,
+          "ownIndustry": 3,
+          "sideIndustry": 57,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 1583,
+          "ownIndustry": 4,
+          "sideIndustry": null,
+          "ownProvinces": null
+        }
+      ]
+    },
+    {
+      "id": "2026-09-29T22-36-49-547Z-cf98dbaa",
+      "match": "v6-current-qing-02",
+      "mapId": "imperial-1910-v6",
+      "combatSeed": "v6-current-qing-02",
+      "startedAt": "2026-09-29T22:36:49.550Z",
+      "modelGroup": "qwen",
+      "modelId": "qwen3.8-27b-unsloth-q4-xl",
+      "client": "Pi",
+      "access": "MCP",
+      "harness": "Pi",
+      "arena": "seven practice bots",
+      "sourceRevision": "a73cd6530a2b",
+      "country": "qing",
+      "interfaceVersion": "decision-turn-v4",
+      "turnView": "decision",
+      "strategy": "decision view in prompt",
+      "maxTurnSeconds": 120,
+      "decisionIntervalTicks": 30,
+      "sessionMode": "fresh",
+      "preset": "standard",
+      "status": "finished",
+      "resultReason": "deadline",
+      "finalTick": 1800,
+      "result": "loss",
+      "won": false,
+      "industry": 0,
+      "acceptedActions": 111,
+      "rejectedActions": 19,
+      "toolCalls": 371,
+      "failedToolCalls": 29,
+      "firstActionSeconds": 4.75,
+      "failureRatePct": 7.82,
+      "inputTokens": 825443,
+      "outputTokens": 49695,
+      "cacheReadTokens": 3314291,
+      "totalTokens": 4189429,
+      "uncachedTokens": 875138,
+      "tokensPerAction": 37742.6,
+      "turns": 47,
+      "timedOutTurns": 3,
+      "meanTurnSeconds": 19.38,
+      "durationSeconds": 1803.32,
+      "progress": [
+        {
+          "tick": 0,
+          "ownIndustry": 8,
+          "sideIndustry": 8,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 30,
+          "ownIndustry": 8,
+          "sideIndustry": 8,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 60,
+          "ownIndustry": 8,
+          "sideIndustry": 21,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 90,
+          "ownIndustry": 9,
+          "sideIndustry": 21,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 120,
+          "ownIndustry": 9,
+          "sideIndustry": 21,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 150,
+          "ownIndustry": 9,
+          "sideIndustry": 20,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 180,
+          "ownIndustry": 10,
+          "sideIndustry": 21,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 210,
+          "ownIndustry": 9,
+          "sideIndustry": 22,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 240,
+          "ownIndustry": 9,
+          "sideIndustry": 22,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 270,
+          "ownIndustry": 9,
+          "sideIndustry": 19,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 300,
+          "ownIndustry": 9,
+          "sideIndustry": 22,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 330,
+          "ownIndustry": 7,
+          "sideIndustry": 23,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 360,
+          "ownIndustry": 8,
+          "sideIndustry": 24,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 390,
+          "ownIndustry": 10,
+          "sideIndustry": 25,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 420,
+          "ownIndustry": 10,
+          "sideIndustry": 25,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 450,
+          "ownIndustry": 9,
+          "sideIndustry": 23,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 480,
+          "ownIndustry": 9,
+          "sideIndustry": 23,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 510,
+          "ownIndustry": 9,
+          "sideIndustry": 24,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 540,
+          "ownIndustry": 8,
+          "sideIndustry": 22,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 570,
+          "ownIndustry": 7,
+          "sideIndustry": 17,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 600,
+          "ownIndustry": 7,
+          "sideIndustry": 17,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 630,
+          "ownIndustry": 7,
+          "sideIndustry": 14,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 660,
+          "ownIndustry": 7,
+          "sideIndustry": 14,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 690,
+          "ownIndustry": 6,
+          "sideIndustry": 8,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 811,
+          "ownIndustry": 3,
+          "sideIndustry": 16,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 841,
+          "ownIndustry": 3,
+          "sideIndustry": 16,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 871,
+          "ownIndustry": 3,
+          "sideIndustry": 16,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 901,
+          "ownIndustry": 5,
+          "sideIndustry": 17,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 931,
+          "ownIndustry": 6,
+          "sideIndustry": 16,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 961,
+          "ownIndustry": 5,
+          "sideIndustry": 15,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 991,
+          "ownIndustry": 5,
+          "sideIndustry": 15,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 1112,
+          "ownIndustry": 5,
+          "sideIndustry": 11,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 1142,
+          "ownIndustry": 3,
+          "sideIndustry": 9,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 1197,
+          "ownIndustry": 3,
+          "sideIndustry": 9,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 1227,
+          "ownIndustry": 3,
+          "sideIndustry": 9,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 1257,
+          "ownIndustry": 3,
+          "sideIndustry": 6,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 1287,
+          "ownIndustry": 5,
+          "sideIndustry": 8,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 1317,
+          "ownIndustry": 3,
+          "sideIndustry": 3,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 1347,
+          "ownIndustry": 2,
+          "sideIndustry": 2,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1377,
+          "ownIndustry": 2,
+          "sideIndustry": 2,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1407,
+          "ownIndustry": 2,
+          "sideIndustry": 2,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1437,
+          "ownIndustry": 2,
+          "sideIndustry": 2,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1557,
+          "ownIndustry": 0,
+          "sideIndustry": 0,
+          "ownProvinces": 0
+        },
+        {
+          "tick": 1587,
+          "ownIndustry": 0,
+          "sideIndustry": 0,
+          "ownProvinces": 0
+        },
+        {
+          "tick": 1617,
+          "ownIndustry": 0,
+          "sideIndustry": 0,
+          "ownProvinces": 0
+        },
+        {
+          "tick": 1647,
+          "ownIndustry": 0,
+          "sideIndustry": 0,
+          "ownProvinces": 0
+        },
+        {
+          "tick": 1685,
+          "ownIndustry": 0,
+          "sideIndustry": 0,
+          "ownProvinces": 0
+        },
+        {
+          "tick": 1800,
+          "ownIndustry": 0,
+          "sideIndustry": null,
+          "ownProvinces": null
+        }
+      ]
+    },
+    {
+      "id": "2026-09-29T23-05-49-668Z-2b2e54b7",
+      "match": "v6-current-qing-02",
+      "mapId": "imperial-1910-v6",
+      "combatSeed": "v6-current-qing-02",
+      "startedAt": "2026-09-29T23:05:49.672Z",
+      "modelGroup": "qwen",
+      "modelId": "qwen3.8-27b-unsloth-q4-xl",
+      "client": "Pi",
+      "access": "MCP",
+      "harness": "Pi",
+      "arena": "seven practice bots",
+      "sourceRevision": "a73cd6530a2b",
+      "country": "qing",
+      "interfaceVersion": "decision-turn-v4",
+      "turnView": "decision",
+      "strategy": "decision view in prompt",
+      "maxTurnSeconds": 60,
+      "decisionIntervalTicks": 30,
+      "sessionMode": "fresh",
+      "preset": "standard",
+      "status": "finished",
+      "resultReason": "deadline",
+      "finalTick": 1800,
+      "result": "loss",
+      "won": false,
+      "industry": 30,
+      "acceptedActions": 134,
+      "rejectedActions": 20,
+      "toolCalls": 395,
+      "failedToolCalls": 36,
+      "firstActionSeconds": 2.78,
+      "failureRatePct": 9.11,
+      "inputTokens": 980633,
+      "outputTokens": 49904,
+      "cacheReadTokens": 4004168,
+      "totalTokens": 5034705,
+      "uncachedTokens": 1030537,
+      "tokensPerAction": 37572.43,
+      "turns": 54,
+      "timedOutTurns": 4,
+      "meanTurnSeconds": 18.1,
+      "durationSeconds": 1805.86,
+      "progress": [
+        {
+          "tick": 0,
+          "ownIndustry": 8,
+          "sideIndustry": 8,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 30,
+          "ownIndustry": 8,
+          "sideIndustry": 8,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 82,
+          "ownIndustry": 9,
+          "sideIndustry": 20,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 112,
+          "ownIndustry": 9,
+          "sideIndustry": 22,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 142,
+          "ownIndustry": 10,
+          "sideIndustry": 22,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 172,
+          "ownIndustry": 10,
+          "sideIndustry": 21,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 202,
+          "ownIndustry": 9,
+          "sideIndustry": 21,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 232,
+          "ownIndustry": 9,
+          "sideIndustry": 21,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 272,
+          "ownIndustry": 10,
+          "sideIndustry": 24,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 302,
+          "ownIndustry": 11,
+          "sideIndustry": 24,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 332,
+          "ownIndustry": 11,
+          "sideIndustry": 24,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 362,
+          "ownIndustry": 11,
+          "sideIndustry": 25,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 392,
+          "ownIndustry": 14,
+          "sideIndustry": 28,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 422,
+          "ownIndustry": 13,
+          "sideIndustry": 29,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 452,
+          "ownIndustry": 13,
+          "sideIndustry": 29,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 482,
+          "ownIndustry": 13,
+          "sideIndustry": 30,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 512,
+          "ownIndustry": 16,
+          "sideIndustry": 26,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 542,
+          "ownIndustry": 14,
+          "sideIndustry": 24,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 602,
+          "ownIndustry": 13,
+          "sideIndustry": 20,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 632,
+          "ownIndustry": 16,
+          "sideIndustry": 21,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 662,
+          "ownIndustry": 18,
+          "sideIndustry": 21,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 692,
+          "ownIndustry": 18,
+          "sideIndustry": 20,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 722,
+          "ownIndustry": 18,
+          "sideIndustry": 20,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 752,
+          "ownIndustry": 19,
+          "sideIndustry": 21,
+          "ownProvinces": 10
+        },
+        {
+          "tick": 782,
+          "ownIndustry": 21,
+          "sideIndustry": 23,
+          "ownProvinces": 11
+        },
+        {
+          "tick": 813,
+          "ownIndustry": 22,
+          "sideIndustry": 24,
+          "ownProvinces": 12
+        },
+        {
+          "tick": 843,
+          "ownIndustry": 24,
+          "sideIndustry": 26,
+          "ownProvinces": 13
+        },
+        {
+          "tick": 873,
+          "ownIndustry": 24,
+          "sideIndustry": 26,
+          "ownProvinces": 13
+        },
+        {
+          "tick": 932,
+          "ownIndustry": 23,
+          "sideIndustry": 49,
+          "ownProvinces": 12
+        },
+        {
+          "tick": 962,
+          "ownIndustry": 24,
+          "sideIndustry": 51,
+          "ownProvinces": 13
+        },
+        {
+          "tick": 992,
+          "ownIndustry": 24,
+          "sideIndustry": 51,
+          "ownProvinces": 13
+        },
+        {
+          "tick": 1022,
+          "ownIndustry": 24,
+          "sideIndustry": 49,
+          "ownProvinces": 13
+        },
+        {
+          "tick": 1052,
+          "ownIndustry": 24,
+          "sideIndustry": 49,
+          "ownProvinces": 13
+        },
+        {
+          "tick": 1082,
+          "ownIndustry": 24,
+          "sideIndustry": 46,
+          "ownProvinces": 13
+        },
+        {
+          "tick": 1113,
+          "ownIndustry": 24,
+          "sideIndustry": 48,
+          "ownProvinces": 13
+        },
+        {
+          "tick": 1143,
+          "ownIndustry": 24,
+          "sideIndustry": 50,
+          "ownProvinces": 13
+        },
+        {
+          "tick": 1173,
+          "ownIndustry": 24,
+          "sideIndustry": 52,
+          "ownProvinces": 13
+        },
+        {
+          "tick": 1203,
+          "ownIndustry": 22,
+          "sideIndustry": 46,
+          "ownProvinces": 12
+        },
+        {
+          "tick": 1233,
+          "ownIndustry": 24,
+          "sideIndustry": 45,
+          "ownProvinces": 14
+        },
+        {
+          "tick": 1263,
+          "ownIndustry": 24,
+          "sideIndustry": 44,
+          "ownProvinces": 14
+        },
+        {
+          "tick": 1324,
+          "ownIndustry": 28,
+          "sideIndustry": 46,
+          "ownProvinces": 16
+        },
+        {
+          "tick": 1354,
+          "ownIndustry": 28,
+          "sideIndustry": 47,
+          "ownProvinces": 16
+        },
+        {
+          "tick": 1384,
+          "ownIndustry": 28,
+          "sideIndustry": 45,
+          "ownProvinces": 16
+        },
+        {
+          "tick": 1414,
+          "ownIndustry": 30,
+          "sideIndustry": 46,
+          "ownProvinces": 17
+        },
+        {
+          "tick": 1444,
+          "ownIndustry": 30,
+          "sideIndustry": 47,
+          "ownProvinces": 17
+        },
+        {
+          "tick": 1504,
+          "ownIndustry": 31,
+          "sideIndustry": 44,
+          "ownProvinces": 16
+        },
+        {
+          "tick": 1534,
+          "ownIndustry": 32,
+          "sideIndustry": 45,
+          "ownProvinces": 17
+        },
+        {
+          "tick": 1564,
+          "ownIndustry": 32,
+          "sideIndustry": 42,
+          "ownProvinces": 17
+        },
+        {
+          "tick": 1625,
+          "ownIndustry": 33,
+          "sideIndustry": 42,
+          "ownProvinces": 16
+        },
+        {
+          "tick": 1655,
+          "ownIndustry": 33,
+          "sideIndustry": 41,
+          "ownProvinces": 16
+        },
+        {
+          "tick": 1685,
+          "ownIndustry": 32,
+          "sideIndustry": 40,
+          "ownProvinces": 15
+        },
+        {
+          "tick": 1715,
+          "ownIndustry": 31,
+          "sideIndustry": 38,
+          "ownProvinces": 14
+        },
+        {
+          "tick": 1745,
+          "ownIndustry": 31,
+          "sideIndustry": 38,
+          "ownProvinces": 14
+        },
+        {
+          "tick": 1775,
+          "ownIndustry": 30,
+          "sideIndustry": 34,
+          "ownProvinces": 14
+        },
+        {
+          "tick": 1800,
+          "ownIndustry": 30,
+          "sideIndustry": null,
+          "ownProvinces": null
+        }
+      ]
+    },
+    {
+      "id": "2026-09-29T23-08-15-603Z-72f54933",
+      "match": "v6-current-japan-03",
+      "mapId": "imperial-1910-v6",
+      "combatSeed": "v6-current-japan-03",
+      "startedAt": "2026-09-29T23:08:15.606Z",
+      "modelGroup": "deepseek",
+      "modelId": "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
+      "client": "Pi",
+      "access": "MCP",
+      "harness": "Pi",
+      "arena": "seven practice bots",
+      "sourceRevision": "a73cd6530a2b",
+      "country": "japan",
+      "interfaceVersion": "decision-turn-v4",
+      "turnView": "decision",
+      "strategy": "decision view in prompt",
+      "maxTurnSeconds": 120,
+      "decisionIntervalTicks": 30,
+      "sessionMode": "fresh",
+      "preset": "standard",
+      "status": "finished",
+      "resultReason": "domination",
+      "finalTick": 1730,
+      "result": "win",
+      "won": true,
+      "industry": 26,
+      "acceptedActions": 131,
+      "rejectedActions": 1,
+      "toolCalls": 397,
+      "failedToolCalls": 14,
+      "firstActionSeconds": 9.9,
+      "failureRatePct": 3.53,
+      "inputTokens": 950401,
+      "outputTokens": 214426,
+      "cacheReadTokens": 3249664,
+      "totalTokens": 4414491,
+      "uncachedTokens": 1164827,
+      "tokensPerAction": 33698.4,
+      "turns": 51,
+      "timedOutTurns": 0,
+      "meanTurnSeconds": 26.81,
+      "durationSeconds": 1758.32,
+      "progress": [
+        {
+          "tick": 0,
+          "ownIndustry": 6,
+          "sideIndustry": 6,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 30,
+          "ownIndustry": 6,
+          "sideIndustry": 6,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 60,
+          "ownIndustry": 6,
+          "sideIndustry": 20,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 90,
+          "ownIndustry": 6,
+          "sideIndustry": 21,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 120,
+          "ownIndustry": 8,
+          "sideIndustry": 23,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 150,
+          "ownIndustry": 8,
+          "sideIndustry": 19,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 180,
+          "ownIndustry": 8,
+          "sideIndustry": 19,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 217,
+          "ownIndustry": 9,
+          "sideIndustry": 20,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 253,
+          "ownIndustry": 9,
+          "sideIndustry": 22,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 283,
+          "ownIndustry": 9,
+          "sideIndustry": 20,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 343,
+          "ownIndustry": 9,
+          "sideIndustry": 19,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 373,
+          "ownIndustry": 9,
+          "sideIndustry": 18,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 403,
+          "ownIndustry": 9,
+          "sideIndustry": 18,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 465,
+          "ownIndustry": 12,
+          "sideIndustry": 21,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 495,
+          "ownIndustry": 12,
+          "sideIndustry": 21,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 525,
+          "ownIndustry": 12,
+          "sideIndustry": 24,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 556,
+          "ownIndustry": 14,
+          "sideIndustry": 23,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 586,
+          "ownIndustry": 14,
+          "sideIndustry": 22,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 616,
+          "ownIndustry": 14,
+          "sideIndustry": 22,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 661,
+          "ownIndustry": 16,
+          "sideIndustry": 24,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 692,
+          "ownIndustry": 16,
+          "sideIndustry": 24,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 751,
+          "ownIndustry": 16,
+          "sideIndustry": 25,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 783,
+          "ownIndustry": 18,
+          "sideIndustry": 23,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 813,
+          "ownIndustry": 18,
+          "sideIndustry": 23,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 843,
+          "ownIndustry": 18,
+          "sideIndustry": 24,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 877,
+          "ownIndustry": 18,
+          "sideIndustry": 24,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 908,
+          "ownIndustry": 18,
+          "sideIndustry": 22,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 938,
+          "ownIndustry": 18,
+          "sideIndustry": 20,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 968,
+          "ownIndustry": 19,
+          "sideIndustry": 21,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 998,
+          "ownIndustry": 17,
+          "sideIndustry": 19,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 1028,
+          "ownIndustry": 18,
+          "sideIndustry": 19,
+          "ownProvinces": 10
+        },
+        {
+          "tick": 1058,
+          "ownIndustry": 18,
+          "sideIndustry": 19,
+          "ownProvinces": 10
+        },
+        {
+          "tick": 1088,
+          "ownIndustry": 18,
+          "sideIndustry": 19,
+          "ownProvinces": 10
+        },
+        {
+          "tick": 1118,
+          "ownIndustry": 18,
+          "sideIndustry": 19,
+          "ownProvinces": 10
+        },
+        {
+          "tick": 1148,
+          "ownIndustry": 20,
+          "sideIndustry": 21,
+          "ownProvinces": 11
+        },
+        {
+          "tick": 1178,
+          "ownIndustry": 24,
+          "sideIndustry": 25,
+          "ownProvinces": 12
+        },
+        {
+          "tick": 1214,
+          "ownIndustry": 24,
+          "sideIndustry": 25,
+          "ownProvinces": 12
+        },
+        {
+          "tick": 1244,
+          "ownIndustry": 24,
+          "sideIndustry": 25,
+          "ownProvinces": 12
+        },
+        {
+          "tick": 1274,
+          "ownIndustry": 24,
+          "sideIndustry": 25,
+          "ownProvinces": 12
+        },
+        {
+          "tick": 1343,
+          "ownIndustry": 23,
+          "sideIndustry": 24,
+          "ownProvinces": 11
+        },
+        {
+          "tick": 1373,
+          "ownIndustry": 23,
+          "sideIndustry": 24,
+          "ownProvinces": 11
+        },
+        {
+          "tick": 1432,
+          "ownIndustry": 24,
+          "sideIndustry": 25,
+          "ownProvinces": 12
+        },
+        {
+          "tick": 1467,
+          "ownIndustry": 24,
+          "sideIndustry": 25,
+          "ownProvinces": 12
+        },
+        {
+          "tick": 1497,
+          "ownIndustry": 25,
+          "sideIndustry": 26,
+          "ownProvinces": 13
+        },
+        {
+          "tick": 1527,
+          "ownIndustry": 26,
+          "sideIndustry": 27,
+          "ownProvinces": 13
+        },
+        {
+          "tick": 1557,
+          "ownIndustry": 27,
+          "sideIndustry": 28,
+          "ownProvinces": 14
+        },
+        {
+          "tick": 1599,
+          "ownIndustry": 28,
+          "sideIndustry": 29,
+          "ownProvinces": 14
+        },
+        {
+          "tick": 1629,
+          "ownIndustry": 25,
+          "sideIndustry": 26,
+          "ownProvinces": 13
+        },
+        {
+          "tick": 1659,
+          "ownIndustry": 25,
+          "sideIndustry": 75,
+          "ownProvinces": 13
+        },
+        {
+          "tick": 1689,
+          "ownIndustry": 25,
+          "sideIndustry": 76,
+          "ownProvinces": 13
+        },
+        {
+          "tick": 1722,
+          "ownIndustry": 25,
+          "sideIndustry": 77,
+          "ownProvinces": 13
+        },
+        {
+          "tick": 1730,
+          "ownIndustry": 26,
+          "sideIndustry": null,
+          "ownProvinces": null
+        }
+      ]
+    },
+    {
+      "id": "2026-09-29T23-37-57-842Z-0f6a7e4f",
+      "match": "v6-current-russia-04",
+      "mapId": "imperial-1910-v6",
+      "combatSeed": "v6-current-russia-04",
+      "startedAt": "2026-09-29T23:37:57.845Z",
+      "modelGroup": "deepseek",
+      "modelId": "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
+      "client": "Pi",
+      "access": "MCP",
+      "harness": "Pi",
+      "arena": "seven practice bots",
+      "sourceRevision": "a73cd6530a2b",
+      "country": "russia",
+      "interfaceVersion": "decision-turn-v5",
+      "turnView": "decision",
+      "strategy": "decision view in prompt",
+      "maxTurnSeconds": 120,
+      "decisionIntervalTicks": 30,
+      "sessionMode": "fresh",
+      "preset": "standard",
+      "status": "finished",
+      "resultReason": "domination",
+      "finalTick": 706,
+      "result": "win",
+      "won": true,
+      "industry": 16,
+      "acceptedActions": 59,
+      "rejectedActions": 5,
+      "toolCalls": 182,
+      "failedToolCalls": 10,
+      "firstActionSeconds": 6.24,
+      "failureRatePct": 5.49,
+      "inputTokens": 598206,
+      "outputTokens": 90100,
+      "cacheReadTokens": 1491456,
+      "totalTokens": 2179762,
+      "uncachedTokens": 688306,
+      "tokensPerAction": 36945.12,
+      "turns": 19,
+      "timedOutTurns": 0,
+      "meanTurnSeconds": 31.54,
+      "durationSeconds": 727.26,
+      "progress": [
+        {
+          "tick": 0,
+          "ownIndustry": 12,
+          "sideIndustry": 12,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 30,
+          "ownIndustry": 12,
+          "sideIndustry": 12,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 60,
+          "ownIndustry": 13,
+          "sideIndustry": 25,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 90,
+          "ownIndustry": 13,
+          "sideIndustry": 36,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 120,
+          "ownIndustry": 13,
+          "sideIndustry": 36,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 150,
+          "ownIndustry": 13,
+          "sideIndustry": 38,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 191,
+          "ownIndustry": 13,
+          "sideIndustry": 41,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 237,
+          "ownIndustry": 13,
+          "sideIndustry": 44,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 293,
+          "ownIndustry": 12,
+          "sideIndustry": 42,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 332,
+          "ownIndustry": 12,
+          "sideIndustry": 40,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 366,
+          "ownIndustry": 12,
+          "sideIndustry": 44,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 473,
+          "ownIndustry": 11,
+          "sideIndustry": 46,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 503,
+          "ownIndustry": 11,
+          "sideIndustry": 48,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 533,
+          "ownIndustry": 11,
+          "sideIndustry": 50,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 563,
+          "ownIndustry": 11,
+          "sideIndustry": 51,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 596,
+          "ownIndustry": 11,
+          "sideIndustry": 54,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 626,
+          "ownIndustry": 13,
+          "sideIndustry": 60,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 661,
+          "ownIndustry": 13,
+          "sideIndustry": 61,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 691,
+          "ownIndustry": 15,
+          "sideIndustry": 67,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 706,
+          "ownIndustry": 16,
+          "sideIndustry": null,
+          "ownProvinces": null
+        }
+      ]
     }
   ]
 }

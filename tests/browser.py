@@ -99,8 +99,17 @@ def main():
     results, started = {}, time.monotonic()
     def outcome(name, ok, since):
         results[name] = f'{"passed" if ok else "FAILED"} ({time.monotonic() - since:.0f} s)'
-    # The two UI parts run beside the rest (each its own server and browser, output in artifacts/<suite>.log). With
-    # --full the performance suite runs last, alone, so its enforced CPU budgets see as quiet a host as possible.
+    # The live walkthrough owns the browser first; competing Chrome captures made its lobby screenshot flaky.
+    # The two UI parts then run beside the remaining suites, each with its own server and browser.
+    if 'live' in chosen:
+        since = time.monotonic()
+        try:
+            live_match(args, artifacts)
+            outcome('live', True, since)
+        except Exception as error:
+            outcome('live', False, since); print(f'live suite failed: {error!r}', file=sys.stderr)
+            import traceback; traceback.print_exc()
+    # With --full the performance suite runs last, alone, so its enforced CPU budgets see a quiet host.
     background = {}
     for name in chosen:
         command = SUITES[name](args, artifacts) if name in BACKGROUND else None
@@ -111,14 +120,12 @@ def main():
         for proc in background.values(): proc.wait()
         time.sleep(.2)  # the waiting threads record the outcome
     last = ['perf'] if args.full and 'perf' in chosen else []
-    for name in [n for n in chosen if n not in BACKGROUND and n not in last] + last:
+    for name in [n for n in chosen if n not in BACKGROUND and n not in last and n != 'live'] + last:
         if name in last: finish()
         since = time.monotonic()
         try:
-            if name == 'live': live_match(args, artifacts)
-            else:
-                command = SUITES[name](args, artifacts)
-                if command: subprocess.run(command, cwd=ROOT, check=True, timeout=1800)
+            command = SUITES[name](args, artifacts)
+            if command: subprocess.run(command, cwd=ROOT, check=True, timeout=1800)
             outcome(name, True, since)
         except Exception as error:  # report every suite, then fail
             outcome(name, False, since); print(f'{name} suite failed: {error!r}', file=sys.stderr)

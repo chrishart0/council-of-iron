@@ -67,5 +67,5 @@ try {
 } finally {
   if (child && child.exitCode === null) child.kill('SIGTERM');
   app.server.closeAllConnections();
-  await new Promise(done => app.server.close(done));
+  await app.close();
 }

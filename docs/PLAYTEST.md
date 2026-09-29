@@ -6,6 +6,21 @@ The earlier Pi model results below used the former v5 map. Master now uses the v
 
 # v6 agent results — 29 September 2026
 
+## Current Pi baselines — 29 September 2026
+
+DeepSeek V4 Flash Vision Exp and the local Qwen3.8 27B Unsloth Q4 XL played isolated normal-speed rooms against seven practice bots on revision `a73cd6530a2b`, with `decision-turn-v4`, the same country and combat seed within each pair, and a 120-second turn limit. Qwen used the healthy direct backend on port 18082 because the configured port-8081 proxy was unavailable; `/props` reported a 204,800-token context. The ignored local `.env` now points the Qwen alias at the direct backend. This changed the route, not the model or game rules.
+
+| Start | DeepSeek | Qwen |
+| --- | --- | --- |
+| France, `v6-current-france-01` | Domination win at tick 518, 24 own industry; 37 accepted / 3 rejected actions, 4 failed calls of 124, 16 turns, no timeout, 1,344,533 reported tokens | Domination win at tick 560, 18 own industry; 42 accepted / 5 rejected actions, 7 failed calls of 113, 19 turns, no timeout, 1,258,972 reported tokens |
+| Qing, `v6-current-qing-02` | Domination win at tick 1583, **4 own industry**; 93 accepted / 6 rejected actions, 27 failed calls of 335, 39 turns, no timeout, 3,878,506 reported tokens | Loss with 0 industry at the tick-1800 deadline; 111 accepted / 19 rejected actions, 29 failed calls of 371, 47 turns, 3 timed-out turns, 4,189,429 reported tokens |
+
+DeepSeek's Qing nearly disappeared before a late alliance with France supplied most of the winning side's industry. Qwen's Qing allied with Russia, later brought in Japan, then lost its final province. These two seeds show a France win for both models and a weak coalition win versus elimination on Qing. They do not establish a reliable win rate.
+
+Qwen repeated the Qing seed with a 60-second rather than 120-second turn limit, still using `decision-turn-v4`. It again lost at the tick-1800 deadline, but retained **30 own industry** after allying with Russia and Ottoman (54 turns, 36 failed calls of 395, 4 timed-out turns, 5,034,705 reported tokens). The shorter limit ended four long turns after accepted actions; the model's decisions also diverged from the first attempt, so the stronger personal position cannot be attributed to the limit alone. DeepSeek played Japan on `v6-current-japan-03`, the same revision and v4 interface: it won by domination at tick 1730 with 26 own industry after a late alliance with France (131 accepted / 1 rejected actions, 14 failed calls of 397, 51 turns, 4,414,491 reported tokens).
+
+With `decision-turn-v5` (rejected-call guidance), DeepSeek Russia won by domination at tick 706 on `v6-current-russia-04`, holding 16 own industry in a Russia/Germany/Qing alliance (59 accepted / 5 rejected actions, 10 failed calls of 182, 19 turns, no timeout, 2,179,762 reported tokens). This is the fourth DeepSeek win in four current-map starts, but Qing and Russia relied heavily on allied industry. Qwen Japan on the matched Japan seed and DeepSeek Germany with the v6 view order are still in progress.
+
 ## Matched harness starts — 29 September 2026
 
 We ran isolated, normal-speed games against seven practice bots on revision `e29afedd6fa1`. Each model's Pi and CLI starts used the same country and combat seed, with one agent seat per room. These match the opening conditions, but subsequent decisions and combat paths diverge. The Space Bunny starts used OpenRouter `stealth/space-bunny-alpha` through Pi and Hermes; GPT-6 Sol low used Pi and Codex CLI. All finished rows are in the HTML benchmark ledger.

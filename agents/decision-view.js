@@ -35,20 +35,24 @@ export function decisionView(observation, map) {
         if (event[key] !== undefined) result[key] = event[key];
       return result;
     });
+  const { inbox, status, tick, you, victoryRule, readyDevelopments, ...boardDetail } = board;
   return {
-    ...board,
+    ...(inbox ? { inbox } : {}),
+    status, tick, you,
     position: {
       ownIndustry, sideIndustry: side?.industry ?? ownIndustry,
       industryGap: Math.max(0, board.victoryRule.targetIndustry - (side?.industry ?? ownIndustry)),
       sideRank: side ? sides.findIndex(s => s.industry === side.industry) + 1 : null,
       allianceSize: side?.members.length ?? 1,
     },
+    victoryRule, readyDevelopments,
     frontier: targets.slice(0, 24), omittedFrontierTargets: Math.max(0, targets.length - 24),
     possiblePartners: board.sides.filter(s => s.members.length === 1 && s.id !== board.side)
       .map(s => ({ country: s.members[0], industry: s.industry, combinedIndustry: (side?.industry ?? ownIndustry) + s.industry,
         // Borders between your provinces and theirs: a neighbouring ally can reinforce you, a distant one cannot.
         sharedBorderLinks: board.own.reduce((n, p) => n + p.neighbors.filter(x => x.owner === s.members[0]).length, 0) })),
     recentOutcomes, eventCursor: observation.cursor, hasMoreEvents: observation.hasMore,
+    ...boardDetail,
     decisionNote: 'Frontier targets are the provinces you can attack: each borders your own territory (an ally\'s border is not enough). sources lists your bordering provinces with free troops; troops may also come from anywhere in your empire (march sources:[...] routes through your and allied land, all arriving together). Attack from every bordering province at once with march {to, fromAllBordering:true, percent}. requiresWar means declare war first (or march with declareWar:true); truceUntil means no declaration before that tick. This is not a combat forecast: use preview for a chosen battle. Outcomes contain only events delivered to your seat and omit player speech: inbox (first) lists unread messages and offers waiting on you. Drain hasMoreEvents before treating outcomes as recent.',
   };
 }
