@@ -489,6 +489,20 @@ function executeTurnAround(g, order) {
     ...(onward ? { path: [plan.via, ...onward.path], pathIndex: 0 } : {}) });
   event(g, 'army_turned_around', { country: a.country, armyId: a.id, from: home, to: plan.to, amount: a.amount, arrivesAt: plan.arrivesAt });
 }
+/** A returning army whose home was captured by a country it is at war with keeps advancing: from here on it is
+ * an ordinary attack on that province (recall, turn-around and threat alerts as for any army). A recall sends it
+ * to your nearest province, taking as long as the way back from where it is. Not at war with the new owner, it
+ * keeps returning (an ally's province is reinforced; otherwise the troops are interned on arrival). */
+function advanceOnLostHome(g, a) {
+  const home = province(g, a.to), point = journeyPoint(a, g.positions, g.tick), r = gameRules(g);
+  const back = id => travelTicks(point, g.positions[id], r);
+  const nearest = g.provinces.filter(p => p.owner === a.country).map(p => p.id)
+    .sort((x, y) => back(x) - back(y) || x.localeCompare(y))[0] ?? home.id;
+  delete a.returning; delete a.resume;
+  Object.assign(a, { from: nearest, origin: nearest, originDepartedAt: g.tick - back(nearest), startPoint: point, departedAt: g.tick });
+  event(g, 'army_advancing', { country: a.country, armyId: a.id, province: home.id, owner: home.owner, amount: a.amount,
+    arrivesAt: a.arrivesAt, reason: 'home_captured' });
+}
 /** Why an arriving, non-allied army that did not join the attack is turned back. */
 function refusal(g,army,target,battle,chosen) {
   if(!mayEnter(g,army.country,target.owner))return {reason:'no_war',owner:target.owner};
@@ -837,6 +851,7 @@ function resolveArrivals(g) {
         target.troops+=army.amount;reinforced+=army.amount;
         if(battle)battle.arrivals.push({country:army.country,amount:army.amount});
       } else if(player(g,army.country).side===chosen && mayEnter(g,army.country,target.owner)) {
+        if(army.returning)advanceOnLostHome(g,army); // war came after the capture: it attacks as an ordinary army
         if(!battle){battle={id:identifier(g,'battle-'),province:target.id,startedAt:g.tick,
           attackerSide:chosen,previousOwner:target.owner,before:target.troops,arrivals:[],
           defenderRecruited:0,defenderRouted:0,withdrawn:0,engaged:0,casualties:0,lastRound:null};
@@ -898,6 +913,9 @@ function resolveBattleRounds(g) {
     event(g,'battle',{province:target.id,previousOwner:battle.previousOwner,owner:target.owner,before:battle.before,
       defenderRecruited:battle.defenderRecruited,defenderRouted:battle.defenderRouted,withdrawn:battle.withdrawn,troops:target.troops,
       arrivals:battle.arrivals,duration:g.tick-battle.startedAt,casualties:battle.casualties});
+    // Armies marching home to a province just captured by their enemy keep advancing on it.
+    if(target.owner!==battle.previousOwner)
+      for(const a of g.armies)if(a.returning && a.to===target.id && atWar(g,a.country,target.owner))advanceOnLostHome(g,a);
   }
 }
 function recruit(g) {

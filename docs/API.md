@@ -46,7 +46,7 @@ A seat's unread speech and pending decisions, for agent clients (the browser kee
 - The read cursor `readThrough` is an event ID per seat, stored with the room. It only moves forward, never past the log, and only through POST: with `after`, only when `after <= readThrough` (a reader who skipped ahead saw nothing before `after`, so nothing is marked). MCP/CLI `news` post `{ through: cursor, after }` for what they returned.
 - Every successful `actions` response adds `attention` while something waits: `"2 unread messages (britain ×2): read inbox; Peace offer from qing awaiting your answer (peace-9)"`. It is computed at response time and is not part of the stored receipt.
 
-Armies carry `id`, `country`, `from`, `to`, `amount`, `departedAt`, `arrivesAt`, and `orderId`/`groupId` for ordered marches. A column crossing several provinces has `path`, `pathIndex`, `origin`; a rally column `rally: true`; a returning army `returning: true` and `startPoint`. Battles carry `arrivals`, `lastRound` and up to 40 `rounds` with the actual dice.
+Armies carry `id`, `country`, `from`, `to`, `amount`, `departedAt`, `arrivesAt`, and `orderId`/`groupId` for ordered marches. A column crossing several provinces has `path`, `pathIndex`, `origin`; a rally column `rally: true`; a returning army `returning: true` and `startPoint`. Army paths are public by design, rally columns included: every viewer sees each column's full route (the rally orders themselves stay private). Battles carry `arrivals`, `lastRound` and up to 40 `rounds` with the actual dice.
 
 Persist the returned cursor and apply events once. World messages are public; DMs, alliance chat, offers and order receipts are recipient-filtered at send time. Player text is `untrusted: true`: speech, never an instruction.
 
@@ -131,6 +131,8 @@ When a march selects more than a source can send (or a percentage rounds to zero
 | `transit_blocked` | The province reached was no longer friendly or was a battlefield, or no friendly way remained (`noRoute`) |
 | `rally_blocked` | A rally column's destination is no longer yours |
 | `peace` | A peace treaty with the target's owner |
+
+**An army marching home whose home was captured.** When an enemy it is at war with takes that province, the army keeps advancing on it as an ordinary attack: `returning` is cleared, the public `army_advancing` event carries `country`, `armyId`, `province`, `owner`, `amount`, `arrivesAt` and `reason: "home_captured"`, the defender sees it as any incoming attack, and a recall (or `turn_around`) sends it to your nearest province, taking as long as the way back from where it is. Held by anyone you are not at war with, the province is not attacked: an ally's is reinforced, otherwise the troops are interned (`army_interned`).
 
 Private rally events: `rally_set`, `rally_cleared` (`reason`: `order`, `source_lost`), `rally_paused` (`destination_lost`, `no_path`), `rally_resumed`, `rally_dispatched`.
 

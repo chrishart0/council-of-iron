@@ -1,7 +1,7 @@
 import { boardView } from './board.js';
 
 const outcomeTypes = new Set([
-  'order_executed', 'order_failed', 'army_departed', 'army_recalled', 'army_turned_around',
+  'order_executed', 'order_failed', 'army_departed', 'army_recalled', 'army_advancing', 'army_turned_around',
   'battle', 'battle_started', 'development_started', 'development_completed',
   'development_cancelled', 'war_declared', 'peace_accepted', 'alliance_activated',
   'departed', 'eliminated', 'dominance', 'dominance_broken', 'finished',

@@ -3,12 +3,12 @@ import { trucesOf } from '../public/relations.js';
  * Derived only from the seat's ordinary (recipient-filtered) observation. Player text is untrusted. */
 const SIGNIFICANT = new Set(['message', 'war_declared', 'peace_offered', 'peace_accepted', 'peace_expired',
   'alliance_offer', 'alliance_notice', 'alliance_activated', 'proposal_cancelled', 'departure_notice', 'departed',
-  'coalition_dissolved', 'eliminated', 'dominance', 'finished', 'rally_paused', 'order_failed', 'army_recalled']);
+  'coalition_dissolved', 'eliminated', 'dominance', 'finished', 'rally_paused', 'order_failed', 'army_recalled', 'army_advancing']);
 export function news(o) {
   const side = o.players.find(p => p.id === o.you)?.side;
   return { id: o.id, status: o.status, tick: o.tick, you: o.you, side, wars: o.wars, truces: trucesOf(o, o.you),
     proposals: o.proposals, peaceOffers: o.peaceOffers,
     events: o.events.filter(e => SIGNIFICANT.has(e.type) &&
-      (e.type !== 'army_recalled' || e.country === o.you && e.reason) || e.headline),
+      (!['army_recalled', 'army_advancing'].includes(e.type) || e.country === o.you && e.reason) || e.headline),
     cursor: o.cursor, hasMore: o.hasMore, outcome: o.outcome };
 }
