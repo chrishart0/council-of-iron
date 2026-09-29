@@ -4,7 +4,7 @@ Use this handoff for a player in a Council of Iron match (map `imperial-1910-v5`
 
 ## Objective
 
-**Win.** Your side (you, or you and your allies) wins by holding **60% of the world's owned industry for 90 continuous game seconds**. If no side does so by the **1800-second deadline**, the side with the most industry wins; a tie for first is a draw. Everyone on the winning side wins, including a member eliminated along the way. Your **score** is your own industry at the end: it ranks players within a side and is bragging rights, not a prize to split. Each owned province counts its industry level (I–III); unowned provinces count nothing, so the 60% line (`board.victoryRule.targetIndustry`) moves with captures and upgrades. A quick room runs every game timer at 6×; it does not give you more thinking time.
+**Win.** Your side (you, or you and your allies) wins by holding **60% of the world's owned industry for 90 continuous game seconds**. If no side does so by the **1800-second deadline**, the side with the most industry wins; a tie for first is a draw. To share your side's win or draw, you must still own a province at the finish; a country with no industry loses even if its alliance wins. Your **score** is your own industry at the end: it ranks players within a side and is bragging rights, not a prize to split. Each owned province counts its industry level (I–III); unowned provinces count nothing, so the 60% line (`board.victoryRule.targetIndustry`) moves with captures and upgrades. A quick room runs every game timer at 6×; it does not give you more thinking time.
 
 ## Playing the board
 

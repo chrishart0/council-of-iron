@@ -23,10 +23,12 @@ export function codexToolFailure(event) {
 }
 
 export function summarizeRun(raw, modelGroup) {
-  if (!['qwen', 'luna', 'external'].includes(modelGroup)) throw new Error('Specify a qwen, luna, or external model group.');
+  if (!['qwen', 'luna', 'deepseek', 'external'].includes(modelGroup)) throw new Error('Specify a qwen, luna, deepseek, or external model group.');
   if (!raw.runId || !raw.startedAt || !raw.match || raw.status !== 'finished' ||
       !['win', 'loss', 'draw'].includes(raw.score?.result) || !Number.isFinite(raw.score.industry))
     throw new Error(`Run ${raw.runId || '(unknown)'} has no authoritative finished result.`);
+  if (raw.score.industry === 0 && raw.score.result !== 'loss')
+    throw new Error(`Run ${raw.runId} has a result from rules that credited a country with no industry.`);
   const client = raw.client === 'codex' ? 'Codex' : 'Pi';
   const commands = client === 'Codex' ? (raw.events || []).filter(event =>
     event.itemType === 'command_execution' && typeof event.command === 'string').map(event => event.command) : [];
@@ -63,9 +65,7 @@ export function summarizeRun(raw, modelGroup) {
   const totalTokens = number(tokenUsage?.total) ?? (inputTokens === null || outputTokens === null ? null : inputTokens + outputTokens);
   const totalTurnMs = turns.length && !raw.usageIncomplete ? finiteSum(turns, 'wallMs') : null;
   const durationSeconds = raw.finishedAt ? (Date.parse(raw.finishedAt) - Date.parse(raw.startedAt)) / 1000 : null;
-  const won = typeof raw.score.side === 'string' && raw.outcome &&
-    (raw.outcome.draw === true || typeof raw.outcome.winningSide === 'string')
-    ? !raw.outcome.draw && raw.score.side === raw.outcome.winningSide : null;
+  const won = raw.score.result === 'win';
   return {
     id: raw.runId, match: raw.match, combatSeed: raw.combatSeed || null,
     startedAt: raw.startedAt, modelGroup, client, access, country: raw.country,
@@ -79,7 +79,7 @@ export function summarizeRun(raw, modelGroup) {
     decisionIntervalTicks: number(raw.decisionIntervalTicks),
     sessionMode: raw.sessionMode || raw.turnMode,
     preset: raw.preset, status: raw.status, resultReason: raw.outcome?.reason || null,
-    finalTick: number(raw.finalTick), result: raw.score.result, industry: raw.score.industry,
+    finalTick: number(raw.finalTick), result: raw.score.result, won, industry: raw.score.industry,
     acceptedActions, rejectedActions, toolCalls: calls.length, failedToolCalls: failed,
     firstActionSeconds: firstAcceptedAt ? round((Date.parse(firstAcceptedAt) - Date.parse(raw.startedAt)) / 1000) : null,
     failureRatePct: calls.length ? round(100 * failed / calls.length) : null,
@@ -96,8 +96,8 @@ export function summarizeRun(raw, modelGroup) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [, , group, ...paths] = process.argv;
-  if (!['qwen', 'luna', 'external'].includes(group) || paths.length === 0) {
-    console.error('Usage: node agents/pi/bench.js <qwen|luna|external> data/pi/<run>.json [...]');
+  if (!['qwen', 'luna', 'deepseek', 'external'].includes(group) || paths.length === 0) {
+    console.error('Usage: node agents/pi/bench.js <qwen|luna|deepseek|external> data/pi/<run>.json [...]');
     process.exit(2);
   }
   const previous = JSON.parse(readFileSync(output, 'utf8'));

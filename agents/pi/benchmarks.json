@@ -1,5 +1,45 @@
 {
   "schemaVersion": 2,
   "description": "Completed isolated games (one agent seat against seven practice bots). result and industry come from the authoritative final outcome. Missing token values mean the runner did not record provider usage.",
-  "runs": []
+  "runs": [
+    {
+      "id": "2026-09-29T00-24-13-242Z-4714b9f5",
+      "match": "latest-japan-01",
+      "combatSeed": "latest-japan-01",
+      "startedAt": "2026-09-29T00:24:13.242Z",
+      "modelGroup": "deepseek",
+      "client": "Pi",
+      "access": "MCP",
+      "country": "japan",
+      "interfaceVersion": "decision-turn-v3",
+      "turnView": "decision",
+      "strategy": "decision view in prompt",
+      "maxTurnSeconds": 120,
+      "decisionIntervalTicks": 30,
+      "sessionMode": "fresh",
+      "preset": "standard",
+      "status": "finished",
+      "resultReason": "deadline",
+      "finalTick": 1800,
+      "result": "win",
+      "won": true,
+      "industry": 27,
+      "acceptedActions": 101,
+      "rejectedActions": 6,
+      "toolCalls": 341,
+      "failedToolCalls": 30,
+      "firstActionSeconds": 5.07,
+      "failureRatePct": 8.8,
+      "inputTokens": 911640,
+      "outputTokens": 188964,
+      "cacheReadTokens": 2722560,
+      "totalTokens": 3823164,
+      "uncachedTokens": 1100604,
+      "tokensPerAction": 37853.11,
+      "turns": 51,
+      "timedOutTurns": 0,
+      "meanTurnSeconds": 25.99,
+      "durationSeconds": 1808.47
+    }
+  ]
 }

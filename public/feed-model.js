@@ -64,7 +64,8 @@ export function headlineCopy(item, names) {
  * viewer has belonged to this session, so "your alliance dissolved" still counts after the fact. */
 export function viewerOf(state, pastSides = []) {
   const you = state?.you || null, me = state?.players?.find(p => p.id === you);
-  return { you, side: me?.side || null, allies: me ? state.players.filter(p => p.side === me.side && p.id !== you).map(p => p.id) : [],
+  return { you, side: me?.side || null, result: state?.outcome?.scores?.find(s => s.country === you)?.result || null,
+    allies: me ? state.players.filter(p => p.side === me.side && p.id !== you).map(p => p.id) : [],
     pastSides: [...pastSides] };
 }
 

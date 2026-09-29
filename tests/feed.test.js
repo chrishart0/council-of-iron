@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createGame, join, start, act, tick, observe, worldFeed, classifyHeadline, majorBattleThreshold, HEADLINES } from '../src/engine.js';
-import { feedItems, feedPage, headlineCopy } from '../public/feed-model.js';
+import { feedItems, feedPage, headlineCopy, viewerOf } from '../public/feed-model.js';
 import { presentHeadline } from '../public/feed.js';
 const map = JSON.parse(readFileSync(new URL('../public/imperial-map.json', import.meta.url)));
 let next = 0;
@@ -50,6 +50,13 @@ test('only public diplomatic, elimination, victory and top-tier industry events 
   for (const type of ['message', 'army_departed', 'order_failed', 'joined', 'started', 'reinforced', 'development_started'])
     assert.equal(classifyHeadline({ type }, { maxDevelopment: 3, worldTroops: 1 }), null, type);
   assert.equal(classifyHeadline({ type: 'war_declared', fromRoster: [], toRoster: [], recipients: ['usa'] }), null);
+});
+
+test('the viewer carries the saved individual result for finish cues', () => {
+  const state = { you: 'japan', players: [{ id: 'japan', side: 'alliance' }, { id: 'germany', side: 'alliance' }],
+    outcome: { winningSide: 'alliance', scores: [{ country: 'japan', result: 'loss', industry: 0 },
+      { country: 'germany', result: 'win', industry: 79 }] } };
+  assert.equal(viewerOf(state).result, 'loss');
 });
 
 test('observe and worldFeed attach the same engine headline; the feed is public and chronological', () => {

@@ -20,7 +20,7 @@ function fresh(board=map) {
 }
 function advance(g,n) { for(let i=0;i<n;i++) tick(g); }
 
-test('report results are the original results; every member of the winning alliance won',()=>{
+test('report results are the original saved results',()=>{
   assert.equal(review.report.players.length,8);
   assert.deepEqual(review.report.outcome,recorded.outcome);
   assert.equal(review.report.alliances.length,3);
@@ -106,6 +106,7 @@ test('draws, two occupied seats and retained eliminated members have correct rev
   for(const p of e.provinces)p.owner='usa';
   start(e);advance(e,100);
   const ev=buildReview(e,map);assert.ok(ev.report.players.filter(p=>p.country!=='usa').every(p=>p.eliminatedAt===1));
+  assert.ok(ev.report.players.filter(p=>p.country!=='usa').every(p=>p.result==='loss'));
 });
 test('initial checkpoint preserves a nonstandard test opening and a tampered final state is withheld',()=>{
   const g=fresh();g.rules={...g.rules,duration:40};g.provinces[0].troops=234;start(g);advance(g,40);

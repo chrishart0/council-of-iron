@@ -29,6 +29,14 @@ test('every member of the winning side wins, whatever its share; score is own in
   assert.deepEqual([outcome.usa.industry, outcome.britain.industry], [5, 95]);
 });
 
+test('a country with no final industry loses despite its allied side winning or drawing', () => {
+  const g = game(), side = coalition(g, ['usa', 'britain']);
+  industries(g, { britain: 95, france: 70, germany: 60 });
+  assert.equal(g.players.find(p => p.id === 'usa').eliminatedAt, null);
+  assert.deepEqual(score(g, side, false).map(s => s.result), ['loss', 'win', 'loss', 'loss']);
+  assert.deepEqual(score(g, null, true).map(s => s.result), ['loss', 'draw', 'draw', 'draw']);
+});
+
 test('at the deadline the side with the most industry wins; a tie for first is a draw', () => {
   const g = game(); coalition(g, ['france', 'germany']);
   industries(g, { usa: 50, britain: 40, france: 30, germany: 25 });

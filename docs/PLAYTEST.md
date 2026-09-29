@@ -2,6 +2,14 @@
 
 Actual test evidence only, newest first. Automated self-play and bot matches check that the rules hold and that matches resolve; they do not show balance or that people enjoy the game.
 
+# Current-rules Japan trials — 28 September 2026
+
+Two isolated normal-speed Pi/MCP matches used the same combat seed (`latest-japan-01`), Japan against seven practice bots, and the `decision-turn-v3` interface. These are individual observations, not a model win-rate estimate.
+
+- Qwen 27B Japan issued 90 orders. It was eliminated at tick 1311 with no provinces or armies. Its Germany/Russia alliance won by domination at tick 1495, but the then-current result incorrectly recorded Japan as a winner with **0 industry**. This run is excluded from the new benchmark ledger; the importer now rejects such a result. The scoring rule now gives a zero-industry country a loss even if its alliance wins.
+- DeepSeek Japan reached the tick-1800 deadline with 12 provinces and 27 industry, winning with its alliance. It issued 107 orders (101 accepted, 6 rejected); the Pi client recorded 30 failed tool calls out of 341. Its aggregate result is in `agents/pi/benchmarks.json`.
+- **Rule-change checks:** `npm test` passed 215 tests, `npm run check` passed, the 32-round diplomacy balance gate reported 0 invariant failures, and the native `python tests/browser.py --executable /usr/bin/google-chrome` run passed its recorded-match, review and UI suites.
+
 # Simplification pass — 28 September 2026
 
 The rules were cut down to one `march` order, rally points only, recall only, alliance-wide war and peace without votes, win/lose/draw results with your own industry as score, alliances capped at half the countries, no opening council, no industry damage on capture and invisible anti-spam limits (the rule-by-rule record is [SIMPLIFY-PLAN.md](SIMPLIFY-PLAN.md)). Results from runs on the `simplify` branch:
@@ -70,4 +78,3 @@ Early local runs used a managed-Chromium HTTP bridge because the sandbox blocked
 Apart from the user's own phone playtests of earlier versions (the feedback behind [SIMPLIFY-PLAN.md](SIMPLIFY-PLAN.md): "too complex, I get lost"; "the map is good"), no human players have rated clarity or enjoyment. Real devices and iOS Safari, screen readers, public-internet hardening, load and calibrated rankings are untested.
 
 **Agent-harness evidence merged from master (old rules, 28 September 2026).** Review reconstruction of the external-profile quick room `a09b0d68` shows four model turns spanning ticks 0–1727 at the 6× clock (turn wall times 35.1, 120.0 capped, 72.5, 72.6 s); Britain ended with six provinces and no alliance. Two normal-speed external-profile records stopped early (a connection error at tick 291; an output-length stop at tick 295) and are excluded. Three completed normal-speed Qwen Pi Germany runs on seed `normal02` differ (one tool-led win, two compact-board losses) with divergent boards and alliances, so they cannot attribute the gap to the prompt; the harness now records `turnView` and a per-turn position trace for matched comparisons. See [HARNESS-REVIEW.md](HARNESS-REVIEW.md).
-

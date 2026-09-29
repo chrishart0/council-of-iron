@@ -12,6 +12,10 @@ test('benchmark export keeps aggregate Pi metrics and excludes private run conte
     usage: { input: 1000, output: 300, cacheRead: 400 }, turnLog: [{ wallMs: 20000, timedOut: false }, { wallMs: 30000, timedOut: true }] };
   const run = summarizeRun(raw, 'luna');
   assert.equal(run.result, 'win');
+  assert.equal(run.won, true);
+  assert.equal(summarizeRun({ ...raw, score: { ...score, side: 'alliance', result: 'loss', industry: 0 },
+    outcome: { winningSide: 'alliance', draw: false, reason: 'domination' } }, 'luna').won, false);
+  assert.throws(() => summarizeRun({ ...raw, score: { ...score, industry: 0 } }, 'luna'), /credited a country with no industry/);
   assert.equal(run.industry, 14);
   assert.equal(run.interfaceVersion,'board-turn-v2');
   assert.equal(run.acceptedActions, 1);
@@ -24,6 +28,7 @@ test('benchmark export keeps aggregate Pi metrics and excludes private run conte
   assert.equal(run.country, 'britain');
   assert.doesNotMatch(JSON.stringify(run), /private|secret|endpoint/);
   assert.equal(summarizeRun(raw, 'external').modelGroup, 'external');
+  assert.equal(summarizeRun(raw, 'deepseek').modelGroup, 'deepseek');
   assert.equal(summarizeRun({ ...raw, toolCalls: [{ name: 'board', ok: true }] }, 'luna').strategy,
     'compact board');
   assert.equal(summarizeRun({ ...raw, toolCalls: [{ name: 'view_map', ok: true }] }, 'luna').strategy,
