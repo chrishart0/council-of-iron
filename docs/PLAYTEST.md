@@ -2,6 +2,10 @@
 
 Actual test evidence only, newest first. Automated self-play and bot matches check that the rules hold and that matches resolve; they do not show balance or that people enjoy the game.
 
+# Three-country-cap France trials — 29 September 2026
+
+Two isolated normal-speed Pi/MCP matches used the same France start and combat seed (`cap3-france-01`) against seven practice bots. Both reached an individual win by holding at least 60% of industry for 90 ticks. DeepSeek finished by domination at tick 568 with 31 own industry in a France/Britain/Russia alliance (45 accepted, 3 rejected orders; 7 failed tool calls of 144). Qwen finished by domination at tick 908 with 48 own industry in a France/Germany alliance (113 accepted, 67 rejected orders; 71 failed tool calls of 259). Qwen's rejected orders were 44 marches, 22 developments and one chat; 40 march rejections reported insufficient uncommitted troops. The sanitized aggregate records are in `agents/pi/benchmarks.json`. This pair is evidence of two wins from one starting country and seed, not a general win-rate estimate.
+
 # Three-country alliance cap — 28 September 2026
 
 The current rules cap a side at `min(3, floor(seats / 2))`. The eight-seat offer test reaches three members and rejects a fourth; four-seat rooms remain capped at two, and two- and three-seat rooms cannot form alliances. `npm test` passed 216 tests, `npm run check` passed, the 32-round diplomacy gate had 0 invariant failures (24 decisive outcomes, 0 draws), and the native `python tests/browser.py --executable /usr/bin/google-chrome` run passed its live-match, review, UI and voice suites. This is rule and interface verification, not a human balance verdict. Live room `39104252` was still running under its original four-seat cap when this change was tested.
