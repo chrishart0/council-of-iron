@@ -139,7 +139,8 @@ function run(seed) {
     if ([300,600,1200].includes(g.tick)) checkpoints[g.tick] = Object.fromEntries(g.players.map(p=>[p.id,g.provinces.filter(v=>v.owner===p.id).length]));
   }
   invariant(g.outcome.scores.every(s=>['win','draw','loss'].includes(s.result) && Number.isSafeInteger(s.industry)), 'invalid result',g);
-  invariant(g.outcome.draw === g.outcome.scores.every(s=>s.result==='draw'), 'inconsistent draw',g);
+  // A country without territory at the finish loses even in a draw (engine score()); everyone else draws.
+  invariant(g.outcome.draw === g.outcome.scores.filter(s=>s.industry>0).every(s=>s.result==='draw'), 'inconsistent draw',g);
   invariant(g.players.every(p=>g.players.filter(q=>q.side===p.side).length<=Math.max(1,Math.floor(g.players.length/2))), 'alliance over the size cap',g);
   const outcome = structuredClone(g.outcome), endTick = g.tick; tick(g);
   invariant(g.tick===endTick && JSON.stringify(g.outcome)===JSON.stringify(outcome), 'nonterminal outcome',g);

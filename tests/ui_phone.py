@@ -63,9 +63,9 @@ def phone_checks(browser, url, identity, server, report, out, check_layout, chec
 
         # 1) Ghost click: your province, then a neighbour whose sheet opens under the finger. The synthetic click the
         # browser fires for that tap must not land on the new sheet (it used to open the owner's country card).
-        tap('#marker-england .counter-body'); expect(page.locator('#card-title')).to_have_text('Southern England')
-        tap('#marker-normandy .counter-body')
-        expect(page.locator('#card')).to_have_attribute('data-kind', 'province'); expect(page.locator('#card-title')).to_have_text('Normandy')
+        tap('#marker-england .counter-body'); expect(page.locator('#card-title')).to_have_text('Great Britain')
+        tap('#marker-north-france .counter-body')
+        expect(page.locator('#card')).to_have_attribute('data-kind', 'province'); expect(page.locator('#card-title')).to_have_text('Northern France')
         expect(page.locator('#primary')).to_contain_text('Declare war on France'); check_commit(page, f'{tag} neighbour order'); shot('02-ghost-click-guarded')
 
         # 2) Attack from the target list on your province's card: province, row, send = 3 taps (the remembered 50%).

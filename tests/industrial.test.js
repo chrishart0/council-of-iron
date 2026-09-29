@@ -13,8 +13,8 @@ let id=0;const action=(g,p,a,opId=`n-${++id}`)=>act(g,map,p,a,opId);
 const advance=(g,n)=>{for(let i=0;i<n;i++)tick(g);};
 const total=g=>g.provinces.reduce((n,p)=>n+p.troops,0)+g.armies.reduce((n,a)=>n+a.amount,0);
 test('industrial map has more European provinces, colonial footholds and explicit asymmetric industry',()=>{
-  assert.ok(map.provinces.length>64);const g=game();assert.equal(province(g,'namibia').owner,'germany');
-  assert.equal(province(g,'north-india').owner,'britain');assert.equal(province(g,'indochina').owner,'france');
+  assert.ok(map.provinces.length>=50&&map.provinces.length<=64);const g=game();assert.equal(province(g,'namibia').owner,'germany');
+  assert.equal(province(g,'india').owner,'britain');assert.equal(province(g,'indochina').owner,'france');
   assert.ok(province(g,'ruhr').development>province(g,'namibia').development);
   assert.equal(gameRules(g).economyShare,.6);
   assert.equal(economyThreshold(g),Math.ceil(g.provinces.filter(p=>p.owner).reduce((n,p)=>n+p.development,0)*.6));
@@ -28,7 +28,7 @@ test('completed development alone can reach 60% of active industry and start a c
   for(const id of ['usa','britain'])join(g,map,{profileId:id,name:id,country:id});
   for(const p of g.provinces){p.owner=null;p.development=1;}
   for(const id of ['west-us','central-us'])province(g,id).owner='usa';
-  for(const id of ['england','scotland'])province(g,id).owner='britain';
+  for(const id of ['england','ireland'])province(g,id).owner='britain';
   province(g,'west-us').troops=40;start(g);
   assert.equal(economyThreshold(g),3);
   action(g,'usa',{type:'develop',from:'west-us'});
@@ -42,7 +42,7 @@ test('opponent growth can break an economic hold without changing any province o
   const g=game();for(const p of g.provinces){p.owner=null;p.development=1;}
   for(const id of ['west-us','central-us'])province(g,id).owner='usa';
   province(g,'west-us').development=2;
-  for(const id of ['england','scotland'])province(g,id).owner='britain';
+  for(const id of ['england','ireland'])province(g,id).owner='britain';
   tick(g);assert.equal(g.dominance[country(g,'usa').side],1);
   province(g,'england').development=2;tick(g);
   assert.equal(g.dominance[country(g,'usa').side],undefined);
@@ -55,7 +55,7 @@ test('deadline ranks economic output, even when the winner owns fewer provinces'
   assert.equal(g.outcome.reason,'deadline');assert.equal(g.outcome.winningSide,country(g,'britain').side);
 });
 test('distance movement takes longer overseas and crosses the antimeridian by the short direction',()=>{
-  const g=game();assert.ok(g.travelTimes.england['east-us']>g.travelTimes.england['north-france']);
+  const g=game();assert.ok(g.travelTimes.england.egypt>g.travelTimes.england['north-france']);
   const west=map.provinces.find(p=>p.id==='west-us'),mexico=map.provinces.find(p=>p.id==='mexico');
   const base=15+Math.ceil(distanceKm(west,mexico)/35),current=g.travelTimes['west-us'].mexico;
   assert.equal(current,Math.ceil(base*100/120),'every link is 1.2× faster than the distance table');
@@ -79,7 +79,7 @@ test('one group order sends every available troop from multiple owned provinces 
   advance(g,receipt.arrivesAt);
   assert.equal(province(g,'west-us').troops,1);
   assert.equal(province(g,'central-us').troops,1);
-  assert.equal(target.troops,34);
+  assert.equal(target.troops,36);
   assert.equal(g.armies.length,0);
 });
 test('long marches pass through allied land but not through foreign land',()=>{
@@ -132,7 +132,7 @@ test('recalling an outbound army reverses at its actual position and returns no 
   action(g,'usa',{type:'recall',id:army.id});assert.equal(province(g,'west-us').troops,before);tick(g);
   assert.equal(army.returning,true);assert.deepEqual(army.startPoint,expectedPoint);assert.equal(army.arrivesAt,23);
   advance(g,10);assert.equal(g.armies.length,1);tick(g);assert.equal(g.armies.length,0);assert.equal(province(g,'mexico').owner,null);
-  assert.equal(province(g,'west-us').troops,12+3);assert.equal(r.groupId,army.groupId);
+  assert.equal(province(g,'west-us').troops,12+2);assert.equal(r.groupId,army.groupId);
 });
 test('a coordinated recall cancels waiting components and reverses already-dispatched armies',()=>{
   const g=game();const r=action(g,'usa',{type:'march',to:'mexico',sources:[{from:'west-us',amount:5},{from:'central-us',amount:5}]});

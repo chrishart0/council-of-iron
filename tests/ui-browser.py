@@ -131,8 +131,10 @@ def click_at(page,locator):
 def select(page,source,target=None,size=None):
     """v0.8 order card by map taps (tap-tap): Home, your province, then its neighbour."""
     page.keyboard.press('Escape');page.locator('#home-view').click();page.wait_for_timeout(150)
-    click_at(page,page.locator(f'#marker-{source} .counter-body'))
-    if target:click_at(page,page.locator(f'#marker-{target} .counter-body'))
+    # A province in battle shows its clash marker instead of its counter; tapping that selects it the same way.
+    spot=lambda id:page.locator(f'#marker-{id} .counter-body') if page.locator(f'#marker-{id} .counter-body').is_visible() else page.locator(f'#map .battle-counter[data-province="{id}"]')
+    click_at(page,spot(source))
+    if target:click_at(page,spot(target))
     expect(page.locator('#card')).to_have_attribute('data-kind','province')
     if size and page.locator('#card').get_attribute('data-size')!=size:page.locator('#card-size').click()
     if size:expect(page.locator('#card')).to_have_attribute('data-size',size)
@@ -209,8 +211,8 @@ def wrap_checks(page,report,capture):
         if(p.x<box.left+4||p.x>box.right-4||p.y<box.top+4||p.y>box.bottom-4)continue;
         const e=document.elementFromPoint(p.x,p.y);if(e&&e.matches('use.world-copy'))return {x:p.x,y:p.y};}
       return null;}''')
-    assert spot,'no clickable repeated-copy point over Australia'
-    page.mouse.click(spot['x'],spot['y']);expect(page.locator('#card-title')).to_have_text('Australia')
+    assert spot,'no clickable repeated-copy point over Australasia'
+    page.mouse.click(spot['x'],spot['y']);expect(page.locator('#card-title')).to_have_text('Australasia')
     page.keyboard.press('Escape')  # close the card so later drags start on the map
     capture('14-dateline.png',700)
     result=page.evaluate(MAP_AUDIT,'ui-war')
@@ -219,7 +221,7 @@ def wrap_checks(page,report,capture):
     assert not result['badSums'] and not result['missing'] and not result['overlaps'],result
     # Pacific links take the short way across the dateline; no duplicate IDs from the copies.
     widths=page.evaluate('''() => [...document.querySelectorAll('#map .sea-connections path')].map(p=>[p.dataset.edge,p.getBBox().width])''')
-    pacific=[wd for e,wd in widths if set(e.split('|')) in [{'west-us','south-japan'},{'alaska','far-east'},{'west-us','philippines'}]]
+    pacific=[wd for e,wd in widths if set(e.split('|')) in [{'hawaii','japan'},{'alaska','far-east'},{'west-us','hawaii'}]]
     assert len(pacific)==3 and all(wd<640 for wd in pacific),widths
     assert all(wd<640 for _,wd in widths),widths
     ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
@@ -319,7 +321,7 @@ def relations_checks(page,report,capture):
     camera(page,'world');capture('16-diplomacy-mode.png',900)
     key();toggle.click();menu(page,False);expect(page.locator('#map')).to_have_attribute('data-mode','political')
     for pid,owner,fill in fills():
-        if owner=='germany':assert fill=='#8e8b7d',(pid,fill)
+        if owner=='germany':assert fill=='#76808c',(pid,fill)
     camera(page,'europe');page.wait_for_timeout(150)
     box=page.locator('#marker-bavaria .counter-body').bounding_box();page.mouse.move(box['x']+box['width']/2,box['y']+box['height']/2);page.wait_for_timeout(450)
     expect(page.locator('#map')).to_have_attribute('data-outline-focus','germany')
@@ -632,7 +634,7 @@ def expand_checks(browser,url,identity,report,out):
         page.keyboard.press('Escape');expect(page.locator('#stage')).not_to_have_class(re.compile('map-expanded'))
         expect(page.locator('#hud')).to_be_visible();expect(live).to_be_focused()
         # Popups on phones are compact toasts under the HUD, never over the order sheet or its commit.
-        select(page,'england','midlands')  # (the Netherlands is a battle by now; its clash marker replaces the counter)
+        select(page,'ireland','england')
         sheet=page.locator('#card').bounding_box();commit=page.locator('#primary').bounding_box();sizes=page.evaluate(TOAST_SIZE)
         for name,r in sizes.items():
             assert r['height']<=min(80 if name=='declaration' else 72,h*.22)+.5 and r['top']>=0,(w,h,name,r)
@@ -680,7 +682,7 @@ EFFECT_CHECK='''async () => {
   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.id='effect-test-map';svg.setAttribute('viewBox','0 0 1280 680');svg.style.cssText='width:640px;height:340px';
   host.append(svg);document.body.append(host);
   const atlas=new Atlas(svg,map,()=>{});atlas.update(state,null,null);
-  const good=[['industry_up',{province:'ruhr',level:3}],['captured',{province:'alpine-france',owner:'germany'}],
+  const good=[['industry_up',{province:'ruhr',level:3}],['captured',{province:'south-france',owner:'germany'}],
     ['alliance',{countries:['britain','france']}],['war',{from:['germany'],to:['france']}],['peace',{from:['usa'],to:['japan']}],['eliminated',{country:'qing'}]];
   const bad=[[],['nope',{}],['industry_up'],['industry_up',null],['industry_up',{province:'atlantis'}],['captured',{province:'ruhr',owner:'<b>x</b>'}],
     ['alliance',{countries:'britain'}],['alliance',{countries:['britain']}],['war',{from:['x'],to:['y']}],['peace',{from:null,to:[{}]}],['eliminated',{country:{}}],['eliminated',{country:'atlantis'}]];
@@ -695,8 +697,8 @@ EFFECT_CHECK='''async () => {
     still:effects.every(e=>e.classList.contains('still')),
     animations:[...svg.querySelectorAll('.map-effect *')].map(e=>getComputedStyle(e).animationName).filter(n=>n!=='none').length};
   // A march across the Pacific: its trace and marker take the short way over the dateline.
-  const t=state.tick,from=map.provinces.find(p=>p.id==='west-us'),to=map.provinces.find(p=>p.id==='south-japan');
-  atlas.update({...state,you:'usa',armies:[...state.armies,{id:'wrap-test',country:'usa',from:'west-us',to:'south-japan',amount:30,departedAt:t-5,arrivesAt:t+5}]},null,'south-japan');
+  const t=state.tick,from=map.provinces.find(p=>p.id==='west-us'),to=map.provinces.find(p=>p.id==='japan');
+  atlas.update({...state,you:'usa',armies:[...state.armies,{id:'wrap-test',country:'usa',from:'west-us',to:'japan',amount:30,departedAt:t-5,arrivesAt:t+5}]},null,'japan');
   const trail=[...svg.querySelectorAll('.army-trail')].map(p=>p.getBBox().width);
   const marker=[...svg.querySelectorAll('.moving-army')].map(g=>Number(g.getAttribute('transform').slice('translate('.length).split(' ')[0]));
   const wrap=d=>Math.abs(d-1280*Math.round(d/1280));
@@ -793,23 +795,23 @@ def mobile_checks(browser,url,identity,report,out):
         for _ in range(14):page.keyboard.press('e')  # touch: no +/− buttons (pinch, double tap, E)
         page.wait_for_timeout(200);level=page.locator('#map').get_attribute('data-lod')
         assert px(page)>=DESKTOP_OLD_MAX and px(page)>=MAX_PX-.05 and level=='near',(w,px(page),level)
-        sizes=page.evaluate('''()=>['belgium','low-countries','ruhr','rhineland','saxony','serbia'].map(id=>{const r=document.querySelector('#province-'+id).getBoundingClientRect();return [id,Math.min(r.width,r.height)];})''')
+        sizes=page.evaluate('''()=>['low-countries','ruhr','bavaria','prussia','italy','balkans'].map(id=>{const r=document.querySelector('#province-'+id).getBoundingClientRect();return [id,Math.min(r.width,r.height)];})''')
         assert all(s>=32 for _,s in sizes),sizes
         camera(page,'europe');page.keyboard.press('e');page.keyboard.press('e');page.keyboard.press('e');page.wait_for_timeout(200)
         result=page.evaluate(MAP_AUDIT,'ui-mobile');assert not result['overlaps'] and not result['missing'] and not result['badSums'],result
         if w==390:page.screenshot(path=str(out/'19-mobile-max-zoom.png'))
         if w==390:
-            # A column that has just left Scotland sits on the Scotland counter: a tap must still select Scotland.
+            # A column that has just left Great Britain sits on its counter: a tap must still select Great Britain.
             camera(page,'world');page.locator('#home-view').click()
             for _ in range(5):page.keyboard.press('e')
             page.locator('#map').scroll_into_view_if_needed();page.wait_for_timeout(250)
-            departing=page.evaluate('''()=>{const c=document.querySelector('#marker-scotland .counter-body').getBoundingClientRect();
+            departing=page.evaluate('''()=>{const c=document.querySelector('#marker-england .counter-body').getBoundingClientRect();
               return [...document.querySelectorAll('#map .moving-army:not(.engaged)')].map(g=>{const r=g.querySelector('.army-arrow').getBoundingClientRect();
                 return {blocked:g.classList.contains('tap-blocked'),hit:g.querySelector('.army-hit').getBoundingClientRect().width,over:r.left<c.right+4&&c.left-4<r.right&&r.top<c.bottom+4&&c.top-4<r.bottom};}).filter(a=>a.over);}''')  # touching within 4 px
             assert departing and all(a['blocked'] for a in departing) and all(a['hit']<=18 for a in departing),departing
-            body=page.locator('#marker-scotland .counter-body').bounding_box()
+            body=page.locator('#marker-england .counter-body').bounding_box()
             page.touchscreen.tap(body['x']+body['width']/2,body['y']+body['height']/2)
-            expect(page.locator('#card-title')).to_have_text('Scotland')
+            expect(page.locator('#card-title')).to_have_text('Great Britain')
         context.close()
     report['assertions'].append(f'Phones (390×844 and 844×390, touch emulation) reach {MAX_PX} px per map unit (desktop previously {DESKTOP_OLD_MAX:.1f}) by + button and by a real two-finger pinch; double tap zooms 2×; near LOD with names is reachable; small Europe provinces are ≥32 CSS px; a tap on a counter under a just-departed army selects the province; the viewBox fills the element (no letterboxing); counters stay non-overlapping.')
 
@@ -857,10 +859,11 @@ def coach_and_drag_checks(browser,url,identity,report,out):
     assert page.evaluate("localStorage.getItem('coi.coach')")=='done'
     page.reload();expect(page.locator('#commander-title')).to_have_text('Britain');page.wait_for_timeout(1200);expect(coach).to_be_hidden()
     menu(page);page.locator('#coach-replay').click();expect(coach).to_be_visible();page.keyboard.press('Escape');expect(coach).to_be_hidden()
-    # Drag with a real touch point from Southern England's counter to the Midlands (the Netherlands is a battle by now).
+    # Drag with a real touch point from Ireland's counter to Great Britain (in battle by now: its clash marker is the target).
     page.locator('#home-view').click();page.wait_for_timeout(250)
     def centre(sel):
         b=page.locator(sel).bounding_box();return b['x']+b['width']/2,b['y']+b['height']/2
+    target='#marker-england .counter-body' if page.locator('#marker-england .counter-body').is_visible() else '#map .battle-counter[data-province="england"]'
     cdp=context.new_cdp_session(page)
     def touch_drag(a,b,end=True):
         (x0,y0),(x1,y1)=centre(a),centre(b)
@@ -870,13 +873,14 @@ def coach_and_drag_checks(browser,url,identity,report,out):
         if end:cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]});page.wait_for_timeout(150)
     # Gesture separation: a one-finger drag from a province you have not selected pans the map (no order arrow).
     before=page.locator('#map').get_attribute('viewBox')
-    touch_drag('#marker-england .counter-body','#marker-midlands .counter-body')
+    touch_drag('#marker-ireland .counter-body',target)
     assert page.locator('#map').get_attribute('viewBox')!=before,'an unselected drag should pan'
     expect(page.locator('#card')).to_be_hidden();assert page.locator('#map .draft-arrow').count()==0
     page.locator('#home-view').click();page.wait_for_timeout(250)
-    # Tap Southern England (selected), then drag from its counter: now the drag marches.
-    x,y=centre('#marker-england .counter-body');page.touchscreen.tap(x,y);expect(page.locator('#card-title')).to_have_text('Southern England')
-    (x0,y0),(x1,y1)=centre('#marker-england .counter-body'),centre('#marker-midlands .counter-body')
+    # Tap Ireland (selected), then drag from its counter: now the drag marches.
+    target='#marker-england .counter-body' if page.locator('#marker-england .counter-body').is_visible() else '#map .battle-counter[data-province="england"]'
+    x,y=centre('#marker-ireland .counter-body');page.touchscreen.tap(x,y);expect(page.locator('#card-title')).to_have_text('Ireland')
+    (x0,y0),(x1,y1)=centre('#marker-ireland .counter-body'),centre(target)
     cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':x0,'y':y0,'id':1}]})
     for i in range(1,13):cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':x0+(x1-x0)*i/12,'y':y0+(y1-y0)*i/12,'id':1}]})
     page.wait_for_timeout(80)
@@ -884,22 +888,22 @@ def coach_and_drag_checks(browser,url,identity,report,out):
     assert re.fullmatch(r'\d+ · \d+s',page.locator('#map .draft-label text').text_content()),page.locator('#map .draft-label text').text_content()  # troops · ETA
     page.screenshot(path=str(out/'22-touch-drag.png'))
     cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
-    expect(page.locator('#card')).to_have_attribute('data-kind','province');expect(page.locator('#card-title')).to_have_text('Midlands')
-    expect(page.locator('#card-sub')).to_contain_text('from Southern England');check_commit(page,'390 after drag')
+    expect(page.locator('#card')).to_have_attribute('data-kind','province');expect(page.locator('#card-title')).to_have_text('Great Britain')
+    expect(page.locator('#card-sub')).to_contain_text('from Ireland');check_commit(page,'390 after drag')
     assert page.locator('#map .draft-arrow').count()==1  # the order arrow stays while the card is open
     page.screenshot(path=str(out/'23-after-drag.png'))
     assert not errors,errors
     context.close()
-    report['assertions'].append('First match: three dismissible tips (drag to attack, tap a country, the Messages button counts what needs you), stored per browser, replayable from the menu, closed by Escape, never overlapping other overlays. On touch, a one-finger drag from a province you have not selected pans the map; after a tap selects Southern England, a real touch drag from its counter draws a snapped order arrow with an ETA label, then opens the order card for that target with one primary action.')
+    report['assertions'].append('First match: three dismissible tips (drag to attack, tap a country, the Messages button counts what needs you), stored per browser, replayable from the menu, closed by Escape, never overlapping other overlays. On touch, a one-finger drag from a province you have not selected pans the map; after a tap selects Ireland, a real touch drag from its counter draws a snapped order arrow with an ETA label, then opens the order card for that target with one primary action.')
 
 def turn_notice_checks(browser,url,identity,server,report,out):
-    """Recorded position 'ui-turn': Britain's 5 troops reach Île-de-France (north-france) while Germany's battle is under way there and
+    """Recorded position 'ui-turn': Britain's 5 troops reach Northern France (north-france) while Germany's battle is under way there and
     are turned back (engine reason battle_in_progress). Live notice with March again + Show army; the returning army's
     card at 1536×864 and 390×844; the notice's March again issues a turn_around the server accepts."""
     folder=out/'turn';folder.mkdir(parents=True,exist_ok=True)
     def step(to):
         server.stdin.write(f'@ui-turn war {to}\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==to
-    step(92)
+    step(131)
     pages=[]
     for name,(w,h),touch in [('card-desktop',(1536,864),False),('card-phone',(390,844),True),('notice',(1366,768),False)]:
         context=browser.new_context(viewport={'width':w,'height':h},is_mobile=touch,has_touch=touch,device_scale_factor=2 if touch else 1)
@@ -909,12 +913,12 @@ def turn_notice_checks(browser,url,identity,server,report,out):
         pages.append((name,w,h,context,page,errors,touch))
     state=lambda page,after=0:page.evaluate("after=>fetch('/api/games/ui-turn?after='+after,{headers:{Authorization:'Bearer '+JSON.parse(localStorage.getItem('coi.identity')).token}}).then(r=>r.json())",after)
     cursor=state(pages[0][4])['cursor']
-    step(93)
+    step(132)
     s=state(pages[0][4],cursor);army=next(a for a in s['armies'] if a['country']=='britain' and a.get('returning'))
     assert army['resume']['target']=='north-france' and any(e['type']=='army_recalled' and e.get('reason')=='battle_in_progress' for e in s['events']),army
     for name,w,h,context,page,errors,touch in pages:
         notice=page.locator('#toasts .cx-toast[data-tier="personal"]')
-        expect(notice).to_contain_text('Your 5 troops turned back from Île-de-France',timeout=6000)
+        expect(notice).to_contain_text('Your 5 troops turned back from Northern France',timeout=6000)
         expect(notice).to_contain_text('battle there was already under way')
         expect(notice.locator('[data-notice-act="turn"]')).to_have_text('March again');expect(notice.locator('[data-notice-act="show-army"]')).to_have_text('Show army')
         page.screenshot(path=str(folder/f'{w}x{h}-notice.png'));check_layout(page,f'{w}x{h} turned-back notice');check_contrast(page,f'{w}x{h} turned-back notice')
@@ -923,23 +927,23 @@ def turn_notice_checks(browser,url,identity,server,report,out):
         if name.startswith('card'):
             notice.locator('[data-notice-act="show-army"]').click()
             expect(page.locator('#card')).to_have_attribute('data-kind','army');expect(page.locator('#card-status')).to_contain_text('RETURNING')
-            expect(page.locator('#primary')).to_contain_text('March again → Île-de-France (arrives');expect(page.locator('#primary')).to_be_enabled()
+            expect(page.locator('#primary')).to_contain_text('March again → Northern France (arrives');expect(page.locator('#primary')).to_be_enabled()
             expect(page.locator('#card-status')).to_contain_text('Another side’s battle is under way there; your troops may be turned back again.',timeout=5000)
             page.wait_for_timeout(400);page.screenshot(path=str(folder/f'{w}x{h}-returning-army-card.png'))
             check_layout(page,f'{w}x{h} returning-army card');check_commit(page,f'{w}x{h} returning-army card');check_contrast(page,f'{w}x{h} returning-army card')
     page=pages[2][4]
     page.locator('#toasts .cx-toast [data-notice-act="turn"]').click()
-    expect(page.locator('#toasts')).to_contain_text('Marching again → Île-de-France',timeout=5000)
+    expect(page.locator('#toasts')).to_contain_text('Marching again → Northern France',timeout=5000)
     s=state(page);assert any(o['type']=='turn_around' and o['target']==army['id'] for o in s['orders']),s['orders']
-    step(94)
+    step(133)
     s=state(page,cursor);moved=next(a for a in s['armies'] if a['id']==army['id'])
     assert not moved.get('returning') and moved['turnArounds']==1 and moved['to']=='north-france',moved
     assert any(e['type']=='army_turned_around' and e['armyId']==army['id'] for e in s['events']),'army_turned_around'
     # The desktop card follows: the army marches again, so its one primary is Recall.
-    expect(pages[0][4].locator('#primary')).to_contain_text('Recall → Southern England',timeout=5000)
+    expect(pages[0][4].locator('#primary')).to_contain_text('Recall → Great Britain',timeout=5000)
     for name,w,h,context,page,errors,touch in pages:
         assert not errors,(name,errors);context.close()
-    report['assertions'].append('A real automatic turn-back (Britain’s 5 reach Île-de-France (north-france) during Germany’s battle; engine reason battle_in_progress) arrives live as a sticky notice naming the cause with March again and Show army (44 px on touch); Show army opens the returning army’s card with one enabled primary “March again → Île-de-France (arrives mm:ss)” and the server’s warning that another side’s battle is under way (region, primary and contrast checks at 1536×864 and 390×844); the notice’s March again queues a turn_around the server executes (army_turned_around, no longer returning, 1 of the room’s maxTurnArounds used).')
+    report['assertions'].append('A real automatic turn-back (Britain’s 5 reach Northern France (north-france) during Germany’s battle; engine reason battle_in_progress) arrives live as a sticky notice naming the cause with March again and Show army (44 px on touch); Show army opens the returning army’s card with one enabled primary “March again → Northern France (arrives mm:ss)” and the server’s warning that another side’s battle is under way (region, primary and contrast checks at 1536×864 and 390×844); the notice’s March again queues a turn_around the server executes (army_turned_around, no longer returning, 1 of the room’s maxTurnArounds used).')
 
 def truce_checks(browser,url,identity,report,out):
     """Recorded position 'ui-truce': Britain and France made peace at tick 0 (truce until 01:00). The country card says so and
@@ -964,7 +968,7 @@ def truce_checks(browser,url,identity,report,out):
     expect(page.locator('#card-status')).to_contain_text('no war with')
     check_layout(page,'truce order card');page.keyboard.press('Escape')
     s=page.evaluate("fetch('/api/games/ui-truce',{headers:{Authorization:'Bearer '+JSON.parse(localStorage.getItem('coi.identity')).token}}).then(r=>r.json())")
-    short=next(p for p in s['provinces'] if p['id']=='scotland');assert short['owner']=='britain' and short['development']==1 and short['troops']-1<24,short
+    short=next(p for p in s['provinces'] if p['id']=='ireland');assert short['owner']=='britain' and short['development']==1 and short['troops']-1<24,short
     select(page,short['id'])
     develop=page.locator('#develop-province');expect(develop).to_have_text(f"Needs 24 · you have {short['troops']-1}");expect(develop).to_be_disabled()
     page.screenshot(path=str(folder/'develop-short.png'));page.keyboard.press('Escape')
@@ -1116,7 +1120,7 @@ def main():
             page.keyboard.press('Escape');expect(page.locator('#hud-menu')).to_be_hidden();expect(page.locator('#menu-button')).to_be_focused()
             # Keyboard orders: focus your province counter, Enter, then a neighbour, Enter → focus on the one primary; Escape cancels.
             page.locator('#home-view').click();page.locator('#marker-england').focus();page.keyboard.press('Enter')
-            expect(page.locator('#card-title')).to_have_text('Southern England')
+            expect(page.locator('#card-title')).to_have_text('Great Britain')
             page.locator('#marker-low-countries').focus();page.keyboard.press('Enter');expect(page.locator('#primary')).to_be_focused()
             page.keyboard.press('Escape');expect(page.locator('#card')).to_be_hidden()
             report['assertions'].append('Keyboard: the standard opens the alliance card with focus moved in and Escape returns it; the menu opens and closes the same way; a province then a neighbour selected with Enter puts focus on the one primary action (Enter sends), and Escape cancels.')
@@ -1166,7 +1170,7 @@ def main():
             page.locator('#journal-close').click();expect(page.locator('#war-journal')).to_be_hidden()
             report['assertions'].append('Powers rows keep keyboard focus across polling and open the country card; the War log opens from the menu or L and closes with Escape or Close.')
             select(page,'england','low-countries','full');capture('03-order-expanded.png')
-            select(page,'scotland',None,'full');capture('04-own-province.png')
+            select(page,'ireland',None,'full');capture('04-own-province.png')
             open_country(page,'germany',False);capture('05-country.png');page.keyboard.press('Escape')
             select(page,'england','low-countries','peek');camera(page,'world');capture('06-order-world.png')
             # Templates with authored static symbols cannot execute arbitrary player inputs.
@@ -1196,27 +1200,32 @@ def main():
             threat=page.locator('#toasts .cx-toast[data-tier="action"]')
             # Russian columns (at war with Britain's alliance) land on Britain's provinces: within 30 s each is an ACTION.
             server.stdin.write('505\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==505
-            expect(threat).to_contain_text(re.compile('attacks (Netherlands|Northern India)'),timeout=5000)
+            expect(threat).to_contain_text(re.compile('attacks (Egypt|India)'),timeout=5000)
             check_layout(page,'1600x1000 action toast')
             threat.locator('[data-do="dismiss"]').click()
             capture('11-incoming-attack.png')
-            # Tick 579: Russia breaks on Northern India in a major battle: a PERSONAL notice with the troops left, a banner
-            # (it is Britain's battle) and exactly one audible cue.
-            page.wait_for_timeout(3000)  # past the 2.5 s stinger gap after the warning cue, as in real time
-            before=len(spy(page,'cues'))
-            server.stdin.write('587\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==587
-            expect(personal).to_contain_text('Line held · Northern India',timeout=8000)
-            expect(personal).to_contain_text('43 troops')
-            expect(page.locator('#declaration')).to_contain_text('Major battle at Northern India',timeout=5000)
+            # Tick 600: Russia's attack breaks on India in a major battle: a PERSONAL notice with the troops left, a banner
+            # (it is Britain's battle) and exactly one audible cue. Step to 596 first and dismiss the warnings of the armies
+            # due on the Low Countries and the Levant (ACTION toasts own the lane until dismissed; they stay in Messages).
+            server.stdin.write('596\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==596
+            page.wait_for_timeout(2500)
+            for _ in range(6):
+                if not threat.count() or not threat.is_visible():break
+                threat.locator('[data-do="dismiss"]').dispatch_event('click');page.wait_for_timeout(600)  # a banner may sit over it
+            page.wait_for_timeout(20500);before=len(spy(page,'cues'))  # past the 20 s stinger budget window, as in real time
+            server.stdin.write('604\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==604
+            expect(personal).to_contain_text('Line held · India',timeout=8000)
+            expect(personal).to_contain_text(re.compile(r'\d+ troops remain'))
+            expect(page.locator('#declaration')).to_contain_text('Major battle at India',timeout=5000)
             page.wait_for_timeout(1600);fresh_cues=spy(page,'cues')[before:]
             assert len([c for c in fresh_cues if c['audible']])==1,fresh_cues
-            report['sound']={'tick579':fresh_cues}
-            report['assertions'].append(f'The live tick-579 headline (a major battle on your own province) chose exactly one audible cue ({[c["cue"] for c in fresh_cues if c["audible"]][0]}).')
+            report['sound']={'tick600':fresh_cues}
+            report['assertions'].append(f'The live tick-600 headline (a major battle on your own province) chose exactly one audible cue ({[c["cue"] for c in fresh_cues if c["audible"]][0]}).')
             camera(page,'world');capture('12-line-held.png')
             page.screenshot(path=str(out/'13-battle-banner.png'))
             check_layout(page,'1600x1000 banner')
             rows=open_thread(page,'world')
-            expect(rows.locator('[data-kind="major_battle"]').last).to_contain_text('Northern India')
+            expect(rows.locator('[data-kind="major_battle"]').last).to_contain_text('India')
             close_comms(page)
             report['assertions'].append('Recorded position stepped live: a hostile army due within 30 s is the one ACTION toast; a defence you won is a PERSONAL notice with the troops left and, as a major battle (casualties above max(20, 3% of all troops)) on your land, a banner and a World row.')
             feed_checks(page,report)
@@ -1227,7 +1236,7 @@ def main():
             assert spy(page,'cues')[before:]==[],spy(page,'cues')[before:]
             sound_settings_checks(page,context,url,report,args.bridge)
             for banner in ['#declaration','#alliance-seal','#fallen-seal']:expect(page.locator(banner)).to_be_hidden()
-            rows=open_thread(page,'world');expect(rows.locator('[data-kind="major_battle"]').last).to_contain_text('Northern India');close_comms(page)
+            rows=open_thread(page,'world');expect(rows.locator('[data-kind="major_battle"]').last).to_contain_text('India');close_comms(page)
             report['assertions'].append('Reopening the room rebuilt the World thread without replaying banners or toasts.')
             report['assertions'].append('Actual recorded losses and defense trigger factual, dismissible notices; reopening suppresses old battle popups.')
             page.set_viewport_size({'width':1500,'height':1150});go_back(page)

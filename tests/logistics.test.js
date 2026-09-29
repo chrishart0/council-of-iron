@@ -40,10 +40,10 @@ test('internal speed is charged speed only when both ends are friendly at depart
   const outside = send(g, 'usa', { type:'march', from: 'west-us', to: 'mexico', amount: 10 });
   assert.equal(inside.arrivesAt, g.tick + 1 + g.internalTravelTimes['west-us']['central-us']);
   assert.equal(outside.arrivesAt, g.tick + 1 + g.travelTimes['west-us'].mexico);
-  assert.equal(g.provinces.length > 0 && observe(g, 'usa').internalTravelTimes['west-us']['central-us'], 24);
+  assert.equal(g.provinces.length > 0 && observe(g, 'usa').internalTravelTimes['west-us']['central-us'], 26);
   tick(g);
   const fast = g.armies.find(a => a.to === 'central-us');
-  assert.equal(fast.arrivesAt - fast.departedAt, 24);
+  assert.equal(fast.arrivesAt - fast.departedAt, 26);
   // A recall takes as long as the army has been out.
   advance(g, 5); send(g, 'usa', { type: 'recall', id: fast.id }); tick(g);
   assert.equal(fast.returning, true); assert.equal(fast.arrivesAt, g.tick + 6);
@@ -150,18 +150,18 @@ test('a rally column is an ordinary army: recallable; only lost territory pauses
 });
 
 test('rally clear, bulk sources and idempotent retries', () => {
-  const g = game({ setup: g => { own(g, 'mexico', 'usa', 30); own(g, 'west-canada', 'usa', 10); } });
+  const g = game({ setup: g => { own(g, 'mexico', 'usa', 30); own(g, 'canada', 'usa', 10); } });
   assert.throws(() => send(g, 'usa', { type: 'rally', from: 'mexico', to: null }), /No rally point/);
-  const action = { type: 'rally', from: ['mexico', 'west-canada', 'central-us'], to: 'west-us' };
+  const action = { type: 'rally', from: ['mexico', 'canada', 'central-us'], to: 'west-us' };
   const first = send(g, 'usa', action, 'rally-1'), again = send(g, 'usa', action, 'rally-1');
   assert.deepEqual(again, first); assert.equal(g.orders.filter(o => o.type === 'rally').length, 1);
   assert.throws(() => send(g, 'usa', { ...action, to: 'east-us' }, 'rally-1'), /different action/);
   assert.throws(() => send(g, 'usa', { type: 'rally', from: ['mexico', 'mexico'], to: 'west-us' }), /once/);
-  assert.throws(() => send(g, 'usa', { type: 'rally', from: ['east-us', 'japan'], to: 'west-us' }), /Unknown province/);
-  tick(g); assert.deepEqual(g.rallies.map(x => x.from), ['central-us', 'mexico', 'west-canada']);
+  assert.throws(() => send(g, 'usa', { type: 'rally', from: ['east-us', 'atlantis'], to: 'west-us' }), /Unknown province/);
+  tick(g); assert.deepEqual(g.rallies.map(x => x.from), ['canada', 'central-us', 'mexico']);
   send(g, 'usa', { type: 'rally', from: ['mexico', 'central-us'], to: null });
   send(g, 'usa', { type: 'rally', from: 'east-us', to: 'west-us' });
-  tick(g); assert.deepEqual(g.rallies.map(x => x.from), ['east-us', 'west-canada']);
+  tick(g); assert.deepEqual(g.rallies.map(x => x.from), ['canada', 'east-us']);
   assert.ok(g.events.some(e => e.type === 'rally_cleared' && e.reason === 'order'));
 });
 

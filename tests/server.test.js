@@ -215,8 +215,8 @@ test('real CLI subprocess joins, observes, sends orders, reconnects from a priva
   const both=await run('preview','north-france','50%','--from','england,ireland');assert.equal(both.code,0,both.stderr);
   assert.equal(JSON.parse(both.stdout).sources.length,2);
   const bordering=await run('preview','north-france','50%','--all-bordering');assert.equal(bordering.code,0,bordering.stderr);
-  assert.deepEqual(JSON.parse(bordering.stdout).sources.map(s=>s.from).sort(),['england','ireland']);
-  const far=await run('preview','north-france','50%','--from','scotland');assert.equal(far.code,0,far.stderr);assert.ok(JSON.parse(far.stdout).sources[0].path.length>1,'from anywhere in your empire');
+  assert.deepEqual(JSON.parse(bordering.stdout).sources.map(s=>s.from).sort(),['england']);
+  const far=await run('preview','north-france','50%','--from','ireland');assert.equal(far.code,0,far.stderr);assert.ok(JSON.parse(far.stdout).sources[0].path.length>1,'from anywhere in your empire');
   const loose=await run('preview','mexico','50%','--from','england');assert.equal(loose.code,1);assert.match(loose.stderr,/You have no province bordering mexico\. Take or hold a province next to it first\./);assert.ok(JSON.parse(both.stdout).combatAtArrival);
   const state=JSON.parse((await run('state')).stdout);assert.equal(state.you,'britain');assert.equal(state.orders.length,1);
   const compact=JSON.parse((await run('board')).stdout);
@@ -293,12 +293,12 @@ test('new rooms use the current rules; rally plans and orders go over HTTP',asyn
   const usa=await f.seat(id,host,'usa'),germany=await f.seat(id,agent,'germany','agent');
   await f.launch(id,usa.token);
   const view=(await f.call(`/api/games/${id}`,'GET',undefined,usa.token)).data;
-  assert.equal(view.rules.moveSpeedPercent,120);assert.equal(view.internalTravelTimes['west-us']['central-us'],24);
+  assert.equal(view.rules.moveSpeedPercent,120);assert.equal(view.internalTravelTimes['west-us']['central-us'],26);
   assert.deepEqual(view.rallies,[]);
   const rally={type:'rally',from:['central-us','east-us'],to:'west-us'};
   const plan=await f.call(`/api/games/${id}/plan`,'POST',rally,usa.token);
   assert.equal(plan.status,200,JSON.stringify(plan.data));assert.deepEqual(plan.data.sources.map(s=>s.path),[['west-us'],['central-us','west-us']]);
-  assert.equal(plan.data.sources[1].travel,24+25);
+  assert.equal(plan.data.sources[1].travel,24+26);
   assert.equal((await f.call(`/api/games/${id}/plan`,'POST',{type:'rally',from:'alaska',to:'west-us'},usa.token)).status,409,'no friendly path');
   assert.equal(f.app.games.get(id).orders.length,0,'a plan spends nothing');
   assert.equal((await f.call(`/api/games/${id}/plan`,'POST',rally,germany.token)).status,403);
@@ -316,7 +316,7 @@ test('industrial HTTP plans are private, atomic, synchronized, recallable and pe
   const usa=await f.seat(id,host,'usa'),germany=await f.seat(id,agent,'germany','agent');
   await f.launch(id,usa.token);
   const map=(await f.call(`/api/games/${id}/map`)).data;
-  assert.equal(map.rulesVersion,3);assert.ok(map.provinces.length>64);
+  assert.equal(map.rulesVersion,3);assert.ok(map.provinces.length>=50);
   const request={to:'mexico',sources:[{from:'west-us',percent:50},{from:'central-us',percent:50}]};
   const plan=await f.call(`/api/games/${id}/plan`,'POST',request,usa.token);
   assert.equal(plan.status,200);assert.equal(f.app.games.get(id).orders.length,0);
@@ -325,7 +325,7 @@ test('industrial HTTP plans are private, atomic, synchronized, recallable and pe
   assert.equal(new Set(receipt.orders.map(o=>o.arrivesAt)).size,1);
   f.app.step(f.app.games.get(id),1);await f.restart();
   const restored=(await f.call(`/api/games/${id}`,'GET',undefined,usa.token)).data;
-  assert.equal(restored.scenario,'imperial-1910-v5');assert.ok(restored.armies.some(a=>a.groupId===receipt.groupId));
+  assert.equal(restored.scenario,'imperial-1910-v6');assert.ok(restored.armies.some(a=>a.groupId===receipt.groupId));
   const recall={opId:'return',action:{type:'recall',id:receipt.groupId}};
   assert.equal((await f.call(`/api/games/${id}/actions`,'POST',recall,usa.token)).status,200);
   f.app.step(f.app.games.get(id),10);
@@ -477,7 +477,7 @@ test('a long march has the same path and arrival for the browser (HTTP /plan), M
   const f=await fixture(t),host=await f.register('Host'),other=await f.register('Other');
   const id=await f.room(host),usa=await f.seat(id,host,'usa');await f.seat(id,other,'britain');
   await f.launch(id,usa.token);
-  const g=f.app.games.get(id);for(const p of ['mexico','west-canada'])Object.assign(g.provinces.find(v=>v.id===p),{owner:'usa',troops:30});
+  const g=f.app.games.get(id);for(const p of ['mexico','canada'])Object.assign(g.provinces.find(v=>v.id===p),{owner:'usa',troops:30});
   const action={to:'alaska',from:'mexico',amount:20};
   const http=(await f.call(`/api/games/${id}/plan`,'POST',action,usa.token)).data;
   assert.ok(http.sources[0].path.length>=3,JSON.stringify(http));
@@ -507,14 +507,14 @@ test('attack from every bordering province: HTTP, MCP and CLI agree; percent per
     {jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'preview',arguments:action}},
     {jsonrpc:'2.0',id:3,method:'tools/call',params:{name:'march',arguments:{to:'andes',fromAllBordering:true,percent:50}}},
     {jsonrpc:'2.0',id:4,method:'tools/call',params:{name:'march',arguments:{to:'mexico',fromAllBordering:false,percent:50}}},
-    {jsonrpc:'2.0',id:5,method:'tools/call',params:{name:'march',arguments:{to:'central-america',from:'east-us',amount:3}}},
+    {jsonrpc:'2.0',id:5,method:'tools/call',params:{name:'march',arguments:{to:'brazil',from:'east-us',amount:3}}},
   ].map(x=>JSON.stringify(x)).join('\n')+'\n');
   const out=mcp.stdout.trim().split('\n').map(x=>JSON.parse(x));
   assert.deepEqual(JSON.parse(out[1].result.content[0].text).sources,http.sources);
   assert.equal(out[2].result.isError,true);assert.match(out[2].result.content[0].text,/You have no province bordering andes/);
   assert.equal(out[3].error.code,-32602,'only true is accepted');
   const far=JSON.parse(out[4].result.content[0].text);
-  assert.match(far.error,/You have no province bordering central-america\. Take or hold a province next to it first\. Your nearest: /);
+  assert.match(far.error,/You have no province bordering brazil\. Take or hold a province next to it first\. Your nearest: /);
   assert.deepEqual(far.hint.target.yourBorderingProvinces,[]);
   const cli=await subprocess('agents/cli.js',['preview','mexico','50%','--all-bordering'],env);assert.equal(cli.code,0,cli.stderr);
   assert.deepEqual(JSON.parse(cli.stdout).sources,http.sources);

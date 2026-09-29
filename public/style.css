@@ -592,6 +592,10 @@ body.keyboard-open .comms{--cx-safe-b:0px}
   .card-actions>button.primary{min-height:54px;font-size:19px}
   .card-actions>button:not(.primary){min-height:44px}
 }
+/* Short phones: the relation label and its note share one line, so an order sheet leaves the camera column its room. */
+@media (max-height:819px) and (pointer:coarse){.card-relation{padding:3px 10px;font-size:14px;line-height:1.2}.card-relation .rel{font-size:15px;white-space:nowrap}.sources-hint{font-size:13px;line-height:1.1}}
+/* Narrow phones: two secondary actions share a row without wrapping a longer province name ("Cancel 6 → Low Countries"). */
+@media (max-width:400px){.card-actions>button:not(.primary):not(.danger){font-size:14px;padding:4px 8px;letter-spacing:-.1px}}
 .card-relation .send-list{flex-basis:100%}
 .send-row .flag{display:inline-grid;place-items:center;width:22px;flex:none}
 /* Short landscape phones: the slider and the four share chips share one row, so the commit button stays on screen. */

@@ -1,7 +1,8 @@
 /** Replay the recorded single-controller decisions (tests/fixtures/handplay-20260927.json.gz)
  * under the CURRENT rules and map. This does NOT generate new strategy: every submitted order is a
  * recorded one. The recording predates formal war, the single march order, rally points and the current
- * timings, so a small, explicit adapter bridges it (see adapt()):
+ * timings, and it was played on the 80-province v4 board, so a small, explicit adapter bridges it (see adapt()):
+ *   - recorded province ids map onto the published v6 board (RECORDED_PROVINCE: merged provinces);
  *   - recorded move/attack orders become one march (a recorded arrival time is dropped); a march into a
  *     non-allied country declares war in the same action (declareWar), exactly what a player adds today;
  *   - a recorded recruitment arrow to one of the mover's own provinces becomes a rally point there;
@@ -20,8 +21,17 @@ import { resolve } from 'node:path';
 import { createGame, join, start, act, tick, sides, RuleError } from '../src/engine.js';
 
 export const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../tests/fixtures/handplay-20260927.json.gz', import.meta.url))));
-// The board the recording was played on; the published map's borders have since been redrawn.
-export const map = JSON.parse(readFileSync(new URL('../tests/fixtures/handplay-map.json', import.meta.url)));
+// The recording is replayed on the published map. It was played on the 80-province v4 board; v6 merged
+// provinces (scripts/build-imperial-v6.js), so every recorded province id goes through this table.
+export const map = JSON.parse(readFileSync(new URL('../public/imperial-map.json', import.meta.url)));
+export const RECORDED_PROVINCE = Object.freeze({
+  'central-america':'mexico', amazonia:'brazil', patagonia:'andes', 'east-canada':'canada', 'west-canada':'canada',
+  scotland:'england', midlands:'england', normandy:'north-france', occitania:'south-france', 'alpine-france':'south-france',
+  belgium:'low-countries', rhineland:'ruhr', brandenburg:'prussia', saxony:'bavaria', 'south-italy':'italy',
+  balkans:'danube', serbia:'balkans', bulgaria:'balkans', urals:'siberia', 'east-anatolia':'caucasus',
+  sahel:'sahara', angola:'congo', 'north-india':'india', 'south-india':'india',
+  'north-japan':'japan', 'south-japan':'japan', 'new-zealand':'australia' });
+const place = id => typeof id === 'string' ? RECORDED_PROVINCE[id] ?? id : id;
 export const projection = g => ({ tick:g.tick, status:g.status, provinces:g.provinces, armies:g.armies, sides:sides(g), outcome:g.outcome });
 export const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const troopTotal = g => g.provinces.reduce((n,p)=>n+p.troops,0)+g.armies.reduce((n,a)=>n+a.amount,0);
@@ -31,7 +41,11 @@ const recordedOffers=[...new Set(fixture.actions.filter(a=>a.action.type==='acce
   .sort((a,b)=>Number(a.split('-')[1])-Number(b.split('-')[1]));
 /** The orders to submit for one recorded action, in order: [{country, action, opId}]. */
 export function adapt(g, a, offers) {
-  const recorded=structuredClone(a.action);let action=recorded;
+  const recorded=structuredClone(a.action);
+  // Province ids onto the current board; an order whose ends merged into one province is rejected and counted.
+  for(const key of ['from','to'])if(key in recorded)recorded[key]=Array.isArray(recorded[key])?recorded[key].map(place):place(recorded[key]);
+  if(Array.isArray(recorded.sources))recorded.sources=recorded.sources.map(s=>typeof s==='string'?place(s):{...s,from:place(s.from)});
+  let action=recorded;
   if(recorded.type==='accept')action.proposalId=offers.map.get(recorded.proposalId) ?? recorded.proposalId;
   if(recorded.type==='move')action={type:'march',from:recorded.from,to:recorded.to,
     ...(recorded.percent!==undefined?{percent:recorded.percent}:{amount:recorded.amount})};

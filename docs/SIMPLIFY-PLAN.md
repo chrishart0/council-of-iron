@@ -85,7 +85,7 @@ Heuristic self-play is only used for invariants and "matches still resolve", nev
 
 ## Bucket 3 — KEEP
 
-- **The map** (80 provinces, borders, counters, wraparound, zoom) — the user's verdict: "the map is good".
+- **The map** (80 provinces in v5, 59 larger ones since v6, borders, counters, wraparound, zoom) — the user's verdict: "the map is good".
 - **Distance-based travel** with fast internal links (own/allied land ×2) — "faster movement".
 - **Slow Risk-dice battles** (4 rounds per 5 s), reinforcements and recall mid-battle — "slower battles".
 - **One resource** (troops) and **three industry levels**; recruitment every 20 s.

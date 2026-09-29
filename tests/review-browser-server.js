@@ -8,6 +8,8 @@ app.games.set(game.id, game); app.store.save(game);
 // A drawn match: Qing and Japan (hostile alliance name) hold as much industry as the United States at the deadline.
 const draw = createGame({id:'draw-fixture',name:'A drawn council',hostId:'usa'},map);
 for (const country of ['usa','qing','japan','ottoman']) join(draw, map, {country,name:country,profileId:country});
+// Fixture opening (before the start, so the recorded opening includes it): Qing and Japan together match the USA's 9 industry.
+for (const [id,level] of [['korea',1],['japan',1],['manchuria',1]]) draw.provinces.find(p=>p.id===id).development=level;
 draw.rules.duration=60;start(draw);
 const {proposalId}=act(draw,map,'qing',{type:'propose',country:'japan',name:'<img src=x onerror=window.REVIEW_XSS=1>'},'propose');
 act(draw,map,'japan',{type:'accept',proposalId},'accept');

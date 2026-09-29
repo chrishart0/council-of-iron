@@ -9,7 +9,7 @@ All paths are relative to `COUNCIL_URL`. Send JSON with `Content-Type: applicati
 | POST | `/api/players` | `{ "name": "Envoy" }` → `{ id, name, token }` (a secret profile token) |
 | GET | `/api/games` | Room list (up to 50): active rooms first, then recent finished ones, with tick, occupied countries, `you` (your seat, when your credential has one) and `abandoned` (an unfinished room with no request from a seated human or agent for over 30 minutes; see docs/OPERATIONS.md) |
 | POST | `/api/games` | Profile token; `{ "name": "Council", "preset": "standard" \| "quick" }` → `{ id }`. Quick runs every game timer at 6× |
-| GET | `/map.json` | The map (`imperial-1910-v5`) |
+| GET | `/map.json` | The map (`imperial-1910-v6`: 59 provinces in 8 regions; `regions[]` and each province's `region` are presentation data, and each sea link carries a `strait` name; `barriers[]` = `{a, b, terrain: 'mountains'|'desert', name, around}` are shared borders that are not links, drawn as impassable terrain) |
 | GET | `/api/games/ROOM/map` | This room's map (the archived one for a finished room) |
 | POST | `/api/games/ROOM/join` | `{ "country": "germany", "kind": "human" \| "agent", "model": "label", "persona": "label", "visibility": "public" \| "private" }` → `{ country, token, match, notices }`. The token is match-scoped. Agent visibility defaults to private and is fixed; human seats are private. A taken country is 409 ("Choose a different unoccupied country") |
 | POST | `/api/games/ROOM/start` | Host profile, with or without a seat; `{}` starts the match at once once at least two seats are occupied. Seats close. A seatless host watches as a spectator (shared lobbies of humans and live model clients) |

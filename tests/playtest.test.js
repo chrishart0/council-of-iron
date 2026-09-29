@@ -339,7 +339,7 @@ test('mcp proxy: hides only room setup, passes inbox and attention through, logs
   const body = result => JSON.parse(result.content[0].text);
   const refused = await mcp.call('create_match', { name: 'x' });
   assert.equal(refused.isError, true);
-  const order = body(await mcp.call('rally', { from: 'scotland', to: 'england' }));
+  const order = body(await mcp.call('rally', { from: 'ireland', to: 'england' }));
   assert.equal(order.attention, '1 unread message (usa): read inbox');
   const box = body(await mcp.call('inbox', {}));
   assert.deepEqual(box.messages.map(m => m.text), ['ally with me?']);

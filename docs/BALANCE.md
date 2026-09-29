@@ -2,6 +2,22 @@
 
 **Heuristic self-play does not prove balance or fun.** The practice bots (`agents/industrial-policy.js`, seeded styles in `tests/simulation.js`) attack only with clear superiority, never tire and do not bargain. These runs check invariants (troop conservation, valid garrisons and armies, the deadline, consistent results, the alliance size cap) and that matches still resolve. Starting positions are deliberately asymmetric; do not tune starting armies to these bots.
 
+## Map v6 (2026-09-28)
+
+The published map became `imperial-1910-v6`:
+- 59 larger provinces in eight regions, with smoothed borders;
+- five impassable borders: the Himalayas, the Urals, the Alps between Italy and France, and the Sahara (twice);
+- Hawaii as the only mid-Pacific crossing;
+- new starting setups.
+
+The full analysis, the static exposure table and the self-play comparison are in [MAP-V6.md](MAP-V6.md).
+
+On the final merged engine (border attack rule, alliances of at most three), over 256 matches the spread of winning-side appearances fell:
+- diplomacy: from 130/25 (SD 44.9) on v5 to 133/53 (SD 25.9) on v6;
+- solo: from 108/0 to 83/3.
+
+The watch items are the USA's lead, Japan, and Britain in solo mode. These results come from heuristic bots, not humans.
+
 ## Simplification pass (2026-09-28)
 
 Same seeds, same map (`imperial-1910-v4`), before (merge commit a148680) and after the simplified rules: one march order through own and allied land, rallies instead of recruitment arrows, recall without resume, alliance-wide war and peace without votes, win-or-lose results with alliances capped at half the countries, no opening council, no capture damage, an invisible 10-per-10 s order limit instead of 3 per 10 s. The bots now rally their interior to the nearest front instead of setting recruitment arrows. 256 matches per row; zero invariant failures in every run.

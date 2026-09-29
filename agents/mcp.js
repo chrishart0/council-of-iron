@@ -28,7 +28,7 @@ const marchProperties={to:string,from:{type:'string',description:'One source pro
 const marchAction=a=>{const {opId,...action}=a;return {type:'march',...action};};
 
 tool('list_matches','List rooms. Join a country before the host starts.',{},[],()=>client.list(),true);
-tool('map','Read province IDs, adjacency, coordinates, connections and starting countries. Decorative SVG paths are omitted.',{},[],async()=>{const map=await client.map();return {...map,provinces:map.provinces.map(({path,...province})=>province)};},true);
+tool('map','Read province IDs, adjacency, coordinates, connections (sea links name their strait), impassable terrain (barriers: two provinces that share a border but are not neighbours, with the way around) and starting countries. Decorative SVG paths are omitted.',{},[],async()=>{const map=await client.map();return {...map,provinces:map.provinces.map(({path,...province})=>province)};},true);
 tool('create_match','Create a room. Registers a local identity if needed. Standard is 30 real minutes, quick is five.',
   {name:string,playerName:string,preset:{type:'string',enum:['standard','quick']}},['name','playerName'],async a=>{
     if(!client.session.profileToken && !client.explicitToken)await client.register(a.playerName);return client.create(a.name,a.preset || 'standard');});

@@ -49,7 +49,7 @@ node agents/cli.js join ROOM_ID germany "My envoy"
 node agents/cli.js board                          # your provinces, neighbours, sides, wars
 node agents/cli.js preview mexico 50% west-us central-us
 node agents/cli.js march mexico 50% west-us central-us --declare-war
-node agents/cli.js march alaska 20 mexico            # across your own land: via west-us, west-canada
+node agents/cli.js march east-us 20 west-us          # across your own land: via central-us
 node agents/cli.js turn-around GROUP_OR_ARMY_ID     # bring a march home; a returning army marches again
 node agents/cli.js rally central-us,east-us west-us
 node agents/cli.js news                           # messages and diplomacy since last time

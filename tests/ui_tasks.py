@@ -72,8 +72,10 @@ class Walk:
         """Camera only (not counted): pan the map by dragging empty map so the province is on screen."""
         if escape: self.page.keyboard.press('Escape')
         vw, vh = self.page.viewport_size['width'], self.page.viewport_size['height']
-        for _ in range(8):
+        for _ in range(16):
             x, y = self.at(self.counter(province))
+            if abs(x - vw / 2) > vw * 1.5 or abs(y - vh / 2) > vh * 1.5:  # far away on a zoomed-in map: zoom out a step
+                self.page.keyboard.press('q'); self.page.wait_for_timeout(150); self.camera += 1; continue
             clear = self.counter(province).evaluate('(el,[x,y])=>el.contains(document.elementFromPoint(x,y))', [x, y]) if 0 <= x < vw and 0 <= y < vh else False
             if 40 < x < vw - 40 and vh * .25 < y < vh * .55 and clear: return
             start = self.page.evaluate('''([w,h])=>{for(let y=h*.35;y<h*.6;y+=13)for(let x=w*.3;x<w*.7;x+=13){const e=document.elementFromPoint(x,y);
@@ -111,21 +113,22 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     assert any(o['type'] == 'march' and o['to'] == 'north-france' and o['amount'] == amount for o in s['orders']), s['orders']
     w.end()
 
-    # (a) Attack a neighbouring enemy province with 50%: Normandy (France, now at war).
+    # (a) Attack a neighbouring enemy province with 50%: Indochina (France, now at war), from India.
+    w.bring('indochina')  # camera only (not counted): the Indian front
     w.begin('attack')
     before = {p['id']: p['troops'] for p in s['provinces']}
     if touch:
-        w.tap(w.counter('normandy'), 'target')
+        w.tap(w.counter('indochina'), 'target')
     else:
-        w.drag('england', 'normandy', 'drag')
+        w.drag('india', 'indochina', 'drag')
     expect(page.locator('#card')).to_have_attribute('data-relation', 'enemy')
     w.tap(page.locator('[data-fraction="0.5"]'), 'half')
-    expect(primary).to_contain_text('Attack Normandy with')
+    expect(primary).to_contain_text('Attack Indochina with')
     w.tap(primary, 'sent')
     s = w.state()
-    free = before['england'] - 1 - sum(o['amount'] for o in s['orders'] if o['from'] == 'england' and o['to'] != 'normandy')
-    order = next(o for o in s['orders'] if o['to'] == 'normandy')
-    assert order['from'] == 'england' and order['amount'] == max(1, free // 2), (order, free)
+    free = before['india'] - 1 - sum(o['amount'] for o in s['orders'] if o['from'] == 'india' and o['to'] != 'indochina')
+    order = next(o for o in s['orders'] if o['to'] == 'indochina')
+    assert order['from'] == 'india' and order['amount'] == max(1, free // 2), (order, free)
     w.end()
 
     # Recall: tap your own moving army, then Recall.
@@ -134,7 +137,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     army = None
     for _ in range(8):
         page.wait_for_timeout(900)
-        s = w.state(); army = next((a for a in s['armies'] if a['country'] == 'britain' and a['to'] == 'normandy' and not a.get('returning')), None)
+        s = w.state(); army = next((a for a in s['armies'] if a['country'] == 'britain' and a['to'] == 'indochina' and not a.get('returning')), None)
         if army and page.locator(f'[data-army="{army["id"]}"]:not(.tap-blocked) .army-hit').count(): break
         w.stdin(f'war {s["tick"] + 1}')
     assert army, 'no marching army to recall'
@@ -144,30 +147,30 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
         expect(page.locator('#card')).to_have_attribute('data-kind', 'army'); expect(primary).to_contain_text('Recall')
         w.tap(primary, 'recalled')
     else:  # the column still sits on a counter (counter taps win): recall from the province it left
-        w.tap(w.counter('england'), 'province'); w.results['recallPath'] = 'source province card'
-        w.tap(page.locator('#card-actions button', has_text='→ Normandy'), 'recalled')
+        w.tap(w.counter('india'), 'province'); w.results['recallPath'] = 'source province card'
+        w.tap(page.locator('#card-actions button', has_text='→ Indochina'), 'recalled')
     expect(lane(page)).to_contain_text('Recall queued')
     w.end()
 
-    # March again: the recalled column is on its way home; send it back toward Normandy from where it is.
+    # March again: the recalled column is on its way home; send it back toward Indochina from where it is.
     s = w.state(); back = None
     for _ in range(4):
         back = next((a for a in s['armies'] if a['id'] == army['id']), None)
         if back and back.get('returning'): break
         w.stdin(f'war {s["tick"] + 1}'); page.wait_for_timeout(900); s = w.state()
-    assert back and back.get('returning') and back['resume']['target'] == 'normandy', back
+    assert back and back.get('returning') and back['resume']['target'] == 'indochina', back
     page.keyboard.press('Escape'); page.wait_for_timeout(900)  # start from a closed card (not counted)
     w.begin('turn')
     hit = page.locator(f'[data-army="{army["id"]}"]:not(.tap-blocked) .army-hit')
     if hit.count() and page.evaluate('([x,y])=>Boolean(document.elementFromPoint(x,y)?.closest("[data-army]"))', list(w.at(hit))):
         w.tap(hit, 'returning-army'); w.results['turnPath'] = 'army marker'
         expect(page.locator('#card')).to_have_attribute('data-kind', 'army'); expect(page.locator('#card-status')).to_contain_text('RETURNING')
-        expect(primary).to_contain_text('March again → Normandy (arrives'); w.snap('card')
+        expect(primary).to_contain_text('March again → Indochina (arrives'); w.snap('card')
         w.tap(primary, 'marched')
-    else:  # still on England's counter (counter taps win): the province card lists the troops heading home there
-        w.tap(w.counter('england'), 'province'); w.results['turnPath'] = 'home province card'
+    else:  # still on India's counter (counter taps win): the province card lists the troops heading home there
+        w.tap(w.counter('india'), 'province'); w.results['turnPath'] = 'home province card'
         w.tap(page.locator('#card-actions button', has_text='March again'), 'marched')
-    expect(lane(page)).to_contain_text('Marching again → Normandy')
+    expect(lane(page)).to_contain_text('Marching again → Indochina')
     s = w.state(); assert any(o['type'] == 'turn_around' and o['target'] == army['id'] for o in s['orders']), s['orders']
     w.end()
 
@@ -218,24 +221,24 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     w.end()
     close_comms(page)
 
-    # Develop a province: East Canada (level II) once natural recruitment pays for level III (48 troops).
+    # Develop a province: Canada (level II) once natural recruitment pays for level III (48 troops).
     w.begin('develop')
     w.stdin('war 400')
-    w.bring('east-canada')
-    w.tap(w.counter('east-canada'), 'province')
+    w.bring('canada')
+    w.tap(w.counter('canada'), 'province')
     develop = page.locator('#develop-province'); expect(develop).to_contain_text('Develop · 48 troops'); expect(develop).to_be_enabled(timeout=5000)
     w.tap(develop, 'confirm-open')
     w.tap(page.locator('#confirm-dialog [value="confirm"]'), 'invested')
     expect(lane(page)).to_contain_text('Investment committed')
-    s = w.state(); assert any(o['type'] == 'develop' and o['from'] == 'east-canada' for o in s['orders']), s['orders']
+    s = w.state(); assert any(o['type'] == 'develop' and o['from'] == 'canada' for o in s['orders']), s['orders']
     w.end()
 
-    # Rally point: tap a province of yours → "Rally troops to…" → tap the rally province (Scotland → Southern England;
+    # Rally point: tap a province of yours → "Rally troops to…" → tap the rally province (Ireland → Great Britain;
     # the British seat's analogue of "always send Mexico's new troops to Pacific States").
     w.begin('rally')
     w.stdin('war 420')
-    page.keyboard.press('Escape'); w.bring('scotland')
-    w.tap(w.counter('scotland'), 'source')
+    page.keyboard.press('Escape'); page.locator('#home-view').click(); w.bring('ireland')  # home view (camera) is next to Ireland
+    w.tap(w.counter('ireland'), 'source')
     rally = page.locator('#rally-province'); expect(rally).to_have_text('Rally troops to…'); expect(rally).to_be_enabled(timeout=5000)
     w.tap(rally, 'pick')
     expect(lane(page)).to_contain_text('Tap one of your provinces')
@@ -244,9 +247,9 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     w.tap(w.counter('england'), 'set')
     expect(lane(page)).to_contain_text('Rally set', timeout=5000)
     s = w.state(); order = next(o for o in s['orders'] if o['type'] == 'rally')
-    assert order['sources'] == ['scotland'] and order['to'] == 'england', order
+    assert order['sources'] == ['ireland'] and order['to'] == 'england', order
     w.stdin('war 422'); page.wait_for_timeout(1500)
-    expect(page.locator('[data-rally="scotland"]').first).to_be_attached(timeout=5000)
+    expect(page.locator('[data-rally="ireland"]').first).to_be_attached(timeout=5000)
     w.snap('arrow')
     w.end()
 
@@ -299,8 +302,8 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     # Long moves through friendly land: tap your province, tap the destination anywhere, one button. The card's one-line
     # preview names the way (the server's /plan route); the arrow on the map follows it leg by leg.
     routes = w.results.setdefault('routes', {})
-    for task, source, dest, ally in [('long', 'scotland', 'low-countries', False), ('through-ally', 'scotland', 'rhineland', True)]:
-        page.keyboard.press('Escape'); w.bring(source)
+    for task, source, dest, ally in [('long', 'ireland', 'low-countries', False), ('through-ally', 'ireland', 'bavaria', True)]:
+        page.keyboard.press('Escape'); page.locator('#home-view').click(); w.bring(source)
         w.begin(task)
         w.tap(w.counter(source), 'source')
         if not w.counter(dest).evaluate('(el)=>{const r=el.getBoundingClientRect();return r.left>20&&r.right<innerWidth-20&&r.top>60&&r.bottom<innerHeight*.55&&el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}'):
@@ -317,7 +320,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
         w.tap(primary, 'sent')
         s = w.state(); order = next(o for o in s['orders'] if o['type'] == 'march' and o['from'] == source and o['to'] == dest)
         owners = {p['id']: p['owner'] for p in s['provinces']}
-        path = order['path']; assert len(path) >= 3, path
+        path = order['path']; assert len(path) >= 2, path  # not a neighbour: at least one province on the way
         routes[task] = {'source': source, 'via': path[:-1], 'target': dest, 'arrivesAt': order['arrivesAt'], 'preview': text}
         allied = [v for v in path[:-1] if owners[v] not in (None, 'britain')]
         assert (allied and all(owners[v] == 'germany' for v in allied)) if ally else not allied, (path, owners)
@@ -330,7 +333,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
 def multiselect(browser, url, identity, server, report, out, room, width, height, touch):
     """Attack one province from several of yours at once: "Select all bordering" (desktop ≤3, phone ≤5 interactions),
     Shift-click and a Shift-drag rectangle (desktop), the Select mode and a long-press (phone). Room: Britain holds
-    four provinces bordering the USA's Atlantic States (east-us) and is at war with the USA."""
+    four provinces bordering the USA's Pacific States (west-us) and is at war with the USA."""
     folder = out / 'tasks' / f'{width}x{height}'; folder.mkdir(parents=True, exist_ok=True)
     context = browser.new_context(viewport={'width': width, 'height': height}, is_mobile=touch, has_touch=touch, device_scale_factor=2 if touch else 1)
     context.add_init_script('localStorage.setItem("coi.identity",' + json.dumps(json.dumps(identity)) + ');localStorage.setItem("coi.coach","done");')
@@ -338,32 +341,32 @@ def multiselect(browser, url, identity, server, report, out, room, width, height
     page.goto(f'{url}/?match={room}'); expect(page.locator('#commander-title')).to_have_text('Britain' if width < 1024 else 'British Empire')
     w = Walk(page, server, room, touch, folder, report)
     primary, chips, card = page.locator('#primary'), page.locator('#sources .source-chip'), page.locator('#card')
-    four = ['caribbean', 'central-us', 'east-canada', 'england']
+    four = ['canada', 'central-us', 'hawaii', 'mexico']
     def closer():
-        """Camera only (not counted): zoom in until the four provinces' counters show, keeping east-us in view."""
+        """Camera only (not counted): zoom in until the counters show, keeping west-us in view."""
         page.keyboard.press('Escape')
         for _ in range(8):
-            try: w.bring('east-us', escape=False)
+            try: w.bring('west-us', escape=False)
             except AssertionError: pass
             else:
-                if all(w.counter(p).is_visible() for p in ['east-us', 'caribbean', 'central-us']): return
+                if all(w.counter(p).is_visible() for p in ['west-us', 'mexico', 'central-us']): return
             page.keyboard.press('e'); page.wait_for_timeout(150); w.camera += 1
         raise AssertionError('counters not visible')
     close_comms(page); closer()
     task = 'bordering-phone' if touch else 'bordering-desktop'
     w.begin(task)
-    w.tap(w.counter('east-us'), 'target')
+    w.tap(w.counter('west-us'), 'target')
     expect(card).to_have_attribute('data-relation', 'enemy')
     select_all = page.locator('#select-bordering'); expect(select_all).to_have_text('Select all bordering (4)')
     w.tap(select_all, 'all-bordering')
-    expect(primary).to_contain_text('Attack Atlantic States from 4 provinces · ')
+    expect(primary).to_contain_text('Attack Pacific States from 4 provinces · ')
     expect(chips).to_have_count(4)
     expect(page.locator('#order-preview')).to_contain_text('from 4 provinces'); expect(page.locator('#order-preview')).to_contain_text('all arrive together at')
     expect(page.locator('#map .draft-arrow')).to_have_count(4)
     total = int(primary.inner_text().split('·')[-1])
     w.snap('order-card')
     w.tap(primary, 'sent')
-    s = w.state(); orders = [o for o in s['orders'] if o['type'] == 'march' and o['to'] == 'east-us']
+    s = w.state(); orders = [o for o in s['orders'] if o['type'] == 'march' and o['to'] == 'west-us']
     assert sorted(o['from'] for o in orders) == sorted(four), orders
     assert len({o['arrivesAt'] for o in orders}) == 1 and len({o['groupId'] for o in orders}) == 1, orders
     assert sum(o['amount'] for o in orders) == total, (orders, total)
@@ -373,20 +376,20 @@ def multiselect(browser, url, identity, server, report, out, room, width, height
         # Shift-click two provinces of yours, then the target: one order from both.
         closer()
         w.begin('shift')
-        page.keyboard.down('Shift'); w.tap(w.counter('caribbean')); w.tap(w.counter('central-us')); page.keyboard.up('Shift')
+        page.keyboard.down('Shift'); w.tap(w.counter('mexico')); w.tap(w.counter('central-us')); page.keyboard.up('Shift')
         expect(page.locator('#card-title')).to_have_text('2 provinces selected'); expect(chips).to_have_count(2)
         expect(page.locator('#map .province.selected')).to_have_count(2)
         w.snap('shift-selected')
-        w.tap(w.counter('east-us'), 'shift-target')
-        expect(primary).to_contain_text('Attack Atlantic States from 2 provinces')
+        w.tap(w.counter('west-us'), 'shift-target')
+        expect(primary).to_contain_text('Attack Pacific States from 2 provinces')
         w.tap(primary, 'shift-sent')
-        s = w.state(); group = [o for o in s['orders'] if o['type'] == 'march' and o['to'] == 'east-us' and o['groupId'] != orders[0]['groupId']]
-        assert sorted(o['from'] for o in group) == ['caribbean', 'central-us'], group
+        s = w.state(); group = [o for o in s['orders'] if o['type'] == 'march' and o['to'] == 'west-us' and o['groupId'] != orders[0]['groupId']]
+        assert sorted(o['from'] for o in group) == ['central-us', 'mexico'], group
         w.end()
         # Shift-drag a rectangle around two provinces: both are selected (only your own), Escape clears.
         closer()
         w.begin('lasso')
-        boxes = [w.counter(p).bounding_box() for p in ['caribbean', 'central-us']]
+        boxes = [w.counter(p).bounding_box() for p in ['mexico', 'central-us']]
         x0, y0 = min(b['x'] for b in boxes) - 12, min(b['y'] for b in boxes) - 12
         x1, y1 = max(b['x'] + b['width'] for b in boxes) + 12, max(b['y'] + b['height'] for b in boxes) + 12
         page.keyboard.down('Shift'); page.mouse.move(x0, y0); page.mouse.down()
@@ -395,15 +398,17 @@ def multiselect(browser, url, identity, server, report, out, room, width, height
         page.mouse.up(); page.keyboard.up('Shift'); w.count += 1
         expect(page.locator('#map .lasso')).to_have_count(0)
         picked = page.evaluate("[...document.querySelectorAll('#sources .source-chip span')].map(e=>e.textContent)")
-        assert {'Caribbean', 'Great Plains'} <= set(picked), picked
-        assert set(picked) <= {'Caribbean', 'Great Plains', 'Eastern Canada', 'Southern England'}, picked  # only your own
+        assert {'Mexico', 'Great Plains'} <= set(picked), picked
+        assert set(picked) <= {'Mexico', 'Great Plains', 'Canada', 'Hawaii'}, picked  # only your own
         # Destinations are lit for the selection; a province you cannot attack is dimmed and says why on hover (not counted).
-        expect(page.locator('#map .province[data-province="east-us"]')).to_have_class(re.compile(r'\breach-attack\b'))
-        expect(page.locator('#map .province[data-province="hawaii"]')).not_to_have_class(re.compile(r'\bneighbor\b'))
-        page.mouse.move(*w.at(w.counter('hawaii'))); expect(page.locator('.atlas-tooltip')).to_contain_text('You cannot attack it: none of your provinces borders it')
+        expect(page.locator('#map .province[data-province="west-us"]')).to_have_class(re.compile(r'\breach-attack\b'))
+        expect(page.locator('#map .province[data-province="andes"]')).not_to_have_class(re.compile(r'\bneighbor\b'))
+        w.bring('andes', escape=False)  # camera only: every province near the Pacific States borders one of yours
+        page.mouse.move(*w.at(w.counter('andes'))); expect(page.locator('.atlas-tooltip')).to_contain_text('You cannot attack it: none of your provinces borders it')
         w.snap('lasso-selected')
-        w.tap(w.counter('east-us'), 'lasso-target')
-        expect(primary).to_contain_text('Attack Atlantic States from')
+        w.bring('west-us', escape=False)
+        w.tap(w.counter('west-us'), 'lasso-target')
+        expect(primary).to_contain_text('Attack Pacific States from')
         w.end()
         page.keyboard.press('Escape'); expect(card).to_be_hidden(); expect(page.locator('#map .province.selected')).to_have_count(0)
     else:
@@ -411,20 +416,21 @@ def multiselect(browser, url, identity, server, report, out, room, width, height
         closer()
         w.begin('select-mode')
         toggle = page.locator('#select-mode'); w.tap(toggle, 'mode-on'); expect(toggle).to_have_attribute('aria-pressed', 'true')
-        w.tap(w.counter('caribbean')); w.bring('central-us', escape=False); w.tap(w.counter('central-us'), 'two-selected')
+        w.bring('mexico', escape=False); w.tap(w.counter('mexico')); w.bring('central-us', escape=False); w.tap(w.counter('central-us'), 'two-selected')
         expect(page.locator('#card-title')).to_have_text('2 provinces selected'); expect(chips).to_have_count(2)
-        w.bring('east-us', escape=False); w.tap(w.counter('east-us'), 'mode-target')
-        expect(primary).to_contain_text('Attack Atlantic States from 2 provinces')
+        w.bring('west-us', escape=False); w.tap(w.counter('west-us'), 'mode-target')
+        expect(primary).to_contain_text('Attack Pacific States from 2 provinces')
         w.end()
         page.keyboard.press('Escape'); expect(card).to_be_hidden(); expect(toggle).to_have_attribute('aria-pressed', 'false')
-        x, y = w.at(w.counter('caribbean'))
+        w.bring('mexico', escape=False)  # camera only: Mexico and the Great Plains side by side
+        x, y = w.at(w.counter('mexico'))
         cdp = page.context.new_cdp_session(page)
         cdp.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': x, 'y': y, 'id': 1}]})
         page.wait_for_timeout(700)
         cdp.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
-        expect(page.locator('#card-title')).to_have_text('Caribbean')
+        expect(page.locator('#card-title')).to_have_text('Mexico')
         if not w.counter('central-us').evaluate('(el)=>{const r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}'):
-            w.bring('central-us', escape=False)  # camera only: the Caribbean's card now covers the lower map
+            w.bring('central-us', escape=False)  # camera only: Mexico's card now covers the lower map
         x, y = w.at(w.counter('central-us'))
         cdp.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': x, 'y': y, 'id': 1}]})
         page.wait_for_timeout(700)

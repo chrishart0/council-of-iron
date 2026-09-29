@@ -62,8 +62,14 @@ def camera(page,view):
     if not page.locator('#hud-menu').is_visible():page.locator('#menu-button').click()
     page.locator(f'#{view}-view').click()
 def country_card(page,cid):
-    page.keyboard.press('Escape');page.locator(f'#lb-rows .lb-row[data-id="{cid}"]').click()
-    expect(page.locator('#card')).to_have_attribute('data-kind','country')
+    # Powers rows re-sort while the match runs (12× clock): a click can land on the row that just moved under the
+    # pointer, so check the card is this country's and try again.
+    name=page.evaluate("id=>fetch('/map.json').then(r=>r.json()).then(m=>m.countries.find(c=>c.id===id).name)",cid)
+    for _ in range(4):
+        page.keyboard.press('Escape');page.locator(f'#lb-rows .lb-row[data-id="{cid}"]').click()
+        expect(page.locator('#card')).to_have_attribute('data-kind','country')
+        if page.locator('#card-title').inner_text().strip()==name:return
+    expect(page.locator('#card-title')).to_have_text(name)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -398,67 +404,114 @@ def main():
                 page.keyboard.press('Escape');expect(page.locator('#card')).to_be_hidden();expect(page.locator('#hud-standard')).to_be_focused()
                 report['assertions'].append('A second room starts with the same browser identity; map taps open a peeking order card (province, then neighbour); 100% and Shift-click adding a second source work; the standard opens and closes the alliance card by keyboard with focus returned.')
                 # Attack together: with the target chosen, tapping another of your provinces beside it adds a source.
-                order(page,'west-us','mexico');page.locator('[data-fraction="0.5"]').click()
-                page.locator('#card-size').click()  # back to peek so the map is free
-                page.mouse.click(*centre(page.locator('#marker-central-us .counter-body')))
+                # The practice bots have been playing against an idle USA for a few minutes, so pick two provinces the USA
+                # still holds that border the same neutral province (on v6 Britain's Canada borders all three US states).
+                room2=http('/api/games')['games'][0]['id']
+                nb={p['id']:p['neighbors'] for p in http('/map.json')['provinces']}
+                for attempt in range(4):  # the bots keep playing at 12×: a chosen province may fall before the taps land
+                    st=http(f'/api/games/{room2}');owner={p['id']:p['owner'] for p in st['provinces']};troops={p['id']:p['troops'] for p in st['provinces']}
+                    mine=sorted((i for i,o in owner.items() if o=='usa' and troops[i]>=3),key=lambda i:-troops[i])
+                    # The longest such attack, so the group is still on its way when the recall below looks for it.
+                    tt=st['travelTimes'];src,second,target=max(((a,b,t) for t in sorted(nb) if owner[t] is None for a in mine for b in mine if a!=b and t in nb[a] and t in nb[b]),key=lambda x:(min(tt[x[0]][x[2]],tt[x[1]][x[2]]),x))
+                    order(page,src,target);page.locator('[data-fraction="0.5"]').click()
+                    page.locator('#card-size').click()  # back to peek so the map is free
+                    if not page.locator(f'#marker-{second} .counter-body').is_visible() or not (0<centre(page.locator(f'#marker-{second} .counter-body'))[0]<page.viewport_size['width']):bring(page,second)
+                    page.mouse.click(*centre(page.locator(f'#marker-{second} .counter-body')))
+                    page.wait_for_timeout(300)
+                    if page.locator('#sources .source-chip').count()==2 and page.locator('#card-title').inner_text()==names[target]:break
+                    page.keyboard.press('Escape');page.keyboard.press('Escape')
                 expect(page.locator('#sources .source-chip')).to_have_count(2)
                 page.locator('#card-size').click();expect(page.locator('#order-details')).to_contain_text('arrive together')
                 page.screenshot(path=str(artifacts/'06-coordinated-plan.png'),full_page=True)
                 capture(page,1300)
                 page.locator('#primary').click()
-                confirmed(page,'Sent')
-                room2=http('/api/games')['games'][0]['id']
+                # The server has the order (a brief "Sent" toast may lose the one slot to news that affects you).
+                deadline=time.monotonic()+6
+                sent=lambda:any(o.get('to')==target or (o.get('path') or [None])[-1]==target for o in http(f'/api/games/{room2}').get('orders',[])+http(f'/api/games/{room2}')['armies'] if o.get('country','usa')=='usa')
+                while time.monotonic()<deadline and not sent():page.wait_for_timeout(200)
+                assert sent(),lane(page).inner_text()
                 page.wait_for_timeout(1400)
                 # Group recall is a browser control, never direct mutation of the game.
-                province(page,'west-us');page.locator('#card-size').click()
                 recall_group=page.locator('[data-recall]').filter(has_text='Recall group')
-                expect(recall_group).to_be_visible(timeout=10000)
-                recall_group.click()
+                recalled=False
+                for pid in [src,second,src,second]:  # the live 12× match keeps re-rendering the card; either source lists the group
+                    province(page,pid)
+                    if page.locator('#card-size').is_visible() and page.locator('#card').get_attribute('data-size')!='full':page.locator('#card-size').click()
+                    try:expect(recall_group).to_be_visible(timeout=4000);recall_group.click(timeout=4000);recalled=True;break
+                    except Exception:page.keyboard.press('Escape');page.wait_for_timeout(300)
+                assert recalled,'no Recall group row on either source'
                 confirmed(page,'Recall queued')
                 expect(page.locator('.march-row.returning').first).to_be_visible(timeout=5000)
                 page.screenshot(path=str(artifacts/'07-recalling.png'),full_page=True)
                 capture(page,1300)
                 report['assertions'].append('Browser committed a two-source attack (a second province added by tapping it beside the target) as one order, then recalled the group with real return time.')
-                # Alaska starts undeveloped; let natural recruitment fund construction.
-                province(page,'alaska')
+                # Develop a province of the USA (the lowest level it can pay for); natural recruitment funds the construction.
+                # The bots keep playing against the idle USA, so pick from whatever it still holds.
+                usa_state=lambda:{p['id']:p for p in http(f'/api/games/{room2}')['provinces']}
+                deadline=time.monotonic()+60;build=None
+                while time.monotonic()<deadline:
+                    ready=[p for p in usa_state().values() if p['owner']=='usa' and p['development']<3 and not p.get('developing') and p['troops']-1>=(24 if p['development']==1 else 48)+2]
+                    if ready:build=min(ready,key=lambda p:(p['development'],-p['troops'],p['id']));break
+                    page.wait_for_timeout(1000)
+                assert build,('no USA province can pay for development',[(p['id'],p['owner'],p['troops'],p['development']) for p in usa_state().values() if p['owner']=='usa'])
+                level,build=build['development'],build['id'];cost=24 if level==1 else 48
+                for _ in range(3):  # a leftover source from the recall above turns a tap on a neighbour into a reinforcement target
+                    province(page,build)
+                    if page.locator('#develop-province').count():break
+                    page.locator('#card-close').click();page.wait_for_timeout(200)
                 develop=page.locator('#develop-province')
-                expect(develop).to_be_enabled(timeout=40000)
+                expect(develop).to_be_enabled(timeout=10000)
                 page.locator('#card-size').click();expect(page.locator('#development-payback')).to_contain_text('payback')
                 develop.click()
-                expect(page.locator('#confirm-dialog')).to_contain_text('Spend 24 troops')
+                expect(page.locator('#confirm-dialog')).to_contain_text(f'Spend {cost} troops')
                 page.locator('#confirm-dialog [value="confirm"]').click()
                 confirmed(page,'Investment committed')
                 expect(develop).to_contain_text(re.compile('Construction queued|Building level'),timeout=6000)
                 page.screenshot(path=str(artifacts/'08-development.png'),full_page=True)
                 capture(page,1300)
-                # Construction takes 120 game seconds; Alaska borders Canada, so the build either completes or the province
-                # falls first (and the unfinished work is lost). Both are the real rule; the card must show whichever happened.
-                deadline=time.monotonic()+25
+                # Construction takes 120 (I→II) or 180 (II→III) game seconds; the province may be attacked, so the build either
+                # completes or the province falls first (and the unfinished work is lost). The card must show whichever happened.
+                deadline=time.monotonic()+(25 if level==1 else 35)
                 while time.monotonic()<deadline:
-                    alaska=next(p for p in http(f'/api/games/{room2}')['provinces'] if p['id']=='alaska')
-                    if alaska['owner']!='usa' or alaska['development']>=2:break
+                    built=usa_state()[build]
+                    if built['owner']!='usa' or built['development']>level:break
                     page.wait_for_timeout(300)
-                if alaska['owner']=='usa':
-                    assert alaska['development']==2,alaska
-                    province(page,'alaska');expect(page.locator('#card-sub')).to_contain_text('industry Ⅱ',timeout=5000)
-                    report['assertions'].append('Browser funded, confirmed and completed province development using naturally recruited manpower.')
+                if built['owner']=='usa':
+                    assert built['development']==level+1,built
+                    for _ in range(3):  # counters shift as the live match moves; make sure the card is this province's
+                        province(page,build)
+                        if page.locator('#card-title').inner_text().strip()==names[build]:break
+                    expect(page.locator('#card-title')).to_have_text(names[build])
+                    expect(page.locator('#card-sub')).to_contain_text(f"industry {['','Ⅰ','Ⅱ','Ⅲ'][level+1]}",timeout=5000)
+                    report['assertions'].append(f'Browser funded, confirmed and completed province development ({build}, level {level}→{level+1}) using naturally recruited manpower.')
                 else:
-                    assert alaska['developing'] is None and alaska['development']==1,alaska
-                    report['assertions'].append('Browser funded and confirmed province development with naturally recruited manpower; a bot captured Alaska before the 120-second build finished, and the unfinished work was lost (the capture rule).')
-                # A long march through your own land to a province beyond the neighbours. The destination
-                # can change hands during this live bot match, so the same route may reinforce or attack.
-                order(page,'west-us','east-us')
-                expect(page.locator('#primary')).to_contain_text(re.compile('Reinforce|Attack'))
+                    assert built['developing'] is None and built['development']==level,built
+                    report['assertions'].append(f'Browser funded and confirmed province development with naturally recruited manpower; a bot captured {build} before the build finished, and the unfinished work was lost (the capture rule).')
+                # A long march: through your own land to a province of yours beyond the neighbours (one controlled route).
+                owners={i:p['owner'] for i,p in usa_state().items()}
+                def via(a,b):
+                    seen={a};queue=[a]
+                    while queue:
+                        x=queue.pop(0)
+                        for n in nb[x]:
+                            if n==b:return True
+                            if n not in seen and owners[n]=='usa':seen.add(n);queue.append(n)
+                    return False
+                mine=sorted(i for i,o in owners.items() if o=='usa')
+                start,end=next((a,b) for a in mine for b in mine if a!=b and b not in nb[a] and via(a,b) and usa_state()[a]['troops']>3)
+                order(page,start,end)
+                expect(page.locator('#primary')).to_contain_text(re.compile('Reinforce|Attack'))  # the destination may change hands in this live bot match
                 expect(page.locator('#order-details')).to_contain_text('Via',timeout=5000)
                 expect(page.locator('#primary')).to_be_enabled(timeout=10000)
                 page.screenshot(path=str(artifacts/'10-long-march.png'))
                 page.locator('#primary').click()
-                if page.locator('#confirm-dialog').is_visible():page.locator('#confirm-dialog [value="confirm"]').click()
-                confirmed(page,'Sent')
+                try:  # a destination that changed hands to an enemy asks to confirm the war first
+                    expect(page.locator('#confirm-dialog')).to_be_visible(timeout=1500);page.locator('#confirm-dialog [value="confirm"]').click()
+                except AssertionError:pass
                 deadline=time.monotonic()+8
-                while time.monotonic()<deadline and not any(a.get('path') and a['path'][-1]=='east-us' for a in http(f'/api/games/{room2}')['armies']):page.wait_for_timeout(250)
-                assert any(a.get('path') and a['path'][-1]=='east-us' for a in http(f'/api/games/{room2}')['armies']),lane(page).inner_text()
-                report['assertions'].append('Browser sent a long march from West US to East US through its own land: the card showed the route and the server moved one column along it.')
+                while time.monotonic()<deadline and not any(a.get('path') and a['path'][-1]==end for a in http(f'/api/games/{room2}')['armies']):page.wait_for_timeout(250)
+                assert any(a.get('path') and a['path'][-1]==end for a in http(f'/api/games/{room2}')['armies']),lane(page).inner_text()
+                report['assertions'].append(f'Browser sent a long march from {start} to {end} through its own land: the card showed the route and the server moved one column along it.')
                 page.set_viewport_size({'width':390,'height':844})
                 assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1')
                 page.screenshot(path=str(artifacts/'09-mobile-orders.png'),full_page=True)
