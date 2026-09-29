@@ -426,9 +426,9 @@ def multiselect(browser, url, identity, server, report, out, room, width, height
         cdp.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': x, 'y': y, 'id': 1}]})
         page.wait_for_timeout(700)
         cdp.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
-        expect(page.locator('#card-title')).to_have_text('Caribbean')
+        expect(page.locator('#card-title')).to_have_text('Mexico')
         if not w.counter('central-us').evaluate('(el)=>{const r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}'):
-            w.bring('central-us', escape=False)  # camera only: the Caribbean's card now covers the lower map
+            w.bring('central-us', escape=False)  # camera only: Mexico's card now covers the lower map
         x, y = w.at(w.counter('central-us'))
         cdp.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': x, 'y': y, 'id': 1}]})
         page.wait_for_timeout(700)
