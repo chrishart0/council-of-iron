@@ -289,12 +289,10 @@ body[data-comms=thread] .powers .lb-summary{display:block}
 .lb-move{position:absolute;left:1px;font-size:10px}.lb-move.up{color:var(--verdigris-hi)}.lb-move.down{color:var(--war)}
 .lb-flags{display:flex;align-items:center;justify-content:center}
 .lb-expand{display:grid;place-items:center;width:22px;height:22px;color:var(--brass-hi);font-size:13px}
-.lb-swatch{display:none}
 .lb-standards{display:flex}.lb-standards .insignia{width:20px;height:24px}
 .lb-name{display:flex;align-items:center;gap:6px;min-width:0;grid-column:3}
 .lb-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;min-width:0}
 .lb-bar{flex:none;width:30px;height:5px;background:#0008}.lb-bar>i{display:block;height:100%;background:var(--band,var(--brass))}
-.lb-pct{display:none}
 .lb-rel{grid-column:4;justify-self:center;display:grid;place-items:center;color:var(--muted)}
 .lb-rel .ui-icon{width:16px;height:16px}.lb-rel.enemy{color:var(--war)}.lb-rel.ally{color:var(--verdigris-hi)}
 .lb-land,.lb-troops{text-align:right}.lb-troops{font-weight:600;color:var(--ivory)}.lb-land{color:#d0c7aa}
