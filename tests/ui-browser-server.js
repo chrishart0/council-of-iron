@@ -66,7 +66,8 @@ app.server.listen(0,'127.0.0.1',()=>console.log(JSON.stringify({url:`http://127.
 for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>app.close().then(()=>process.exit(0)));
 
 // A private test-process channel, never a route on the game server.
-createInterface({input:process.stdin}).on('line',input=>{
+// Closing stdin (the test runner ended, even if it was killed) stops the server.
+createInterface({input:process.stdin}).on('close',()=>app.close().then(()=>process.exit(0))).on('line',input=>{
   // `@room command` addresses a task room with the same commands as the war room (dm, offer, ally, war N).
   let line=input,room=w;
   if(input.startsWith('@')){const [id,...rest]=input.slice(1).split(' ');room=taskRooms[id];if(!room)throw new Error('Unknown task room');line=rest.join(' ');}

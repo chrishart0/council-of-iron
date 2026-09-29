@@ -91,9 +91,11 @@ removed once), counters and the leaderboard change numbers, and each army frame 
 
 Pixel 7, 4× throttle, the live room above:
 
-- main thread busy < 60 % on the map and with the World thread open; no long task ≥ 200 ms;
+- main thread busy < 60 % on the map and with the World thread open; no long task ≥ 200 ms (these two depend on
+  the host's load: `npm run test:perf` and `python tests/browser.py --full` enforce them, the default
+  `python tests/browser.py` runs `--quick` and only reports them);
 - no endless CSS animation; army frames ≤ 12 per second on a touch screen;
 - observation < 15 KB on the wire;
 - no World-thread row re-created by polling when its content did not change;
 - page hidden: no poll and no animation frame; a lobby (nothing moves): no animation frame;
-- DOM elements grow by < 25 % from 5:00 to 25:00 game time (sampled while the match runs).
+- DOM elements grow by < 25 % from 5:00 to 25:00 game time (sampled while the match runs; `--quick`, used by the default `python tests/browser.py`, samples 30 s of it).

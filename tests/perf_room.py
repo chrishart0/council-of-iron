@@ -1,7 +1,8 @@
 """A live, accelerated room for performance runs: real HTTP server (tests/browser-server.js), one human seat
 (Britain, the browser) and seven practice bots. Test-only helpers; no game endpoint is added."""
-import json, os, subprocess, time, urllib.request
+import json, os, time, urllib.request
 from pathlib import Path
+import browser_helpers
 ROOT = Path(__file__).resolve().parents[1]
 
 def http(url, path, method='GET', data=None, token=None):
@@ -11,9 +12,8 @@ def http(url, path, method='GET', data=None, token=None):
 
 def start_server(clock_scale=1):
     env = {**os.environ, 'PORT': '0', 'TEST_CLOCK_SCALE': str(clock_scale)}
-    proc = subprocess.Popen(['node', 'tests/browser-server.js'], cwd=ROOT, env=env, stdout=subprocess.PIPE, text=True)
-    url = json.loads(proc.stdout.readline())['url']
-    return proc, url
+    proc, settings = browser_helpers.start_server('tests/browser-server.js', env)
+    return proc, settings['url']
 
 def busy_room(url, preset='quick'):
     me = http(url, '/api/players', 'POST', {'name': 'Perf Probe'})

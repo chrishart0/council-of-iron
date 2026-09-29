@@ -4,14 +4,61 @@ Bridge mode never changes managed browser policy. It renders the real modules in
 an in-memory page and forwards only relative requests to the local test server.
 It is a DOM/integration test, not evidence of native navigation or CSP behavior.
 """
+import atexit
 import base64
 import json
+import os
 from pathlib import Path
 import re
+import signal
+import subprocess
+import sys
+import tempfile
 import urllib.error
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# Test processes (servers, agents) always end with the suite: `finally` blocks and atexit stop them (SIGTERM is turned
+# into SystemExit so both run), and the test servers also exit when their stdin pipe closes, i.e. when this process
+# dies without cleaning up. Each child runs in its own process group so the whole group is stopped.
+_children = []
+signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
+
+def spawn(args, env=None):
+    """Start a child in its own process group; stdout is a pipe, stderr goes to a log file (never an undrained pipe)."""
+    log = tempfile.NamedTemporaryFile(prefix='council-test-', suffix='.log', delete=False)
+    proc = subprocess.Popen(args, cwd=ROOT, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=log, text=True,
+                            start_new_session=True)
+    proc.log_path = log.name; log.close(); _children.append(proc)
+    return proc
+
+def stop(proc):
+    if proc.poll() is None:
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+            try: proc.wait(timeout=10)
+            except subprocess.TimeoutExpired: os.killpg(proc.pid, signal.SIGKILL); proc.wait(timeout=10)
+        except ProcessLookupError: pass
+    log = server_log(proc)  # a child that failed shows its stderr
+    if proc.returncode not in (0, -signal.SIGTERM, -signal.SIGKILL) and log.strip(): print(f'--- stderr of {" ".join(proc.args)} (last 3000 bytes) ---\n{log}', file=sys.stderr)
+    try: Path(proc.log_path).unlink()
+    except FileNotFoundError: pass
+
+atexit.register(lambda: [stop(p) for p in _children])
+
+def start_server(script, env=None):
+    """Start a test server script; returns (process, the JSON line it prints once listening)."""
+    proc = spawn(['node', script], env)
+    line = proc.stdout.readline()
+    if not line:
+        proc.wait(timeout=10)
+        raise RuntimeError(f'{script} did not start: {Path(proc.log_path).read_text()[-3000:]}')
+    return proc, json.loads(line)
+
+def server_log(proc):
+    try: return Path(proc.log_path).read_text()[-3000:]
+    except FileNotFoundError: return ''
 
 def load_bridge(page, url, saved=None):
     def local_http(payload):

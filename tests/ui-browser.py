@@ -4,7 +4,7 @@ Not a new strategic match. Native navigation by default; explicit bridge optiona
 import argparse,io,json,os,re,subprocess
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
-from browser_helpers import load_bridge, lane, open_thread, close_comms
+from browser_helpers import load_bridge, lane, open_thread, close_comms, start_server, stop
 from ui_tasks import walkthrough, multiselect
 from ui_phone import phone_checks
 ROOT=Path(__file__).resolve().parents[1]
@@ -992,10 +992,9 @@ def main():
     parser.add_argument('--gif')
     args=parser.parse_args();out=Path(args.artifacts);out.mkdir(parents=True,exist_ok=True)
     report={'status':'not completed','transport':'python-http-bridge' if args.bridge else 'native-browser-http','assertions':[],'pageErrors':[],'fixture':'Recorded decisions replayed under the current rules, paused at tick 480; not a new balance sample'}
-    server=subprocess.Popen(['node','tests/ui-browser-server.js'],cwd=ROOT,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    server,settings=start_server('tests/ui-browser-server.js');url=settings['url'];identity=settings['identity']
     frames=[]
     try:
-        settings=json.loads(server.stdout.readline());url=settings['url'];identity=settings['identity']
         with sync_playwright() as p:
             launch={'headless':True}
             if args.executable:launch['executable_path']=args.executable
@@ -1329,6 +1328,6 @@ def main():
             result[0].save(target,save_all=True,append_images=result[1:],duration=[d for _,d in frames],loop=0,disposal=2)
             report['gif']={'path':str(target),'frames':len(result),'bytes':target.stat().st_size,'kind':'Actual interface tour of recorded state; not live play'}
     finally:
-        server.terminate();server.wait(timeout=10);(out/'ui-browser-report.json').write_text(json.dumps(report,indent=2)+'\n')
+        stop(server);(out/'ui-browser-report.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report,indent=2))
 if __name__=='__main__':main()
