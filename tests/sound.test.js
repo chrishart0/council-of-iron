@@ -35,6 +35,8 @@ test('every headline kind maps to one cue; loud stingers only when it affects th
   assert.equal(cue(h('dominance_broken', { side: 'x' }), me), 'countdown_stop');
   assert.equal(cue(h('finished', { draw: true }), me), 'draw');
   assert.equal(cue(h('finished', { winningSide: 'france' }), me), 'victory');
+  assert.equal(cue(h('finished', { winningSide: 'france' }), { ...me, result: 'loss' }), 'defeat');
+  assert.equal(cue(h('finished', { draw: true }), { ...me, result: 'loss' }), 'defeat');
   assert.equal(cue(h('finished', { winningSide: 'x' }), me), 'defeat');
   assert.equal(cue(h('finished', { winningSide: 'x' }), spectator), 'victory');
   assert.equal(headlineCue(h('unknown')), null);

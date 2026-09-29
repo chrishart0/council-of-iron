@@ -99,7 +99,7 @@ Heuristic self-play is only used for invariants and "matches still resolve", nev
 ## How to play (one screen, after simplification)
 
 1. **Goal.** Hold **60% of the world's industry** with your alliance for **90 seconds**. If nobody does by
-   **30:00**, the side with the most industry wins. A tie is a draw. Everyone on the winning side wins.
+   **30:00**, the side with the most industry wins. A tie is a draw. A player with no industry at the finish loses, even if their alliance wins.
 2. **Troops.** Each province makes troops every 20 s: 1, 2 or 3 by its industry level.
 3. **March.** Drag from your province to another. You can attack any province that borders your own
    territory, sending troops from anywhere in your empire (the quickest way through your and your allies'

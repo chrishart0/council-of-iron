@@ -48,6 +48,8 @@ export function headlineCue(item, viewer = {}) {
     case 'dominance': return request('countdown', Boolean(viewer.side) && h.side === viewer.side);
     case 'dominance_broken': return request('countdown_stop', Boolean(viewer.side) && h.side === viewer.side);
     case 'finished':
+      if (you && viewer.result === 'loss') return request('defeat');
+      if (you && viewer.result === 'win') return request('victory', true);
       if (h.draw) return request('draw', Boolean(you));
       if (!you) return request('victory');
       return h.winningSide === viewer.side ? request('victory', true) : request('defeat');

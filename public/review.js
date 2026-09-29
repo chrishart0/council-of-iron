@@ -72,7 +72,8 @@ export class AfterAction {
     const headline = r.outcome.draw ? 'The council ends in a draw' : winner.members.length > 1 ? `Victory for the ${this.side(winner.id)}` : `${this.side(winner.id)} prevails`;
     const reason = r.outcome.reason === 'domination' ? `Held ${Math.round(100 * r.rules.economyShare)}% of the world's industry for ${r.rules.hold} seconds`
       : r.outcome.draw ? 'Equal industry at the deadline' : 'Most industry at the deadline';
-    const verdict = r.outcome.draw ? 'Draw' : this.viewer ? (winners.includes(this.viewer) ? 'Victory' : 'Defeat') : 'After-action report';
+    const verdict = this.viewer ? ({ win: 'Victory', loss: 'Defeat', draw: 'Draw' }[this.player(this.viewer)?.result] || 'After-action report')
+      : r.outcome.draw ? 'Draw' : 'After-action report';
     this.root.dataset.verdict = verdict.toLowerCase();
     // Your score is your own industry at the end; a spectator sees the winners' total.
     const me = this.viewer && this.player(this.viewer);
@@ -113,7 +114,7 @@ ${medal ? `<div class="v-medal">${icon('industry')}<b>${number(medal.value)}</b>
     const totals = r.totals || {};
     this.el('aar-overview').innerHTML = `<div class="report-body">
 <section class="r-table"><h2 class="r-head">Final standings</h2><div class="r-scroll"><table id="aar-standings"><caption class="sr-only">Final standings by alliance: provinces, industry, forces and result</caption><thead><tr><th scope="col">Alliance / country</th><th scope="col">Land</th><th scope="col">Industry</th><th scope="col" class="c-forces">Forces</th><th scope="col">Result</th></tr></thead>${body}</table></div>
-<p class="fine">Everyone on the winning side wins. Industry is each country's completed factory levels at the end: its score within the side. Forces include troops still marching at the finish.</p>
+<p class="fine">A country with no industry at the finish loses, even if its alliance wins. Industry is each country's completed factory levels at the end: its score within the side. Forces include troops still marching at the finish.</p>
 <dl class="aar-facts"><div><dt>Length</dt><dd>${clock(r.duration)}</dd></div><div><dt>Battles</dt><dd>${totals.battles ?? '—'}</dd></div><div><dt>Casualties</dt><dd>${totals.casualties === undefined ? '—' : number(totals.casualties)}</dd></div></dl></section>
 <section class="r-side"><h2 class="r-head">Share of the map</h2><figure class="chart land-chart"><svg viewBox="-4 -6 ${W + 8} ${H + 12}" preserveAspectRatio="none" role="img" aria-label="Provinces held by each alliance over the match"><line x1="0" x2="${W}" y1="0" y2="0" class="grid"/><line x1="0" x2="${W}" y1="${H / 2}" y2="${H / 2}" class="grid"/><line x1="0" x2="${W}" y1="${H}" y2="${H}" class="grid"/>${lines}</svg>
 <figcaption><span class="axis">Top line ${Math.round(scale * 100)}% of the map · 00:00 → ${clock(r.duration)}</span>${alliances.map(a => `<span style="--c:${colors[a.id] || NEUTRAL}"><i></i>${esc(this.side(a.id))}</span>`).join('')}</figcaption></figure>

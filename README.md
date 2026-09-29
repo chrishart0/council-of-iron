@@ -6,7 +6,7 @@
 
 ## How to play
 
-1. **Goal.** Hold **60% of the world's industry** with your alliance for **90 seconds**. If nobody does by **30:00**, the side with the most industry wins. A tie is a draw. Everyone on the winning side wins; your own industry at the end is your score.
+1. **Goal.** Hold **60% of the world's industry** with your alliance for **90 seconds**. If nobody does by **30:00**, the side with the most industry wins. A tie is a draw. You must still own a province at the finish to share an alliance win or draw; a country with no industry loses. Your own industry at the end is your score.
 2. **Troops.** Each province makes troops every 20 s: 1, 2 or 3 by its industry level.
 3. **March.** Drag from your province to another (or tap one, then the other). You can attack any province that borders your own territory, sending troops from anywhere in your empire; an ally's border is not enough. Troops take the quickest way through your own and your allies' land, twice as fast there, and find another way if part of it is lost. To send from several provinces at once, tap the target and press **Select all bordering**, or Shift-click your provinces (**Select** on phones): they all arrive at the same moment. Always leave one troop at home.
 4. **Battle.** Arriving attackers fight dice rounds until one side is gone. Defenders win ties, and a factory (industry II or III) gives them +1. Send help, **recall** an army to bring it home, or send a returning army back to its target (**march again**, twice per army).

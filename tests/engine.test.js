@@ -55,13 +55,14 @@ test('an alliance holds at most half the countries; small games are free-for-all
   assert.equal(g.players.filter(p=>p.side===player(g,'usa').side).length,4);
   assert.throws(()=>command(g,'usa',{type:'propose',country:'russia'}),/at most 4 countries/);
 });
-test('everyone on the winning side wins; an eliminated ally still shares the result',()=>{
+test('an eliminated ally loses even when its side wins',()=>{
   const g=game(['usa','britain','france','germany']);const {proposalId}=command(g,'usa',{type:'propose',country:'britain'});
   command(g,'britain',{type:'accept',proposalId});advance(g,30);
   for(const p of g.provinces.filter(p=>p.owner==='usa'))p.owner=null;
   tick(g);assert.equal(player(g,'usa').eliminatedAt,31);
   const results=Object.fromEntries(score(g,player(g,'britain').side,false).map(s=>[s.country,s]));
-  assert.deepEqual([results.usa.result,results.britain.result,results.france.result],['win','win','loss']);
+  assert.deepEqual([results.usa.result,results.britain.result,results.france.result],['loss','win','loss']);
   assert.equal(results.usa.industry,0);assert.ok(results.britain.industry>0);
-  assert.ok(score(g,null,true).every(s=>s.result==='draw'));
+  assert.equal(score(g,null,true).find(s=>s.country==='usa').result,'loss');
+  assert.ok(score(g,null,true).filter(s=>s.country!=='usa').every(s=>s.result==='draw'));
 });

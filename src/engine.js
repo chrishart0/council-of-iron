@@ -928,11 +928,14 @@ export const economyThreshold = g => Math.ceil(g.provinces.filter(p => p.owner)
   .reduce((n, p) => n + p.development, 0) * gameRules(g).economyShare);
 const ownedIndustry = (g, country) => g.provinces.filter(v => v.owner === country)
   .reduce((n, v) => n + v.development, 0);
-/** One result per player: everyone on the winning side wins; a draw is a draw. `industry` (your own
- * industry at the end) is the score: bragging rights and the order within a side. */
+/** One result per player. A country without territory at the finish loses, even when its side wins
+ * or draws. `industry` (your own industry at the end) is the score within a side. */
 export function score(g, winningSide, draw) {
-  return g.players.map(p => ({ country: p.id, result: draw ? 'draw' : p.side === winningSide ? 'win' : 'loss',
-    industry: ownedIndustry(g, p.id) }));
+  return g.players.map(p => {
+    const industry = ownedIndustry(g, p.id);
+    return { country: p.id, result: industry === 0 ? 'loss' : draw ? 'draw' : p.side === winningSide ? 'win' : 'loss',
+      industry };
+  });
 }
 function finish(g, winningSide, reason) {
   g.status = 'finished';

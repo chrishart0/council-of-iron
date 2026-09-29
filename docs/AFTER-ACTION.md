@@ -5,7 +5,7 @@ A finished room opens its review automatically; the room list labels finished ma
 ## Overview
 
 - **Result band:** **Victory**, **Defeat** or **Draw** for a seat (spectators see "After-action report"), the winners' standards, the headline ("Victory for the Atlantic Accord", "France prevails" or "The council ends in a draw") and how it ended: a 60 % industry hold, the most industry at the deadline, or equal industry at the deadline. The medal shows your own industry (spectators: the winning side's industry).
-- **Final standings**, grouped by alliance (the winning one marked *Victor*), then independents: **Land**, **Industry**, **Forces** (troops including those still marching at the finish) and each player's **Result** (Won / Lost / Draw). Everyone on the winning side wins, including members eliminated along the way. Industry — your completed factory levels at the end — is your score within your side; there is no prize, payout or other points.
+- **Final standings**, grouped by alliance (the winning one marked *Victor*), then independents: **Land**, **Industry**, **Forces** (troops including those still marching at the finish) and each player's **Result** (Won / Lost / Draw). A country with no industry at the finish loses even if its alliance wins or the match is drawn. Industry — your completed factory levels at the end — is your score within your side; there is no prize, payout or other points.
 - Match length, battles and casualties, a share-of-the-map chart per alliance, turning points that open the replay at that moment, and one primary *Watch the replay*.
 
 Results are copied from the saved outcome, never recalculated by the browser, and stay visible even when history is unavailable.

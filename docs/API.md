@@ -137,7 +137,7 @@ The MCP/CLI `board`, `decision_view` (`decision`) and `news` are computed in the
 
 ## Victory and results
 
-A side whose completed industry is at least `economyThreshold` (`ceil(0.6 × all owned industry)`) starts a 90-second hold; captures, upgrades and membership changes can break it. At 1800 the side with the most industry wins; equal first is a draw. `outcome` is `{ winningSide, reason: "domination" | "deadline", tick, draw, scores: [{ country, result: "win" | "loss" | "draw", industry }] }`: everyone on the winning side wins, and `industry` (your own at the end) is your score. Each finished match adds one win, draw or loss per seat to `/api/standings` (bots are not listed).
+A side whose completed industry is at least `economyThreshold` (`ceil(0.6 × all owned industry)`) starts a 90-second hold; captures, upgrades and membership changes can break it. At 1800 the side with the most industry wins; equal first is a draw. `outcome` is `{ winningSide, reason: "domination" | "deadline", tick, draw, scores: [{ country, result: "win" | "loss" | "draw", industry }] }`. A player with zero industry at the finish records a loss, even if their side wins or the match is drawn. Other players on the winning side record a win; `industry` (your own at the end) is your score. Each finished match adds one win, draw or loss per seat to `/api/standings` (bots are not listed).
 
 ## Voice input (browser convenience)
 

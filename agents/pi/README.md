@@ -52,7 +52,7 @@ The currently tested Qwen service uses the Unsloth `Qwen3.8-27B-UD-Q4_K_XL.gguf`
 After a completed run, publish only its aggregate metrics to the tracked ledger. The importer refuses unfinished games and never copies endpoints, credentials, model messages or raw tool payloads. Each match row records the seat's `result` (win, draw or loss) and final `industry`, accepted and rejected orders, failed tool calls, tokens and turn timing:
 
 ```bash
-node agents/pi/bench.js qwen|luna|external data/pi/<completed-run>.json
+node agents/pi/bench.js qwen|luna|deepseek|external data/pi/<completed-run>.json
 node agents/pi/task-bench.js qwen|luna data/pi/<completed-task>.json
 cd agents/pi && python -m http.server 8000   # open http://127.0.0.1:8000/bench.html
 ```

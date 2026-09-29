@@ -882,7 +882,7 @@ function renderRules(){
   const r=state.rules,box=$('how-to-play'),key=JSON.stringify(r);if(box.dataset.key===key)return;box.dataset.key=key;
   const span=t=>t%60?`${t} s`:`${t/60} min`;
   box.replaceChildren(...[
-    ['Goal',`Hold ${Math.round(r.economyShare*100)}% of the world's industry with your alliance for ${r.hold} s. If nobody does by ${time(r.duration)}, the side with the most industry wins; a tie is a draw. Everyone on the winning side wins.`],
+    ['Goal',`Hold ${Math.round(r.economyShare*100)}% of the world's industry with your alliance for ${r.hold} s. If nobody does by ${time(r.duration)}, the side with the most industry wins; a tie is a draw. You must own a province at the finish to share a win or draw.`],
     ['Troops',`Each province makes troops every ${r.recruit} s: 1, 2 or 3 by its industry level.`],
     ['March','Drag from your province to any target, or tap one, then the other. Tap more of your provinces to attack together: they arrive at the same moment. Troops travel through your and your allies’ land, twice as fast inside it. Always leave one troop at home.'],
     ['Battle',`Arriving attackers fight dice rounds until one side is gone. Defenders win ties, and a factory (industry II or III) gives them +1. Send help, recall an army to bring it home, or send a returning army back to its target (march again, ${timesWord(r.maxTurnArounds)} per army).`],
