@@ -208,6 +208,7 @@ ${medal ? `<div class="v-medal">${icon('industry')}<b>${number(medal.value)}</b>
       case 'dominance_broken': return `${this.side(e.side)}’s countdown stops. ${e.reason}`;
       case 'development_started': return `${c(e.country)} invests ${e.cost} in ${this.place(e.province)}.`;
       case 'development_completed': return `${this.place(e.province)} reaches industry ${e.level}.`;
+      case 'army_advancing': return `${c(e.country)}’s ${e.amount} troops marching home attack ${this.place(e.province)}, captured by ${c(e.owner)}.`;
       case 'army_recalled': return `${c(e.country)} ${e.reason ? 'turns back' : 'recalls'} ${e.amount} toward ${this.place(e.to)}.`;
       case 'eliminated': return `${c(e.country)} is eliminated.`;
       case 'finished': return 'The match ends. Final scores are fixed.';

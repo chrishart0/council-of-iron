@@ -899,6 +899,7 @@ function describe(e){
     case 'development_completed':return`${place(e.province).name} reaches industrial level ${e.level}.`;
     case 'army_recalled':return`${c(e.country)} ${e.reason?'turns back':'recalls'} ${e.amount} troops${e.province?` from ${place(e.province).name}`:''}; return to ${place(e.to).name} at ${time(e.arrivesAt)}.`;
     case 'army_turned_around':return`${c(e.country)} sends ${e.amount} troops back toward ${place(e.to).name}; they arrive at ${time(e.arrivesAt)}.`;
+    case 'army_advancing':return`${c(e.country)}’s ${e.amount} troops marching home attack ${place(e.province).name}, captured by ${c(e.owner)}; they arrive at ${time(e.arrivesAt)}.`;
     case 'army_interned':return`${e.amount} troops from ${c(e.country)} cannot return through ${place(e.province).name}.`;
     case 'battle':return`${place(e.province).name}: ${e.owner!==e.previousOwner?`${c(e.owner)} captures it`:'defenders retain ownership'}; ${e.troops} troops remain.`;
     case 'alliance_notice':return`${e.name}: coalition change confirmed; activates at ${time(e.activateAt)}.`;

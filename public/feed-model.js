@@ -138,6 +138,8 @@ export function commsItems(events, breaks = [], { you = null } = {}) {
       case 'peace_expired': push(e, peace.get(e.offerId) ?? ['dm'], { system: 'expired' }); break;
       // Your own army turned back automatically (never a recall you ordered yourself: that has no reason).
       case 'army_recalled': if (you && e.country === you && e.reason) push(e, ['mine'], { system: 'turned_back' }); break;
+      // Your army marching home found its home taken by an enemy: it attacks it instead.
+      case 'army_advancing': if (you && e.country === you) push(e, ['mine'], { system: 'home_captured' }); break;
       default: break;
     }
   }
@@ -172,6 +174,8 @@ export function systemCopy(item, names) {
     case 'peace_offer': return { tone: 'peace', icon: 'treaty', title: 'Peace offered', detail: `${list(item.fromRoster)} offer peace to ${list(item.toRoster)} · open until ${t(item.expiresAt)}.` };
     case 'turned_back': return { tone: 'war', icon: 'military', title: 'Troops turned back',
       detail: `Your ${item.amount} troops turned back${item.province ? ` from ${names.province(item.province)}` : ''}: ${turnedBackReason(item, names)}. They reach ${names.province(item.to)} at ${t(item.arrivesAt)}.` };
+    case 'home_captured': return { tone: 'war', icon: 'military', title: 'Attacking lost home',
+      detail: `Your ${item.amount} troops are attacking ${names.province(item.province)}: it was captured while they marched home. They arrive at ${t(item.arrivesAt)}.` };
     case 'expired': return { tone: 'broken', icon: 'council', title: 'Peace offer closed', detail: item.reason ?? 'The peace offer expired.' };
     default: return { tone: 'broken', icon: 'journal', title: 'Council', detail: '' };
   }

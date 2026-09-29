@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Council of Iron · Agent trials</title>
+  <title>Council of Iron · Campaign ledger</title>
   <style>
     :root { color-scheme: dark; --ink:#dbe8ed; --muted:#96abb8; --ground:#0d202b; --panel:#17303e; --line:#375464; --pi:#6fd8dc; --codex:#eec877; --bad:#e89189; --good:#9fdcae; }
     * { box-sizing:border-box; }
@@ -19,7 +19,7 @@
     .seal { border:2px solid var(--pi); border-radius:50%; width:94px; height:94px; display:grid; place-content:center; text-align:center; color:var(--pi); font:bold 12px/1.1 Verdana,sans-serif; letter-spacing:.13em; transform:rotate(-8deg); }
     .controls { display:flex; gap:16px; flex-wrap:wrap; align-items:end; padding:24px 0; }
     label { color:var(--muted); display:grid; gap:8px; }
-    select { min-width:170px; border:1px solid var(--line); background:var(--panel); color:var(--ink); padding:10px 32px 10px 12px; border-radius:4px; font:15px/1.2 inherit; }
+    select { min-width:150px; max-width:250px; border:1px solid var(--line); background:var(--panel); color:var(--ink); padding:10px 32px 10px 12px; border-radius:4px; font:15px/1.2 inherit; }
     select:focus-visible, button:focus-visible { outline:3px solid var(--pi); outline-offset:3px; }
     .stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); }
     .stat { min-height:116px; background:var(--panel); padding:18px 20px; }
@@ -27,39 +27,46 @@
     .stat strong { display:block; font:normal 36px/1 Georgia,serif; margin:16px 0 5px; }
     .stat small { color:var(--muted); }
     .surface { margin-top:24px; border:1px solid var(--line); background:var(--panel); }
+    .chart-scroll { overflow-x:auto; }
     .surface-heading { display:flex; justify-content:space-between; gap:14px; align-items:baseline; padding:20px 22px 10px; }
     h2 { font:normal 28px/1.1 Georgia,serif; margin:0; }
     .surface-heading p { color:var(--muted); margin:0; font-size:13px; }
-    #plot { display:block; width:100%; height:340px; }
-    .legend { display:flex; gap:20px; padding:0 24px 20px; color:var(--muted); font-size:13px; }
-    .legend span::before { content:""; display:inline-block; width:12px; height:3px; background:var(--pi); vertical-align:middle; margin-right:7px; }
-    .legend .codex::before { background:var(--codex); }
+    #plot, #progress-plot { display:block; width:100%; height:340px; }
+    .legend { display:flex; flex-wrap:wrap; gap:8px 18px; padding:0 24px 20px; color:var(--muted); font-size:13px; }
+    .legend span { display:inline-flex; align-items:center; gap:7px; }
+    .legend i { display:inline-block; width:18px; border-top:3px solid var(--series); }
+    .legend .dashed i { border-top-style:dashed; }
+    .legend .dotted i { border-top-style:dotted; }
+    .check { display:flex; align-items:center; gap:8px; margin:0 22px 12px; width:max-content; }
+    .check input { accent-color:var(--pi); width:18px; height:18px; }
+    .empty { padding:20px 24px; color:var(--muted); }
     .table-wrap { overflow-x:auto; }
     table { border-collapse:collapse; width:100%; min-width:850px; font-variant-numeric:tabular-nums; }
     th,td { padding:11px 14px; text-align:left; border-top:1px solid var(--line); white-space:nowrap; }
     th { color:var(--muted); background:#102733; }
     tbody tr:hover { background:#244150; }
-    td:nth-child(n+9) { text-align:right; }
+    td.numeric { text-align:right; }
     .client { font-weight:700; }
-    .client.pi { color:var(--pi); }
-    .client.codex { color:var(--codex); }
+    .client { color:var(--pi); }
     .negative { color:var(--bad); }
     .positive { color:var(--good); }
     .notes { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:22px; margin-top:26px; color:var(--muted); font-size:14px; }
     .notes p { border-left:2px solid var(--line); padding-left:15px; margin:0; }
     .note-label { color:var(--ink); display:block; margin-bottom:7px; }
     #error, #task-error { color:var(--bad); padding:20px; }
-    @media(max-width:700px) { header { grid-template-columns:1fr; } .seal { display:none; } .stats { grid-template-columns:repeat(2,minmax(0,1fr)); } .notes { grid-template-columns:1fr; } .surface-heading { display:block; } #plot { height:280px; } }
+    @media(max-width:700px) { header { grid-template-columns:1fr; } .seal { display:none; } .stats { grid-template-columns:repeat(2,minmax(0,1fr)); } .notes { grid-template-columns:1fr; } .surface-heading { display:block; } #plot, #progress-plot { height:280px; min-width:620px; } }
   </style>
 </head>
 <body>
 <main>
   <header>
-    <div><div class="eyebrow">Council of Iron / <span id="map-id">current map</span> trials</div><h1>Agent <em>trials</em></h1><p>One agent seat against seven practice bots. These runs expose tool failures and latency; a few quick rooms do not establish playing strength. A shared seed fixes combat rolls for the same state, but agents create different states.</p></div>
+    <div><div class="eyebrow">Council of Iron / <span id="map-id">current map</span> trials</div><h1>Campaign <em>ledger</em></h1><p>Follow each model's results across runs and its industry through a match. Isolated bot games and shared rooms are labeled separately. A seed fixes combat rolls for the same state, but each agent's orders change the state.</p></div>
     <div class="seal" aria-hidden="true">IRON<br>COUNCIL<br>LAB</div>
   </header>
   <section class="controls" aria-label="Filter benchmark results">
-    <label>Model <select id="model"><option value="all">All models</option><option value="qwen">Qwen</option><option value="luna">Luna</option><option value="deepseek">DeepSeek</option><option value="external">Other external</option></select></label>
+    <label>Model <select id="model"><option value="all">All models</option></select></label>
+    <label>Harness <select id="harness"><option value="all">All harnesses</option></select></label>
+    <label>Room <select id="arena"><option value="all">All rooms</option></select></label>
     <label>Country <select id="country"><option value="all">All countries</option></select></label>
     <label>Clock <select id="preset"><option value="all">Both speeds</option><option value="standard">Normal</option><option value="quick">Quick</option></select></label>
     <label>Combat seed <select id="seed"><option value="all">All rooms</option></select></label>
@@ -68,102 +75,40 @@
   <div id="error" role="alert" hidden></div>
   <section class="stats" aria-label="Selected run summary">
     <div class="stat"><div class="stat-label">Completed runs</div><strong id="count">—</strong><small>in this view</small></div>
-    <div class="stat"><div class="stat-label">Pi win / draw / loss</div><strong id="pi-score">—</strong><small>completed Pi rooms</small></div>
-    <div class="stat"><div class="stat-label">Codex win / draw / loss</div><strong id="codex-score">—</strong><small>completed Codex rooms</small></div>
-    <div class="stat"><div class="stat-label">Tool failures</div><strong id="failures">—</strong><small>all selected calls</small></div>
+    <div class="stat"><div class="stat-label">Win / draw / loss</div><strong id="record">—</strong><small>seat results</small></div>
+    <div class="stat"><div class="stat-label">Median own industry</div><strong id="industry">—</strong><small>at match finish</small></div>
+    <div class="stat"><div class="stat-label">Failed tool calls</div><strong id="failures">—</strong><small>of selected calls</small></div>
+  </section>
+  <section class="surface" aria-labelledby="scorecard-title">
+    <div class="surface-heading"><h2 id="scorecard-title">Models × harnesses</h2><p>Separate rows for each room type. Small samples stay visible.</p></div>
+    <div class="table-wrap"><table><thead><tr><th>Model</th><th>Harness</th><th>Room</th><th>Runs</th><th>Win / draw / loss</th><th>Median industry</th><th>Failed / calls</th><th>Median tokens / action</th></tr></thead><tbody id="scorecard"></tbody></table></div>
   </section>
   <section class="surface" aria-labelledby="plot-title">
-    <div class="surface-heading"><h2 id="plot-title">Runs over time</h2><p id="plot-detail">Select a measure to compare the clients.</p></div>
-    <svg id="plot" role="img" aria-label="Benchmark values over time"></svg>
-    <div class="legend"><span>Pi</span><span class="codex">Codex</span></div>
+    <div class="surface-heading"><h2 id="plot-title">Trials over time</h2><p id="plot-detail">Each mark is a completed match. Filled marks won; rings lost.</p></div>
+    <div class="chart-scroll"><svg id="plot" role="img" aria-label="Benchmark values over time"></svg></div>
+    <div class="legend" id="trend-legend"></div>
+  </section>
+  <section class="surface" aria-labelledby="progress-title">
+    <div class="surface-heading"><h2 id="progress-title">Inside the match</h2><p id="progress-detail">Own industry by game tick, sampled before each model turn.</p></div>
+    <label class="check"><input id="show-side" type="checkbox">Show alliance industry</label>
+    <div class="chart-scroll"><svg id="progress-plot" role="img" aria-label="Player industry by game tick"></svg></div>
+    <div class="legend" id="progress-legend"></div>
   </section>
   <section class="surface" aria-labelledby="table-title">
     <div class="surface-heading"><h2 id="table-title">Match ledger</h2><p>— means the runner did not record that metric.</p></div>
-    <div class="table-wrap"><table><thead><tr><th>Started</th><th>Model</th><th>Country</th><th>Client</th><th>Clock</th><th>Seed</th><th>Strategy / version</th><th>Result</th><th>Industry</th><th>Accepted</th><th>Rejected orders</th><th>Failed / calls</th><th>Tokens</th><th>First action (s)</th><th>Seconds / turn</th><th>Capped turns</th></tr></thead><tbody id="rows"></tbody></table></div>
+    <div class="table-wrap"><table><thead><tr><th>Started</th><th>Model</th><th>Harness</th><th>Room</th><th>Country</th><th>Clock</th><th>Seed</th><th>Code</th><th>Result</th><th>Industry</th><th>Accepted</th><th>Rejected</th><th>Failed / calls</th><th>Tokens</th><th>First action (s)</th><th>Seconds / turn</th><th>Capped turns</th></tr></thead><tbody id="rows"></tbody></table></div>
   </section>
   <section class="surface" aria-labelledby="pair-title">
-    <div class="surface-heading"><h2 id="pair-title">Same-seed run deltas</h2><p>Each Pi run uses the nearest-in-time Codex run with the same model, country, clock and seed. Positive industry and negative rejected-order or token deltas favor Pi. Failed-call deltas reflect different tool transports; these are separate games.</p></div>
-    <div class="table-wrap"><table><thead><tr><th>Model</th><th>Country</th><th>Clock</th><th>Seed</th><th>Pi started</th><th>Industry Δ</th><th>Failed calls Δ</th><th>Rejected orders Δ</th><th>Tokens Δ</th><th>Pi path</th><th>Codex path</th></tr></thead><tbody id="pairs"></tbody></table></div>
+    <div class="surface-heading"><h2 id="pair-title">Matched starts</h2><p>Same model, country, clock, seed and code revision; each harness still plays a separate game.</p></div>
+    <div class="table-wrap"><table><thead><tr><th>Model</th><th>Country</th><th>Seed</th><th>Revision</th><th>First harness</th><th>Result / industry</th><th>Second harness</th><th>Result / industry</th><th>Industry Δ</th><th>Failed-call Δ</th><th>Token Δ</th></tr></thead><tbody id="pairs"></tbody></table></div>
   </section>
   <section class="surface" aria-labelledby="task-title">
     <div class="surface-heading"><h2 id="task-title">Fixed-board tool task</h2><p>The same paused British board and three required orders. Success, rejections and time to the third accepted order measure client execution without a moving clock.</p></div>
     <div id="task-error" role="alert" hidden></div>
     <div class="table-wrap"><table><thead><tr><th>Started</th><th>Model</th><th>Client</th><th>Success</th><th>Correct steps</th><th>Accepted</th><th>Rejected</th><th>Failed / calls</th><th>First action (s)</th><th>Complete (s)</th><th>Total tokens</th><th>Uncached</th></tr></thead><tbody id="task-rows"></tbody></table></div>
   </section>
-  <div class="notes"><p><span class="note-label">Reading the score</span>Result is the seat's win, draw or loss: its alliance held 60% of the world's industry for 90 s, or had the most industry at the deadline. Industry is the seat's own final industry. A seat on a winning alliance can win with little industry of its own.</p><p><span class="note-label">Benchmark boundary</span>Quick rooms run the whole clock 6× faster, including diplomatic offers. A rejected order is a failed MCP call for Pi, while a Codex shell command can exit successfully after an HTTP rejection. Use rejected orders for the shared game-validity comparison; tool failures describe each client path. Provider token counters may also differ. Token fields are blank where the provider did not report usage.</p></div>
+  <div class="notes"><p><span class="note-label">Reading the score</span>Result is the seat's win, draw or loss: its alliance held 60% of the world's industry for 90 s, or had the most industry at the deadline. Industry is the seat's own final industry. An alliance win can come with little personal industry.</p><p><span class="note-label">Comparison boundary</span>Shared rooms can include humans and other model seats; isolated rooms use seven practice bots. Quick rooms run the clock 6× faster. Compare within the same room type, clock and rules revision. Failed-call counts cover each harness's recorded tool path; provider token counters can differ. Missing usage stays blank.</p></div>
 </main>
-<script type="module">
-const $ = id => document.getElementById(id);
-const svg = $('plot');
-const NS = 'http://www.w3.org/2000/svg';
-const fmt = value => value == null ? '—' : new Intl.NumberFormat('en-US',{maximumFractionDigits:2}).format(value);
-const record = list => list.length ? ['win','draw','loss'].map(result=>list.filter(run=>run.result===result).length).join(' / ') : '—';
-const el = (name, attrs={}) => { const node=document.createElementNS(NS,name); for(const [key,value] of Object.entries(attrs)) node.setAttribute(key,String(value)); return node; };
-let runs=[], taskRuns=[];
-function draw() {
-  const selected = runs.filter(run => ($('model').value==='all'||run.modelGroup===$('model').value) && ($('country').value==='all'||run.country===$('country').value) && ($('preset').value==='all'||run.preset===$('preset').value) && ($('seed').value==='all'||run.combatSeed===$('seed').value));
-  const metric=$('measure').value, measurable=selected.filter(run=>Number.isFinite(run[metric]));
-  $('count').textContent=selected.length;
-  $('pi-score').textContent=record(selected.filter(run=>run.client==='Pi'));
-  $('codex-score').textContent=record(selected.filter(run=>run.client==='Codex'));
-  $('failures').textContent=fmt(selected.reduce((sum,run)=>sum+run.failedToolCalls,0));
-  $('plot-detail').textContent=measurable.length ? `${measurable.length} runs with recorded ${$('measure').selectedOptions[0].text.toLowerCase()}. ${$('model').value==='all'?'Choose one model to connect its runs.':''}` : 'No runs recorded this measure yet.';
-  svg.replaceChildren(); svg.setAttribute('viewBox','0 0 960 340');
-  const x0=74,x1=916,y0=38,y1=282;
-  const values=measurable.map(run=>run[metric]);
-  let min=Math.min(0,...values),max=Math.max(1,...values);
-  if(min===max) max=min+1;
-  const y=value=>y1-(value-min)/(max-min)*(y1-y0);
-  const x=index=>measurable.length===1?(x0+x1)/2:x0+index*(x1-x0)/(measurable.length-1);
-  for(let i=0;i<=4;i++) { const value=min+(max-min)*i/4, yy=y(value); svg.append(el('line',{x1:x0,y1:yy,x2:x1,y2:yy,stroke:'#375464','stroke-dasharray':i===0?'':'3 5'})); const t=el('text',{x:x0-12,y:yy+4,'text-anchor':'end',fill:'#96abb8','font-size':12});t.textContent=fmt(value);svg.append(t); }
-  for(const client of ['Pi','Codex']) {
-    const points=measurable.map((run,index)=>({run,index})).filter(item=>item.run.client===client);
-    const color=client==='Pi'?'#6fd8dc':'#eec877';
-    if(points.length>1 && $('model').value!=='all') svg.append(el('polyline',{points:points.map(({run,index})=>`${x(index)},${y(run[metric])}`).join(' '),fill:'none',stroke:color,'stroke-width':2.5,'stroke-dasharray':client==='Codex'?'7 5':''}));
-    for(const {run,index} of points) { const dot=el('circle',{cx:x(index),cy:y(run[metric]),r:6,fill:color,stroke:'#0d202b','stroke-width':2});const title=el('title');title.textContent=`${run.modelGroup.toUpperCase()} · ${run.client} ${run.access} · ${run.preset} · ${fmt(run[metric])}`;dot.append(title);svg.append(dot); }
-  }
-  if(measurable.length) { for(const index of [0,measurable.length-1]) { const run=measurable[index],t=el('text',{x:x(index),y:315,'text-anchor':index===0?'start':'end',fill:'#96abb8','font-size':12});t.textContent=new Date(run.startedAt).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});svg.append(t); } }
-  const tbody=$('rows');tbody.replaceChildren();
-  for(const run of [...selected].reverse()) {
-    const tr=document.createElement('tr');
-    const cells=[new Date(run.startedAt).toLocaleString(),run.modelGroup.toUpperCase(),run.country,`${run.client} ${run.access}`,run.preset,run.combatSeed||'—',`${run.strategy} · ${run.sessionMode} · ${run.interfaceVersion}`,run.result,fmt(run.industry),fmt(run.acceptedActions),fmt(run.rejectedActions),`${run.failedToolCalls} / ${run.toolCalls}`,fmt(run.totalTokens),fmt(run.firstActionSeconds),fmt(run.meanTurnSeconds),fmt(run.timedOutTurns)];
-    for(let i=0;i<cells.length;i++){const td=document.createElement('td');td.textContent=cells[i];if(i===3)td.className=`client ${run.client.toLowerCase()}`;if(i===7)td.className=run.result==='win'?'positive':run.result==='loss'?'negative':'';tr.append(td);}tbody.append(tr);
-  }
-  const pairRows=$('pairs');pairRows.replaceChildren();
-  const bySeed=new Map();
-  for(const run of selected.filter(run=>run.combatSeed)) {
-    const key=`${run.modelGroup}|${run.country}|${run.preset}|${run.combatSeed}`;
-    const group=bySeed.get(key)||{Pi:[],Codex:[]};
-    group[run.client].push(run); bySeed.set(key,group);
-  }
-  for(const [key,group] of bySeed) {
-    if(!group.Codex.length) continue;
-    const [model,country,preset,seed]=key.split('|');
-    for(const pi of group.Pi) {
-      const codex=group.Codex.reduce((best,run)=>Math.abs(Date.parse(run.startedAt)-Date.parse(pi.startedAt))<Math.abs(Date.parse(best.startedAt)-Date.parse(pi.startedAt))?run:best);
-      const diff=field=>Number.isFinite(pi[field])&&Number.isFinite(codex[field])?fmt(pi[field]-codex[field]):'—';
-      const cells=[model.toUpperCase(),country,preset,seed,new Date(pi.startedAt).toLocaleString(),diff('industry'),diff('failedToolCalls'),diff('rejectedActions'),diff('totalTokens'),`${pi.strategy} · ${pi.sessionMode} · ${pi.interfaceVersion}`,`${codex.access} · ${codex.interfaceVersion}`];
-      const tr=document.createElement('tr');for(const value of cells){const td=document.createElement('td');td.textContent=value;tr.append(td);}pairRows.append(tr);
-    }
-  }
-  if(!pairRows.children.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=11;td.textContent='No completed Pi/Codex pair for this selection yet.';tr.append(td);pairRows.append(tr);}
-  drawTask();
-}
-function drawTask() {
-  const selected=taskRuns.filter(run=>$('model').value==='all'||run.modelGroup===$('model').value);
-  const rows=$('task-rows');rows.replaceChildren();
-  for(const run of [...selected].reverse()) {
-    const tr=document.createElement('tr');
-    const cells=[new Date(run.startedAt).toLocaleString(),run.modelGroup.toUpperCase(),`${run.client} ${run.access}`,run.success?'Yes':'No',`${fmt(run.correctSteps)} / ${fmt(run.requiredSteps)}`,fmt(run.acceptedOrders),fmt(run.rejectedOrders),`${run.failedToolCalls} / ${run.toolCalls}`,fmt(run.firstActionSeconds),fmt(run.completionSeconds),fmt(run.totalTokens),fmt(run.uncachedTokens)];
-    for(const [i,value] of cells.entries()){const td=document.createElement('td');td.textContent=value;if(i===3)td.className=run.success?'positive':'negative';tr.append(td);}rows.append(tr);
-  }
-  if(!selected.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=12;td.textContent='No completed fixed-board task for this model yet.';tr.append(td);rows.append(tr);}
-}
-for(const id of ['model','country','preset','seed','measure']) $(id).addEventListener('change',draw);
-try { const response=await fetch('./benchmarks.json',{cache:'no-store'});if(!response.ok)throw new Error(`HTTP ${response.status}`);const data=await response.json();if(data.schemaVersion!==3||!data.mapId||!Array.isArray(data.runs)||data.runs.some(run=>run.mapId!==data.mapId))throw new Error('Unsupported benchmark file');$('map-id').textContent=data.mapId;runs=data.runs;for(const country of [...new Set(runs.map(run=>run.country))].sort()){const option=document.createElement('option');option.value=country;option.textContent=country;$('country').append(option);}for(const seed of [...new Set(runs.map(run=>run.combatSeed).filter(Boolean))].sort()){const option=document.createElement('option');option.value=seed;option.textContent=seed;$('seed').append(option);}draw(); }
-catch(error){$('error').hidden=false;$('error').textContent=`Could not load benchmarks.json (${error.message}). Serve this folder with: python -m http.server 8000`;}
-try { const response=await fetch('./task-benchmarks.json',{cache:'no-store'});if(!response.ok)throw new Error(`HTTP ${response.status}`);const data=await response.json();if(data.schemaVersion!==1||!Array.isArray(data.runs))throw new Error('Unsupported fixed-board benchmark file');taskRuns=data.runs;drawTask(); }
-catch(error){$('task-error').hidden=false;$('task-error').textContent=`Could not load task-benchmarks.json (${error.message}).`;}
-</script>
+<script type="module" src="./bench-view.js"></script>
 </body>
 </html>

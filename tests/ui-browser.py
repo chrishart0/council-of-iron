@@ -1125,7 +1125,7 @@ def main():
                 minimum[tag]=min(low)
             report['contrastMinimum']=minimum;report['contrast']=contrast_log
             cov=report['uncoveredMap']
-            # The War Room frame (top bar, right column) is permanent: honest bounds measured on this fixture.
+            # AGENTS.md v0.8 'Single view' bounds, as amended for the permanent War Room frame (top bar, right column).
             # Measured on this fixture: 1366×768 68.6% idle / 54.2% peek; 1920×1080 76.7% / 69.1% (full table in uncoveredMap).
             assert cov['1366x768']['idle']>=.65 and cov['1366x768']['orderPeek']>=.50,cov['1366x768']
             assert cov['1920x1080']['idle']>=.73 and cov['1920x1080']['orderPeek']>=.65,cov['1920x1080']

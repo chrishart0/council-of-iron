@@ -11,6 +11,25 @@ const round = value => number(value) === null ? null : Math.round(value * 100) /
 const finiteSum = (items, key) => items.every(item => number(item[key]) !== null)
   ? items.reduce((sum, item) => sum + item[key], 0) : null;
 
+/** Publish only numeric, public-position facts; raw turn views and conversations stay private. */
+export function summarizeProgress(positions = [], finalTick = null, finalIndustry = null) {
+  const byTick = new Map();
+  for (const position of positions) {
+    if (!Number.isSafeInteger(position.tick) || position.tick < 0 ||
+        !Number.isFinite(position.ownIndustry) || position.ownIndustry < 0) continue;
+    byTick.set(position.tick, {
+      tick: position.tick, ownIndustry: position.ownIndustry,
+      sideIndustry: number(position.sideIndustry), ownProvinces: number(position.ownProvinces),
+    });
+  }
+  if (Number.isSafeInteger(finalTick) && finalTick >= 0 && Number.isFinite(finalIndustry)) {
+    const previous = byTick.get(finalTick);
+    byTick.set(finalTick, { tick: finalTick, ownIndustry: finalIndustry,
+      sideIndustry: previous?.sideIndustry ?? null, ownProvinces: previous?.ownProvinces ?? null });
+  }
+  return [...byTick.values()].sort((a, b) => a.tick - b.tick);
+}
+
 export function codexToolFailure(event) {
   if (event.exitCode !== undefined && event.exitCode !== null) return event.exitCode !== 0;
   if (event.result?.isError) return true;
@@ -23,8 +42,9 @@ export function codexToolFailure(event) {
   });
 }
 
-export function summarizeRun(raw, modelGroup) {
-  if (!['qwen', 'luna', 'deepseek', 'external'].includes(modelGroup)) throw new Error('Specify a qwen, luna, deepseek, or external model group.');
+export function summarizeRun(raw, modelGroup, { revision = raw.sourceRevision } = {}) {
+  if (!/^[a-z][a-z0-9_-]{1,31}$/.test(modelGroup)) throw new Error('Specify a lowercase model group.');
+  if (revision && !/^[0-9a-f]{7,40}$/.test(revision)) throw new Error('Revision must be a Git commit hash.');
   if (!raw.runId || !raw.startedAt || !raw.match || raw.status !== 'finished' ||
       !['win', 'loss', 'draw'].includes(raw.score?.result) || !Number.isFinite(raw.score.industry))
     throw new Error(`Run ${raw.runId || '(unknown)'} has no authoritative finished result.`);
@@ -71,7 +91,9 @@ export function summarizeRun(raw, modelGroup) {
   const won = raw.score.result === 'win';
   return {
     id: raw.runId, match: raw.match, mapId: raw.mapId, combatSeed: raw.combatSeed || null,
-    startedAt: raw.startedAt, modelGroup, client, access, country: raw.country,
+    startedAt: raw.startedAt, modelGroup, modelId: String(raw.modelId || raw.model || modelGroup), client, access,
+    harness: client, arena: raw.live ? 'shared room' : 'seven practice bots', sourceRevision: revision || null,
+    country: raw.country,
     interfaceVersion: raw.interfaceVersion, turnView: raw.turnView || null,
     strategy: raw.embeddedBoard ? usedView ? `${raw.turnView === 'decision' ? 'decision view' : 'board'} prompt + visual`
       : raw.turnView === 'decision' ? 'decision view in prompt' : 'board in prompt'
@@ -94,21 +116,25 @@ export function summarizeRun(raw, modelGroup) {
     timedOutTurns,
     meanTurnSeconds: totalTurnMs !== null ? round(totalTurnMs / turns.length / 1000) : null,
     durationSeconds: round(durationSeconds),
+    progress: summarizeProgress(raw.positionLog, raw.finalTick, raw.score.industry),
   };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const [, , group, ...paths] = process.argv;
-  if (!['qwen', 'luna', 'deepseek', 'external'].includes(group) || paths.length === 0) {
-    console.error('Usage: node agents/pi/bench.js <qwen|luna|deepseek|external> data/pi/<run>.json [...]');
+  const [, , group, ...args] = process.argv;
+  const revisionIndex = args.indexOf('--revision');
+  const revision = revisionIndex >= 0 ? args.splice(revisionIndex, 2)[1] : undefined;
+  const paths = args;
+  if (!/^[a-z][a-z0-9_-]{1,31}$/.test(group || '') || paths.length === 0 || revisionIndex >= 0 && !revision) {
+    console.error('Usage: node agents/pi/bench.js <model-group> [--revision GIT_HASH] data/pi/<run>.json [...]');
     process.exit(2);
   }
   const previous = JSON.parse(readFileSync(output, 'utf8'));
-  if (previous.schemaVersion !== 3 || previous.mapId !== CURRENT_MAP_ID || !Array.isArray(previous.runs))
-    throw new Error(`Benchmark ledger must use schema 3 and current map ${CURRENT_MAP_ID}.`);
+  if (previous.schemaVersion !== 4 || previous.mapId !== CURRENT_MAP_ID || !Array.isArray(previous.runs))
+    throw new Error(`Benchmark ledger must use schema 4 and current map ${CURRENT_MAP_ID}.`);
   const entries = new Map(previous.runs.map(run => [run.id, run]));
   for (const path of paths) {
-    const run = summarizeRun(JSON.parse(readFileSync(path, 'utf8')), group);
+    const run = summarizeRun(JSON.parse(readFileSync(path, 'utf8')), group, { revision });
     if (entries.has(run.id) && entries.get(run.id).modelGroup !== group) throw new Error(`Run ${run.id} already belongs to another group.`);
     entries.set(run.id, run);
   }
