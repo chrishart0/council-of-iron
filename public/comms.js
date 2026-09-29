@@ -9,7 +9,7 @@
 import { inbox, arrivals } from './comms-model.js';
 import { headlineCopy, systemCopy } from './feed-model.js';
 import { icon, insignia, faction } from './presentation.js';
-import { escapeHTML as esc, clock, patchList } from './ui.js';
+import { escapeHTML as esc, clock, patchList, setText, setAttr, setHidden } from './ui.js';
 import { relationsOf } from './relations.js';
 
 const QUICK = ['Agreed.', 'Not now.', 'Let us talk terms.'];
@@ -35,11 +35,11 @@ export class Comms {
   /* ── shell ── */
   build() {
     const b = this.button; b.classList.add('cx-button'); b.type = 'button'; b.setAttribute('aria-keyshortcuts', 'C');
-    b.setAttribute('aria-controls', this.panel.id); b.setAttribute('aria-expanded', 'false');
+    b.setAttribute('aria-controls', this.panel.id); b.setAttribute('aria-expanded', 'false'); b.title = 'Messages (C)';
     this.toasts.innerHTML = '<div class="cx-live" aria-live="assertive" data-tier="action"></div><div class="cx-live" aria-live="polite" data-tier="personal"></div>';
     this.toasts.dataset.state = 'empty';
     const p = this.panel; p.classList.add('cx-panel'); p.setAttribute('aria-label', 'Messages');
-    p.innerHTML = `<header class="cx-head plaque"><button type="button" class="cx-back" aria-label="All conversations">${icon('back')}</button><h2 class="cx-title">Messages</h2><button type="button" class="cx-readall">Mark all read</button><button type="button" class="cx-close" aria-label="Close messages">${icon('close')}</button></header>
+    p.innerHTML = `<header class="cx-head plaque"><button type="button" class="cx-back" aria-label="All conversations">${icon('back')}</button><h2 class="cx-title" tabindex="-1">Messages</h2><button type="button" class="cx-readall">Mark all read</button><button type="button" class="cx-close" aria-label="Close messages">${icon('close')}</button></header>
 <ol class="cx-list" aria-label="Conversations"></ol>
 <section class="cx-thread" aria-label="Conversation"><nav class="cx-switch" aria-label="Switch conversation"></nav><div class="cx-members" hidden></div><ol class="cx-rows" aria-live="polite" aria-relevant="additions"></ol><button type="button" class="cx-jump" hidden></button>
 <div class="cx-quick" role="group" aria-label="Quick replies"></div>
@@ -145,7 +145,7 @@ export class Comms {
   /** The visible area changed (the phone keyboard opened or closed): a reader at the latest message stays there. */
   keepLatest() { if (this.view === 'thread' && this.stuck !== false) this.toBottom(false); }
   toBottom(smooth) { const rows = this.$('.cx-rows'); rows.scrollTo({ top: rows.scrollHeight, behavior: smooth && !reduced() ? 'smooth' : 'auto' }); this.jump(0); }
-  jump(n) { this.below = n; const b = this.$('.cx-jump'); b.hidden = !n; b.innerHTML = n ? `${icon('down')}<span>${n} new</span>` : ''; }
+  jump(n) { this.below = n; const b = this.$('.cx-jump'); setHidden(b, !n); const html = n ? `${icon('down')}<span>${n} new</span>` : ''; if (b.__html !== html) { b.__html = html; b.innerHTML = html; } }
   /** Per-item read state: a row counts as read once it has actually been on screen in its open thread. */
   markVisible() {
     if (this.view !== 'thread' || this.panel.hidden) return;
@@ -205,19 +205,19 @@ export class Comms {
   grow() { const i = this.$('.cx-input'); i.style.height = 'auto'; i.style.height = `${Math.min(i.scrollHeight, 108)}px`; }
   /* ── rendering ── */
   render() {
-    document.body.dataset.comms = this.view;
-    this.panel.dataset.view = this.view === 'closed' ? 'list' : this.view;
-    this.panel.hidden = this.view === 'closed' || !this.state;
-    this.panel.dataset.docked = String(this.docked());
-    this.button.hidden = !this.state;
-    if (!this.state) { this.toasts.dataset.state = 'empty'; return; }
+    // Every poll renders: write only what changed (an unchanged write is still a mutation and a style invalidation).
+    setAttr(document.body, 'data-comms', this.view);
+    setAttr(this.panel, 'data-view', this.view === 'closed' ? 'list' : this.view);
+    setHidden(this.panel, this.view === 'closed' || !this.state);
+    setAttr(this.panel, 'data-docked', this.docked());
+    setHidden(this.button, !this.state);
+    if (!this.state) { setAttr(this.toasts, 'data-state', 'empty'); return; }
     this.renderButton(); this.renderToasts(); this.renderList(); this.renderThread();
   }
   renderButton() {
     const { action, unread } = this.box?.counts || { action: 0, unread: 0 }, b = this.button;
-    b.dataset.action = String(action); b.dataset.unread = String(unread); b.setAttribute('aria-expanded', String(this.view !== 'closed'));
-    b.setAttribute('aria-label', `Messages${action ? `: ${action} to decide` : ''}${unread ? `${action ? ',' : ':'} ${unread} unread` : ''}`);
-    b.title = 'Messages (C)';
+    setAttr(b, 'data-action', action); setAttr(b, 'data-unread', unread); setAttr(b, 'aria-expanded', this.view !== 'closed');
+    setAttr(b, 'aria-label', `Messages${action ? `: ${action} to decide` : ''}${unread ? `${action ? ',' : ':'} ${unread} unread` : ''}`);
     const key = `${action}|${unread}`; if (b.dataset.key === key) return; b.dataset.key = key;
     b.innerHTML = `${icon('dispatches')}${action ? `<b class="cx-count" data-tier="action">${action}</b>` : ''}${unread ? `<i class="cx-count" data-tier="personal">${unread}</i>` : ''}`;
   }
@@ -234,7 +234,7 @@ export class Comms {
     if (loud.__html !== loudHTML) { loud.__html = loudHTML; loud.innerHTML = loudHTML; }
     if (quiet.__html !== quietHTML) { quiet.__html = quietHTML; quiet.innerHTML = quietHTML; }
     for (const eta of this.toasts.querySelectorAll('[data-eta]')) { const s = String(Math.max(0, Number(eta.dataset.eta) - this.state.tick)); if (eta.textContent !== s) eta.textContent = s; }
-    this.toasts.dataset.state = a.length ? 'action' : f ? 'flash' : p ? 'personal' : 'empty';
+    setAttr(this.toasts, 'data-state', a.length ? 'action' : f ? 'flash' : p ? 'personal' : 'empty');
   }
   actionToast(r, more) {
     const i = r.item, n = this.names;
@@ -314,16 +314,16 @@ export class Comms {
   }
   renderThread() {
     const rowsEl = this.$('.cx-rows'), conv = this.box?.conversations.find(c => c.key === this.conv);
-    const title = this.$('.cx-title'); title.textContent = this.view === 'thread' && conv ? this.convTitle(conv) : 'Messages'; title.tabIndex = -1;
-    this.$('.cx-readall').hidden = !this.box || this.readOnly;
+    setText(this.$('.cx-title'), this.view === 'thread' && conv ? this.convTitle(conv) : 'Messages');
+    setHidden(this.$('.cx-readall'), !this.box || this.readOnly);
     const composer = this.$('.cx-composer'), quick = this.$('.cx-quick');
-    if (this.view !== 'thread' || !conv) { if (rowsEl.firstChild) rowsEl.replaceChildren(); rowsEl.__conv = rowsEl.__rendered = null; composer.hidden = quick.hidden = true; return; }
+    if (this.view !== 'thread' || !conv) { if (rowsEl.firstChild) rowsEl.replaceChildren(); rowsEl.__conv = rowsEl.__rendered = null; setHidden(composer, true); setHidden(quick, true); return; }
     const me = this.state.players?.find(p => p.id === this.state.you);
     const canWrite = !this.readOnly && this.state.status === 'running' && me?.eliminatedAt == null && (conv.kind !== 'alliance' || conv.side) && !(conv.kind === 'dm' && conv.eliminated);
-    composer.hidden = !canWrite; quick.hidden = !canWrite || conv.kind !== 'dm';
+    setHidden(composer, !canWrite); setHidden(quick, !canWrite || conv.kind !== 'dm');
     const input = this.$('.cx-input'), n = this.names;
-    input.placeholder = conv.kind === 'world' ? 'Message everyone…' : conv.kind === 'alliance' ? 'Message your alliance…' : `Message ${faction(conv.country).short}…`;
-    this.$('.cx-note').textContent = conv.kind === 'alliance' && this.state.rules?.revealAllianceChatAfterMatch ? 'Alliance chat becomes public in the replay after the match ends.' : '';
+    setAttr(input, 'placeholder', conv.kind === 'world' ? 'Message everyone…' : conv.kind === 'alliance' ? 'Message your alliance…' : `Message ${faction(conv.country).short}…`);
+    setText(this.$('.cx-note'), conv.kind === 'alliance' && this.state.rules?.revealAllianceChatAfterMatch ? 'Alliance chat becomes public in the replay after the match ends.' : '');
     this.renderSwitch(conv); this.renderMembers(conv);
     const qhtml = QUICK.map(q => `<button type="button" data-quick="${esc(q)}">${esc(q)}</button>`).join('');
     if (quick.__html !== qhtml) { quick.__html = qhtml; quick.innerHTML = qhtml; }
@@ -355,14 +355,14 @@ export class Comms {
     const items = this.box.conversations.filter(c => !(c.kind === 'dm' && c.eliminated && !c.active)).sort((a, b) => place(a) - place(b)).filter(c => c.kind !== 'dm' || c.active || c.key === conv.key || !this.readOnly);
     const buttons = this.readOnly ? [] : items.map(c => ({ key: c.key, html: `<button type="button" data-conv="${esc(c.key)}" aria-current="${c.key === conv.key}" title="${esc(c.kind === 'alliance' ? (c.side ? this.names.side(c.side) : 'Alliance') : this.convTitle(c))}" aria-label="${esc(c.kind === 'alliance' ? 'Alliance chat' : this.convTitle(c))}${c.unread ? `, ${c.unread} unread` : ''}">${c.kind === 'dm' ? insignia(c.country) : icon(c.kind === 'world' ? 'globe' : 'ally')}${c.unread || c.action ? '<i class="cx-dot"></i>' : ''}</button>` }));
     patchList(nav, buttons);
-    nav.hidden = !buttons.length;
+    setHidden(nav, !buttons.length);
   }
   /** The alliance thread names its members (standards and names). */
   renderMembers(conv) {
     const box = this.$('.cx-members'), side = conv.kind === 'alliance' && conv.side ? (this.state.sides || []).find(s => s.id === conv.side) : null;
     const html = side ? side.members.map(id => `<span>${insignia(id)}<b>${id === this.state.you ? 'You' : esc(faction(id).short)}</b></span>`).join('') : '';
     if (box.__html !== html) { box.__html = html; box.innerHTML = html; }
-    box.hidden = !html;
+    setHidden(box, !html);
   }
   row(r) {
     // Unread is a class set after rendering, so reading a row never rebuilds it (a tap on its buttons is never lost).
@@ -402,5 +402,5 @@ export class Comms {
     if (b.dataset.do) this.decide(this.box.rows.find(r => r.key === li.dataset.key), b.dataset.do);
   }
   /** Long messages clamp at four lines; "More" appears only when the text is actually cut. */
-  clampCheck() { for (const t of this.panel.querySelectorAll('.cx-text')) { const btn = t.nextElementSibling; if (t.dataset.open === '1') { btn.hidden = false; btn.textContent = 'Less'; } else btn.hidden = t.scrollHeight <= t.clientHeight + 1; } }
+  clampCheck() { for (const t of this.panel.querySelectorAll('.cx-text')) { const btn = t.nextElementSibling; if (t.dataset.open === '1') { setHidden(btn, false); setText(btn, 'Less'); } else setHidden(btn, t.scrollHeight <= t.clientHeight + 1); } }
 }

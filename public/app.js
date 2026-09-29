@@ -3,7 +3,7 @@ import { AfterAction } from './review.js';
 import { developmentForecast, allianceForecast } from './insights.js';
 import { faction, insignia, icon, battleSignal } from './presentation.js';
 import { Atlas } from './atlas.js';
-import { escapeHTML as esc, setHTML, setText, operationId, confirmAction, clock as time, seatType } from './ui.js';
+import { escapeHTML as esc, setHTML, setText, setAttr, setHidden, operationId, confirmAction, clock as time, seatType } from './ui.js';
 import { Herald, presentHeadline } from './feed.js';
 import { viewerOf, turnedBackReason } from './feed-model.js';
 import { Comms } from './comms.js';
@@ -352,7 +352,7 @@ function revealUnderCard(id){
 }
 function paintMap(){
   if(!state)return;
-  $('select-mode').hidden=!active();
+  setHidden($('select-mode'),!active());
   const many=sources.length>1;
   atlas.update(state,many?null:sources[0] || null,target,many?{selected:sources,reach:target?null:selectionReach()}:{});
   paintDraft();
@@ -574,42 +574,43 @@ function renderCard(){
   const box=$('card');
   if(!card || !state || state.status==='lobby'){if(card && state?.status==='lobby')closeCard();return;}
   if(card.kind==='army' && !state.armies.some(a=>a.id===card.id)){closeCard();return;}
-  box.dataset.kind=card.kind;box.dataset.size=cardSize;box.dataset.relation='';
-  $('card-size').setAttribute('aria-expanded',String(cardSize==='full'));$('card-size').setAttribute('aria-label',cardSize==='full'?'Show less':'Show more');
+  // Polling re-renders the open card every second: write only what changed.
+  setAttr(box,'data-kind',card.kind);setAttr(box,'data-size',cardSize);
+  setAttr($('card-size'),'aria-expanded',cardSize==='full');setAttr($('card-size'),'aria-label',cardSize==='full'?'Show less':'Show more');
   const view={province:provinceCard,army:armyCard,country:countryCard,alliance:allianceCard}[card.kind]();
   const kind=card.kind==='province'?(view.order?'Orders':'Province'):{army:'Army',country:'Country',alliance:'Your alliance'}[card.kind];
   if($('card-kind').textContent!==kind){$('card-kind').textContent=kind;$('card-kind-icon').innerHTML=icon({province:view.order?'march':'land',army:'march',country:'seal',alliance:'ally'}[card.kind]);}
   part('card-flag',JSON.stringify(view.flag),()=>view.flag?flag(view.flag):null);
-  $('card-title').textContent=view.title;
+  setText($('card-title'),view.title);
   part('card-sub',JSON.stringify(view.subKey ?? view.sub),()=>view.sub);
   part('card-status',JSON.stringify(view.statusKey ?? view.status),()=>view.status);
-  box.dataset.relation=view.relation || '';
-  $('card-size').hidden=!view.more;
-  $('card-body').hidden=cardSize!=='full' || !view.more;
+  setAttr(box,'data-relation',view.relation || '');
+  setHidden($('card-size'),!view.more);
+  setHidden($('card-body'),cardSize!=='full' || !view.more);
   if(!$('card-body').hidden)view.more();
   // Dock: sources and amount (orders), a message box (diplomacy), then the actions.
   const order=view.order;
   // The selection bar: every selected source with the troops it sends (of its free troops), × removes it.
   const chips=order?.chips || [],showChips=chips.length>1 || selectMode && chips.length>0;
-  $('sources').hidden=!order || !showChips && !order.hint && !order.note;
+  setHidden($('sources'),!order || !showChips && !order.hint && !order.note);
   if(order)part('sources',JSON.stringify([showChips && chips,order.hint,order.note]),()=>[...(showChips?chips.map(c=>{
     const b=button('',{removeSource:c.from},`source-chip${c.off?' off':''}`);
     b.append(el('b','',c.off?'–':String(c.amount)),el('span','',place(c.from).name),el('small','',c.off?'out':`/${c.free}`),el('i','','×'));
     b.setAttribute('aria-label',`Remove ${place(c.from).name} (${c.off?'cannot send there':`${c.amount} of ${c.free} free troops`})`);return b;}):[]),
     ...(order.note?[el('small','sources-hint sources-off',order.note)]:[]),...(order.hint?[el('small','sources-hint',order.hint)]:[])]);
-  $('amount-control').hidden=!order || !order.parts.length;
+  setHidden($('amount-control'),!order || !order.parts.length);
   if(order){
-    const pct=Math.round(fraction*100);if(document.activeElement!==$('amount-slider'))$('amount-slider').value=String(pct);
-    $('amount-out').textContent=`${order.total} troops · ${pct}%`;
-    for(const b of document.querySelectorAll('[data-fraction]'))b.setAttribute('aria-pressed',String(Math.abs(Number(b.dataset.fraction)-fraction)<.001));
+    const pct=Math.round(fraction*100);if(document.activeElement!==$('amount-slider') && $('amount-slider').value!==String(pct))$('amount-slider').value=String(pct);
+    setText($('amount-out'),`${order.total} troops · ${pct}%`);
+    for(const b of document.querySelectorAll('[data-fraction]'))setAttr(b,'aria-pressed',Math.abs(Number(b.dataset.fraction)-fraction)<.001);
   }
-  $('order-preview').hidden=!order || !(order.preview || order.why);
-  if(order)$('order-preview').textContent=order.why || order.preview;
+  setHidden($('order-preview'),!order || !(order.preview || order.why));
+  if(order)setText($('order-preview'),order.why || order.preview);
   part('card-actions',JSON.stringify(view.actions.map(a=>[a.label,a.act,a.arg,a.primary,a.danger,a.disabled,a.id])),()=>view.actions.map(a=>{
     const b=button(a.label,{act:a.act,...(a.arg!==undefined?{arg:a.arg}:{})},`${a.primary?'primary':''}${a.danger?' danger':''}`);
     if(a.id)b.id=a.id;b.disabled=Boolean(a.disabled);return b;}));
-  $('card-dock').hidden=$('sources').hidden && $('amount-control').hidden && $('order-preview').hidden && !view.actions.length;
-  if(order){const pct=Math.round(fraction*100);$('amount-slider').style.setProperty('--fill',`${pct}%`);}
+  setHidden($('card-dock'),$('sources').hidden && $('amount-control').hidden && $('order-preview').hidden && !view.actions.length);
+  if(order && $('amount-slider').style.getPropertyValue('--fill')!==`${Math.round(fraction*100)}%`)$('amount-slider').style.setProperty('--fill',`${Math.round(fraction*100)}%`);
   if(card.kind==='province'){paintDraft();if(order && order.parts.length)updatePreview();}
 }
 function provinceCard(){
@@ -849,8 +850,8 @@ function renderHud(){
   setText($('commander-title'),state.you?(compact.matches?faction(state.you).short:country(state.you).name):(state.status==='running'?'Spectating':'Observer'));
   setHTML($('commander-insignia'),insignia(state.you));
   setText($('commander-side'),me?(me.eliminatedAt!==null?'Fallen':`${me.side.startsWith('solo:')?'Independent':namedSide(me.side)}${enemies?` · at war with ${enemies}`:''}`):'Watching');
-  $('hud-standard').disabled=!me || spectating;
-  $('hud-standard').setAttribute('aria-label',me && !spectating?`${country(state.you).name}: your alliance and diplomacy`:'Spectating');
+  if($('hud-standard').disabled!==(!me || spectating))$('hud-standard').disabled=!me || spectating;
+  setAttr($('hud-standard'),'aria-label',me && !spectating?`${country(state.you).name}: your alliance and diplomacy`:'Spectating');
   const economy=team?.economy ?? 0,threshold=state.economyThreshold || 1;
   const stat=(name,label,value,title,extra='')=>`<span class="stat" title="${esc(title)}">${icon(name)}<span><b>${value}</b><small>${esc(label)}</small></span>${extra}</span>`;
   const holdings=state.you?land.length:state.provinces.filter(p=>p.owner).length,forces=state.you?troops:state.provinces.reduce((n,p)=>n+p.troops,0);
@@ -859,7 +860,6 @@ function renderHud(){
     (me?stat('industry','industry to win',`${economy}<small>/${threshold}</small>`,`Your side's industry: ${economy} of the ${threshold} needed`,`<i class="gauge"><i style="width:${Math.min(100,Math.round(100*economy/threshold))}%"></i></i>`):''));
   const dominant=Object.entries(state.dominance)[0];
   document.querySelector('.clock-plaque').classList.toggle('victory-warning',Boolean(dominant) && state.status==='running');
-  $('victory-status').setAttribute('role','timer');$('victory-status').setAttribute('aria-live','off');
   const leader=[...state.sides].sort((a,b)=>b.economy-a.economy)[0];
   setText($('victory-status'),dominant && state.status==='running'?`${namedSide(dominant[0])} wins in ${state.rules.hold-(state.tick-dominant[1])}s unless stopped`:
     leader?`Win: ${threshold} industry for ${state.rules.hold}s · ${namedSide(leader.id)} leads with ${leader.economy}`:`${threshold} industry held ${state.rules.hold}s wins`);
@@ -954,11 +954,11 @@ function placeSound(){
 function render(){
   if(!state)return;
   document.body.classList.toggle('spectating',state.status==='running' && (!state.you || spectating));
-  document.body.dataset.status=state.status;
+  setAttr(document.body,'data-status',state.status);
   if(state.status!=='running' && card)closeCard();
   setText(document.querySelector('.scenario-note'),map.notice);
   setText($('game-name'),state.name);setText($('lobby-room'),state.name);setText($('room-label'),`${state.players.length}/8 seats`);
-  $('lobby').hidden=state.status!=='lobby';if(state.status==='lobby')renderLobby();
+  setHidden($('lobby'),state.status!=='lobby');if(state.status==='lobby')renderLobby();
   setText($('phase'),state.status==='lobby'?'Assembling':state.status==='finished'?'Concluded':seated()?'In session':'Watching');
   setText($('clock'),time(state.tick));setText($('clock-total'),`/ ${time(state.rules.duration)}`);
   renderRules();setText($('pace-badge'),state.speed===1?'Standard pace':`Quick · ${state.speed}×`);

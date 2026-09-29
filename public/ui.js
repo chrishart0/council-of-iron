@@ -8,6 +8,7 @@ export const seatType = p => !p ? '' : p.kind === 'bot' ? 'Bot' : p.kind === 'ag
  * invalidation (inside the map's world layers, also a rebuild of both <use> copies). */
 export const setText = (element, value) => { value = String(value); if (element.textContent !== value) element.textContent = value; };
 export const setAttr = (element, name, value) => { value = String(value); if (element.getAttribute(name) !== value) element.setAttribute(name, value); };
+export const setHidden = (element, hidden) => { hidden = Boolean(hidden); if (element.hidden !== hidden) element.hidden = hidden; };
 export function setHTML(element, html) {
   if(element.__html!==html){element.innerHTML=html;element.__html=html;}
 }
