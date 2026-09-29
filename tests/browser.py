@@ -23,6 +23,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -103,12 +104,12 @@ def main():
     background = {}
     for name in chosen:
         command = SUITES[name](args, artifacts) if name in BACKGROUND else None
-        if command: background[name] = spawn(command, output=str(artifacts / f'{name}.log'))
+        if command:
+            background[name] = spawn(command, output=str(artifacts / f'{name}.log'))
+            threading.Thread(target=lambda n=name, p=background[name]: outcome(n, p.wait() == 0, started), daemon=True).start()
     def finish():
-        while background:
-            for name, proc in list(background.items()):
-                if proc.poll() is not None: outcome(name, proc.returncode == 0, started); del background[name]
-            time.sleep(.5)
+        for proc in background.values(): proc.wait()
+        time.sleep(.2)  # the waiting threads record the outcome
     last = ['perf'] if args.full and 'perf' in chosen else []
     for name in [n for n in chosen if n not in BACKGROUND and n not in last] + last:
         if name in last: finish()
