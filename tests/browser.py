@@ -1,4 +1,13 @@
-"""Browser/controller integration. Normal mode uses actual browser HTTP navigation.
+"""Browser/controller integration and the browser test entry point (`python tests/browser.py`).
+
+A real match through the real controls: the browser (USA), a separate CLI process (Britain, later driven by
+agents/bot.js) and six idle agent seats, on an accelerated clock (the whole clock is scaled; no endpoint advances
+time). Idle seats never act, so every assertion that needs a province's owner is deterministic. `--full` fills those
+six seats with practice bots instead (a live soak match, as does `--gif`) and runs the long performance checks.
+Then the focused suites run: recorded-match review, UI layout/tasks on paused recorded positions, voice, and
+mobile performance budgets.
+
+Normal mode uses actual browser HTTP navigation.
 
 `--bridge` is an explicit fallback for managed Chromium with all URL navigation
 blocked: render unmodified app JS in an in-memory document, with fetch forwarded
@@ -14,11 +23,12 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
 from playwright.sync_api import sync_playwright, expect
-from browser_helpers import load_bridge, lane, open_thread, close_comms
+from browser_helpers import load_bridge, lane, open_thread, close_comms, start_server, spawn, stop
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -74,13 +84,53 @@ def country_card(page,cid):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--bridge', action='store_true')
-    parser.add_argument('--gif', help='Write an actual browser-capture GIF to this path.')
+    parser.add_argument('--full', action='store_true', help='Practice bots in the six idle seats (a live soak match) and the long performance run.')
+    parser.add_argument('--gif', help='Write an actual browser-capture GIF of a live bot match (implies --full) to this path.')
     parser.add_argument('--ui-gif', help='Record a labeled tour of the command interface.')
     parser.add_argument('--review-gif', help='Also record the focused after-action review as a GIF.')
     parser.add_argument('--executable', default=os.environ.get('BROWSER_EXECUTABLE'))
     parser.add_argument('--artifacts', default=str(ROOT / 'artifacts'))
+    parser.add_argument('--only', help='Comma-separated suites to run: ' + ','.join(SUITES))
     args = parser.parse_args()
+    args.full = args.full or bool(args.gif)
     artifacts = Path(args.artifacts); artifacts.mkdir(parents=True, exist_ok=True)
+    chosen = args.only.split(',') if args.only else list(SUITES)
+    assert set(chosen) <= set(SUITES), chosen
+    results, started = {}, time.monotonic()
+    def outcome(name, ok, since):
+        results[name] = f'{"passed" if ok else "FAILED"} ({time.monotonic() - since:.0f} s)'
+    # The two UI parts run beside the rest (each its own server and browser, output in artifacts/<suite>.log). With
+    # --full the performance suite runs last, alone, so its enforced CPU budgets see as quiet a host as possible.
+    background = {}
+    for name in chosen:
+        command = SUITES[name](args, artifacts) if name in BACKGROUND else None
+        if command:
+            background[name] = spawn(command, output=str(artifacts / f'{name}.log'))
+            threading.Thread(target=lambda n=name, p=background[name]: outcome(n, p.wait() == 0, started), daemon=True).start()
+    def finish():
+        for proc in background.values(): proc.wait()
+        time.sleep(.2)  # the waiting threads record the outcome
+    last = ['perf'] if args.full and 'perf' in chosen else []
+    for name in [n for n in chosen if n not in BACKGROUND and n not in last] + last:
+        if name in last: finish()
+        since = time.monotonic()
+        try:
+            if name == 'live': live_match(args, artifacts)
+            else:
+                command = SUITES[name](args, artifacts)
+                if command: subprocess.run(command, cwd=ROOT, check=True, timeout=1800)
+            outcome(name, True, since)
+        except Exception as error:  # report every suite, then fail
+            outcome(name, False, since); print(f'{name} suite failed: {error!r}', file=sys.stderr)
+            import traceback; traceback.print_exc()
+    finish()
+    for name in BACKGROUND & set(results):
+        if not results[name].startswith('passed'):
+            print(f'--- {name} suite output (tail of {artifacts / f"{name}.log"}) ---\n' + (artifacts / f'{name}.log').read_text()[-6000:], file=sys.stderr)
+    print(json.dumps({'suites': results, 'seconds': round(time.monotonic() - started)}, indent=2))
+    if any(not r.startswith('passed') for r in results.values()): sys.exit(1)
+
+def live_match(args, artifacts):
     gif_frames=[]
     def capture(page,duration=140):
         if not args.gif:return
@@ -89,15 +139,21 @@ def main():
     report = {'transport': 'python-http-bridge' if args.bridge else 'native-browser-http', 'assertions': [], 'pageErrors': []}
     with tempfile.TemporaryDirectory(prefix='council-browser-') as tmp:
         env = {**os.environ, 'PORT': '0', 'TEST_DB': str(Path(tmp)/'test.db'), 'TEST_CLOCK_SCALE': '12'}
-        server = subprocess.Popen(['node', 'tests/browser-server.js'], cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        server, settings = start_server('tests/browser-server.js', env)
         bot = None
         try:
-            url = json.loads(server.stdout.readline())['url']
+            url = settings['url']
             def http(path, method='GET', data=None, token=None):
                 request = urllib.request.Request(url + path, method=method, data=json.dumps(data).encode() if data is not None else None,
                     headers={**({'Content-Type':'application/json'} if data is not None else {}), **({'Authorization':f'Bearer {token}'} if token else {})})
                 with urllib.request.urlopen(request, timeout=15) as response:
                     return json.load(response)
+            IDLE=['france','germany','russia','ottoman','qing','japan']
+            def idle_seats(room,countries):
+                """Agent seats that never act: the room is full and nothing moves unless the test moves it."""
+                for c in countries:
+                    envoy=http('/api/players','POST',{'name':f'Idle {c}'})
+                    http(f'/api/games/{room}/join','POST',{'country':c,'kind':'agent'},envoy['token'])
             def cli(*arguments):
                 result = subprocess.run(['node','agents/cli.js',*arguments],cwd=ROOT,env={**os.environ,'COUNCIL_URL':url,'COUNCIL_SESSION':str(Path(tmp)/'agent.session.json'),'COUNCIL_TOKEN':'','COUNCIL_MATCH':''},capture_output=True,text=True,timeout=20)
                 assert result.returncode == 0, result.stderr
@@ -130,12 +186,13 @@ def main():
                 expect(page.locator('#lobby-note')).to_contain_text('You command United States')
                 report['assertions'].append('Human browser created room and joined USA through UI.')
                 cli('join',room,'britain','External CLI Envoy')
-                page.locator('#fill-bots').click()
+                if args.full:page.locator('#fill-bots').click()
+                else:idle_seats(room,IDLE)
                 expect(page.locator('#room-label')).to_contain_text('8/8')
                 page.locator('#start-match').click()
                 expect(page.locator('#phase')).to_have_text('In session')  # Start means start
                 assert http(f'/api/games/{room}')['status']=='running'
-                report['assertions'].append('Separate CLI process joined Britain; six practice bots filled seats; the host pressed Start and the match began at once.')
+                report['assertions'].append(f'Separate CLI process joined Britain; {"six practice bots" if args.full else "six idle agent seats"} filled the room; the host pressed Start and the match began at once.')
                 if args.gif:
                     page.evaluate('''() => { const note=document.createElement('div');note.textContent='ACTUAL BROWSER CAPTURE · 12× TEST CLOCK · HEURISTIC AGENTS';note.style.cssText='position:fixed;right:18px;bottom:10px;z-index:20;padding:6px 10px;background:#142c34ee;border:1px solid #c6a87280;color:#e4d6ae;font:9px system-ui;letter-spacing:.7px;border-radius:3px;pointer-events:none';document.body.append(note); }''')
                 capture(page,800)
@@ -155,7 +212,7 @@ def main():
                 cli('war','france')
                 # Engine headline -> the same World feed row for every viewer, with a live banner.
                 open_thread(page,'world')
-                # Practice bots may declare their own wars first; find this one by its parties.
+                # Practice bots (--full) may declare their own wars first; find this one by its parties.
                 expect(page.locator('#comms .cx-rows [data-kind="war"]').filter(has_text='French Republic').filter(has_text='British Empire').first).to_be_visible(timeout=10000)
                 close_comms(page)
                 report['assertions'].append('A CLI war declaration appeared as a war marker in the browser’s World thread (the history).')
@@ -290,7 +347,7 @@ def main():
                 spectator.close()
                 report['assertions'].append('Lobby spectator watched on a full-viewport map with the World history beside it on desktop and mobile; the feed reply posted world chat that the read-only spectator feed showed as escaped text, while private dispatches stayed hidden.')
                 # External process now controls the existing agent seat over the real API.
-                bot=subprocess.Popen(['node','agents/bot.js'],cwd=ROOT,env={**os.environ,'COUNCIL_URL':url,'COUNCIL_SESSION':str(Path(tmp)/'agent.session.json'),'COUNCIL_TOKEN':'','COUNCIL_MATCH':room},stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+                bot=spawn(['node','agents/bot.js'],{**os.environ,'COUNCIL_URL':url,'COUNCIL_SESSION':str(Path(tmp)/'agent.session.json'),'COUNCIL_TOKEN':'','COUNCIL_MATCH':room})
                 deadline=time.monotonic()+15
                 while time.monotonic()<deadline:
                     state=http(f'/api/games/{room}')
@@ -327,232 +384,212 @@ def main():
                 assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1'), 'Mobile horizontal overflow'
                 page.set_viewport_size({'width':1600,'height':1050})
                 report['assertions'].append('390-pixel mobile layout displayed controls without horizontal page overflow.')
-                # Do not advance the clock through a privileged endpoint: wait for wall-clock play.
-                if args.gif:
-                    deadline=time.monotonic()+180
-                    while not page.locator('#result').is_visible() and time.monotonic()<deadline:
-                        capture(page)
-                        page.wait_for_timeout(1800)
-                expect(page.locator('#result')).to_be_visible(timeout=180000)
-                capture(page,2200)
-                result=http(f'/api/games/{room}')
-                assert result['status']=='finished' and len(result['outcome']['scores'])==8
-                report['outcome']=result['outcome']
-                public_events=[]; event_cursor=0
-                while True:
-                    batch=http(f'/api/games/{room}?after={event_cursor}'); public_events.extend(batch['events']); event_cursor=batch['cursor']
-                    if not batch['hasMore']: break
-                report['events']={kind:sum(e['type']==kind for e in public_events) for kind in ['battle','army_departed','alliance_activated']}
-                expect(page.locator('#result')).not_to_contain_text('Experimental')
-                expect(page.locator('#aar-standings tr[data-result-country]')).to_have_count(8)
-                after_action=cli('review')
-                assert after_action['historyAvailable']
-                assert after_action['outcome']==result['outcome']
-                page.screenshot(path=str(artifacts/'05-result.png'),full_page=True)
-                page.locator('#aar-tab-replay').click()
-                expect(page.locator('#replay-stage')).to_be_visible()
-                page.locator('#replay-slider').fill(str(result['tick']))
-                assert int(page.locator('#replay-stage').get_attribute('data-tick'))==result['tick']
-                assert cli('replay',str(result['tick']))['tick']==result['tick']
-                page.locator('[data-aar-transport="start"]').click()
-                expect(page.locator('#replay-stage')).to_have_attribute('data-tick','0')
-                page.locator('#replay-play').click()
-                page.wait_for_timeout(350)
-                page.locator('#replay-play').click()
-                assert int(page.locator('#replay-slider').input_value())>0
-                page.locator('#replay-exit').click()
-                for report_tab in ['military','economy','diplomacy','overview']:
-                    page.locator(f'#aar-tab-{report_tab}').click()
-                    expect(page.locator(f'#aar-{report_tab}')).to_be_visible()
-                report['assertions'].append('Completed live match opened player/alliance review, scrubbable playback and all report tabs; CLI review and historical board agreed.')
-                stdout,stderr=bot.communicate(timeout=20);assert bot.returncode==0,stderr
-                assert json.loads(stdout)['scores']==result['outcome']['scores']
-                report['assertions'].append('Wall-clock match reached a final result; browser and external agent observed identical final scores.')
-                page.locator('#aar-back').click()
-                page.locator('#tab-standings').click()
-                me=next(p for p in http('/api/standings')['standings'] if p['name']=='Browser Commander')
-                expect(page.locator('#standings .standing-row',has_text='Browser Commander')).to_contain_text(f"{me['wins']}–{me['draws']}–{me['losses']}")
-                assert me['matches']==1 and me['wins']==(next(s for s in result['outcome']['scores'] if s['country']=='usa')['result']=='win'),me
-                page.locator('#tab-rooms').click()
-                report['assertions'].append('The win–draw–loss record includes the browser player after returning to the rooms.')
-                # Local UI interactions: distinct source selection, keyboard tabs and a real next room.
-                page.locator('#room-name').fill('Second Council')
-                page.locator('#create-form button[type=submit]').click()
-                expect(page.locator('#lobby')).to_be_visible()
-                page.locator('[data-country-seat="usa"]').click()
-                page.locator('#join-form button').click()
-                page.locator('#fill-bots').click()
-                page.locator('#start-match').click()
-                expect(page.locator('#phase')).to_have_text('In session')
-                expect(page.locator('#card')).to_be_hidden()
-                if page.locator('#coach').is_visible():page.locator('#coach-skip').click()
-                names={p['id']:p['name'] for p in http('/map.json')['provinces']}
-                # Tap-tap on the map: your province, then a neighbour; Shift-click adds another source.
-                province(page,'west-us');expect(page.locator('#card-title')).to_have_text(names['west-us'])
-                expect(page.locator('#card')).to_have_attribute('data-size','peek')  # a map selection opens a peeking card
-                if not page.locator('#marker-mexico').is_visible():page.locator('#zoom-out').click()
-                page.mouse.click(*centre(page.locator('#marker-mexico .counter-body')))
-                expect(page.locator('#card-title')).to_have_text(names['mexico']);expect(page.locator('#card-sub')).to_contain_text(names['west-us'])
-                page.locator('[data-fraction="1"]').click();expect(page.locator('#amount-out')).to_contain_text('100%')
-                page.keyboard.down('Shift');page.mouse.click(*centre(page.locator('#marker-central-us .counter-body')));page.keyboard.up('Shift')
-                # Shift-click adds a second source to the same order (multi-select); both arrive together.
-                expect(page.locator('#card-title')).to_have_text(names['mexico']);expect(page.locator('#card-sub')).to_contain_text('from 2 provinces')
-                expect(page.locator('#sources .source-chip')).to_have_count(2)
-                page.keyboard.press('Escape');expect(page.locator('#card')).to_be_hidden()
-                page.locator('#hud-standard').focus();page.keyboard.press('Enter')
-                expect(page.locator('#card')).to_have_attribute('data-kind','alliance');expect(page.locator('#card-title')).to_be_focused()
-                for _ in range(3):  # a live headline/banner may take Escape before the card
-                    page.keyboard.press('Escape')
-                    if page.locator('#card').is_hidden():break
-                expect(page.locator('#card')).to_be_hidden();expect(page.locator('#hud-standard')).to_be_focused()
-                report['assertions'].append('A second room starts with the same browser identity; map taps open a peeking order card (province, then neighbour); 100% and Shift-click adding a second source work; the standard opens and closes the alliance card by keyboard with focus returned.')
-                # Attack together: with the target chosen, tapping another of your provinces beside it adds a source.
-                # The practice bots have been playing against an idle USA for a few minutes, so pick two provinces the USA
-                # still holds that border the same neutral province (on v6 Britain's Canada borders all three US states).
-                room2=http('/api/games')['games'][0]['id']
-                nb={p['id']:p['neighbors'] for p in http('/map.json')['provinces']}
-                for attempt in range(4):  # the bots keep playing at 12×: a chosen province may fall before the taps land
-                    st=http(f'/api/games/{room2}');owner={p['id']:p['owner'] for p in st['provinces']};troops={p['id']:p['troops'] for p in st['provinces']}
-                    mine=sorted((i for i,o in owner.items() if o=='usa' and troops[i]>=3),key=lambda i:-troops[i])
-                    # The longest such attack, so the group is still on its way when the recall below looks for it.
-                    tt=st['travelTimes'];src,second,target=max(((a,b,t) for t in sorted(nb) if owner[t] is None for a in mine for b in mine if a!=b and t in nb[a] and t in nb[b]),key=lambda x:(min(tt[x[0]][x[2]],tt[x[1]][x[2]]),x))
+                def first_room_result():
+                    # Do not advance the clock through a privileged endpoint: wait for wall-clock play. Standard is 30 game
+                    # minutes, 150 s at 12x from the start, sooner if a side holds 60% of the industry.
+                    page.goto(url+f'/?match={room}') if not args.bridge else None
+                    if args.gif:
+                        deadline=time.monotonic()+240
+                        while not page.locator('#result').is_visible() and time.monotonic()<deadline:
+                            capture(page)
+                            page.wait_for_timeout(1800)
+                    expect(page.locator('#result')).to_be_visible(timeout=240000)
+                    capture(page,2200)
+                    result=http(f'/api/games/{room}')
+                    assert result['status']=='finished' and len(result['outcome']['scores'])==8
+                    report['outcome']=result['outcome']
+                    public_events=[]; event_cursor=0
+                    while True:
+                        batch=http(f'/api/games/{room}?after={event_cursor}'); public_events.extend(batch['events']); event_cursor=batch['cursor']
+                        if not batch['hasMore']: break
+                    report['events']={kind:sum(e['type']==kind for e in public_events) for kind in ['battle','army_departed','alliance_activated']}
+                    expect(page.locator('#result')).not_to_contain_text('Experimental')
+                    expect(page.locator('#aar-standings tr[data-result-country]')).to_have_count(8)
+                    after_action=cli('review')
+                    assert after_action['historyAvailable']
+                    assert after_action['outcome']==result['outcome']
+                    page.screenshot(path=str(artifacts/'05-result.png'),full_page=True)
+                    page.locator('#aar-tab-replay').click()
+                    expect(page.locator('#replay-stage')).to_be_visible()
+                    page.locator('#replay-slider').fill(str(result['tick']))
+                    assert int(page.locator('#replay-stage').get_attribute('data-tick'))==result['tick']
+                    assert cli('replay',str(result['tick']))['tick']==result['tick']
+                    page.locator('[data-aar-transport="start"]').click()
+                    expect(page.locator('#replay-stage')).to_have_attribute('data-tick','0')
+                    page.locator('#replay-play').click()
+                    expect(page.locator('#replay-stage')).not_to_have_attribute('data-tick','0')
+                    page.locator('#replay-play').click()
+                    assert int(page.locator('#replay-slider').input_value())>0
+                    page.locator('#replay-exit').click()
+                    for report_tab in ['military','economy','diplomacy','overview']:
+                        page.locator(f'#aar-tab-{report_tab}').click()
+                        expect(page.locator(f'#aar-{report_tab}')).to_be_visible()
+                    report['assertions'].append('Completed live match opened player/alliance review, scrubbable playback and all report tabs; CLI review and historical board agreed.')
+                    stdout,_=bot.communicate(timeout=20);assert bot.returncode==0,bot.returncode
+                    assert json.loads(stdout)['scores']==result['outcome']['scores']
+                    report['assertions'].append('Wall-clock match reached a final result; browser and external agent observed identical final scores.')
+                    page.locator('#aar-back').click()
+                    page.locator('#tab-standings').click()
+                    me=next(p for p in http('/api/standings')['standings'] if p['name']=='Browser Commander')
+                    expect(page.locator('#standings .standing-row',has_text='Browser Commander')).to_contain_text(f"{me['wins']}–{me['draws']}–{me['losses']}")
+                    assert me['matches']==1 and me['wins']==(next(s for s in result['outcome']['scores'] if s['country']=='usa')['result']=='win'),me
+                    page.locator('#tab-rooms').click()
+                    report['assertions'].append('The win–draw–loss record includes the browser player after returning to the rooms.')
+
+                def other_rooms():
+                    # A second room with the same browser identity; the other seven seats are idle agents, so the USA keeps
+                    # exactly its starting land and every province named below is deterministic.
+                    page.goto(url+'/');expect(page.locator('#room-name')).to_be_visible()
+                    page.locator('#room-name').fill('Second Council')
+                    page.locator('#create-form button[type=submit]').click()
+                    expect(page.locator('#lobby')).to_be_visible()
+                    page.locator('[data-country-seat="usa"]').click()
+                    page.locator('#join-form button').click()
+                    expect(page.locator('#lobby-note')).to_contain_text('You command United States')
+                    room2=next(g['id'] for g in http('/api/games')['games'] if g['name']=='Second Council')
+                    idle_seats(room2,['britain',*IDLE])
+                    expect(page.locator('#room-label')).to_contain_text('8/8')
+                    page.locator('#start-match').click()
+                    expect(page.locator('#phase')).to_have_text('In session')
+                    expect(page.locator('#card')).to_be_hidden()
+                    if page.locator('#coach').is_visible():page.locator('#coach-skip').click()
+                    names={p['id']:p['name'] for p in http('/map.json')['provinces']}
+                    # Tap-tap on the map: your province, then a neighbour; Shift-click adds another source.
+                    province(page,'west-us');expect(page.locator('#card-title')).to_have_text(names['west-us'])
+                    expect(page.locator('#card')).to_have_attribute('data-size','peek')  # a map selection opens a peeking card
+                    if not page.locator('#marker-mexico').is_visible():page.locator('#zoom-out').click()
+                    page.mouse.click(*centre(page.locator('#marker-mexico .counter-body')))
+                    expect(page.locator('#card-title')).to_have_text(names['mexico']);expect(page.locator('#card-sub')).to_contain_text(names['west-us'])
+                    page.locator('[data-fraction="1"]').click();expect(page.locator('#amount-out')).to_contain_text('100%')
+                    page.keyboard.down('Shift');page.mouse.click(*centre(page.locator('#marker-central-us .counter-body')));page.keyboard.up('Shift')
+                    # Shift-click adds a second source to the same order (multi-select); both arrive together.
+                    expect(page.locator('#card-title')).to_have_text(names['mexico']);expect(page.locator('#card-sub')).to_contain_text('from 2 provinces')
+                    expect(page.locator('#sources .source-chip')).to_have_count(2)
+                    page.keyboard.press('Escape');expect(page.locator('#card')).to_be_hidden()
+                    page.locator('#hud-standard').focus();page.keyboard.press('Enter')
+                    expect(page.locator('#card')).to_have_attribute('data-kind','alliance');expect(page.locator('#card-title')).to_be_focused()
+                    page.keyboard.press('Escape');expect(page.locator('#card')).to_be_hidden();expect(page.locator('#hud-standard')).to_be_focused()
+                    report['assertions'].append('A second room starts with the same browser identity; map taps open a peeking order card (province, then neighbour); 100% and Shift-click adding a second source work; the standard opens and closes the alliance card by keyboard with focus returned.')
+                    # Attack together: with the target chosen, tapping another of your provinces beside it adds a source.
+                    # The longest such attack from two USA provinces into neutral land, so the group is still on its way
+                    # when the recall below looks for it.
+                    nb={p['id']:p['neighbors'] for p in http('/map.json')['provinces']}
+                    st=http(f'/api/games/{room2}');owner={p['id']:p['owner'] for p in st['provinces']};tt=st['travelTimes']
+                    mine=sorted(i for i,o in owner.items() if o=='usa')
+                    src,second,target=max(((a,b,t) for t in sorted(nb) if owner[t] is None for a in mine for b in mine if a!=b and t in nb[a] and t in nb[b]),key=lambda x:(min(tt[x[0]][x[2]],tt[x[1]][x[2]]),x))
                     order(page,src,target);page.locator('[data-fraction="0.5"]').click()
                     page.locator('#card-size').click()  # back to peek so the map is free
                     if not page.locator(f'#marker-{second} .counter-body').is_visible() or not (0<centre(page.locator(f'#marker-{second} .counter-body'))[0]<page.viewport_size['width']):bring(page,second)
                     page.mouse.click(*centre(page.locator(f'#marker-{second} .counter-body')))
-                    page.wait_for_timeout(300)
-                    if page.locator('#sources .source-chip').count()==2 and page.locator('#card-title').inner_text()==names[target]:break
-                    page.keyboard.press('Escape');page.keyboard.press('Escape')
-                expect(page.locator('#sources .source-chip')).to_have_count(2)
-                page.locator('#card-size').click();expect(page.locator('#order-details')).to_contain_text('arrive together')
-                page.screenshot(path=str(artifacts/'06-coordinated-plan.png'),full_page=True)
-                capture(page,1300)
-                page.locator('#primary').click()
-                # The server has the order (a brief "Sent" toast may lose the one slot to news that affects you).
-                deadline=time.monotonic()+6
-                sent=lambda:any(o.get('to')==target or (o.get('path') or [None])[-1]==target for o in http(f'/api/games/{room2}').get('orders',[])+http(f'/api/games/{room2}')['armies'] if o.get('country','usa')=='usa')
-                while time.monotonic()<deadline and not sent():page.wait_for_timeout(200)
-                assert sent(),lane(page).inner_text()
-                page.wait_for_timeout(1400)
-                # Group recall is a browser control, never direct mutation of the game.
-                recall_group=page.locator('[data-recall]').filter(has_text='Recall group')
-                recalled=False
-                for pid in [src,second,src,second]:  # the live 12× match keeps re-rendering the card; either source lists the group
-                    province(page,pid)
-                    if page.locator('#card-size').is_visible() and page.locator('#card').get_attribute('data-size')!='full':page.locator('#card-size').click()
-                    try:expect(recall_group).to_be_visible(timeout=4000);recall_group.click(timeout=4000);recalled=True;break
-                    except Exception:page.keyboard.press('Escape');page.wait_for_timeout(300)
-                assert recalled,'no Recall group row on either source'
-                confirmed(page,'Recall queued')
-                expect(page.locator('.march-row.returning').first).to_be_visible(timeout=5000)
-                page.screenshot(path=str(artifacts/'07-recalling.png'),full_page=True)
-                capture(page,1300)
-                report['assertions'].append('Browser committed a two-source attack (a second province added by tapping it beside the target) as one order, then recalled the group with real return time.')
-                # Develop a province of the USA (the lowest level it can pay for); natural recruitment funds the construction.
-                # The bots keep playing against the idle USA, so pick from whatever it still holds.
-                usa_state=lambda:{p['id']:p for p in http(f'/api/games/{room2}')['provinces']}
-                deadline=time.monotonic()+60;build=None
-                while time.monotonic()<deadline:
-                    ready=[p for p in usa_state().values() if p['owner']=='usa' and p['development']<3 and not p.get('developing') and p['troops']-1>=(24 if p['development']==1 else 48)+2]
-                    if ready:build=min(ready,key=lambda p:(p['development'],-p['troops'],p['id']));break
-                    page.wait_for_timeout(1000)
-                assert build,('no USA province can pay for development',[(p['id'],p['owner'],p['troops'],p['development']) for p in usa_state().values() if p['owner']=='usa'])
-                level,build=build['development'],build['id'];cost=24 if level==1 else 48
-                for _ in range(3):  # a leftover source from the recall above turns a tap on a neighbour into a reinforcement target
+                    expect(page.locator('#sources .source-chip')).to_have_count(2);expect(page.locator('#card-title')).to_have_text(names[target])
+                    page.locator('#card-size').click();expect(page.locator('#order-details')).to_contain_text('arrive together')
+                    page.screenshot(path=str(artifacts/'06-coordinated-plan.png'),full_page=True)
+                    capture(page,1300)
+                    page.locator('#primary').click()
+                    # The server has the order (a brief "Sent" toast may lose the one slot to news that affects you).
+                    sent=lambda:(lambda g:any(o.get('to')==target or (o.get('path') or [None])[-1]==target for o in g.get('orders',[])+g['armies'] if o.get('country','usa')=='usa'))(http(f'/api/games/{room2}'))
+                    deadline=time.monotonic()+6
+                    while time.monotonic()<deadline and not sent():page.wait_for_timeout(200)
+                    assert sent(),lane(page).inner_text()
+                    # Group recall is a browser control, never direct mutation of the game.
+                    recall_group=page.locator('[data-recall]').filter(has_text='Recall group')
+                    province(page,src)
+                    if page.locator('#card').get_attribute('data-size')!='full':page.locator('#card-size').click()
+                    expect(recall_group).to_be_visible(timeout=6000);recall_group.click()
+                    confirmed(page,'Recall queued')
+                    expect(page.locator('.march-row.returning').first).to_be_visible(timeout=5000)
+                    page.screenshot(path=str(artifacts/'07-recalling.png'),full_page=True)
+                    capture(page,1300)
+                    report['assertions'].append(f'Browser committed a two-source attack ({src} and {second} on {target}, the second added by tapping it beside the target) as one order, then recalled the group with real return time.')
+                    # Develop a province of the USA (the lowest level it can pay for); natural recruitment funds the construction.
+                    usa_state=lambda:{p['id']:p for p in http(f'/api/games/{room2}')['provinces']}
+                    deadline=time.monotonic()+60;build=None
+                    while time.monotonic()<deadline:
+                        ready=[p for p in usa_state().values() if p['owner']=='usa' and p['development']<3 and not p.get('developing') and p['troops']-1>=(24 if p['development']==1 else 48)+2]
+                        if ready:build=min(ready,key=lambda p:(p['development'],-p['troops'],p['id']));break
+                        page.wait_for_timeout(500)
+                    assert build,('no USA province can pay for development',[(p['id'],p['troops'],p['development']) for p in usa_state().values() if p['owner']=='usa'])
+                    level,build=build['development'],build['id'];cost=24 if level==1 else 48
+                    page.keyboard.press('Escape');page.keyboard.press('Escape')  # no leftover source from the recall above
                     province(page,build)
-                    if page.locator('#develop-province').count():break
-                    page.locator('#card-close').click();page.wait_for_timeout(200)
-                develop=page.locator('#develop-province')
-                expect(develop).to_be_enabled(timeout=10000)
-                page.locator('#card-size').click();expect(page.locator('#development-payback')).to_contain_text('payback')
-                develop.click()
-                expect(page.locator('#confirm-dialog')).to_contain_text(f'Spend {cost} troops')
-                page.locator('#confirm-dialog [value="confirm"]').click()
-                confirmed(page,'Investment committed')
-                expect(develop).to_contain_text(re.compile('Construction queued|Building level'),timeout=6000)
-                page.screenshot(path=str(artifacts/'08-development.png'),full_page=True)
-                capture(page,1300)
-                # Construction takes 120 (I→II) or 180 (II→III) game seconds; the province may be attacked, so the build either
-                # completes or the province falls first (and the unfinished work is lost). The card must show whichever happened.
-                deadline=time.monotonic()+(25 if level==1 else 35)
-                while time.monotonic()<deadline:
-                    built=usa_state()[build]
-                    if built['owner']!='usa' or built['development']>level:break
-                    page.wait_for_timeout(300)
-                if built['owner']=='usa':
-                    assert built['development']==level+1,built
-                    for _ in range(3):  # counters shift as the live match moves; make sure the card is this province's
-                        province(page,build)
-                        if page.locator('#card-title').inner_text().strip()==names[build]:break
-                    expect(page.locator('#card-title')).to_have_text(names[build])
+                    develop=page.locator('#develop-province')
+                    expect(develop).to_be_enabled(timeout=10000)
+                    page.locator('#card-size').click();expect(page.locator('#development-payback')).to_contain_text('payback')
+                    develop.click()
+                    expect(page.locator('#confirm-dialog')).to_contain_text(f'Spend {cost} troops')
+                    page.locator('#confirm-dialog [value="confirm"]').click()
+                    confirmed(page,'Investment committed')
+                    expect(develop).to_contain_text(re.compile('Construction queued|Building level'),timeout=6000)
+                    page.screenshot(path=str(artifacts/'08-development.png'),full_page=True)
+                    capture(page,1300)
+                    # Construction takes 120 (I→II) or 180 (II→III) game seconds: 10 or 15 s at 12x.
+                    deadline=time.monotonic()+40
+                    while time.monotonic()<deadline and usa_state()[build]['development']==level:page.wait_for_timeout(300)
+                    assert usa_state()[build]['development']==level+1,usa_state()[build]
+                    province(page,build);expect(page.locator('#card-title')).to_have_text(names[build])
                     expect(page.locator('#card-sub')).to_contain_text(f"industry {['','Ⅰ','Ⅱ','Ⅲ'][level+1]}",timeout=5000)
                     report['assertions'].append(f'Browser funded, confirmed and completed province development ({build}, level {level}→{level+1}) using naturally recruited manpower.')
-                else:
-                    assert built['developing'] is None and built['development']==level,built
-                    report['assertions'].append(f'Browser funded and confirmed province development with naturally recruited manpower; a bot captured {build} before the build finished, and the unfinished work was lost (the capture rule).')
-                # A long march: through your own land to a province of yours beyond the neighbours (one controlled route).
-                owners={i:p['owner'] for i,p in usa_state().items()}
-                def via(a,b):
-                    seen={a};queue=[a]
-                    while queue:
-                        x=queue.pop(0)
-                        for n in nb[x]:
-                            if n==b:return True
-                            if n not in seen and owners[n]=='usa':seen.add(n);queue.append(n)
-                    return False
-                mine=sorted(i for i,o in owners.items() if o=='usa')
-                route=next(((a,b) for a in mine for b in mine if a!=b and b not in nb[a] and via(a,b) and usa_state()[a]['troops']>3),None)
-                if route:  # A live bot match can take away every suitable USA route; ui_tasks covers the controlled case.
-                    start,end=route
+                    # A long march: through your own land to a province of yours beyond the neighbours (one route).
+                    owners={i:p['owner'] for i,p in usa_state().items()}
+                    def via(a,b):
+                        seen={a};queue=[a]
+                        while queue:
+                            x=queue.pop(0)
+                            for n in nb[x]:
+                                if n==b:return True
+                                if n not in seen and owners[n]=='usa':seen.add(n);queue.append(n)
+                        return False
+                    mine=sorted(i for i,o in owners.items() if o=='usa')
+                    start,end=next((a,b) for a in mine for b in mine if a!=b and b not in nb[a] and via(a,b) and usa_state()[a]['troops']>3)
                     order(page,start,end)
-                    expect(page.locator('#primary')).to_contain_text(re.compile('Reinforce|Attack'))  # the destination may change hands in this live bot match
+                    expect(page.locator('#primary')).to_contain_text('Reinforce')
                     expect(page.locator('#order-details')).to_contain_text('Via',timeout=5000)
                     expect(page.locator('#primary')).to_be_enabled(timeout=10000)
                     page.screenshot(path=str(artifacts/'10-long-march.png'))
                     page.locator('#primary').click()
-                    try:  # a destination that changed hands to an enemy asks to confirm the war first
-                        expect(page.locator('#confirm-dialog')).to_be_visible(timeout=1500);page.locator('#confirm-dialog [value="confirm"]').click()
-                    except AssertionError:pass
                     deadline=time.monotonic()+8
                     while time.monotonic()<deadline and not any(a.get('path') and a['path'][-1]==end for a in http(f'/api/games/{room2}')['armies']):page.wait_for_timeout(250)
                     assert any(a.get('path') and a['path'][-1]==end for a in http(f'/api/games/{room2}')['armies']),lane(page).inner_text()
                     report['assertions'].append(f'Browser sent a long march from {start} to {end} through its own land: the card showed the route and the server moved one column along it.')
-                page.set_viewport_size({'width':390,'height':844})
-                assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1')
-                page.screenshot(path=str(artifacts/'09-mobile-orders.png'),full_page=True)
-                page.set_viewport_size({'width':1600,'height':1050})
-                # A host who filled every seat with bots before choosing a country takes one of them over.
-                page.goto(url+'/');expect(page.locator('#room-name')).to_be_visible()
-                page.locator('#room-name').fill('Practice council')
-                page.locator('#create-form button[type=submit]').click()
-                expect(page.locator('#lobby')).to_be_visible()
-                page.locator('[data-country-seat="japan"]').click()
-                expect(page.locator('#fill-bots')).to_contain_text('Take this seat')
-                page.locator('#fill-bots').click()
-                expect(page.locator('#room-label')).to_contain_text('8/8')
-                expect(page.locator('#lobby-note')).to_contain_text('You command Empire of Japan')
-                practice=http('/api/games')['games'][0]['id']
-                players=http(f'/api/games/{practice}')['players']
-                assert next(p for p in players if p['id']=='japan')['kind']=='human' and sum(p['kind']=='bot' for p in players)==7
-                page.locator('#start-match').click();expect(page.locator('#phase')).to_have_text('In session')
-                report['assertions'].append('A host who had not chosen a country took Japan and filled the other seven seats with bots in one step, then started the match.')
-                # A shared lobby run by a seatless host: live clients (here two agents via the join API) take seats,
-                # two practice bots are added by count, and the host starts the match without a seat and watches.
-                page.goto(url+'/');expect(page.locator('#room-name')).to_be_visible()
-                page.locator('#room-name').fill('Shared council')
-                page.locator('#create-form button[type=submit]').click()
-                expect(page.locator('#lobby')).to_be_visible()
-                shared=next(g['id'] for g in http('/api/games')['games'] if g['name']=='Shared council')
-                expect(page.locator('#start-match')).to_be_disabled()
-                for c in ('britain','france'):
-                    envoy=http('/api/players','POST',{'name':f'Envoy {c}'})
-                    http(f'/api/games/{shared}/join','POST',{'country':c,'kind':'agent'},envoy['token'])
-                expect(page.locator('#start-match')).to_be_enabled();expect(page.locator('#start-match')).to_have_text('Start and watch')
-                page.locator('#start-match').click();expect(page.locator('#phase')).to_have_text('Watching')  # no seat: a spectator
-                shared_room=http(f'/api/games/{shared}')
-                assert shared_room['status']=='running' and len(shared_room['players'])==2,shared_room
-                report['assertions'].append('A seatless host started a shared lobby that two agent seats had joined, and watched the running match.')
+                    page.set_viewport_size({'width':390,'height':844})
+                    assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1')
+                    page.screenshot(path=str(artifacts/'09-mobile-orders.png'),full_page=True)
+                    page.set_viewport_size({'width':1600,'height':1050})
+                    # A host who filled every seat with bots before choosing a country takes one of them over.
+                    page.goto(url+'/');expect(page.locator('#room-name')).to_be_visible()
+                    page.locator('#room-name').fill('Practice council')
+                    page.locator('#create-form button[type=submit]').click()
+                    expect(page.locator('#lobby')).to_be_visible()
+                    page.locator('[data-country-seat="japan"]').click()
+                    expect(page.locator('#fill-bots')).to_contain_text('Take this seat')
+                    page.locator('#fill-bots').click()
+                    expect(page.locator('#room-label')).to_contain_text('8/8')
+                    expect(page.locator('#lobby-note')).to_contain_text('You command Empire of Japan')
+                    practice=next(g['id'] for g in http('/api/games')['games'] if g['name']=='Practice council')
+                    players=http(f'/api/games/{practice}')['players']
+                    assert next(p for p in players if p['id']=='japan')['kind']=='human' and sum(p['kind']=='bot' for p in players)==7
+                    page.locator('#start-match').click();expect(page.locator('#phase')).to_have_text('In session')
+                    report['assertions'].append('A host who had not chosen a country took Japan and filled the other seven seats with bots in one step, then started the match.')
+                    # A shared lobby run by a seatless host: live clients (here two agents via the join API) take seats,
+                    # and the host starts the match without a seat and watches.
+                    page.goto(url+'/');expect(page.locator('#room-name')).to_be_visible()
+                    page.locator('#room-name').fill('Shared council')
+                    page.locator('#create-form button[type=submit]').click()
+                    expect(page.locator('#lobby')).to_be_visible()
+                    shared=next(g['id'] for g in http('/api/games')['games'] if g['name']=='Shared council')
+                    expect(page.locator('#start-match')).to_be_disabled()
+                    for c in ('britain','france'):
+                        envoy=http('/api/players','POST',{'name':f'Envoy {c}'})
+                        http(f'/api/games/{shared}/join','POST',{'country':c,'kind':'agent'},envoy['token'])
+                    expect(page.locator('#start-match')).to_be_enabled();expect(page.locator('#start-match')).to_have_text('Start and watch')
+                    page.locator('#start-match').click();expect(page.locator('#phase')).to_have_text('Watching')  # no seat: a spectator
+                    shared_room=http(f'/api/games/{shared}')
+                    assert shared_room['status']=='running' and len(shared_room['players'])==2,shared_room
+                    report['assertions'].append('A seatless host started a shared lobby that two agent seats had joined, and watched the running match.')
 
+                # The other rooms fill the wait for the first match's result (a GIF records the first match to the end).
+                if args.gif:first_room_result();other_rooms()
+                else:other_rooms();first_room_result()
                 assert not report['pageErrors'],report['pageErrors']
                 if args.gif:
                     from io import BytesIO
@@ -573,28 +610,38 @@ def main():
                 report['status']='passed'
                 browser.close()
         finally:
-            if bot and bot.poll() is None:bot.terminate();bot.wait(timeout=10)
-            server.terminate();server.wait(timeout=10)
+            if bot:stop(bot)
+            stop(server)
             (artifacts/'browser-report.json').write_text(json.dumps(report,indent=2))
     print(json.dumps(report,indent=2))
-    # Keep the focused historical-review checks in the existing CI entry point.
-    review_command=[sys.executable,str(ROOT/'tests/review-browser.py'),'--artifacts',str(artifacts/'review')]
-    if args.bridge:review_command.append('--bridge')
-    if args.executable:review_command.extend(['--executable',args.executable])
-    if args.review_gif:review_command.extend(['--gif',args.review_gif])
-    subprocess.run(review_command,cwd=ROOT,check=True)
-    ui_command=[sys.executable,str(ROOT/'tests/ui-browser.py'),'--artifacts',str(artifacts/'ui')]
-    if args.bridge:ui_command.append('--bridge')
-    if args.executable:ui_command.extend(['--executable',args.executable])
-    if args.ui_gif:ui_command.extend(['--gif',args.ui_gif])
-    subprocess.run(ui_command,cwd=ROOT,check=True)
+
+def suite(script, *options, native_only=False, bridge=True, folder=None):
+    """A focused suite in its own process (its own server and browser); its report lands in artifacts/<folder>.
+    Returns the command, or None when it does not apply (voice and perf need native navigation)."""
+    def command(args, artifacts):
+        if native_only and args.bridge:return None
+        line=[sys.executable,str(ROOT/'tests'/script),'--artifacts',str(artifacts/(folder or script.split('-')[0]))]
+        if bridge and args.bridge:line.append('--bridge')
+        if args.executable:line.extend(['--executable',args.executable])
+        for flag,value in (option(args) for option in options):
+            if value:line.extend([flag] if value is True else [flag,value])
+        return line
+    return command
+
+SUITES = {
+    'live': None,  # live_match, in this process
+    # Recorded-match after-action review: standings, tabs, replay controls, phone layouts, disclosed messages.
+    'review': suite('review-browser.py', lambda a: ('--gif', a.review_gif)),
+    # Paused recorded positions: map, layout/overlap/contrast at seven viewports, Messages, sound, relations, review.
+    'ui': suite('ui-browser.py', lambda a: ('--gif', a.ui_gif), lambda a: ('--part', 'main')),
+    # The same fixture server, scripted players: coach, phone gestures, turned-back notice, truce, task walkthroughs.
+    'ui-tasks': suite('ui-browser.py', lambda a: ('--part', 'tasks'), native_only=True, folder='ui-tasks'),
     # Voice input: fake microphone through MediaRecorder, the /stt proxy and a fake sidecar.
-    voice_command=[sys.executable,str(ROOT/'tests/voice-browser.py'),'--artifacts',str(artifacts/'voice')]
-    if args.executable:voice_command.extend(['--executable',args.executable])
-    if not args.bridge:subprocess.run(voice_command,cwd=ROOT,check=True)
+    'voice': suite('voice-browser.py', native_only=True, bridge=False),
     # Mobile performance budgets (docs/PERFORMANCE.md): a throttled phone during a busy live match.
-    perf_command=[sys.executable,str(ROOT/'tests/perf-browser.py'),'--artifacts',str(artifacts/'perf')]
-    if args.executable:perf_command.extend(['--executable',args.executable])
-    if not args.bridge:subprocess.run(perf_command,cwd=ROOT,check=True)
+    # Without --full: a 30 s DOM sample, and the CPU-time budgets (load-dependent) are reported, not enforced.
+    'perf': suite('perf-browser.py', lambda a: ('--quick', not a.full), native_only=True, bridge=False),
+}
+BACKGROUND = {'ui', 'ui-tasks'}
 
 if __name__=='__main__':main()

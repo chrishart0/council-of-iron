@@ -35,7 +35,7 @@ the dock as a column on the right.
 - **Menu (☰):** room status; **How to play** (the eight rules of README "How to play", filled with this room's numbers — hold time, recruitment interval, build costs and times, peace window, alliance notice); map views (World, Europe, Expand); sound and voice; the map key; controls; War log (L); Copy room link; *Show the tips*; Change identity; Leave to rooms.
 - **Tips:** three first-match tips (drag to attack; tap a country; the Messages button), stored per browser, replayable from ☰; a tip advances by itself once acted on.
 - **Spectators** get the same map, Powers, read-only cards (no actions) and the World thread without a composer.
-- **After the match:** the review (result band, standings, replay, report tabs). See [AFTER-ACTION.md](AFTER-ACTION.md).
+- **After the match:** the review opens by itself (the room list labels it **Review**) and has no command capability. A result band (**Victory / Defeat / Draw**, or "After-action report" for spectators) with the headline and how it ended; final standings by alliance (Land, Industry, Forces, Result), copied from the saved outcome; *Watch the replay*. The replay has play/pause, 1×/4×/16×/64×, ±10 s, an exact-tick slider, event marks, the standings and the history thread at the scrubbed tick (rows seek), and province inspection; it pauses on a hidden page. Report tabs: **Military** (territory and forces over time, battle ledger), **Economy** (recruits, production, investments, troop ledger), **Diplomacy** (turning points and the disclosed-message wire). Data and privacy: [API.md](API.md#after-action-review-finished-matches-only).
 
 ## Orders: everything starts from the map
 
@@ -144,7 +144,7 @@ Regenerate: `npm install` (dev), `python -m pip install numpy scipy matplotlib` 
 
 - **Talk:** tap to start and again to stop, or press and hold (walkie-talkie). A level bar and elapsed time show while recording; it stops after 30 s or about 1.5 s of silence after speech. **Esc** cancels; **Ctrl+Shift+Space** toggles while the composer has focus.
 - **Review, then Send:** the transcript is inserted at the caret, trimmed to 500 characters, focused, never sent automatically.
-- **Paths:** the server's local speech-to-text sidecar (`npm run stt`, `STT_URL=…`) when configured; otherwise the browser's Web Speech API (dashed mic, "may use a cloud service"); otherwise no mic. Spectators get no mic. On plain HTTP the mic is dimmed and explains that it needs HTTPS.
+- **Paths:** the server's transcription when `GET /api/stt` says it is available — OpenAI's API when `OPENAI_API_KEY` is set (the mic says "transcribed by OpenAI"), else the optional local sidecar (`npm run stt`, `STT_URL=…`); otherwise the browser's Web Speech API (dashed mic, "may use a cloud service"); otherwise no mic. Spectators get no mic. On plain HTTP the mic is dimmed and explains that it needs HTTPS.
 - The transcript is untrusted player text and only reaches `input.value`.
 
 ## Accessibility

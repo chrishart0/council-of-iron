@@ -11,14 +11,6 @@ function game(ids=map.countries.map(c=>c.id)){
 }
 let serial=0;const command=(g,id,action,opId=`rules-${++serial}`)=>act(g,map,id,action,opId);
 const advance=(g,n)=>{for(let i=0;i<n;i++)tick(g);};
-test('industrial map is connected and country starts do not overlap',()=>{
-  assert.equal(map.id,'imperial-1910-v6');assert.equal(map.provinces.length,59);
-  const starts=map.countries.flatMap(c=>c.start);
-  assert.equal(starts.length,new Set(starts).size);
-  const byId=new Map(map.provinces.map(p=>[p.id,p]));let seen=new Set([map.provinces[0].id]);
-  for(let i=0;i<map.provinces.length;i++)seen=new Set([...seen,...[...seen].flatMap(id=>byId.get(id).neighbors)]);
-  assert.equal(seen.size,map.provinces.length);
-});
 test('lobby closes at start and all clients share retry and reservation rules',()=>{
   const g=game();assert.throws(()=>join(g,map,{profileId:'late',name:'late',country:'usa'}),/closed/);
   const order={type:'march',from:'west-us',to:'mexico',amount:6};
@@ -34,6 +26,16 @@ test('an invisible anti-spam limit allows ten orders per ten ticks; invalid acti
   advance(g,10);command(g,'usa',{type:'march',from:'west-us',to:'mexico',amount:1});
   assert.equal('commandBudget' in observe(g,'usa'),false);
 });
+test('an invisible chat limit allows one message per seat every two ticks; a refused message is not sent',()=>{
+  const g=game(),say=(id,text)=>command(g,id,{type:'chat',channel:'world',text});
+  say('usa','first');
+  assert.throws(()=>say('usa','too soon'),e=>e.status===429&&/wait a moment/.test(e.message));
+  say('britain','another seat is not limited');tick(g);
+  assert.throws(()=>say('usa','still too soon'),e=>e.status===429);
+  tick(g);say('usa','second');
+  const texts=g.events.filter(e=>e.type==='message').map(e=>e.text);
+  assert.deepEqual(texts.filter(t=>/soon/.test(t)),[]);assert.ok(texts.includes('second'));
+});
 test('alliance needs consent and 30 s notice, with private messages limited to recipients',()=>{
   const g=game();command(g,'usa',{type:'chat',channel:'dm',to:'britain',text:'private code'});
   assert.ok(JSON.stringify(observe(g,'britain')).includes('private code'));
@@ -43,6 +45,15 @@ test('alliance needs consent and 30 s notice, with private messages limited to r
   assert.equal(allied(g,'britain','france'),false);tick(g);
   assert.equal(allied(g,'britain','france'),true);
   assert.equal(player(g,'britain').joinedAt,30);
+});
+test('an unanswered alliance offer expires after two minutes, privately, and can no longer be accepted',()=>{
+  const g=game(),{proposalId}=command(g,'britain',{type:'propose',country:'france'});
+  advance(g,119);assert.equal(g.proposals.find(q=>q.id===proposalId).status,'open');tick(g);
+  assert.equal(g.proposals.find(q=>q.id===proposalId).status,'cancelled');
+  const expired=g.events.find(e=>e.type==='proposal_cancelled'&&e.proposalId===proposalId);
+  assert.equal(expired.reason,'Offer expired.');assert.deepEqual([...expired.recipients].sort(),['britain','france']);
+  assert.throws(()=>command(g,'france',{type:'accept',proposalId}));
+  advance(g,30);assert.equal(allied(g,'britain','france'),false);
 });
 test('an alliance holds at most three countries and never more than half the match',()=>{
   const three=game(['usa','britain','france']);

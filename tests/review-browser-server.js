@@ -1,4 +1,5 @@
 // Deterministic real-match fixtures for browser review tests. No public test endpoints.
+import { fstatSync } from 'node:fs';
 import { makeServer } from '../src/server.js';
 import { replay, map } from '../scripts/replay-handplay.js';
 import { createGame, join, start, act, tick } from '../src/engine.js';
@@ -34,3 +35,5 @@ const incompatible=structuredClone(game);incompatible.id='old-fixture';incompati
 app.games.set(incompatible.id,incompatible);app.store.save(incompatible);
 app.server.listen(0,'127.0.0.1',()=>console.log(JSON.stringify({url:`http://127.0.0.1:${app.server.address().port}`})));
 for (const signal of ['SIGTERM','SIGINT']) process.once(signal,()=>app.close().then(()=>process.exit(0)));
+// Exit with the test runner: its stdin pipe closes even when the runner is killed.
+if (fstatSync(0).isFIFO()) process.stdin.on('end',()=>app.close().then(()=>process.exit(0))).resume();
