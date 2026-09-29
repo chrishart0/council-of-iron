@@ -56,7 +56,7 @@
 .after-action .pr{font-weight:600;color:var(--brass-hi)}.after-action .pr.neg{color:var(--war)}
 .aar-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:8px 0 0}
 .aar-facts div{padding:6px 10px;background:var(--well);box-shadow:inset 0 1px 3px #000a}
-.aar-facts dt{font-size:13px;color:var(--muted)}.aar-facts dd{margin:0;font:700 20px var(--title);color:var(--ivory)}.aar-facts small{font:500 14px var(--ui);color:var(--muted)}
+.aar-facts dt{font-size:13px;color:var(--muted)}.aar-facts dd{margin:0;font:700 20px var(--title);color:var(--ivory)}
 .chart{margin:4px 0 10px;padding:10px;background:#0f1416;box-shadow:inset 0 1px 3px #000}
 .land-chart svg{display:block;width:100%;height:150px}
 .land-chart polyline{fill:none;stroke:var(--c);stroke-width:2.4;vector-effect:non-scaling-stroke;stroke-linejoin:round}
