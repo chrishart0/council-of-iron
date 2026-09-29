@@ -142,7 +142,8 @@ def phone_checks(browser, url, identity, server, report, out, check_layout, chec
         comp = page.locator('#comms .cx-composer').bounding_box(); assert comp['y'] >= 0 and comp['y'] + comp['height'] <= visible + 1, (tag, comp, visible)
         last = page.locator('#comms .cx-msg').last.bounding_box(); rows = page.locator('#comms .cx-rows').bounding_box()
         assert rows['y'] - 2 <= last['y'] and last['y'] + last['height'] <= rows['y'] + rows['height'] + 2, (tag, 'latest message hidden', last, rows)
-        assert page.evaluate('document.activeElement?.id') == 'cx-text'; shot('08-keyboard-open')
+        focused = page.evaluate("() => ({id:document.activeElement?.id,tag:document.activeElement?.tagName,hidden:document.querySelector('.cx-composer').hidden,view:document.querySelector('#comms').dataset.view})")
+        assert focused['id'] == 'cx-text', (tag, focused); shot('08-keyboard-open')
         page.evaluate("()=>{const vv=visualViewport;vv.height=innerHeight;vv.dispatchEvent(new Event('resize'));}"); page.wait_for_timeout(300)
         expect(page.locator('body')).not_to_have_class(re.compile('keyboard-open'))
         # Unread conversations come first in the list, in bold.

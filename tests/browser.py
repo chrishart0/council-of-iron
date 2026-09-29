@@ -498,20 +498,22 @@ def main():
                             if n not in seen and owners[n]=='usa':seen.add(n);queue.append(n)
                     return False
                 mine=sorted(i for i,o in owners.items() if o=='usa')
-                start,end=next((a,b) for a in mine for b in mine if a!=b and b not in nb[a] and via(a,b) and usa_state()[a]['troops']>3)
-                order(page,start,end)
-                expect(page.locator('#primary')).to_contain_text(re.compile('Reinforce|Attack'))  # the destination may change hands in this live bot match
-                expect(page.locator('#order-details')).to_contain_text('Via',timeout=5000)
-                expect(page.locator('#primary')).to_be_enabled(timeout=10000)
-                page.screenshot(path=str(artifacts/'10-long-march.png'))
-                page.locator('#primary').click()
-                try:  # a destination that changed hands to an enemy asks to confirm the war first
-                    expect(page.locator('#confirm-dialog')).to_be_visible(timeout=1500);page.locator('#confirm-dialog [value="confirm"]').click()
-                except AssertionError:pass
-                deadline=time.monotonic()+8
-                while time.monotonic()<deadline and not any(a.get('path') and a['path'][-1]==end for a in http(f'/api/games/{room2}')['armies']):page.wait_for_timeout(250)
-                assert any(a.get('path') and a['path'][-1]==end for a in http(f'/api/games/{room2}')['armies']),lane(page).inner_text()
-                report['assertions'].append(f'Browser sent a long march from {start} to {end} through its own land: the card showed the route and the server moved one column along it.')
+                route=next(((a,b) for a in mine for b in mine if a!=b and b not in nb[a] and via(a,b) and usa_state()[a]['troops']>3),None)
+                if route:  # A live bot match can take away every suitable USA route; ui_tasks covers the controlled case.
+                    start,end=route
+                    order(page,start,end)
+                    expect(page.locator('#primary')).to_contain_text(re.compile('Reinforce|Attack'))  # the destination may change hands in this live bot match
+                    expect(page.locator('#order-details')).to_contain_text('Via',timeout=5000)
+                    expect(page.locator('#primary')).to_be_enabled(timeout=10000)
+                    page.screenshot(path=str(artifacts/'10-long-march.png'))
+                    page.locator('#primary').click()
+                    try:  # a destination that changed hands to an enemy asks to confirm the war first
+                        expect(page.locator('#confirm-dialog')).to_be_visible(timeout=1500);page.locator('#confirm-dialog [value="confirm"]').click()
+                    except AssertionError:pass
+                    deadline=time.monotonic()+8
+                    while time.monotonic()<deadline and not any(a.get('path') and a['path'][-1]==end for a in http(f'/api/games/{room2}')['armies']):page.wait_for_timeout(250)
+                    assert any(a.get('path') and a['path'][-1]==end for a in http(f'/api/games/{room2}')['armies']),lane(page).inner_text()
+                    report['assertions'].append(f'Browser sent a long march from {start} to {end} through its own land: the card showed the route and the server moved one column along it.')
                 page.set_viewport_size({'width':390,'height':844})
                 assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1')
                 page.screenshot(path=str(artifacts/'09-mobile-orders.png'),full_page=True)

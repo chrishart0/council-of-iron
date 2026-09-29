@@ -2,7 +2,15 @@
 
 Actual test evidence only, newest first. Automated self-play and bot matches check that the rules hold and that matches resolve; they do not show balance or that people enjoy the game.
 
-The Pi model results immediately below used the former v5 map. Master now uses the v6 map, with different starting industry, adjacency and impassable borders. The v5 wins remain historical evidence and must not be used as a current v6 model win rate. New v6 Pi trials are pending a stable test-host memory window; the previous attempts were stopped by `earlyoom` and have no result.
+The earlier Pi model results below used the former v5 map. Master now uses the v6 map, with different starting industry, adjacency and impassable borders. The v5 wins remain historical evidence and must not be used as a current v6 model win rate. Some interrupted attempts were stopped by `earlyoom` and have no result.
+
+# First v6 Pi result — 29 September 2026
+
+DeepSeek V4 Flash Vision Exp played Britain at normal speed against seven practice bots (`v6-britain-01`, v6 map and standard preset). It won by domination at tick 701 in a Britain–France–USA coalition, with 33 own industry (50 accepted and 3 rejected actions, 6 failed tool calls of 150, 1,614,813 reported tokens, 22 turns, no timed-out turn). The result is in `agents/pi/benchmarks.json`; it is one current-map sample, not a measured win rate. Qing and France starts are queued separately.
+
+# v6 trial environment — 29 September 2026
+
+The local Qwen llama.cpp service was idle but held about 24 GB host RAM and 28.5 GB VRAM with a 262,144-token slot. Its slot was set to 204,800 tokens (above the requested 200k minimum) and the service restarted while no client connection was open. Afterward `/props` reported 204800, the port-8081 health check and a short completion returned HTTP 200, and observed use was about 10 GB host RAM and 26 GB VRAM. This restored headroom for the pending native browser and v6 Pi trials. The observation does not isolate how much came from the smaller slot versus restarting the long-lived process.
 
 # Additional Pi trials — 29 September 2026
 

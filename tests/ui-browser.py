@@ -124,17 +124,26 @@ def check_layout(page,label,match=True):
     return result
 def check_commit(page,label):
     page.evaluate('()=>Promise.race([Promise.all(document.getAnimations().filter(a=>a.effect?.getTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>0))),new Promise(r=>setTimeout(r,1500))])')
+    assert page.locator('#primary').count()==1,(label,'missing primary',page.locator('#card').get_attribute('data-kind'),page.locator('#card').inner_text())
     result=page.evaluate(COMMIT)
     assert result['visible'] and result['inView'] and result['hit'] and result['scroller'] is None and result['primaries']==1,(label,result)
 def click_at(page,locator):
     box=locator.bounding_box();page.mouse.click(box['x']+box['width']/2,box['y']+box['height']/2)
 def select(page,source,target=None,size=None):
-    """v0.8 order card by map taps (tap-tap): Home, your province, then its neighbour."""
-    page.keyboard.press('Escape');page.locator('#home-view').click();page.wait_for_timeout(150)
+    """Open an order card from a map counter, then choose a target on the map or source card."""
+    page.keyboard.press('Escape')
+    if page.locator('#card').is_visible():page.keyboard.press('Escape')
+    page.locator('#home-view').click();page.wait_for_timeout(150)
     # A province in battle shows its clash marker instead of its counter; tapping that selects it the same way.
     spot=lambda id:page.locator(f'#marker-{id} .counter-body') if page.locator(f'#marker-{id} .counter-body').is_visible() else page.locator(f'#map .battle-counter[data-province="{id}"]')
     click_at(page,spot(source))
-    if target:click_at(page,spot(target))
+    if target:
+        # On a phone an expanded source card can cover the target counter.
+        if page.locator('#card').get_attribute('data-size')=='full':page.locator('#card-size').click()
+        box=spot(target).bounding_box();x=box['x']+box['width']/2;y=box['y']+box['height']/2
+        covered=page.evaluate('([x,y])=>!!document.elementFromPoint(x,y)?.closest("#card")',[x,y])
+        if covered:page.locator(f'#card [data-pick-target="{target}"]').click()
+        else:click_at(page,spot(target))
     expect(page.locator('#card')).to_have_attribute('data-kind','province')
     if size and page.locator('#card').get_attribute('data-size')!=size:page.locator('#card-size').click()
     if size:expect(page.locator('#card')).to_have_attribute('data-size',size)
