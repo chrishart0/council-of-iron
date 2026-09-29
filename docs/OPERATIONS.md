@@ -26,8 +26,8 @@ scripts/deploy.sh             # deploy origin/ui-v0.9-gameui
 `scripts/deploy.sh` (run from any checkout; `COUNCIL_DEPLOY_DIR`, `COUNCIL_UNIT`, `COUNCIL_URL`, `COUNCIL_HOST` override the defaults):
 
 1. fetches, and refuses unless the deploy worktree is clean and the target (`--ref REF`, default `origin/<deploy branch>`) is a fast-forward of the deployed commit; it lists the commits and notes a map `id` or `src/engine.js` change;
-2. reads the live `GET /api/games` (`curl -k`, `Host` from the unit's first `PUBLIC_ORIGIN`) and **refuses** while any room is `running`, or in its `lobby` with at least one human seat, unless the room is `abandoned`; it prints those rooms. `--force` overrides this only when the user explicitly asked for this deploy;
-3. `git pull --ff-only`, `systemctl --user restart`, then verifies `200` on `/`, `/api/stt` (prints availability) and `/api/games`, and that every unfinished room listed before is listed again. On failure it prints the unit's journal and the rollback command.
+2. reads the live `GET /api/games` (`curl -k`, `Host` from the unit's first `PUBLIC_ORIGIN`) and **refuses** while any room is `running`, or in its `lobby` with at least one human seat, unless the room is `abandoned`; it prints those rooms. Only a stopped unit (`inactive`/`failed`) skips this check, and it runs again just before the fast-forward. `--force` overrides this only when the user explicitly asked for this deploy;
+3. fast-forwards to exactly the checked commit (`git merge --ff-only`), `systemctl --user restart`, then verifies `200` on `/`, `/api/stt` (prints availability) and `/api/games`, and that every unfinished room listed before is listed again. On failure it prints the unit's journal and the rollback command.
 
 `--allow-drop-running` sets `COUNCIL_ALLOW_DROP_RUNNING=1` in the user manager for that one restart (and unsets it on exit); use it only when the user decided to drop the listed matches.
 
@@ -37,18 +37,7 @@ scripts/deploy.sh             # deploy origin/ui-v0.9-gameui
 
 At startup `startupPlan()` in `src/server.js` sorts every stored room: load it (current map and rules), skip it (an earlier version that is finished, abandoned, a lobby without humans, or already dropped), or **block**. A blocked room is one that may be in play but that this version cannot load. The server then logs `REFUSING TO START`, names each room (id, name, status, tick, map, seats) and exits with status 78, so a careless restart fails loudly instead of deleting a live game. Add `RestartPreventExitStatus=78` to the unit's `[Service]` section so systemd leaves it failed rather than retrying (`deploy.sh` warns when it is missing). Then either redeploy the commit the room was created on and let it finish, or start once with `COUNCIL_ALLOW_DROP_RUNNING=1`: the rooms are logged as dropped, marked `dropped_at`, and never block again. Their snapshots stay in the database.
 
-### Restoring a dropped room onto a new map
-
-`scripts/restore-room.js` is a one-off for a room dropped by a map change with the same province and country IDs and identical rules. It copies the database (`VACUUM INTO` from a read-only handle) to a **new** file and migrates only that copy: the board tables are rebuilt from the current map, armies on the road finish their current leg as committed, a column whose later leg crosses a vanished border is rerouted by the engine's friendly-path rule (or stops at the end of its leg), and the private opening checkpoint is removed, so the finished match publishes scores without a replay. It prints every changed army and refuses on anything else. `--verify` serves a scratch copy on a random local port and checks listing, observation, a plan and a march, and running to the end.
-
-```sh
-systemctl --user stop council-of-iron-ui-v08          # only with the user's go-ahead; nobody else playing
-node scripts/restore-room.js --db ~/git/council-gameui/data/council.db --out /tmp/restored.db \
-  --room ROOM --from-map tests/fixtures/handplay-map.json --verify
-# keep a backup of data/council.db* , move /tmp/restored.db to data/council.db (remove the old -wal/-shm), start the unit
-```
-
-The alternative that changes nothing in the room is to redeploy the commit it was created on (`--ref`, which must still be a fast-forward, or an explicit rollback by the user) until it finishes.
+To keep a blocked room, redeploy the commit it was created on (`--ref`, which must still be a fast-forward, or an explicit rollback by the user) until it finishes.
 
 ## Persistence and credentials
 

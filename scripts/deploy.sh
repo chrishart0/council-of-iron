@@ -62,9 +62,11 @@ env_of() { printf '%s\n' "$UNIT_ENV" | tr ' ' '\n' | sed -n "s/^$1=//p" | head -
 PORT="$(env_of PORT)"; ORIGIN="$(env_of PUBLIC_ORIGIN | cut -d, -f1)"
 [ -n "$PORT" ] || PORT="${ORIGIN##*:}"
 SCHEME="${ORIGIN%%://*}"; [ -n "$ORIGIN" ] || SCHEME=http
+if [ -z "$PORT" ] && { [ -z "${COUNCIL_URL:-}" ] || [ -z "${COUNCIL_HOST:-}" ]; }; then
+  die "cannot find PORT/PUBLIC_ORIGIN in the environment of $UNIT; set COUNCIL_URL and COUNCIL_HOST"
+fi
 URL="${COUNCIL_URL:-$SCHEME://127.0.0.1:$PORT}"
 HOST_HEADER="${COUNCIL_HOST:-${ORIGIN#*://}}"; HOST_HEADER="${HOST_HEADER:-127.0.0.1:$PORT}"
-[ -n "$PORT" ] || die "cannot find PORT/PUBLIC_ORIGIN in the environment of $UNIT; set COUNCIL_URL and COUNCIL_HOST"
 api() { curl -ksS --max-time 10 -H "Host: $HOST_HEADER" "$@"; }
 if ! systemctl --user show -p RestartPreventExitStatus --value "$UNIT" 2>/dev/null | grep -qw 78; then
   say "WARNING: $UNIT lacks RestartPreventExitStatus=78: if the new version refuses to start (live rooms it cannot load), systemd will keep retrying it."
@@ -76,8 +78,14 @@ LIVE_JS='let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const gs=JSON.p
     if(g.abandoned===true||!(g.status==="running"||(g.status==="lobby"&&humans>0)))continue;
     console.log(`${g.id}\t${g.status}\ttick ${g.tick}\t${humans} human(s)\t${g.players.map(p=>p.id+":"+p.kind).join(" ")}\t${JSON.stringify(g.name)}`)}})'
 ACTIVE_JS='let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{for(const g of JSON.parse(s).games)if(g.status!=="finished")console.log(g.id)})'
+# Checked before anything changes and again just before the restart, so nobody who joins meanwhile is missed.
+# Only a stopped unit (inactive/failed) skips it: activating, reloading or restarting still counts as serving.
 BEFORE=""
-if [ "$(systemctl --user is-active "$UNIT" 2>/dev/null || true)" = active ]; then
+check_live() {
+  local state; state="$(systemctl --user is-active "$UNIT" 2>/dev/null || true)"
+  if [ "$state" = inactive ] || [ "$state" = failed ]; then
+    say "WARNING: $UNIT is $state; skipping the live-room check (the server refuses to start over live rooms it cannot load)"; return
+  fi
   GAMES="$(api "$URL/api/games")" || { [ "$FORCE" = 1 ] || die "cannot read $URL/api/games (Host: $HOST_HEADER); use --force only if you know nobody is playing"; GAMES='{"games":[]}'; }
   LIVE="$(printf '%s' "$GAMES" | node -e "$LIVE_JS")" || die "unexpected /api/games response"
   BEFORE="$(printf '%s' "$GAMES" | node -e "$ACTIVE_JS")"
@@ -86,15 +94,15 @@ if [ "$(systemctl --user is-active "$UNIT" 2>/dev/null || true)" = active ]; the
     [ "$FORCE" = 1 ] || die "rooms are in play; wait for them to finish (or be idle 30 min), or pass --force only if the user explicitly said so"
     say "--force: deploying anyway"
   else say "no live rooms with players"; fi
-else
-  say "WARNING: $UNIT is not active; skipping the live-room check (the server refuses to start over live rooms it cannot load)"
-fi
+}
+check_live
 
 if [ "$CHECK" = 1 ]; then say "--check: would fast-forward $(git -C "$DEPLOY_DIR" rev-parse --short "$DEPLOYED") -> $(git -C "$DEPLOY_DIR" rev-parse --short "$TARGET") and restart $UNIT"; exit 0; fi
 
 # --- Deploy --------------------------------------------------------------------------------------------
-if [ "$REF" = "origin/$BRANCH" ]; then git -C "$DEPLOY_DIR" pull --ff-only --quiet origin "$BRANCH"
-else git -C "$DEPLOY_DIR" merge --ff-only --quiet "$TARGET"; fi
+check_live
+# Exactly the commit checked above (a pull would fetch again and could move past it).
+git -C "$DEPLOY_DIR" merge --ff-only --quiet "$TARGET"
 [ "$(git -C "$DEPLOY_DIR" rev-parse HEAD)" = "$TARGET" ] || die "the deploy worktree did not end at $TARGET"
 say "deploy worktree now at $(git -C "$DEPLOY_DIR" log -1 --format='%h %s')"
 if [ "$ALLOW_DROP" = 1 ]; then
