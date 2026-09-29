@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CURRENT_MAP_ID, summarizeRun } from '../agents/pi/bench.js';
+import { CURRENT_MAP_ID, summarizeRun, summarizeProgress } from '../agents/pi/bench.js';
+import { summarizePlaytestSeat } from '../agents/pi/bench-playtest.js';
 
 const score = { country: 'britain', result: 'win', industry: 14 };
 
@@ -27,6 +28,8 @@ test('benchmark export keeps aggregate Pi metrics and excludes private run conte
   assert.equal(run.firstActionSeconds, 12);
   assert.equal(run.country, 'britain');
   assert.equal(run.mapId, CURRENT_MAP_ID);
+  assert.equal(run.harness, 'Pi');
+  assert.equal(run.arena, 'seven practice bots');
   assert.throws(() => summarizeRun({ ...raw, mapId: 'imperial-1910-v5' }, 'luna'), /current map/);
   assert.doesNotMatch(JSON.stringify(run), /private|secret|endpoint/);
   assert.equal(summarizeRun(raw, 'external').modelGroup, 'external');
@@ -42,6 +45,47 @@ test('benchmark export keeps aggregate Pi metrics and excludes private run conte
     'decision view in prompt');
   assert.equal(summarizeRun({ ...raw, embeddedBoard: false, turnView: 'tools' }, 'luna').strategy,
     'tool-led turns');
+});
+
+test('position progress publishes only numeric facts and the authoritative final industry', () => {
+  const raw = [{ tick: 0, ownIndustry: 5, sideIndustry: 8, ownProvinces: 3,
+    sideMembers: ['private ally'], decisionViewBytes: 4500, secret: 'private chat' },
+    { tick: 20, ownIndustry: 7, sideIndustry: 10, ownProvinces: 4 }];
+  const progress = summarizeProgress(raw, 30, 2);
+  assert.deepEqual(progress, [
+    { tick: 0, ownIndustry: 5, sideIndustry: 8, ownProvinces: 3 },
+    { tick: 20, ownIndustry: 7, sideIndustry: 10, ownProvinces: 4 },
+    { tick: 30, ownIndustry: 2, sideIndustry: null, ownProvinces: null },
+  ]);
+  assert.doesNotMatch(JSON.stringify(progress), /private|secret|decisionViewBytes/);
+});
+
+test('finished Grok and Hermes seats become sanitized, comparable harness rows', () => {
+  const run = { match: 'match-1', mapId: CURRENT_MAP_ID, startedAt: '2026-09-29T00:00:00Z',
+    sourceRevision: 'abcdef123456', interval: 30, turnTimeoutMs: 120000, url: 'https://private' };
+  const report = { match: 'match-1', status: 'finished', tick: 600, speed: 1,
+    finishedAt: '2026-09-29T00:10:00Z', generatedAt: '2026-09-29T02:10:00Z', outcome: { reason: 'domination', scores: [
+      { country: 'japan', result: 'win', industry: 25 }, { country: 'russia', result: 'loss', industry: 0 }] } };
+  const grok = { slot: 'a', country: 'japan', client: 'grok', model: 'grok-4.7',
+    ordersAccepted: 5, ordersRejected: 1, timedOut: 0, clientErrors: 1, privateChat: 'secret' };
+  const turns = [{ durationMs: 20000, tokens: { input: 100, cached: 40, output: 20 },
+    position: { tick: 0, ownIndustry: 8, sideIndustry: 8, ownProvinces: 4, privateChat: 'secret' } }];
+  const calls = [{ ok: true, acceptedTick: 5, at: '2026-09-29T00:00:05Z', args: { text: 'secret' } }, { ok: false }];
+  const row = summarizePlaytestSeat(run, report, grok, turns, calls);
+  assert.equal(row.harness, 'Grok CLI');
+  assert.equal(row.modelGroup, 'grok');
+  assert.equal(row.result, 'win');
+  assert.equal(row.totalTokens, 120);
+  assert.equal(row.failedToolCalls, 1);
+  assert.equal(row.durationSeconds, 600);
+  assert.equal(row.progress.at(-1).ownIndustry, 25);
+  assert.doesNotMatch(JSON.stringify(row), /private|secret|https/);
+  const hermes = summarizePlaytestSeat(run, report, { ...grok, slot: 'b', country: 'russia', client: 'hermes', model: 'gpt-6-luna' }, turns, calls);
+  assert.equal(hermes.harness, 'Hermes');
+  assert.equal(hermes.modelGroup, 'luna');
+  assert.equal(hermes.result, 'loss');
+  assert.throws(() => summarizePlaytestSeat(run, { ...report, status: 'running' }, grok, turns, calls), /finished room/);
+  assert.throws(() => summarizePlaytestSeat({ ...run, mapId: 'old-map' }, report, grok, turns, calls), /current map/);
 });
 
 test('Codex benchmark export does not invent missing token or turn counts', () => {

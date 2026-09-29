@@ -50,6 +50,18 @@ node agents/playtest/run.js report --match ROOM
 
 `status` prints one row per seat (running turn, turns, accepted/rejected orders, messages, pending inbox, last turn, last error); `--watch` refreshes every 5 s. `report` (also printed and saved as `report.json` at the end) gives per seat: turns by trigger, time-outs, failures, median turn time, orders accepted and rejected by reason, client-side tool errors, first order tick, messages sent, messages from allies, replies and the median/maximum reply latency in game seconds (from an ally's first unanswered message to the seat's next message), the longest gap between accepted orders, memory updates and reported tokens.
 
+When a room finishes, `node agents/pi/bench-playtest.js data/playtest/ROOM` adds its Grok CLI, Hermes and Codex CLI seats to the [HTML benchmark report](../pi/bench.html). It uses the recorded map ID, final scores, tool log and a numeric industry sample saved before each turn. The published ledger excludes session credentials, messages, prompts, memory notes, endpoint URLs and raw tool arguments. Shared-room rows are labeled separately from isolated seven-bot games.
+
+For an isolated normal-speed CLI benchmark, `bench-local.js` creates a private local room, joins the requested seats through this same harness, fills remaining countries with practice bots, waits for the final result even if the model seats are eliminated, and imports the finished rows:
+
+```bash
+node agents/playtest/bench-local.js --seed v6-cli-example-01 \
+  --seat g:japan:grok:grok-4.7:low \
+  --seat h:russia:hermes:gpt-6-luna:low --hermes-profile councilluna
+```
+
+The room and raw logs stay under ignored `data/playtest/`. Change the seed for each new run. Grok and Hermes use their installed CLI logins; an unavailable model or login leaves the run incomplete and out of the ledger.
+
 ### Foreground or systemd
 
 Foreground: run the command in a terminal; Ctrl-C stops every seat and writes the report.

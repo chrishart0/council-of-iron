@@ -5,7 +5,7 @@ import { resolve, dirname, relative, isAbsolute, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Type } from '@earendil-works/pi-ai';
 import { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager } from '@earendil-works/pi-coding-agent';
@@ -103,7 +103,8 @@ let server, session, mcp;
 const runId = `${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}`;
 mkdirSync(outputDir, { recursive: true, mode: 0o700 });
 const file = resolve(outputDir, `${runId}.json`);
-const record = { runId, country, preset, playerModel, modelId, provider: config.provider,
+const sourceRevision = (() => { try { return execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(); } catch { return null; } })();
+const record = { runId, country, preset, playerModel, modelId, provider: config.provider, sourceRevision,
   embeddedBoard: taskMode === 'match' && turnView !== 'tools', turnView,
   interfaceVersion: taskMode === 'match' ? turnView === 'board' ? 'board-turn-v8' :
     turnView === 'decision' ? 'decision-turn-v4' : `${turnView}-turn-v2` : 'fixed-v2',

@@ -22,7 +22,7 @@ const PROXY = resolve(here, 'mcp-proxy.js'), FAKE = resolve(here, 'fake-agent.js
 // ------------------------------------------------------------------ arguments
 const argv = process.argv.slice(2);
 const command = ['run', 'status', 'report'].includes(argv[0]) ? argv.shift() : 'run';
-const flags = new Set(['--join', '--wait-start', '--dry-run', '--watch', '--systemd']);
+const flags = new Set(['--join', '--wait-start', '--wait-finish', '--dry-run', '--watch', '--systemd']);
 const opts = { seat: [] };
 for (let i = 0; i < argv.length; i++) {
   const key = argv[i];
@@ -79,7 +79,9 @@ function buildReport() {
   const status = readJson(resolve(runDir, 'status.json'));
   if (!status) throw new Error(`No playtest recorded for ${match} under ${dataRoot}.`);
   const startTick = status.startTick ?? 0;
-  return { match, status: status.status, tick: status.tick, stopReason: status.stopReason ?? null, outcome: status.outcome ?? null,
+  return { match, status: status.status, tick: status.tick, speed: status.speed ?? null,
+    stopReason: status.stopReason ?? null, outcome: status.outcome ?? null,
+    finishedAt: status.status === 'finished' ? status.updatedAt : null,
     generatedAt: new Date().toISOString(),
     seats: status.seats.map(s => seatReport(s, { turns: readJsonl(resolve(seatDir(s.slot), 'turns.jsonl')),
       calls: readJsonl(resolve(seatDir(s.slot), 'mcp.jsonl')), messages: readJsonl(resolve(seatDir(s.slot), 'messages.jsonl')),
@@ -173,14 +175,20 @@ async function runCommand() {
   // Reads are retried on transport errors (e.g. a stale keep-alive socket); game errors are not.
   const retry = async fn => { for (let i = 0; ; i++) { try { return await fn(); } catch (error) { if (error.status || i >= 4) throw error; await sleep(500 * (i + 1)); } } };
   const map = await retry(() => seatState[0].client_.map());
+  const sourceRevision = spawnSync('git', ['rev-parse', '--short=12', 'HEAD'], { cwd: root, encoding: 'utf8' });
+  const priorRun = readJson(resolve(runDir, 'run.json'), {});
+  const currentRevision = sourceRevision.status === 0 ? sourceRevision.stdout.trim() : null;
   writePrivate(resolve(runDir, 'run.json'), JSON.stringify({ match, url: opts.url, seats, hermesProfile: opts.hermesProfile || null,
-    interval, turnTimeoutMs, minGapMs, startedAt: new Date().toISOString() }, null, 2));
+    mapId: map.id, sourceRevision: priorRun.sourceRevision === undefined ? currentRevision
+      : priorRun.sourceRevision === currentRevision ? currentRevision : null,
+    interval, turnTimeoutMs, minGapMs, startedAt: priorRun.startedAt || new Date().toISOString() }, null, 2));
 
   let interrupted = false, startTick = readJson(resolve(runDir, 'status.json'))?.startTick ?? null, gameStatus = 'lobby', tick = 0, outcome = null, reason = null;
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => { if (interrupted) process.exit(130); interrupted = true; log(`${signal}: stopping all seats`); });
   const deadline = maxMinutes ? Date.now() + maxMinutes * 60_000 : Infinity;
   const saveSeat = s => writePrivate(resolve(s.dir, 'state.json'), JSON.stringify({ cursor: s.cursor, memory: s.memory, failures: s.failures, lastStartTick: s.lastStartTick, presented: s.presented }));
   const writeStatus = () => writePrivate(resolve(runDir, 'status.json'), JSON.stringify({ match, url: opts.url, status: gameStatus, tick, startTick,
+    speed: seatState[0]?.latest?.speed ?? null,
     outcome, stopReason: reason, updatedAt: new Date().toISOString(),
     seats: seatState.map(s => ({ slot: s.slot, country: s.country, client: s.client, model: s.model, effort: s.effort, name: s.name,
       running: Boolean(s.child), turns: s.turns, inbox: s.inbox.length + (s.latest?.inbox?.unread ?? 0) + (s.latest?.inbox?.needsDecision?.length ?? 0), eliminated: Boolean(s.eliminated), memoryChars: s.memory.length })) }, null, 2));
@@ -275,6 +283,8 @@ async function runCommand() {
       s.failures = failed ? s.failures + 1 : 0;
       s.backoffUntil = Date.now() + backoffMs(s.failures);
       const entry = { turn: number, trigger, startedAt: new Date(started).toISOString(), durationMs: Date.now() - started, tickStart: o.tick, tickEnd,
+        position: { tick: o.tick, ownIndustry: view.position.ownIndustry, sideIndustry: view.position.sideIndustry,
+          ownProvinces: view.own.length },
         inboxSize, exitCode: code, timedOut, failed, ...summary, clientErrors: parsed.clientErrors.slice(0, 10), memoryUpdated: Boolean(memory),
         memoryChars: s.memory.length, tokens: parsed.tokens, ...(failed ? { stderrTail: stderr.slice(-400) } : {}) };
       appendFileSync(resolve(s.dir, 'turns.jsonl'), `${JSON.stringify(entry)}\n`, { mode: 0o600 });
@@ -297,7 +307,8 @@ async function runCommand() {
     }
     if (gameStatus === 'running' && startTick === null) { startTick = tick; log(`match running at tick ${tick}`); }
     if (gameStatus === 'lobby' && !opts.waitStart && !pollFailures) { reason = 'not-started'; log('The room is still in the lobby; use --wait-start to wait.'); break; }
-    reason = stopReason({ status: gameStatus, httpStatus, interrupted, unreachable: pollFailures >= 60, deadlinePassed: Date.now() > deadline, allSeatsDone: seatState.every(s => (s.eliminated || maxTurns && s.turns >= maxTurns) && !s.child) });
+    reason = stopReason({ status: gameStatus, httpStatus, interrupted, unreachable: pollFailures >= 60, deadlinePassed: Date.now() > deadline,
+      allSeatsDone: !opts.waitFinish && seatState.every(s => (s.eliminated || maxTurns && s.turns >= maxTurns) && !s.child) });
     if (reason) break;
     for (const s of seatState.filter(s => !maxTurns || s.turns < maxTurns)) {
       const trigger = nextTurn({ ...s, running: Boolean(s.child) }, { now: Date.now(), tick, status: gameStatus, interval, minGapMs });

@@ -3,7 +3,7 @@
 import { mkdirSync, writeFileSync, copyFileSync, chmodSync, rmSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { makeServer, MAP } from '../../src/server.js';
 import { CouncilClient } from '../client.js';
@@ -51,7 +51,9 @@ const file = resolve(output, `${runId}-codex.json`);
 const qwenConfig = playerModel === 'qwen' ? loadPiConfig('qwen') : null;
 const modelId = playerModel === 'luna' ? 'gpt-6-luna' : qwenConfig.id;
 const label = playerModel === 'luna' ? 'Luna x-high Codex' : `${qwenConfig.name.slice(0, 33)} Codex`;
+const sourceRevision = (() => { try { return execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(); } catch { return null; } })();
 const record = { runId, client: 'codex', access, model: modelId, country, preset, combatSeed: combatSeed || null,
+  sourceRevision,
   turnMode, turnView, embeddedBoard: turnMode === 'episodic' && taskMode === 'match' && turnView !== 'tools',
   interfaceVersion: taskMode === 'fixed' ? 'fixed-v2' : turnMode === 'episodic'
     ? turnView === 'board' ? 'board-turn-v8' : turnView === 'decision' ? 'decision-turn-v3' : `${turnView}-turn-v2` : 'continuous-v3',
