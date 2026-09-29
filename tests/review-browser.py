@@ -69,7 +69,7 @@ def main():
             expect(page.locator('#replay-stage')).to_be_visible()
             expect(page.locator('#replay-stage')).to_have_attribute('data-tick','0')
             opening_fill=page.locator('#review-map-province-mexico').get_attribute('fill')
-            for tick in [500,0,335,553,463,500]:
+            for tick in [500,0,335,1800,463,500]:
                 page.locator('#replay-slider').fill(str(tick))
                 expect(page.locator('#replay-stage')).to_have_attribute('data-tick',str(tick))
                 board=api(f'/api/games/review-fixture/replay?tick={tick}')
@@ -81,7 +81,7 @@ def main():
             # Neighbouring same-owner counters may be merged at this width; one zoom step separates them.
             page.locator('[data-aar-map="in"]').click();expect(page.locator('#review-map-marker-low-countries')).to_be_visible()
             page.locator('#review-map-marker-low-countries').press('Enter')
-            expect(page.locator('#replay-inspector')).to_contain_text('Netherlands')
+            expect(page.locator('#replay-inspector')).to_contain_text('Low Countries')
             expect(page.locator('#replay-inspector')).to_contain_text('Incoming waves')
             capture(page,'02-replay-europe.png')
             page.locator('[data-aar-map="world"]').click()
@@ -96,14 +96,15 @@ def main():
             page.wait_for_timeout(160);assert page.locator('#replay-slider').input_value()==paused
             page.locator('#replay-slider').focus();page.keyboard.press('ArrowRight')
             assert int(page.locator('#replay-slider').input_value())==int(paused)+1
-            page.locator('#replay-slider').fill('463')
-            expect(page.locator('#replay-event-label')).to_contain_text('victory countdown')
-            page.locator('[data-aar-event="next"]').click();assert int(page.locator('#replay-slider').input_value())>463
+            # On the v6 board the recorded match has no 60% hold; its turning point is the Atlantic Accord at 05:35 (tick 335).
+            page.locator('#replay-slider').fill('335')
+            expect(page.locator('#replay-event-label')).to_contain_text('Atlantic Accord becomes active')
+            page.locator('[data-aar-event="next"]').click();assert int(page.locator('#replay-slider').input_value())>335
             page.locator('[data-aar-transport="end"]').click()
-            expect(page.locator('#replay-stage')).to_have_attribute('data-tick','553')
-            page.locator('#replay-slider').fill('552');page.locator('#replay-play').click()
+            expect(page.locator('#replay-stage')).to_have_attribute('data-tick','1800')
+            page.locator('#replay-slider').fill('1799');page.locator('#replay-play').click()
             expect(page.locator('#replay-play')).to_have_attribute('aria-label','Play replay')
-            expect(page.locator('#replay-stage')).to_have_attribute('data-tick','553')
+            expect(page.locator('#replay-stage')).to_have_attribute('data-tick','1800')
             report['assertions'].append('Play, pause, rate change, keyboard slider, event jumps, opening/final controls and automatic end-of-replay stop work.')
             page.locator('#replay-exit').click()
             for kind in ['military','economy']:
@@ -113,22 +114,22 @@ def main():
                 assert page.locator('#'+kind+'-chart polyline').count()==1
                 page.locator(f'[data-chart="{kind}"][data-compare="all"]').click()
                 capture(page,'04-'+kind+'.png')
-            expect(page.locator('.aar-accounting')).to_contain_text('2,584')
+            expect(page.locator('.aar-accounting')).to_contain_text('7,570')
             page.locator('#aar-tab-military').click()
             page.locator('.aar-ledger [data-aar-seek]').first.click()
-            assert int(page.locator('#replay-stage').get_attribute('data-tick')) <= 553
+            assert int(page.locator('#replay-stage').get_attribute('data-tick')) <= 1800
             page.locator('#replay-exit').click()
             page.locator('#aar-tab-diplomacy').click()
-            expect(page.locator('#aar-diplomacy')).to_contain_text('victory countdown')
+            expect(page.locator('#aar-diplomacy')).to_contain_text('Atlantic Accord')
             capture(page,'05-diplomacy.png')
-            report['assertions'].append('Military/economy comparison charts filter by country; battle links seek exact history; diplomacy lists the turning points including the victory countdown.')
+            report['assertions'].append('Military/economy comparison charts filter by country; battle links seek exact history; diplomacy lists the turning points (the Atlantic Accord becoming active).')
             page.locator('#aar-tab-diplomacy').focus();page.keyboard.press('Home')
             expect(page.locator('#aar-tab-overview')).to_be_focused()
             expect(page.locator('#aar-overview')).to_be_visible()
             page.set_viewport_size({'width':390,'height':844})
             capture(page,'06-mobile-overview.png')
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1')
-            page.locator('#aar-tab-replay').click();page.locator('#replay-slider').fill('463')
+            page.locator('#aar-tab-replay').click();page.locator('#replay-slider').fill('335')
             capture(page,'07-mobile-replay.png')
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1')
             page.locator('#replay-exit').click()
