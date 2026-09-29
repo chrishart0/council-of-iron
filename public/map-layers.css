@@ -88,9 +88,7 @@
 .battle-value{font:750 12px var(--map-sans,system-ui,sans-serif);fill:#fffaf0;text-anchor:middle;dominant-baseline:central;pointer-events:none;paint-order:stroke;stroke:#10181b;stroke-width:3.2;stroke-linejoin:round}
 .battle-swords{fill:none;stroke:#fff3d6;stroke-width:1.7;stroke-linecap:round;pointer-events:none;filter:drop-shadow(0 0 1px #10181b) drop-shadow(0 0 1px #10181b)}
 .battle-pulse{fill:none;stroke:#ff8a63;stroke-width:1.5;opacity:.55}
-.battle-counter.resolved.battle-hit .battle-body{animation:battle-hit .5s ease-out 2}
 .round-loss{font:800 11px var(--map-sans,system-ui,sans-serif);fill:#ff9a7a;text-anchor:middle;paint-order:stroke;stroke:#1b0d0b;stroke-width:2.5}
-@keyframes battle-hit{0%{fill-opacity:.55}100%{fill-opacity:0}}
 /* Decorative map effects (atlas.effect). Base styles are the static reduced-motion highlight. */
 .map-effects{pointer-events:none}
 .fx-ring{fill:none;stroke-width:2.2;transform-box:fill-box;transform-origin:center;animation:fx-ring 1.9s ease-out forwards}
@@ -123,7 +121,6 @@
 /* Reduced motion: no pulse or travel; effects are a brief static highlight. */
 .map-effect.still *,.map-effect.still{animation:none!important}
 .map-effect.still .fx-ring.fx-late{display:none}
-@media(prefers-reduced-motion:reduce){.battle-counter.battle-hit .battle-body{animation:none!important}}
 .atlas-v6:focus{outline:none}.atlas-v6:focus-visible{outline:2px solid #e2c993;outline-offset:-2px}
 
 /* Map rules moved from the v0.8 style.css (v0.9): the atlas keeps its own type, independent of the HUD theme. */

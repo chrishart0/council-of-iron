@@ -73,6 +73,13 @@ def window(page, cdp, seconds, trace_browser=None):
         for e in events: names[e.get('name')] = names.get(e.get('name'), 0) + 1
         out['paints'] = names.get('Paint', 0); out['frames'] = names.get('DrawFrame', 0) or names.get('BeginFrame', 0)
         out['layerize'] = names.get('Layerize', 0) + names.get('UpdateLayerTree', 0)
+        # Where the renderer main thread spends its time (self-contained top-level slices).
+        main = {(e['pid'], e['tid']) for e in events if e.get('name') == 'thread_name' and e.get('args', {}).get('name') == 'CrRendererMain'}
+        spent = {}
+        for e in events:
+            if (e.get('pid'), e.get('tid')) in main and e.get('ph') == 'X' and e.get('name') in ('FunctionCall', 'TimerFire', 'FireAnimationFrame', 'UpdateLayoutTree', 'Layout', 'Paint', 'PrePaint', 'Layerize', 'EventDispatch', 'ParseHTML', 'MajorGC', 'MinorGC', 'V8.GC_SCAVENGER', 'RunTask', 'Commit', 'HitTest', 'ScheduleStyleRecalculation', 'UpdateLayer', 'PaintImage', 'RasterTask', 'v8.run', 'EvaluateScript', 'v8.callFunction'):
+                spent[e['name']] = spent.get(e['name'], 0) + e.get('dur', 0) / 1000
+        out['main_ms'] = {k: round(v) for k, v in sorted(spent.items(), key=lambda kv: -kv[1])}
     wall = b['Timestamp'] - a['Timestamp']; polls = max(1, sb['polls'] - sa['polls'])
     out.update({
         'seconds': round(wall, 1), 'busy_pct': round(100 * (b['TaskDuration'] - a['TaskDuration']) / wall, 1),

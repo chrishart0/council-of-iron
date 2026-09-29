@@ -135,7 +135,8 @@ test('clients format, but never reclassify, headlines; big banners only for what
   assert.equal(plan.banner.kind, 'alliance'); assert.equal(plan.banner.name, '<img src=x>');
   assert.deepEqual(plan.effects, [['alliance', { countries: ['usa', 'france'] }]]);
   assert.equal(presentHeadline(alliance, names, { you: 'britain' }).banner, null, 'someone else\'s alliance: rail row only');
-  assert.deepEqual(presentHeadline(alliance, names, { you: 'britain' }).effects, plan.effects, 'the map effect stays');
+  assert.deepEqual(presentHeadline(alliance, names, { you: 'britain' }).effects, [], 'nor a map effect (spectators see them all)');
+  assert.deepEqual(presentHeadline(alliance, names, null).effects, plan.effects);
   const fallen = { id: 8, tick: 90, type: 'eliminated', country: 'france', headline: { kind: 'eliminated', country: 'france' } };
   assert.equal(presentHeadline(fallen, names, { you: 'usa' }).banner, null);
   const ally = presentHeadline(fallen, names, { you: 'usa', allies: ['france'] }), own = presentHeadline(fallen, names, { you: 'france' });
@@ -150,6 +151,8 @@ test('clients format, but never reclassify, headlines; big banners only for what
   const built = { id: 10, tick: 92, type: 'development_completed', headline: { kind: 'industry_up', province: 'ruhr', country: 'usa', level: 3 } };
   assert.equal(presentHeadline(built, names, { you: 'usa' }).banner, null, 'industry is feed + map effect only');
   assert.deepEqual(presentHeadline(built, names, null).effects, [['industry_up', { province: 'ruhr', level: 3 }]]);
+  assert.deepEqual(presentHeadline(built, names, { you: 'usa' }).effects, [['industry_up', { province: 'ruhr', level: 3 }]], 'your own industry');
+  assert.deepEqual(presentHeadline(built, names, { you: 'france' }).effects, [], 'another country\'s industry: rail only');
 });
 
 test('popup policy: a third-party war is a rail row, a war on the viewer is one banner, spectators get none', async () => {

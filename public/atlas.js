@@ -36,8 +36,9 @@ const FACTORY = 'M-8 7V-1l4.5 3V-1l4.5 3V-7h3.5V7Z';
 const ARROW = 'M-6.5-5.5L7.5 0-6.5 5.5-3 0Z';
 const counterWidth = troops => Math.max(32, String(troops).length * 7 + 15);
 const networks = new WeakMap();
-/** Army interpolation frame rate: armies cross a province in seconds, so 30 fps (15 on touch screens) is smooth. */
-const ARMY_FPS = matchMedia('(pointer: coarse)').matches ? 15 : 30;
+/** Army interpolation frame rate. Each frame repaints the whole map SVG, and armies cross a province in seconds:
+ * 30 fps on desktop, 10 on touch screens (phones), where that repaint is what heats the device. */
+const ARMY_FPS = matchMedia('(pointer: coarse)').matches ? 10 : 30;
 /** World width in map units: the map repeats horizontally at this period. */
 export const WORLD = 1280;
 let instances = 0;
@@ -959,11 +960,11 @@ export class Atlas {
     mark.divider.style.transform = `translateX(${-w / 2 + ratio * w}px)`;
     setDisplay(mark.divider, ratio <= 0 || ratio >= 1 ? 'none' : '');
   }
-  /** A finished battle fills with the winner's colour for a final flash, then disappears. */
+  /** A finished battle shows the winner's colour across the bar for a moment, then disappears. */
   resolveBattle(id, mark) {
     mark.resolved = true;
     const won = (this.byId.get(id)?.owner || null) !== (mark.info?.battle.previousOwner || null);
-    mark.group.classList.add('resolved', 'battle-hit'); mark.group.removeAttribute('tabindex'); mark.group.removeAttribute('data-province');
+    mark.group.classList.add('resolved'); mark.group.removeAttribute('tabindex'); mark.group.removeAttribute('data-province');
     this.setSplit(mark, won ? 1 : 0);
     this.later(() => { mark.group.remove(); if (this.battleMarks.get(id) === mark) this.battleMarks.delete(id); }, this.reducedMotion ? 600 : 900);
   }

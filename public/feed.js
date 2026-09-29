@@ -113,6 +113,9 @@ export function presentHeadline(item, names, viewer = {}) {
     default: break;
   }
   if (banner && !affectsViewer(item, viewer)) banner = null;
+  // Map effects repaint the whole map while they play: a seat sees those that concern it (its own industry too);
+  // spectators, who are watching the whole council, see them all.
+  if (you && !affectsViewer(item, viewer) && !(h.kind === 'industry_up' && h.country === you)) effects.length = 0;
   if (banner) {
     banner.seq = item.seq ?? item.id;
     banner.mine = Boolean(you) && [h.from, h.to, h.countries, [h.country, h.owner, h.previousOwner]].flat().includes(you);
