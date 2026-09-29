@@ -11,10 +11,24 @@ for (const name of ['imperial-map.json']) {
   const map = load(name);
   const provinces = map.provinces.map(p => ({ ...p, rings: provinceRings(p.path) }));
   const boundaryDistance = (point, other) => Math.min(...other.rings.flatMap(ring => ring.map((a, i) => segmentDistance(point, a, ring[(i + 1) % ring.length]))));
+  // The same distance, exact up to NEAR (farther segments report Infinity): a 1-unit grid of each province's segments.
+  const NEAR = .1, grids = new Map(provinces.map(p => {
+    const grid = new Map();
+    for (const ring of p.rings) ring.forEach((a, i) => {
+      const b = ring[(i + 1) % ring.length];
+      for (let x = Math.floor(Math.min(a[0], b[0]) - NEAR); x <= Math.floor(Math.max(a[0], b[0]) + NEAR); x++)
+        for (let y = Math.floor(Math.min(a[1], b[1]) - NEAR); y <= Math.floor(Math.max(a[1], b[1]) + NEAR); y++) {
+          const key = `${x},${y}`; if (!grid.has(key)) grid.set(key, []); grid.get(key).push([a, b]);
+        }
+    });
+    return [p.id, grid];
+  }));
+  const nearDistance = (point, other) => Math.min(Infinity, ...(grids.get(other.id).get(`${Math.floor(point[0])},${Math.floor(point[1])}`) || []).map(([a, b]) => segmentDistance(point, a, b)));
   const boxes = new Map(provinces.map(p => {
     const xs = p.rings.flat().map(v => v[0]), ys = p.rings.flat().map(v => v[1]);
     return [p.id, [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]];
   }));
+  const inBox = ([x, y], p) => { const q = boxes.get(p.id); return q[0] <= x && x <= q[2] && q[1] <= y && y <= q[3]; };
   const near = (a, b, pad) => { const [p, q] = [boxes.get(a.id), boxes.get(b.id)]; return p[0] <= q[2] + pad && q[0] <= p[2] + pad && p[1] <= q[3] + pad && q[1] <= p[3] + pad; };
 
   test(`${name}: every province path parses into finite closed rings`, () => {
@@ -30,12 +44,12 @@ for (const name of ['imperial-map.json']) {
       if (a === b || !near(a, b, 1)) continue;
       for (const ring of a.rings) for (let i = 0; i < ring.length; i++) {
         const v = ring[i], w = ring[(i + 1) % ring.length], mid = [(v[0] + w[0]) / 2, (v[1] + w[1]) / 2];
-        const d = boundaryDistance(v, b);
+        const d = nearDistance(v, b);
         // A vertex either lies on the neighbour's border (split-province junctions are rounded to
         // 0.01 units, invisible at maximum zoom) or is clearly separate from it (narrow straits).
         if (d > .01 && d < .09) drift.push(`${a.id}/${b.id} ${d.toFixed(4)} @${v}`);
-        if (d > .05 && insideRings(v, b.rings)) overlaps.push(`${a.id} vertex inside ${b.id} @${v}`);
-        if (boundaryDistance(mid, b) > .05 && insideRings(mid, b.rings)) overlaps.push(`${a.id} edge inside ${b.id} @${mid}`);
+        if (d > .05 && inBox(v, b) && insideRings(v, b.rings)) overlaps.push(`${a.id} vertex inside ${b.id} @${v}`);
+        if (nearDistance(mid, b) > .05 && inBox(mid, b) && insideRings(mid, b.rings)) overlaps.push(`${a.id} edge inside ${b.id} @${mid}`);
       }
     }
     assert.deepEqual(drift, []);

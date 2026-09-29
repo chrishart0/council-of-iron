@@ -256,7 +256,7 @@ async function until(check, ms, what) {
 
 test('end to end: join, wait for start, fresh turns, inbox trigger, rejection log, stop on finish', { timeout: 120_000 }, async t => {
   const dir = mkdtempSync(join(tmpdir(), 'council-playtest-'));
-  const app = makeServer({ dbPath: ':memory:', clockScale: 60 });
+  const app = makeServer({ dbPath: ':memory:', clockScale: 120 });  // a 15 s standard match
   await new Promise(done => app.server.listen(0, '127.0.0.1', done));
   const url = `http://127.0.0.1:${app.server.address().port}`;
   let harness;
@@ -267,7 +267,7 @@ test('end to end: join, wait for start, fresh turns, inbox trigger, rejection lo
   let output = '';
   harness = spawn(process.execPath, ['agents/playtest/run.js', '--match', id, '--url', url, '--data', dir, '--join', '--wait-start',
     '--seat', 'fake-a:france:fake:none:none', '--seat', 'fake-b:germany:fake:none:none',
-    '--interval', '600', '--min-gap', '0', '--poll-ms', '150', '--turn-timeout', '30'], { cwd: new URL('../', import.meta.url), stdio: ['ignore', 'pipe', 'pipe'] });
+    '--interval', '1800', '--min-gap', '0', '--poll-ms', '150', '--turn-timeout', '30'], { cwd: new URL('../', import.meta.url), stdio: ['ignore', 'pipe', 'pipe'] });
   harness.stdout.on('data', chunk => { output += chunk; });
   harness.stderr.on('data', chunk => { output += chunk; });
   const exited = new Promise(done => harness.on('close', done));
@@ -287,7 +287,7 @@ test('end to end: join, wait for start, fresh turns, inbox trigger, rejection lo
   assert.equal(first.rejected.length, 1);
   assert.match(first.rejected[0].error, /province|Unknown|not/i);
   assert.equal(first.memoryUpdated, true);
-  // A DM from the human triggers the next turn at once (the interval is 600 game seconds), and the agent answers.
+  // A DM from the human triggers the next turn at once (the interval, 1800 game seconds, never comes due), and the agent answers.
   await json(url, `/api/games/${id}/actions`, 'POST', { action: { type: 'chat', channel: 'dm', to: 'france', text: 'Ally with me?' }, opId: 'dm-1' }, seat.token);
   const second = await until(() => lines(turnsA)[1], 30_000, 'inbox turn');
   assert.equal(second.trigger, 'inbox');
