@@ -13,6 +13,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS profiles (id TEXT PRIMARY KEY, name TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS credentials (hash TEXT PRIMARY KEY, profile_id TEXT NOT NULL, game_id TEXT);
       CREATE TABLE IF NOT EXISTS games (id TEXT PRIMARY KEY, snapshot TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS game_archives (game_id TEXT PRIMARY KEY, archive TEXT NOT NULL);
       DROP TABLE IF EXISTS results;
       CREATE TABLE IF NOT EXISTS outcomes (game_id TEXT NOT NULL, profile_id TEXT NOT NULL, country TEXT NOT NULL,
         kind TEXT NOT NULL, result TEXT NOT NULL, industry INTEGER NOT NULL, finished_at INTEGER NOT NULL,
@@ -35,15 +36,42 @@ export class Store {
   }
   /** Every stored room; an unreadable snapshot is skipped (logged), never fatal. */
   load() {
-    return this.db.prepare('SELECT id, snapshot FROM games').all().flatMap(row => {
-      try { return [JSON.parse(row.snapshot)]; }
-      catch { console.log(`Skipped unreadable stored room ${row.id}.`); return []; }
-    });
+    const games=[];
+    for(const row of this.db.prepare('SELECT id,snapshot FROM games').iterate())try{
+      const game=JSON.parse(row.snapshot);
+      // New finished snapshots keep their history on disk but do not need to be hydrated just to
+      // plan startup. Historical endpoints load that one room's history only when requested.
+      if(game.status==='finished'&&game.archiveMaterialized){
+        game.events=[];game.headlines={};game.dominanceBreaks=[];game.receipts={};game.historyEvicted=true;
+        delete game.afterAction;
+      }
+      games.push(game);
+    }catch{console.log(`Skipped unreadable stored room ${row.id}.`);}
+    return games;
+  }
+  loadGame(id) {
+    const row = this.db.prepare(`SELECT g.snapshot,a.archive FROM games g
+      LEFT JOIN game_archives a ON a.game_id=g.id WHERE g.id=?`).get(id);
+    if (!row) return null;
+    try {
+      const game=JSON.parse(row.snapshot);
+      if(row.archive)game.afterAction=JSON.parse(row.archive);
+      return game;
+    }
+    catch { console.log(`Skipped unreadable stored room ${id}.`); return null; }
+  }
+  loadHistory(id) {
+    const row=this.db.prepare('SELECT snapshot FROM games WHERE id=?').get(id);
+    if(!row)return null;
+    try{return JSON.parse(row.snapshot);}
+    catch{console.log(`Skipped unreadable stored room ${id}.`);return null;}
   }
   save(g) {
     this.db.exec('BEGIN IMMEDIATE');
     try {
-      this.db.prepare('INSERT OR REPLACE INTO games VALUES (?,?)').run(g.id, JSON.stringify(g));
+      const snapshot={...g};delete snapshot.afterAction;
+      this.db.prepare('INSERT OR REPLACE INTO games VALUES (?,?)').run(g.id, JSON.stringify(snapshot));
+      if(g.afterAction)this.db.prepare('INSERT OR REPLACE INTO game_archives VALUES (?,?)').run(g.id,JSON.stringify(g.afterAction));
       if (g.outcome) for (const s of g.outcome.scores) {
         const p = g.players.find(p => p.id === s.country);
         this.db.prepare('INSERT OR IGNORE INTO outcomes VALUES (?,?,?,?,?,?,?)').run(
@@ -72,6 +100,7 @@ export class Store {
     this.db.prepare(`INSERT INTO room_activity (game_id, dropped_at) VALUES (?,?)
       ON CONFLICT(game_id) DO UPDATE SET dropped_at=excluded.dropped_at`).run(gameId, at);
   }
+  clearActivity(gameId) { this.db.prepare('DELETE FROM room_activity WHERE game_id=?').run(gameId); }
   /** Wins, draws and losses of every human and agent profile across finished matches. */
   standings() {
     return this.db.prepare(`SELECT p.id, p.name, SUM(o.result='win') AS wins, SUM(o.result='draw') AS draws,

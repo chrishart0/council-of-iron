@@ -171,7 +171,13 @@ test('built-in practice bots use the common game engine to completion and never 
   await f.launch(id,sa.token);const g=f.app.games.get(id);f.app.step(g,1800);
   assert.equal(g.status,'finished');assert.equal(g.outcome.scores.length,8);
   assert.deepEqual((await f.call('/api/standings')).data.standings.map(s=>s.matches),[1,1],'only the human and the agent are ranked');
-  assert.ok(g.actionLog.some(a=>a.opId.startsWith('bot-')));
+  assert.deepEqual(g.actionLog,[],'accepted command history is released after the public archive is materialized');
+  assert.deepEqual(g.receipts,{});assert.deepEqual(g.events,[],'finished history is loaded from durable storage when requested');
+  assert.equal(g.historyEvicted,true);
+  const persisted=f.app.store.loadHistory(id);
+  assert.ok(Object.keys(persisted.receipts).length>0,'operation receipts remain available for safe retries');
+  assert.ok(persisted.events.length>0,'recipient-filtered events remain available to late cursors');
+  assert.equal(g.reviewOrigin,undefined);
   const review=(await f.call(`/api/games/${id}/review`)).data;
   assert.equal(review.historyAvailable,true);
   assert.equal(review.totals.initialTroops+review.totals.recruited-review.totals.invested-review.totals.casualties-review.totals.interned,review.totals.remainingTroops);

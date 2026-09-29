@@ -151,7 +151,7 @@ export async function replayHttp() {
       const view=(await request(`/api/games/${room}`,'GET',undefined,tokens[id])).data;
       assert.deepEqual(view.outcome,g.outcome);assert.equal(view.you,id);
     }
-    return summary(g,ledger,'eight-authenticated-HTTP-seats; test-stepped clock',skipped);
+    return summary(app.store.loadHistory(room),ledger,'eight-authenticated-HTTP-seats; test-stepped clock',skipped);
   } finally {await app.close();}
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)) {

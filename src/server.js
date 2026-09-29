@@ -25,7 +25,7 @@ const PRESETS = { standard: 1, quick: 6 };
 export function loadable(g, map = MAP) {
   if (!g || typeof g !== 'object' || g.scenario !== map.id || !g.rules) return false;
   if (!same(Object.keys(RULES), Object.keys(g.rules).filter(key => key !== 'revealAllianceChatAfterMatch'))) return false;
-  return g.status !== 'finished' || Boolean(g.afterAction && g.outcome);
+  return g.status !== 'finished' || Boolean((g.afterAction || g.archiveMaterialized) && g.outcome);
 }
 /** Rooms idle longer than this are abandoned: they never block startup or a deploy. */
 export const ABANDONED_AFTER_MS = 30 * 60 * 1000;
@@ -113,7 +113,8 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
   }
   const games = new Map(plan.load.map(g=>[g.id,g]));
   // Last request from a seated human or agent per room (see Store.activity); written at most once a minute.
-  const activeAt = new Map([...activity].map(([id, a]) => [id, a.activeAt])), written = new Map();
+  for(const id of activity.keys())if(games.get(id)?.status==='finished')store.clearActivity(id);
+  const activeAt = new Map([...activity].filter(([id])=>games.get(id)?.status!=='finished' && games.has(id)).map(([id,a])=>[id,a.activeAt])), written = new Map();
   function touch(g) {
     const now = Date.now(); activeAt.set(g.id, now);
     if (now - (written.get(g.id) ?? -Infinity) >= 60000) { written.set(g.id, now); store.touch(g.id, now); }
@@ -124,19 +125,45 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
   // In memory only: after a restart a bot still respects every truce, it just forgets older peace.
   const botMemory = new Map();
   const replayReaders = new Map(); // At most four decoded public records in memory.
+  function save(g) { if (!g.archiveMaterialized || !g.historyEvicted) store.save(g); }
+  function evictFinishedHistory(g) {
+    g.events=[];g.headlines={};g.dominanceBreaks=[];g.receipts={};g.historyEvicted=true;
+  }
   function afterAction(g) {
     requireRule(g.status === 'finished' && g.outcome, 'After-action review is available only when the match is finished.', 409);
+    if (g.archiveMaterialized && !g.afterAction) return store.loadGame(g.id)?.afterAction;
     if (!g.afterAction) {
       try { g.afterAction = buildReview(g, mapFor(g)); }
       catch (error) {
         console.error('Review reconstruction withheld:', g.id, error.message);
         g.afterAction = unavailableReview(g, 'This match could not be reconstructed exactly. Final scores are intact; no approximate replay is shown.');
       }
-      save(g);
+    }
+    // Materialize the allowlisted public record before releasing its private reconstruction inputs.
+    if (!g.archiveMaterialized) {
+      // Persist the full recipient-filtered stream and receipts for late cursors and retries, but
+      // keep them out of the long-lived room object. The accepted-command log and opening are only
+      // inputs to reconstruction; review itself is stored separately by Store.
+      g.actionLog = [];
+      delete g.reviewOrigin;
+      g.archiveMaterialized = true;
+      const archive = g.afterAction;
+      store.save(g);
+      delete g.afterAction;
+      evictFinishedHistory(g);
+      return archive;
     }
     return g.afterAction;
   }
-  function save(g) { store.save(g); }
+  // Older finished snapshots may already have their public archive. Compact them once on load too.
+  for (const g of games.values()) if (g.status === 'finished') {
+    if (!g.archiveMaterialized) afterAction(g);
+    else {
+      if (g.afterAction) store.save(g);
+      delete g.afterAction;evictFinishedHistory(g);
+    }
+  }
+  function historicalGame(g) { return g.historyEvicted ? store.loadHistory(g.id) : g; }
   function runBots(g) {
     if (g.tick % 5 !== 0) return;
     for (const p of g.players.filter(p=>p.kind==='bot')) {
@@ -148,7 +175,11 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
   }
   function step(g, count) {
     for (let i=0;i<count && g.status==='running';i++) { tick(g); if(g.status==='running') runBots(g); }
-    if (g.status === 'finished') { afterAction(g); for (const p of g.players) botMemory.delete(`${g.id}:${p.id}`); }
+    if (g.status === 'finished') {
+      afterAction(g);
+      for (const p of g.players) botMemory.delete(`${g.id}:${p.id}`);
+      fractions.delete(g.id); activeAt.delete(g.id); written.delete(g.id);store.clearActivity(g.id);
+    }
     else save(g);
   }
   const handler = async (req,res) => {
@@ -223,16 +254,16 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
           const p=identity && g.players.find(p=>p.profileId===identity.id);
           const after=Number(url.searchParams.get('after') || 0);
           requireRule(Number.isSafeInteger(after) && after>=0,'Invalid event cursor.');
-          const view = observe(g,p?.id || null,after);
+          const source=historicalGame(g),view = observe(source,p?.id || null,after);
           // ?inbox=1 (agent clients): the seat's unread messages and pending decisions, same as GET /inbox.
           return json(res,200,{...view, insights:operationalInsights(view), isHost:identity?.id===g.hostId,
-            ...(p && url.searchParams.get('inbox')==='1'?{inbox:inbox(g,p.id)}:{})});
+            ...(p && url.searchParams.get('inbox')==='1'?{inbox:inbox(source,p.id)}:{})});
         }
         if(endpoint==='feed' && req.method==='GET') {
           // Public World feed: world chat + engine headlines only. Same for every viewer.
           if(identity) auth(g.id);
           const after=Number(url.searchParams.get('after') || 0),limit=Number(url.searchParams.get('limit') || 100);
-          return json(res,200,worldFeed(g,after,limit));
+          return json(res,200,worldFeed(historicalGame(g),after,limit));
         }
         if (['review', 'replay'].includes(endpoint) && req.method === 'GET') {
           if (identity) auth(g.id);
@@ -292,23 +323,24 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         if(endpoint==='inbox') {
           // The seat's own inbox (docs/API.md). GET reads it; POST also moves the read cursor.
           const p=seat();
-          if(req.method==='GET') return json(res,200,inbox(g,p.id));
+          const source=historicalGame(g);
+          if(req.method==='GET') return json(res,200,inbox(source,p.id));
           if(req.method==='POST') {
             const data=await body(req);
             if(data.through!==undefined) {
-              markRead(g,p.id,data.through,data.after ?? null);save(g);return json(res,200,inbox(g,p.id));
+              markRead(source,p.id,data.through,data.after ?? null);save(source);return json(res,200,inbox(source,p.id));
             }
             // Read a page oldest first and mark through the last message shown: nothing unread is skipped.
-            const page=inbox(g,p.id,{limit:20,newest:false});
-            const readThrough=markRead(g,p.id,page.more?page.messages.at(-1).id:g.sequence);save(g);
+            const page=inbox(source,p.id,{limit:20,newest:false});
+            const readThrough=markRead(source,p.id,page.more?page.messages.at(-1).id:g.sequence);save(source);
             return json(res,200,{...page,readThrough});
           }
         }
         if(endpoint==='actions' && req.method==='POST') {
           const p=seat(),data=await body(req);
-          const result=act(g,gameMap,p.id,data.action,data.opId);save(g);
+          const source=historicalGame(g),result=act(source,gameMap,p.id,data.action,data.opId);save(source);
           // Not part of the stored receipt: what waits for this seat right now (unread messages, decisions).
-          const note=attention(g,p.id);
+          const note=attention(source,p.id);
           return json(res,200,note?{...result,attention:note}:result);
         }
       }

@@ -159,7 +159,11 @@ test('HTTP review is read-only, private-state safe, bounded and durable across r
   const publicJson=JSON.stringify((await call('/api/games/recorded/replay')).data);
   assert.ok(!publicJson.includes(profile.token));assert.ok(!publicJson.includes('profileId'));
   // A persisted materialized replay is usable without rerunning the old action log.
-  delete g.actionLog;app.store.save(g);await app.close();await launch();
+  const persisted=app.store.loadGame(g.id);assert.ok(persisted.afterAction);assert.deepEqual(persisted.actionLog,[]);
+  await app.close();await launch();
+  assert.deepEqual(app.games.get(g.id).events,[],'startup keeps only the finished-room shell resident');
+  assert.equal(app.games.get(g.id).historyEvicted,true);
+  assert.ok((await call('/api/games/recorded?after=0')).data.events.length>0,'late observers still load the recorded cursor history');
   assert.deepEqual((await call('/api/games/recorded/review')).data,response.data);
   assert.equal((await call('/api/games/recorded/replay?tick=1800')).data.tick,1800);
   const bad=structuredClone(recorded);bad.id='incompatible';delete bad.reviewOrigin;bad.provinces[0].troops+=17;
