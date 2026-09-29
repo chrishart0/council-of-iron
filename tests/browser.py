@@ -497,8 +497,9 @@ def main():
                 expect(page.locator('#primary')).to_be_enabled(timeout=10000)
                 page.screenshot(path=str(artifacts/'10-long-march.png'))
                 page.locator('#primary').click()
-                if page.locator('#confirm-dialog').is_visible():page.locator('#confirm-dialog [value="confirm"]').click()
-                confirmed(page,'Sent')
+                try:  # a destination that changed hands to an enemy asks to confirm the war first
+                    expect(page.locator('#confirm-dialog')).to_be_visible(timeout=1500);page.locator('#confirm-dialog [value="confirm"]').click()
+                except AssertionError:pass
                 deadline=time.monotonic()+8
                 while time.monotonic()<deadline and not any(a.get('path') and a['path'][-1]==end for a in http(f'/api/games/{room2}')['armies']):page.wait_for_timeout(250)
                 assert any(a.get('path') and a['path'][-1]==end for a in http(f'/api/games/{room2}')['armies']),lane(page).inner_text()
