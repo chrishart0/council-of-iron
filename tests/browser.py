@@ -62,8 +62,14 @@ def camera(page,view):
     if not page.locator('#hud-menu').is_visible():page.locator('#menu-button').click()
     page.locator(f'#{view}-view').click()
 def country_card(page,cid):
-    page.keyboard.press('Escape');page.locator(f'#lb-rows .lb-row[data-id="{cid}"]').click()
-    expect(page.locator('#card')).to_have_attribute('data-kind','country')
+    # Powers rows re-sort while the match runs (12× clock): a click can land on the row that just moved under the
+    # pointer, so check the card is this country's and try again.
+    name=page.evaluate("id=>fetch('/map.json').then(r=>r.json()).then(m=>m.countries.find(c=>c.id===id).name)",cid)
+    for _ in range(4):
+        page.keyboard.press('Escape');page.locator(f'#lb-rows .lb-row[data-id="{cid}"]').click()
+        expect(page.locator('#card')).to_have_attribute('data-kind','country')
+        if page.locator('#card-title').inner_text().strip()==name:return
+    expect(page.locator('#card-title')).to_have_text(name)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -430,40 +436,41 @@ def main():
                 page.screenshot(path=str(artifacts/'07-recalling.png'),full_page=True)
                 capture(page,1300)
                 report['assertions'].append('Browser committed a two-source attack (a second province added by tapping it beside the target) as one order, then recalled the group with real return time.')
-                # An undeveloped province of the USA (Alaska or the Philippines at the start, or a capture); natural recruitment funds
-                # the construction. The bots keep playing, so pick whichever the USA still holds with the most troops.
+                # Develop a province of the USA (the lowest level it can pay for); natural recruitment funds the construction.
+                # The bots keep playing against the idle USA, so pick from whatever it still holds.
                 usa_state=lambda:{p['id']:p for p in http(f'/api/games/{room2}')['provinces']}
                 deadline=time.monotonic()+60;build=None
                 while time.monotonic()<deadline:
-                    ready=[p for p in usa_state().values() if p['owner']=='usa' and p['development']==1 and p['troops']-1>=26]
-                    if ready:build=max(ready,key=lambda p:(p['troops'],p['id']))['id'];break
+                    ready=[p for p in usa_state().values() if p['owner']=='usa' and p['development']<3 and not p.get('developing') and p['troops']-1>=(24 if p['development']==1 else 48)+2]
+                    if ready:build=min(ready,key=lambda p:(p['development'],-p['troops'],p['id']));break
                     page.wait_for_timeout(1000)
-                assert build,'no undeveloped USA province reached 25 troops'
+                assert build,('no USA province can pay for development',[(p['id'],p['owner'],p['troops'],p['development']) for p in usa_state().values() if p['owner']=='usa'])
+                level,build=build['development'],build['id'];cost=24 if level==1 else 48
                 province(page,build)
                 develop=page.locator('#develop-province')
                 expect(develop).to_be_enabled(timeout=10000)
                 page.locator('#card-size').click();expect(page.locator('#development-payback')).to_contain_text('payback')
                 develop.click()
-                expect(page.locator('#confirm-dialog')).to_contain_text('Spend 24 troops')
+                expect(page.locator('#confirm-dialog')).to_contain_text(f'Spend {cost} troops')
                 page.locator('#confirm-dialog [value="confirm"]').click()
                 confirmed(page,'Investment committed')
                 expect(develop).to_contain_text(re.compile('Construction queued|Building level'),timeout=6000)
                 page.screenshot(path=str(artifacts/'08-development.png'),full_page=True)
                 capture(page,1300)
-                # Construction takes 120 game seconds; the province may be attacked, so the build either completes or the province
-                # falls first (and the unfinished work is lost). Both are the real rule; the card must show whichever happened.
-                deadline=time.monotonic()+25
+                # Construction takes 120 (I→II) or 180 (II→III) game seconds; the province may be attacked, so the build either
+                # completes or the province falls first (and the unfinished work is lost). The card must show whichever happened.
+                deadline=time.monotonic()+(25 if level==1 else 35)
                 while time.monotonic()<deadline:
                     built=usa_state()[build]
-                    if built['owner']!='usa' or built['development']>=2:break
+                    if built['owner']!='usa' or built['development']>level:break
                     page.wait_for_timeout(300)
                 if built['owner']=='usa':
-                    assert built['development']==2,built
-                    province(page,build);expect(page.locator('#card-sub')).to_contain_text('industry Ⅱ',timeout=5000)
-                    report['assertions'].append(f'Browser funded, confirmed and completed province development ({build}) using naturally recruited manpower.')
+                    assert built['development']==level+1,built
+                    province(page,build);expect(page.locator('#card-sub')).to_contain_text(f"industry {['','Ⅰ','Ⅱ','Ⅲ'][level+1]}",timeout=5000)
+                    report['assertions'].append(f'Browser funded, confirmed and completed province development ({build}, level {level}→{level+1}) using naturally recruited manpower.')
                 else:
-                    assert built['developing'] is None and built['development']==1,built
-                    report['assertions'].append(f'Browser funded and confirmed province development with naturally recruited manpower; a bot captured {build} before the 120-second build finished, and the unfinished work was lost (the capture rule).')
+                    assert built['developing'] is None and built['development']==level,built
+                    report['assertions'].append(f'Browser funded and confirmed province development with naturally recruited manpower; a bot captured {build} before the build finished, and the unfinished work was lost (the capture rule).')
                 # A long march: through your own land to a province of yours beyond the neighbours (one controlled route).
                 owners={i:p['owner'] for i,p in usa_state().items()}
                 def via(a,b):
