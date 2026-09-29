@@ -44,16 +44,18 @@ test('alliance needs consent and 30 s notice, with private messages limited to r
   assert.equal(allied(g,'britain','france'),true);
   assert.equal(player(g,'britain').joinedAt,30);
 });
-test('an alliance holds at most half the countries; small games are free-for-all',()=>{
+test('an alliance holds at most three countries and never more than half the match',()=>{
   const three=game(['usa','britain','france']);
   assert.equal(observe(three,'usa').maxAlliance,1);
   assert.throws(()=>command(three,'usa',{type:'propose',country:'britain'}),/at least four countries/);
-  const g=game();assert.equal(observe(g,'usa').maxAlliance,4);
+  const four=game(['usa','britain','france','germany']);assert.equal(observe(four,'usa').maxAlliance,2);
+  const six=game(['usa','britain','france','germany','russia','ottoman']);assert.equal(observe(six,'usa').maxAlliance,3);
+  const g=game();assert.equal(observe(g,'usa').maxAlliance,3);
   const found=command(g,'usa',{type:'propose',country:'britain'});command(g,'britain',{type:'accept',proposalId:found.proposalId});advance(g,30);
-  for(const id of ['france','germany']){const q=command(g,'usa',{type:'propose',country:id});
+  for(const id of ['france']){const q=command(g,'usa',{type:'propose',country:id});
     for(const member of g.proposals.find(x=>x.id===q.proposalId).roster)command(g,member,{type:'accept',proposalId:q.proposalId});advance(g,30);}
-  assert.equal(g.players.filter(p=>p.side===player(g,'usa').side).length,4);
-  assert.throws(()=>command(g,'usa',{type:'propose',country:'russia'}),/at most 4 countries/);
+  assert.equal(g.players.filter(p=>p.side===player(g,'usa').side).length,3);
+  assert.throws(()=>command(g,'usa',{type:'propose',country:'germany'}),/at most 3 countries/);
 });
 test('an eliminated ally loses even when its side wins',()=>{
   const g=game(['usa','britain','france','germany']);const {proposalId}=command(g,'usa',{type:'propose',country:'britain'});

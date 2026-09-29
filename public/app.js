@@ -739,7 +739,7 @@ function countryCard(){
       const size=state.players.filter(x=>x.side===me.side).length+1,full=size>state.maxAlliance;
       const canPropose=p.side.startsWith('solo:') && !(state.proposals || []).some(q=>q.status==='pending' && (q.roster.includes(id) || q.roster.includes(state.you)));
       if(canPropose)actions.push({label:proposing?'Send alliance offer':'Propose alliance',act:proposing?'send-offer':'propose',primary:!full,disabled:pendingCommand || full,id:full?undefined:'primary'});
-      if(canPropose && full)note=state.maxAlliance<2?'Alliances need at least four countries in the match.':`An alliance holds at most ${state.maxAlliance} countries: half the match.`;
+      if(canPropose && full)note=state.maxAlliance<2?'Alliances need at least four countries in the match.':`An alliance holds at most ${state.maxAlliance} countries.`;
       else if(!canPropose)note=side?`${c.name} is in ${side.name}. Ask a member to invite you, or talk first.`:'A membership change is already pending.';
       actions.push(truce!==null?{label:`Truce until ${time(truce)}`,act:'declare',arg:id,disabled:true}:{label:'Declare war',act:'declare',arg:id,danger:true,disabled:pendingCommand});
       if(!actions.some(a=>a.primary))actions.unshift({label:'Message',act:'compose',primary:true,id:'primary'});
@@ -889,7 +889,7 @@ function renderRules(){
     ['Rally','Pick a province and a rally point: its new troops march there by themselves.'],
     ['Build',`Spend troops to raise a province’s industry: I→II costs ${r.developmentCosts[1]} (${span(r.developmentTicks[1])}), II→III costs ${r.developmentCosts[2]} (${span(r.developmentTicks[2])}). Capture takes the factory; unfinished work is lost.`],
     ['War and peace',`Declare war before attacking another country: the whole of both alliances goes to war. Anyone can offer peace; anyone on the other side can accept within ${r.peaceLife} s. Peace brings a ${r.truce} s truce: neither side can declare war on the other until it ends.`],
-    ['Alliances',`Propose to a country; the alliance starts ${r.notice} s after everyone accepts. Leaving also takes ${r.notice} s. An alliance holds at most half the countries. Promises in chat are not orders.`],
+    ['Alliances',`Propose to a country; the alliance starts ${r.notice} s after everyone accepts. Leaving also takes ${r.notice} s. An alliance holds at most three countries, and never more than half the match. Promises in chat are not orders.`],
   ].map(([title,text])=>{const li=el('li');li.append(el('b','',`${title}. `),text);return li;}));
 }
 /** One sound control: in the ☰ menu during a live room, in the masthead on the home page and in review. */

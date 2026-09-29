@@ -58,8 +58,8 @@ const warKey = (a, b) => [a, b].sort().join(':');
 export const atWar = (g, a, b) => Boolean(a && b && !allied(g, a, b) && g.wars.includes(warKey(a, b)));
 function mayEnter(g, country, owner) { return !owner || allied(g, country, owner) || atWar(g, country, owner); }
 function sideRoster(g, side) { return members(g, side).map(p => p.id); }
-/** An alliance holds at most half the countries in the match, so there is always an opponent. */
-export const maxAlliance = g => Math.floor(g.players.length / 2);
+/** An alliance holds at most three countries, and never more than half the match. */
+export const maxAlliance = g => Math.min(3, Math.floor(g.players.length / 2));
 export function player(g, id) {
   const p = g.players.find(p => p.id === id);
   requireRule(p, 'Country has no player.', 404); return p;
@@ -527,7 +527,7 @@ function propose(g, p, a) {
   const roster = [...members(g, p.side).map(m => m.id), candidate.id];
   requireRule(roster.length <= maxAlliance(g), maxAlliance(g) < 2
     ? 'Alliances need at least four countries in the match.'
-    : `An alliance can include at most ${maxAlliance(g)} countries (half the match).`, 409);
+    : `An alliance can include at most ${maxAlliance(g)} countries.`, 409);
   const q = { id: identifier(g, 'offer-'), creator: p.id, candidate: candidate.id, coalition, roster,
     name: coalition ? g.coalitions.find(c => c.id === coalition).name : text(a.name || 'The Accord', 'Alliance name', 40),
     signature: signature(g, roster), accepted: [p.id], status: 'open', expiresAt: g.tick + gameRules(g).proposalLife };

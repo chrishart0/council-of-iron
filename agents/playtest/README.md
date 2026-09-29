@@ -36,7 +36,7 @@ node agents/playtest/run.js --match ROOM --url https://HOST:PORT --ca CA.pem \
   --seat SLOT:COUNTRY:CLIENT:MODEL:EFFORT[:NAME] [--seat …] \
   [--join] [--wait-start] [--dry-run] [--systemd] \
   [--interval 30] [--turn-timeout 120] [--min-gap 10] [--poll-ms 2000] [--max-minutes N] [--max-turns N] \
-  [--hermes-provider openai-codex] [--data DIR]
+  [--hermes-provider openai-codex] [--hermes-profile NAME] [--data DIR]
 node agents/playtest/run.js status --match ROOM [--watch]
 node agents/playtest/run.js report --match ROOM
 ```
@@ -45,6 +45,7 @@ node agents/playtest/run.js report --match ROOM
 - `--wait-start` waits in the lobby until the host starts; without it a lobby room ends the run.
 - `--dry-run` prints the join, setup and turn commands and the fixed turn rules, and changes nothing.
 - `--ca` trusts the server's CA for the harness and the MCP servers (`NODE_EXTRA_CA_CERTS`).
+- `--hermes-profile NAME` uses an existing Hermes profile for the single Hermes seat. The harness sets its Council MCP server for this room; the `-t council` turn restriction uses only that server. It leaves the profile's other MCP settings and login alone. The seat's `MODEL` and `EFFORT` still override the profile defaults for every turn.
 - The harness can be stopped and restarted: sessions, cursors, memory notes and logs are resumed from the data directory.
 
 `status` prints one row per seat (running turn, turns, accepted/rejected orders, messages, pending inbox, last turn, last error); `--watch` refreshes every 5 s. `report` (also printed and saved as `report.json` at the end) gives per seat: turns by trigger, time-outs, failures, median turn time, orders accepted and rejected by reason, client-side tool errors, first order tick, messages sent, messages from allies, replies and the median/maximum reply latency in game seconds (from an ally's first unanswered message to the seat's next message), the longest gap between accepted orders, memory updates and reported tokens.

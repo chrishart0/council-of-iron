@@ -102,6 +102,8 @@ function printReport(report) {
 async function runCommand() {
   if (!opts.url) throw new Error('Give --url https://HOST:PORT');
   const seats = validateSeats(opts.seat.map(parseSeat));
+  if (opts.hermesProfile && (!/^[a-z][a-z0-9-]{1,31}$/.test(opts.hermesProfile) || seats.filter(s => s.client === 'hermes').length !== 1))
+    throw new Error('--hermes-profile needs one Hermes seat and a lowercase profile name.');
   const interval = num(opts.interval, 30, 1, 1800), turnTimeoutMs = num(opts.turnTimeout, 120, 10, 3600) * 1000;
   const minGapMs = num(opts.minGap, 10, 0, 600) * 1000, pollMs = num(opts.pollMs, 2000, 50, 60000);
   const maxMinutes = num(opts.maxMinutes, 0, 0, 24 * 60), maxTurns = num(opts.maxTurns, 0, 0, 10000);
@@ -132,10 +134,11 @@ async function runCommand() {
       console.log(`\n## ${s.slot}: ${s.country} via ${s.client} ${s.model} (${s.effort}) as "${s.name}"`);
       if (opts.join) console.log(`# join: POST ${opts.url}/api/players {name:${JSON.stringify(s.name)}} then /api/games/${match}/join {country:"${s.country}",kind:"agent",visibility:"public"} → ${s.mcp.env.COUNCIL_SESSION}`);
       if (s.client === 'grok') console.log(`# writes ${resolve(s.work, '.grok/config.toml')}:\n${grokConfig(s.mcp, grokUserServers()).replace(/^/gm, '#   ')}`);
-      for (const step of setupCommands(s, { mcp: s.mcp, profileExists: hermesProfileExists(s.slot), enabledOtherServers: ['<every other enabled server>'] }))
+      for (const step of setupCommands(s, { mcp: s.mcp, profileExists: hermesProfileExists(opts.hermesProfile || hermesProfile(s.slot)),
+        enabledOtherServers: opts.hermesProfile ? [] : ['<every other enabled server>'], hermesProfileName: opts.hermesProfile }))
         console.log(`${step.input ? 'echo Y | ' : ''}${shellQuote([step.command, ...step.args])}`);
       const cmd = turnCommand(s, { prompt: '<TURN PROMPT>', work: s.work, mcp: s.mcp, usageFile: resolve(s.dir, 'turns/N.usage.json'),
-        hermesProvider: opts.hermesProvider, fakeScript: FAKE });
+        hermesProvider: opts.hermesProvider, hermesProfileName: opts.hermesProfile, fakeScript: FAKE });
       console.log(`(cd ${shellQuote([cmd.cwd])} && ${cmd.env ? `${Object.entries(cmd.env).map(([k, v]) => shellQuote([`${k}=${v}`])).join(' ')} ` : ''}${shellQuote([cmd.command, ...cmd.args])} < /dev/null)`);
     }
     console.log(`\n# <TURN PROMPT> = these rules + MEMORY + INBOX + the seat's current decision_view:\n${turnRules({ country: '<COUNTRY>', match, interval })}`);
@@ -151,7 +154,7 @@ async function runCommand() {
   for (const s of seatState) {
     for (const d of [s.dir, s.work, resolve(s.dir, 'turns')]) { mkdirSync(d, { recursive: true, mode: 0o700 }); chmodSync(d, 0o700); }
     if (s.client === 'grok') { mkdirSync(resolve(s.work, '.grok'), { recursive: true, mode: 0o700 }); writePrivate(resolve(s.work, '.grok/config.toml'), grokConfig(s.mcp, grokUserServers())); }
-    if (s.client === 'hermes') setupHermes(s, log);
+    if (s.client === 'hermes') setupHermes(s, log, opts.hermesProfile);
   }
   for (const s of seatState) {
     s.client_ = new CouncilClient({ url: opts.url, sessionPath: s.mcp.env.COUNCIL_SESSION, token: '', match });
@@ -170,7 +173,8 @@ async function runCommand() {
   // Reads are retried on transport errors (e.g. a stale keep-alive socket); game errors are not.
   const retry = async fn => { for (let i = 0; ; i++) { try { return await fn(); } catch (error) { if (error.status || i >= 4) throw error; await sleep(500 * (i + 1)); } } };
   const map = await retry(() => seatState[0].client_.map());
-  writePrivate(resolve(runDir, 'run.json'), JSON.stringify({ match, url: opts.url, seats, interval, turnTimeoutMs, minGapMs, startedAt: new Date().toISOString() }, null, 2));
+  writePrivate(resolve(runDir, 'run.json'), JSON.stringify({ match, url: opts.url, seats, hermesProfile: opts.hermesProfile || null,
+    interval, turnTimeoutMs, minGapMs, startedAt: new Date().toISOString() }, null, 2));
 
   let interrupted = false, startTick = readJson(resolve(runDir, 'status.json'))?.startTick ?? null, gameStatus = 'lobby', tick = 0, outcome = null, reason = null;
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => { if (interrupted) process.exit(130); interrupted = true; log(`${signal}: stopping all seats`); });
@@ -234,7 +238,8 @@ async function runCommand() {
     writePrivate(resolve(s.dir, 'cursor.json'), JSON.stringify({ after: o.cursor }));
     const mcpFile = resolve(s.dir, 'mcp.jsonl'), mcpOffset = existsSync(mcpFile) ? statSync(mcpFile).size : 0;
     const usageFile = resolve(s.dir, `turns/${number}.usage.json`);
-    const cmd = turnCommand(s, { prompt, work: s.work, mcp: s.mcp, usageFile, hermesProvider: opts.hermesProvider, fakeScript: FAKE });
+    const cmd = turnCommand(s, { prompt, work: s.work, mcp: s.mcp, usageFile, hermesProvider: opts.hermesProvider,
+      hermesProfileName: opts.hermesProfile, fakeScript: FAKE });
     const env = Object.fromEntries(Object.entries({ ...process.env, ...cmd.env }).filter(([k]) => !k.startsWith('COUNCIL_')));
     writePrivate(resolve(s.dir, `turns/${number}.prompt.txt`), prompt);
     const started = Date.now();
@@ -318,24 +323,26 @@ function grokUserServers() {
   return [...new Set(names)].filter(n => n !== 'council');
 }
 function hermesHome() { return process.env.HERMES_HOME || resolve(homedir(), '.hermes'); }
-function hermesProfileExists(slot) { return existsSync(resolve(hermesHome(), 'profiles', hermesProfile(slot))); }
-function setupHermes(s, log) {
-  const profile = hermesProfile(s.slot), profileDir = resolve(hermesHome(), 'profiles', profile);
+function hermesProfileExists(profile) { return existsSync(resolve(hermesHome(), 'profiles', profile)); }
+function setupHermes(s, log, profileOverride) {
+  const profile = profileOverride || hermesProfile(s.slot), profileDir = resolve(hermesHome(), 'profiles', profile);
   const run = (step, allowFail = false) => {
     const result = spawnSync(step.command, step.args, { input: step.input ?? '', encoding: 'utf8', timeout: 120_000 });
     if (result.status !== 0 && !allowFail && !step.mayFail) throw new Error(`${step.command} ${step.args.slice(0, 4).join(' ')} failed: ${(result.stderr || result.stdout || '').slice(-400)}`);
     return result.stdout || '';
   };
-  for (const step of setupCommands(s, { mcp: s.mcp, profileExists: existsSync(profileDir) })) {
+  for (const step of setupCommands(s, { mcp: s.mcp, profileExists: existsSync(profileDir), hermesProfileName: profile })) {
     run(step);
     if (step.args[0] !== 'profile') continue;
     log(`${s.slot}: created Hermes profile ${profile}`);
   }
   // The OAuth login lives in the default Hermes home's auth.json; copy it owner-only when the profile lacks a newer one.
   const source = resolve(hermesHome(), 'auth.json'), target = resolve(profileDir, 'auth.json');
-  if (existsSync(source) && (!existsSync(target) || statSync(target).mtimeMs < statSync(source).mtimeMs)) copyFileSync(source, target);
+  if (!profileOverride && existsSync(source) && (!existsSync(target) || statSync(target).mtimeMs < statSync(source).mtimeMs)) copyFileSync(source, target);
   if (existsSync(target)) chmodSync(target, 0o600);
-  const others = hermesEnabledServers(run({ command: 'hermes', args: ['-p', profile, 'mcp', 'list'] }, true)).filter(n => n !== 'council');
-  for (const step of setupCommands(s, { mcp: s.mcp, profileExists: true, enabledOtherServers: others }).filter(step => step.args.includes('config'))) run(step);
-  if (others.length) log(`${s.slot}: disabled other Hermes MCP servers: ${others.join(', ')}`);
+  if (!profileOverride) {
+    const others = hermesEnabledServers(run({ command: 'hermes', args: ['-p', profile, 'mcp', 'list'] }, true)).filter(n => n !== 'council');
+    for (const step of setupCommands(s, { mcp: s.mcp, profileExists: true, enabledOtherServers: others }).filter(step => step.args.includes('config'))) run(step);
+    if (others.length) log(`${s.slot}: disabled other Hermes MCP servers: ${others.join(', ')}`);
+  }
 }

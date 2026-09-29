@@ -2,6 +2,14 @@
 
 Actual test evidence only, newest first. Automated self-play and bot matches check that the rules hold and that matches resolve; they do not show balance or that people enjoy the game.
 
+# Three-country alliance cap — 28 September 2026
+
+The current rules cap a side at `min(3, floor(seats / 2))`. The eight-seat offer test reaches three members and rejects a fourth; four-seat rooms remain capped at two, and two- and three-seat rooms cannot form alliances. `npm test` passed 216 tests, `npm run check` passed, the 32-round diplomacy gate had 0 invariant failures (24 decisive outcomes, 0 draws), and the native `python tests/browser.py --executable /usr/bin/google-chrome` run passed its live-match, review, UI and voice suites. This is rule and interface verification, not a human balance verdict. Live room `39104252` was still running under its original four-seat cap when this change was tested.
+
+# Mixed-client human room — 28 September 2026
+
+Room `39104252` ran on the live HTTPS server at normal speed with a human Britain seat, Pi seats for Qwen 27B (France), DeepSeek V4 (Germany) and Luna (USA), Hermes Luna with low reasoning (Russia, using the existing `councilluna` profile), Grok 4.7 CLI with low reasoning (Japan), and two practice bots (Ottoman and Qing). The Qwen/DeepSeek alliance won at the tick-1800 deadline with 115 industry (Qwen 36, DeepSeek 79); Britain had 17, Pi Luna 30, Grok 17, and Hermes had been eliminated at tick 1288. The saved public review reconstructed the match after server restart (`historyAvailable: true`): 210 battles, 7 war declarations, 5 alliance activations and 81 disclosed alliance-chat messages. The Pi clients recorded 159 accepted / 25 rejected orders for Qwen, 149 / 8 for DeepSeek, and 48 / 1 for Luna; the CLI harness recorded 82 / 24 for Hermes and 87 / 1 for Grok. This one mixed-client match shows active diplomacy and functioning agents, but does not establish an isolated bot-match win rate or assess the human's enjoyment.
+
 # Current-rules Japan trials — 28 September 2026
 
 Two isolated normal-speed Pi/MCP matches used the same combat seed (`latest-japan-01`), Japan against seven practice bots, and the `decision-turn-v3` interface. These are individual observations, not a model win-rate estimate.
