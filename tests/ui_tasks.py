@@ -255,7 +255,7 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     if not page.locator('#comms [data-conv="dm:japan"]').first.is_visible(): w.tap(page.locator('#comms-button'))
     # The button opens the most important thread (or the list); either way Japan is one more tap (row or switcher).
     japan = page.locator('#comms .cx-switch [data-conv="dm:japan"]' if page.evaluate('document.body.dataset.comms') == 'thread' else '#comms .cx-list [data-conv="dm:japan"]')
-    japan.scroll_into_view_if_needed()  # the list scrolls inside its panel (a scroll, not a tap)
+    japan.evaluate('(el) => el.scrollIntoView({block:"nearest",inline:"nearest"})')  # a scroll, not a tap; the polled list may rerender
     w.tap(japan, 'dm-open')
     steps['openDm'] = w.count - before; assert steps['openDm'] <= 2, steps
     expect(page.locator('#comms .cx-title')).to_have_text('Empire of Japan')

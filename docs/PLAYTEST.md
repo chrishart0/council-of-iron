@@ -2,6 +2,10 @@
 
 Actual test evidence only, newest first. Automated self-play and bot matches check that the rules hold and that matches resolve; they do not show balance or that people enjoy the game.
 
+# Three-country alliance cap — 28 September 2026
+
+The current rules cap a side at `min(3, floor(seats / 2))`. The eight-seat offer test reaches three members and rejects a fourth; four-seat rooms remain capped at two, and two- and three-seat rooms cannot form alliances. `npm test` passed 216 tests, `npm run check` passed, the 32-round diplomacy gate had 0 invariant failures (24 decisive outcomes, 0 draws), and the native `python tests/browser.py --executable /usr/bin/google-chrome` run passed its live-match, review, UI and voice suites. This is rule and interface verification, not a human balance verdict. Live room `39104252` was still running under its original four-seat cap when this change was tested.
+
 # Mixed-client human room — 28 September 2026
 
 Room `39104252` started on the live HTTPS server at normal speed with a human Britain seat, Pi seats for Qwen 27B (France), DeepSeek V4 (Germany) and Luna (USA), Hermes Luna with low reasoning (Russia, using the existing `councilluna` profile), Grok 4.7 CLI with low reasoning (Japan), and two practice bots (Ottoman and Qing). At tick 171 all five model services were active; Hermes had 15 accepted orders and 5 sent messages, and Grok had 13 accepted orders and 7 sent messages. This records a live launch and early activity; the match result and human experience remain to be assessed.
