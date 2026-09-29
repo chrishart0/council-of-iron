@@ -6,6 +6,19 @@ The earlier Pi model results below used the former v5 map. Master now uses the v
 
 # v6 agent results — 29 September 2026
 
+## Matched harness starts — 29 September 2026
+
+We ran isolated, normal-speed games against seven practice bots on revision `e29afedd6fa1`. Each model's Pi and CLI starts used the same country and combat seed, with one agent seat per room. These match the opening conditions, but subsequent decisions and combat paths diverge. The Space Bunny starts used OpenRouter `stealth/space-bunny-alpha` through Pi and Hermes; GPT-6 Sol low used Pi and Codex CLI. All finished rows are in the HTML benchmark ledger.
+
+| Model and start | Pi | CLI |
+| --- | --- | --- |
+| Space Bunny, France, `v6-bunny-france-01` | Win by domination, tick 757, 29 own industry; 54 accepted / 8 rejected actions, 9 failed calls of 91, 26 turns, 951,332 reported tokens | Hermes: win by domination, tick 890, 31 own industry; 60 accepted / 5 rejected actions, 5 failed calls of 69, 16 turns; complete token coverage unavailable |
+| Space Bunny, Japan, `v6-bunny-japan-02` | Loss at the tick-1800 deadline, 24 own industry; 125 accepted / 15 rejected actions, 15 failed calls of 177, 60 turns, 1,543,744 reported tokens | Hermes: draw at the tick-1800 deadline, 13 own industry; 75 accepted / 3 rejected actions, 4 failed calls of 99, 33 turns; complete token coverage unavailable |
+| GPT-6 Sol, France, `v6-sol-france-01` | Win by domination, tick 439, 21 own industry; 24 accepted / 0 rejected actions, 1 failed call of 54, 14 turns, 534,624 reported tokens | Codex CLI: win by domination, tick 568, 24 own industry; 53 accepted / 3 rejected actions, 5 failed calls of 84, 17 turns; complete token coverage unavailable |
+| GPT-6 Sol, Japan, `v6-sol-japan-02` | Win by domination, tick 1066, 32 own industry; 54 accepted / 1 rejected actions, 7 failed calls of 119, 36 turns, 1,191,396 reported tokens | Codex CLI: loss to another side's domination at tick 1750, 18 own industry; 135 accepted / 2 rejected actions, 3 failed calls of 207, 49 turns, 7,676,997 reported tokens |
+
+The first Space Bunny Pi Japan attempt stopped after 23 turns, without an authoritative final result. The local game server was responsive; the harness stopped producing turns and the cause was not established. It is excluded from the ledger and not counted as a loss. The replacement uses the same seed and is the Pi row above. The sample is too small, and the models use different combat seeds, to rank the models or infer that tooling changes caused a win. The Japan Sol split shows a harness comparison can reveal a material difference that the shared France wins would have hidden. Token totals are provider-reported and missing for CLI runs with incomplete turn coverage.
+
 ## CLI harness benchmark — 29 September 2026
 
 Three finished normal-speed CLI seats now appear in the HTML benchmark ledger with their harness, model, arena and industry-over-time trace. In shared room `v6-cli-grok-hermes-04` (Grok CLI 4.7 low as Japan, Hermes Luna low as Russia, six practice bots), a solo German bot won at the tick-1800 deadline with 57 industry. Grok Japan lost with 11 industry (70 accepted / 7 rejected orders; 10 failed tool calls of 156; 23 turns, 2 timeouts). Hermes Luna Russia was eliminated and lost with 0 industry (86 accepted / 19 rejected; 27 failed calls of 178; 34 turns, 1 timeout). Model-reported input/output token counts covered only 20 of Grok's 23 turns and 33 of Luna's 34, so the ledger leaves their full token totals blank.

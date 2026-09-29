@@ -61,6 +61,7 @@ node agents/playtest/bench-local.js --seed v6-cli-example-01 \
 ```
 
 The room and raw logs stay under ignored `data/playtest/`. Change the seed for each new run. Grok and Hermes use their installed CLI logins; an unavailable model or login leaves the run incomplete and out of the ledger.
+For an OpenRouter model through Hermes, pass `--hermes-provider openrouter` and use a dedicated slot/profile. The profile needs its own `OPENROUTER_API_KEY`; keep it in Hermes' private environment, not in this repository.
 
 ### Foreground or systemd
 

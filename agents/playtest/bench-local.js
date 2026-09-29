@@ -11,13 +11,14 @@ import { parseSeat, validateSeats } from './lib.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const args = process.argv.slice(2), seats = [];
-let seed = '', hermesProfile = '', maxMinutes = 35;
+let seed = '', hermesProfile = '', hermesProvider = 'openai-codex', maxMinutes = 35;
 for (let i = 0; i < args.length; i++) {
   const value = args[++i];
   if (!value) throw new Error(`Missing value for ${args[i - 1]}.`);
   if (args[i - 1] === '--seat') seats.push(value);
   else if (args[i - 1] === '--seed') seed = value;
   else if (args[i - 1] === '--hermes-profile') hermesProfile = value;
+  else if (args[i - 1] === '--hermes-provider') hermesProvider = value;
   else if (args[i - 1] === '--max-minutes') maxMinutes = Number(value);
   else throw new Error(`Unknown option ${args[i - 1]}.`);
 }
@@ -39,6 +40,7 @@ try {
     '--join', '--wait-start', '--wait-finish', '--interval', '30', '--turn-timeout', '120',
     '--max-minutes', String(maxMinutes), '--data', output,
     ...seats.flatMap(seat => ['--seat', seat]),
+    '--hermes-provider', hermesProvider,
     ...(hermesProfile ? ['--hermes-profile', hermesProfile] : [])];
   child = spawn(process.execPath, childArgs, { cwd: root, stdio: 'inherit' });
   const closed = new Promise(done => child.once('close', done));
@@ -58,7 +60,7 @@ try {
   if (code !== 0) throw new Error(`CLI harness exited ${code}; private run kept for diagnosis.`);
   const runPath = resolve(output, seed, 'run.json');
   const run = JSON.parse(readFileSync(runPath, 'utf8'));
-  writeFileSync(runPath, `${JSON.stringify({ ...run, arena: 'seven practice bots' })}\n`, { mode: 0o600 });
+  writeFileSync(runPath, `${JSON.stringify({ ...run, arena: 'seven practice bots', combatSeed: seed })}\n`, { mode: 0o600 });
   const imported = spawnSync(process.execPath, [resolve(root, 'agents/pi/bench-playtest.js'), resolve(output, seed)],
     { cwd: root, stdio: 'inherit' });
   if (imported.status !== 0) throw new Error('Finished run could not be imported.');

@@ -39,7 +39,8 @@ export function summarizePlaytestSeat(run, report, seat, turns = [], calls = [])
   const durations = turns.map(turn => turn.durationMs).filter(Number.isFinite);
   const modelId = String(seat.model);
   return {
-    id: `${run.match}:${seat.slot}`, match: run.match, mapId: run.mapId, combatSeed: null,
+    id: `${run.match}:${seat.slot}`, match: run.match, mapId: run.mapId,
+    combatSeed: run.combatSeed || (run.arena === 'seven practice bots' ? run.match : null),
     startedAt: run.startedAt, modelGroup: family(modelId), modelId,
     client: harnessName[seat.client], access: 'MCP', harness: harnessName[seat.client],
     arena: run.arena || 'shared room', sourceRevision: run.sourceRevision || null, country: seat.country,
