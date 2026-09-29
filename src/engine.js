@@ -31,7 +31,9 @@ const journeyTicks = (g, from, to, country = null) =>
 function arrivalDefense(g,target,arrivesAt){
   const recruits=target.owner && Number.isSafeInteger(target.nextRecruit) && target.nextRecruit<=arrivesAt
     ? (Math.floor((arrivesAt-target.nextRecruit)/gameRules(g).recruit)+1)*target.development : 0;
-  const incoming=g.armies.filter(a=>!a.engaged && !a.returning && a.to===target.id && target.owner && allied(g,a.country,target.owner) && a.arrivesAt<=arrivesAt)
+  // Only armies on their last leg into the target: a column passing through moves on.
+  const incoming=g.armies.filter(a=>!a.engaged && !a.returning && a.to===target.id && (a.path?.at(-1) ?? a.to)===target.id
+    && target.owner && allied(g,a.country,target.owner) && a.arrivesAt<=arrivesAt)
     .reduce((n,a)=>n+a.amount,0);
   return {current:target.troops,recruits,incoming,total:target.troops+recruits+incoming,
     assumption:'Current owner, industry, recruitment schedule and visible friendly incoming armies stay unchanged; no new orders, captures, recalls or combat.'};
@@ -821,7 +823,8 @@ function resolveArrivals(g) {
     let battle=g.battles.find(b=>b.province===target.id);
     const defenderSide=target.owner?player(g,target.owner).side:null;
     const groups=new Map();
-    for(const army of arriving)if(!target.owner || !allied(g,army.country,target.owner)) {
+    // Only arrivals that may attack compete for first claim: one that will be turned back never blocks another.
+    for(const army of arriving)if(!allied(g,army.country,target.owner) && mayEnter(g,army.country,target.owner)) {
       const side=player(g,army.country).side,list=groups.get(side)||[];list.push(army);groups.set(side,list);
     }
     const chosen=battle?.attackerSide || [...groups].sort((a,b)=>
