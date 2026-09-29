@@ -11,7 +11,7 @@ from playwright.sync_api import expect
 from browser_helpers import lane, close_comms
 
 BOUNDS = {'attack': 3, 'declare': 3, 'propose': 3, 'respond': 2, 'reply': 2, 'recall': 2, 'turn': 2, 'develop': 3, 'rally': 3, 'converse': 7,
-          'long': 3, 'through-ally': 3, 'bordering-desktop': 3, 'bordering-phone': 5, 'shift': 4, 'lasso': 3, 'select-mode': 6}
+          'long': 3, 'through-ally': 3, 'bordering-desktop': 3, 'bordering-phone': 4, 'shift': 4, 'lasso': 3, 'select-mode': 6}
 
 class Walk:
     def __init__(self, page, server, room, touch, out, report):
@@ -239,6 +239,8 @@ def walkthrough(browser, url, identity, server, report, out, room, width, height
     rally = page.locator('#rally-province'); expect(rally).to_have_text('Rally troops to…'); expect(rally).to_be_enabled(timeout=5000)
     w.tap(rally, 'pick')
     expect(lane(page)).to_contain_text('Tap one of your provinces')
+    if not w.counter('england').evaluate('(el)=>{const r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}'):
+        w.bring('england', escape=False)  # camera only: the card changed height under the map
     w.tap(w.counter('england'), 'set')
     expect(lane(page)).to_contain_text('Rally set', timeout=5000)
     s = w.state(); order = next(o for o in s['orders'] if o['type'] == 'rally')
@@ -420,6 +422,9 @@ def multiselect(browser, url, identity, server, report, out, room, width, height
         cdp.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': x, 'y': y, 'id': 1}]})
         page.wait_for_timeout(700)
         cdp.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
+        expect(page.locator('#card-title')).to_have_text('Caribbean')
+        if not w.counter('central-us').evaluate('(el)=>{const r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}'):
+            w.bring('central-us', escape=False)  # camera only: the Caribbean's card now covers the lower map
         x, y = w.at(w.counter('central-us'))
         cdp.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': x, 'y': y, 'id': 1}]})
         page.wait_for_timeout(700)

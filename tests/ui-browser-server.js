@@ -28,7 +28,7 @@ const finished=replay().game;finished.id='ui-review';finished.name='The Atlantic
 const warRoom=(id,name)=>{const room=createGame({id,name,hostId:profiles.britain.id},map);
   for(const c of map.countries)join(room,map,{country:c.id,name:profiles[c.id].name,profileId:profiles[c.id].id,kind:'agent'});start(room);return room;};
 const w=warRoom('ui-war','The Rhine front');
-const taskRooms=Object.fromEntries(['ui-tasks-m','ui-tasks-d','ui-turn','ui-multi-m','ui-multi-d'].map(id=>[id,warRoom(id,'The Rhine front · walkthrough')]));
+const taskRooms=Object.fromEntries(['ui-tasks-m','ui-tasks-d','ui-turn','ui-multi-m','ui-multi-d','ui-phone','ui-phone-l'].map(id=>[id,warRoom(id,'The Rhine front · walkthrough')]));
 // Multi-select walkthroughs: Britain also holds the Caribbean and the Great Plains (central-us), so four British provinces
 // (Caribbean, Great Plains, Eastern Canada, Southern England) border the USA's Atlantic States (east-us); Britain is at war with the USA.
 for(const id of ['ui-multi-m','ui-multi-d'])for(const [p,troops] of [['caribbean',14],['central-us',16]])

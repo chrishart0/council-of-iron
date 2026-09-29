@@ -96,7 +96,9 @@ export class Comms {
       const got = arrivals(before, after);
       for (const r of got.actions) if (!this.toast.actions.some(a => a.key === r.key) && !(this.view === 'thread' && r.thread === this.conv)) this.toast.actions.push(r);
       const visible = got.personal.filter(g => !(this.view === 'thread' && g.thread === this.conv));
-      if (visible.length) { this.toast.personal = visible.at(-1); clearTimeout(this.personalTimer); this.personalTimer = setTimeout(() => { this.toast.personal = null; this.renderToasts(); }, 4200); }
+      // A message (DM, alliance chat) stays long enough to be noticed and answered; other personal news is brief.
+      if (visible.length) { const g = visible.at(-1), talk = g.rows.some(r => r.item.type === 'message'); this.toast.personal = g; clearTimeout(this.personalTimer); this.personalTimer = setTimeout(() => { this.toast.personal = null; this.renderToasts(); }, talk ? 9000 : 4200); }
+      if (got.actions.length || visible.length) this.bump();
       if (got.worldPulse && this.conv !== 'world') this.pulse = true;
       // New rows in the open thread: stay put if the reader scrolled up, and offer "↓ N new".
       if (this.view === 'thread') {
@@ -127,6 +129,8 @@ export class Comms {
     if (this.toast.personal?.thread === key) this.toast.personal = null;
     this.render(); this.onOpen('thread');
     const rows = this.$('.cx-rows');
+    // Focus inside the tap itself: iOS raises the keyboard only for a focus() made during the user's gesture.
+    if (focusComposer && !this.$('.cx-composer').hidden) this.$('.cx-input').focus({ preventScroll: true });
     requestAnimationFrame(() => {
       const mark = rows.querySelector('.cx-divider'), saved = this.scroll.get(key);
       rows.scrollTop = mark ? Math.max(0, mark.offsetTop - 8) : saved !== undefined ? saved : rows.scrollHeight;
@@ -137,7 +141,9 @@ export class Comms {
   }
   saveDraft() { if (this.view === 'thread' && this.conv) { const v = this.$('.cx-input').value; if (v) this.drafts.set(this.conv, v); else this.drafts.delete(this.conv); } }
   saveScroll() { if (this.view === 'thread' && this.conv) this.scroll.set(this.conv, this.$('.cx-rows').scrollTop); }
-  onScroll() { this.markVisible(); const rows = this.$('.cx-rows'); if (rows.scrollHeight - rows.scrollTop - rows.clientHeight < 32) this.jump(0); }
+  onScroll() { this.markVisible(); const rows = this.$('.cx-rows'); this.stuck = rows.scrollHeight - rows.scrollTop - rows.clientHeight < 32; if (this.stuck) this.jump(0); }
+  /** The visible area changed (the phone keyboard opened or closed): a reader at the latest message stays there. */
+  keepLatest() { if (this.view === 'thread' && this.stuck !== false) this.toBottom(false); }
   toBottom(smooth) { const rows = this.$('.cx-rows'); rows.scrollTo({ top: rows.scrollHeight, behavior: smooth && !reduced() ? 'smooth' : 'auto' }); this.jump(0); }
   jump(n) { this.below = n; const b = this.$('.cx-jump'); b.hidden = !n; b.innerHTML = n ? `${icon('down')}<span>${n} new</span>` : ''; }
   /** Per-item read state: a row counts as read once it has actually been on screen in its open thread. */
@@ -215,6 +221,8 @@ export class Comms {
     const key = `${action}|${unread}`; if (b.dataset.key === key) return; b.dataset.key = key;
     b.innerHTML = `${icon('dispatches')}${action ? `<b class="cx-count" data-tier="action">${action}</b>` : ''}${unread ? `<i class="cx-count" data-tier="personal">${unread}</i>` : ''}`;
   }
+  /** The button rings briefly when something new arrives for you (a count is easy to miss on a phone). */
+  bump() { const b = this.button; b.classList.remove('cx-bump'); void b.offsetWidth; b.classList.add('cx-bump'); clearTimeout(this.bumpTimer); this.bumpTimer = setTimeout(() => b.classList.remove('cx-bump'), 1600); }
   renderToasts() {
     const [loud, quiet] = this.toasts.querySelectorAll('.cx-live');
     const live = new Set((this.box?.rows || []).filter(r => r.pending).map(r => r.key));
@@ -256,14 +264,16 @@ export class Comms {
     const r = g.rows.at(-1), i = r.item, who = g.from ? n.country(g.from) : 'News';
     const line = g.count > 1 ? `${g.count} messages` : i.type === 'message' ? String(i.text).split('\n')[0] : i.headline ? headlineCopy(i, { ...n, time: clock }).title : systemCopy(i, { ...n, time: clock }).title;
     const label = i.type === 'message' ? (i.channel === 'dm' ? 'Reply' : 'Open') : 'Open';
-    return `<div class="cx-toast" data-tier="personal" data-key="${esc(r.key)}" data-thread="${esc(r.thread)}" tabindex="0"><span class="cx-standard">${g.from ? insignia(g.from) : icon('globe')}</span><p><b>${esc(who)}${i.channel === 'alliance' ? ' · alliance' : ''}</b> <span class="cx-line">${esc(line)}</span></p><button type="button" class="cx-secondary" data-do="view">${label}</button><button type="button" class="cx-dismiss" data-do="dismiss" aria-label="Dismiss">${icon('close')}</button></div>`;
+    return `<div class="cx-toast" data-tier="personal"${i.type === 'message' ? ' data-message="1"' : ''} data-key="${esc(r.key)}" data-thread="${esc(r.thread)}" tabindex="0"><span class="cx-standard">${g.from ? insignia(g.from) : icon('globe')}</span><p><b>${esc(who)}${i.channel === 'alliance' ? ' · alliance' : ''}</b> <span class="cx-line">${esc(line)}</span></p><button type="button" class="${i.type === 'message' ? 'cx-primary cx-reply' : 'cx-secondary'}" data-do="view">${label}</button><button type="button" class="cx-dismiss" data-do="dismiss" aria-label="Dismiss">${icon('close')}</button></div>`;
   }
   flashToast(f) { return `<div class="cx-toast${f.error ? ' error' : ''}" data-tier="flash" data-key="${esc(f.key)}" role="${f.error ? 'alert' : 'status'}"><p>${esc(f.text)}</p><button type="button" class="cx-dismiss" data-do="dismiss" aria-label="Dismiss">${icon('close')}</button></div>`; }
   convTitle(c) { return c.kind === 'world' ? 'World' : c.kind === 'alliance' ? (c.side ? this.names.side(c.side) : 'Alliance') : this.names.country(c.country); }
   /** Pinned first: your alliance (or how to get one), then World and every power, sorted by what needs you. */
   ordered() {
-    const convs = this.box.conversations, alliance = convs.find(c => c.kind === 'alliance');
-    return [...(alliance ? [alliance] : []), ...convs.filter(c => c.kind !== 'alliance' && !(c.kind === 'dm' && c.eliminated && !c.active))];
+    // What needs you (a decision, then unread) comes first; then your alliance (pinned); then everything else.
+    const convs = this.box.conversations.filter(c => !(c.kind === 'dm' && c.eliminated && !c.active)), alliance = convs.find(c => c.kind === 'alliance');
+    const urgent = convs.filter(c => c.action || c.unread);
+    return [...urgent, ...(alliance && !urgent.includes(alliance) ? [alliance] : []), ...convs.filter(c => !urgent.includes(c) && c !== alliance)];
   }
   relationTag(country) {
     if (!this.state.you) return '';
@@ -272,7 +282,7 @@ export class Comms {
   }
   renderList() {
     const list = this.$('.cx-list'), box = this.box; if (!box) return;
-    const items = this.ordered().map(c => {
+    const items = this.ordered().map((c, index) => {
       const noAlliance = c.kind === 'alliance' && !c.side;
       const preview = c.last ? this.preview(c.last) : noAlliance ? 'You are independent. Propose an alliance to open a group chat.' : c.kind === 'dm' ? 'No messages yet. Say hello.' : 'No messages yet.';
       const chip = c.action ? `<span class="cx-chip">${c.rows.find(r => r.pending)?.item.system === 'offer' ? 'Offer' : c.rows.find(r => r.pending)?.item.type === 'threat' ? 'Attack' : 'Decide'}</span>` : '';
@@ -281,7 +291,7 @@ export class Comms {
       const glyph = c.kind === 'dm' ? insignia(c.country) : icon(c.kind === 'world' ? 'globe' : 'ally');
       const title = c.kind === 'alliance' ? (c.side ? `Your alliance: ${this.names.side(c.side)}` : 'No alliance yet') : this.convTitle(c);
       const propose = noAlliance && !this.readOnly && this.state.status === 'running' ? '<button type="button" class="cx-propose" data-propose="">Propose an alliance</button>' : '';
-      return { key: c.key, html: `<li${c.kind === 'alliance' ? ' class="cx-pinned"' : ''}><button type="button" class="cx-conv" aria-current="${c.key === this.conv && this.view === 'thread'}" data-conv="${esc(c.key)}" data-kind="${c.kind}" data-state="${c.action ? 'action' : c.unread ? 'unread' : 'read'}"${c.kind === 'world' && this.pulse ? ' data-pulse="1"' : ''}><span class="cx-standard">${glyph}</span><span class="cx-conv-main"><b>${esc(title)}</b><span class="cx-preview">${esc(preview)}</span></span><span class="cx-conv-meta"><time>${c.last ? clock(c.last.tick) : ''}</time>${tag ? `<small class="cx-rel" data-rel="${esc(tag)}">${esc(tag)}</small>` : ''}${chip}${badge}</span></button>${propose}</li>` };
+      return { key: c.key, html: `<li${c.kind === 'alliance' && index === 0 ? ' class="cx-pinned"' : ''}><button type="button" class="cx-conv" aria-current="${c.key === this.conv && this.view === 'thread'}" data-conv="${esc(c.key)}" data-kind="${c.kind}" data-state="${c.action ? 'action' : c.unread ? 'unread' : 'read'}"${c.kind === 'world' && this.pulse ? ' data-pulse="1"' : ''}><span class="cx-standard">${glyph}</span><span class="cx-conv-main"><b>${esc(title)}</b><span class="cx-preview">${esc(preview)}</span></span><span class="cx-conv-meta"><time>${c.last ? clock(c.last.tick) : ''}</time>${tag ? `<small class="cx-rel" data-rel="${esc(tag)}">${esc(tag)}</small>` : ''}${chip}${badge}</span></button>${propose}</li>` };
     });
     patchList(list, items);
   }
@@ -337,10 +347,12 @@ export class Comms {
     const unreadKeys = new Set(conv.rows.filter(r => r.unread).map(r => r.key));
     for (const li of rowsEl.querySelectorAll('[data-key]')) li.classList.toggle('cx-is-unread', unreadKeys.has(li.dataset.key));
   }
-  /** One tap between conversations: your alliance, World, then the powers you talk to (and the rest). */
+  /** One tap between conversations: your alliance, World, then the powers. */
   renderSwitch(conv) {
     const nav = this.$('.cx-switch');
-    const items = this.ordered().filter(c => c.kind !== 'dm' || c.active || c.key === conv.key || !this.readOnly);
+    const seat = id => (this.state.players || []).findIndex(p => p.id === id), place = c => c.kind === 'alliance' ? -2 : c.kind === 'world' ? -1 : seat(c.country);
+    // A steady order (alliance, World, then the powers by seat): the buttons never move under a finger.
+    const items = this.box.conversations.filter(c => !(c.kind === 'dm' && c.eliminated && !c.active)).sort((a, b) => place(a) - place(b)).filter(c => c.kind !== 'dm' || c.active || c.key === conv.key || !this.readOnly);
     const buttons = this.readOnly ? [] : items.map(c => ({ key: c.key, html: `<button type="button" data-conv="${esc(c.key)}" aria-current="${c.key === conv.key}" title="${esc(c.kind === 'alliance' ? (c.side ? this.names.side(c.side) : 'Alliance') : this.convTitle(c))}" aria-label="${esc(c.kind === 'alliance' ? 'Alliance chat' : this.convTitle(c))}${c.unread ? `, ${c.unread} unread` : ''}">${c.kind === 'dm' ? insignia(c.country) : icon(c.kind === 'world' ? 'globe' : 'ally')}${c.unread || c.action ? '<i class="cx-dot"></i>' : ''}</button>` }));
     patchList(nav, buttons);
     nav.hidden = !buttons.length;

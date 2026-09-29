@@ -2,13 +2,23 @@
 
 Actual test evidence only, newest first. Automated self-play and bot matches check that the rules hold and that matches resolve; they do not show balance or that people enjoy the game.
 
+# Additional Pi trials — 29 September 2026
+
+DeepSeek played Qing at normal speed against seven practice bots with `cap3-qing-02`. It won by domination at tick 1196 with 12 own industry (80 accepted, 2 rejected orders; 6 failed tool calls of 254; 2,719,700 reported tokens). DeepSeek then played Britain with `cap3-britain-03` and won by domination at tick 288 with 28 own industry in a Britain/France/Germany alliance (20 accepted, 4 rejected orders; 6 failed tool calls of 64; 832,230 reported tokens). These are two more completed starts, with alliance wins rather than sole control of the 60% threshold. The paired Qwen Qing run stalled inside a Pi turn beyond its 120-second limit and was stopped without an authoritative final result; it is excluded from the ledger. The harness now has a hard deadline so such a stall ends as an incomplete trial.
+
+Space Bunny Alpha Pi passed the three-order fixed task at normal speed (3/3 accepted, no failed calls, one turn). Its isolated France match against seven bots used the same `cap3-france-01` seed as the Qwen/DeepSeek France trials. It won by domination at tick 455 with 21 own industry in a France/Britain/Germany alliance (36 accepted, 4 rejected orders; 4 failed tool calls of 49; 475,901 reported tokens). The sanitized aggregate is in `agents/pi/benchmarks.json` under `external`. These individual matches do not establish a model win rate.
+
+# Three-country-cap France trials — 29 September 2026
+
+Two isolated normal-speed Pi/MCP matches used the same France start and combat seed (`cap3-france-01`) against seven practice bots. Both reached an individual win by holding at least 60% of industry for 90 ticks. DeepSeek finished by domination at tick 568 with 31 own industry in a France/Britain/Russia alliance (45 accepted, 3 rejected orders; 7 failed tool calls of 144). Qwen finished by domination at tick 908 with 48 own industry in a France/Germany alliance (113 accepted, 67 rejected orders; 71 failed tool calls of 259). Qwen's rejected orders were 44 marches, 22 developments and one chat; 40 march rejections reported insufficient uncommitted troops. The sanitized aggregate records are in `agents/pi/benchmarks.json`. This pair is evidence of two wins from one starting country and seed, not a general win-rate estimate.
+
 # Three-country alliance cap — 28 September 2026
 
 The current rules cap a side at `min(3, floor(seats / 2))`. The eight-seat offer test reaches three members and rejects a fourth; four-seat rooms remain capped at two, and two- and three-seat rooms cannot form alliances. `npm test` passed 216 tests, `npm run check` passed, the 32-round diplomacy gate had 0 invariant failures (24 decisive outcomes, 0 draws), and the native `python tests/browser.py --executable /usr/bin/google-chrome` run passed its live-match, review, UI and voice suites. This is rule and interface verification, not a human balance verdict. Live room `39104252` was still running under its original four-seat cap when this change was tested.
 
 # Mixed-client human room — 28 September 2026
 
-Room `39104252` started on the live HTTPS server at normal speed with a human Britain seat, Pi seats for Qwen 27B (France), DeepSeek V4 (Germany) and Luna (USA), Hermes Luna with low reasoning (Russia, using the existing `councilluna` profile), Grok 4.7 CLI with low reasoning (Japan), and two practice bots (Ottoman and Qing). At tick 171 all five model services were active; Hermes had 15 accepted orders and 5 sent messages, and Grok had 13 accepted orders and 7 sent messages. This records a live launch and early activity; the match result and human experience remain to be assessed.
+Room `39104252` ran on the live HTTPS server at normal speed with a human Britain seat, Pi seats for Qwen 27B (France), DeepSeek V4 (Germany) and Luna (USA), Hermes Luna with low reasoning (Russia, using the existing `councilluna` profile), Grok 4.7 CLI with low reasoning (Japan), and two practice bots (Ottoman and Qing). The Qwen/DeepSeek alliance won at the tick-1800 deadline with 115 industry (Qwen 36, DeepSeek 79); Britain had 17, Pi Luna 30, Grok 17, and Hermes had been eliminated at tick 1288. The saved public review reconstructed the match after server restart (`historyAvailable: true`): 210 battles, 7 war declarations, 5 alliance activations and 81 disclosed alliance-chat messages. The Pi clients recorded 159 accepted / 25 rejected orders for Qwen, 149 / 8 for DeepSeek, and 48 / 1 for Luna; the CLI harness recorded 82 / 24 for Hermes and 87 / 1 for Grok. This one mixed-client match shows active diplomacy and functioning agents, but does not establish an isolated bot-match win rate or assess the human's enjoyment.
 
 # Current-rules Japan trials — 28 September 2026
 

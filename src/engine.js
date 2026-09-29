@@ -254,7 +254,7 @@ export function marchPlan(g, map, country, action, { assumeWar = false } = {}) {
     // Percentages select currently uncommitted troops, never future recruitment.
     const amount = input.amount ?? Math.floor(available * input.percent / 100);
     requireRule(Number.isSafeInteger(amount) && amount > 0 && amount <= available,
-      'Not enough uncommitted troops; leave one at home. A percentage must select at least one troop.');
+      `Cannot march from ${source.id}: ${amount} selected, ${available} free. This uncommitted count excludes queued orders and one troop kept home; percentages round down.`);
     return { from: source.id, amount, available, travel: route.travel, path: route.path };
   });
   const arrivesAt = g.tick + 1 + Math.max(...sources.map(s => s.travel));

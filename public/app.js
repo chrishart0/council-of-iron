@@ -10,7 +10,7 @@ import { Herald, presentHeadline } from './feed.js';
 import { viewerOf, turnedBackReason } from './feed-model.js';
 import { Comms } from './comms.js';
 import { LeaderboardPanel } from './leaderboard-panel.js';
-import { ExpandableMap } from './expand.js';
+import { ExpandableMap, fullscreenSupported } from './expand.js';
 // Relations and alliance colours: the same DOM-free helpers the atlas and agent tools use.
 import { relationsOf, allianceColors, atWar as warBetween, truceUntil } from './relations.js';
 import { friendlyPath } from './movement.js';
@@ -312,7 +312,9 @@ function initMap(){
   const previous=$('map'),replacement=previous.cloneNode(false);previous.replaceWith(replacement);
   // The map key (legend + Political/Diplomacy toggle) lives in the ☰ menu.
   atlas=new Atlas(replacement,map,selectProvince,{legend:{placement:'bottom-left',container:$('map-key'),collapsed:false},
-    drag:{start:(id,{counter})=>active() && prov(id)?.owner===state.you && (counter || sources.includes(id)) && freeTroops(id)>0,
+    // Gesture separation on touch: a one-finger drag marches only from the counter of a province you have already
+    // selected (tap it first); every other drag pans. A mouse may drag from any of your counters.
+    drag:{start:(id,{counter,touch})=>active() && prov(id)?.owner===state.you && (touch?counter && sources.includes(id):counter || sources.includes(id)) && freeTroops(id)>0,
       // Dragging from one province of a multi-selection sends the whole selection there.
       begin:from=>{if(!(sources.length>1 && sources.includes(from)))sources=[from];target=null;armyId=null;proposing=false;paintMap();},
       label:(from,to)=>`${amountFor(from)} · ${routeOf(from,to)?.travel ?? '?'}s`,
@@ -320,6 +322,7 @@ function initMap(){
       path:(from,to)=>routeOf(from,to)?.path,
       end:(from,to)=>{if(!(sources.length>1 && sources.includes(from)))sources=[from];target=to;armyId=null;openCard('province',to || from);paintMap();revealUnderCard(to || from);}},
     lasso:ids=>lassoSelect(ids),longPress:true,why:id=>unreachableWhy(id),
+    emptyTap:(x,y,{touch})=>{const id=touch?snapTarget(null,{x,y}):null;if(id)selectProvince(id);},
     onArmy:id=>{const a=state?.armies.find(a=>a.id===id);if(!a)return false;armyId=id;sources=[];target=null;openCard('army',id);paintMap();return true;}});
   $('landing-map').innerHTML=map.provinces.map(p=>`<path d="${p.path}"/>`).join('');
 }
@@ -365,12 +368,28 @@ function freeTroops(id) {
 }
 const amountFor=id=>{const free=freeTroops(id);return free>0?Math.max(1,Math.floor(free*fraction)):0;};
 
+/** Fingers are wide: with your troops chosen (and no target yet), a tap that lands on a province they cannot go to, or on
+ * open sea, snaps to the nearest legal destination whose counter lies within a finger's radius of the tap. */
+const SNAP_RADIUS=34;
+function snapTarget(id,point){
+  if(!active() || !sources.length || target || rallyFrom || selectMode)return id;
+  const legal=sources.length>1?selectionReach():new Map(reachable(sources[0]).map(v=>[v,true]));
+  if(id && (legal.has(id) || prov(id)?.owner===state.you))return id;
+  let best=null,bestDistance=SNAP_RADIUS;
+  for(const v of legal.keys()){
+    const r=document.querySelector(`#marker-${CSS.escape(v)} .counter-body`)?.getBoundingClientRect();if(!r || !r.width)continue;
+    const d=Math.hypot(Math.max(r.left-point.x,0,point.x-r.right),Math.max(r.top-point.y,0,point.y-r.bottom));
+    if(d<bestDistance){best=v;bestDistance=d;}
+  }
+  return best || id;
+}
 /** Tap/click/Enter on a province. Tap-tap fallback of the drag: your province, then a target.
  * Several sources: Shift/Ctrl-click, long-press or Select mode toggles your provinces in and out of the selection
  * (a Shift-drag rectangle adds every province of yours inside it); then one tap on the target. With a target chosen,
  * tapping more of your provinces able to send there adds (or removes) them as sources. */
 function selectProvince(id,modifiers={}){
   if(!state)return;
+  if(modifiers.touch && modifiers.point && !modifiers.toggle)id=snapTarget(id,modifiers.point);
   const p=prov(id),mine=active() && p.owner===state.you;
   if(rallyFrom){ // second tap of "Rally troops to…": the rally province
     const from=rallyFrom;rallyFrom=null;
@@ -626,7 +645,8 @@ function provinceCard(){
     const attackers=state.armies.filter(a=>a.engaged && a.to===id).reduce((n,a)=>n+a.amount,0),odds=combatForecast(attackers,p.troops,p.development);
     status.append(el('b','rel rel-war','BATTLE'),el('span','',`${attackers} attackers against ${p.troops} defenders · attackers take it ${Math.round(100*odds.attackerWinChance)}% of the time${odds.defenseBonus?` · industry adds ${odds.defenseBonus} to the top defender die`:''}.`));
   }
-  else if(mine && active())status.append(el('span','card-hint',freeTroops(id)>0?'Drag to any target — or tap it — to send troops.':'Only one troop here: it must stay home.'));
+  else if(mine && active() && compact.matches && freeTroops(id)>0 && rallyFrom!==id)status.append(...sendList(id));
+  else if(mine && active())status.append(el('span','card-hint',rallyFrom===id?'Tap one of your provinces to rally new troops there.':freeTroops(id)>0?'Drag to any target — or tap it — to send troops.':'Only one troop here: it must stay home.'));
   else if(!mine && !spectating && state.you)status.append(el('span','card-hint',friendlyLand(id) || ownBorder(id)?`None of your provinces can reach ${place(id).name}.`:`You have no province bordering ${place(id).name}. Take or hold a province next to it first.`));
   const actions=[];
   if(mine && active() && p.development<state.rules.maxDevelopment){
@@ -647,7 +667,37 @@ function provinceCard(){
       :{label:`${o.queued?'Cancel':'Recall'} ${o.amount} → ${place(o.to).name}`,act:'recall',arg:o.id,disabled:pendingCommand});
   }
   return {...base,sub:[owner && !mine?ownerButton(owner):el('span','card-meta',mine?'Your province':'Unclaimed'),el('span','card-meta',`${p.troops} troops${owner?` · industry ${'ⅠⅡⅢⅣⅤ'[p.development-1] || p.development}`:''}`)],subKey:[owner,relationOf(owner),p.troops,p.development,mine],
-    status,statusKey:[battle && [battle.province,p.troops,state.armies.filter(a=>a.engaged && a.to===id).reduce((n,a)=>n+a.amount,0)],mine,freeTroops(id)>0,state.armies.filter(a=>a.engaged && a.to===id).length],relation:mine?'own':'',actions,more:()=>moreProvince(id,false)};
+    status,statusKey:[battle && [battle.province,p.troops,state.armies.filter(a=>a.engaged && a.to===id).reduce((n,a)=>n+a.amount,0)],mine,freeTroops(id)>0,state.armies.filter(a=>a.engaged && a.to===id).length,rallyFrom===id,mine && active() && compact.matches?sendChoices(id).map(c=>[c.id,c.line]):null],relation:mine?'own':'',actions,more:()=>moreProvince(id,false)};
+}
+/** Phones: where this province's troops can go, most relevant first (attacks on enemies at war with you or on unclaimed
+ * land, by capture chance; your provinces under attack or on the front line), as big rows. A row is the same as tapping
+ * that province on the map: a finger never has to hit a small counter. Neutral countries (a declaration) stay on the map. */
+function sendChoices(from){
+  const enemies=relationsOf(state,state.you).enemies,amount=amountFor(from),rows=[];
+  const frontLine=id=>neighbours(id).some(n=>enemies.includes(prov(n)?.owner));
+  for(const id of reachable(from)){
+    const p=prov(id),route=routeOf(from,id);if(!p || !route)continue;
+    if(friendlyLand(id)){
+      const attacked=state.armies.some(a=>(a.path?.at(-1) || a.to)===id && !a.returning && !sameSide(a.country,state.you));
+      if(!attacked && !frontLine(id))continue;
+      rows.push({id,score:attacked?.95:.6,travel:route.travel,verb:'Reinforce',line:`${attacked?'under attack':'front line'} · ${route.travel+1}s`});
+    }else if(!p.owner || enemies.includes(p.owner)){
+      const odds=Math.round(100*combatForecast(amount,p.troops,p.development).attackerWinChance);
+      rows.push({id,score:odds/100,travel:route.travel,verb:p.owner?'Attack':'Take',line:`${p.troops} defenders · ${odds}% with ${amount}`});
+    }
+  }
+  // Best chances first (a province under attack counts as .95, the front line as .6), then the nearest.
+  return rows.sort((a,b)=>b.score-a.score || a.travel-b.travel).slice(0,innerHeight<820?3:4);  // small phones and landscape: three, so the map, its camera and the actions keep their room
+}
+function sendList(from){
+  const rows=sendChoices(from),list=el('div','send-list');list.setAttribute('role','group');list.setAttribute('aria-label','Send troops to');
+  for(const r of rows){
+    const b=button('',{pickTarget:r.id},`send-row${r.verb==='Reinforce'?'':' attack'}`),owner=prov(r.id).owner;
+    b.append(owner?flag(owner):el('span','flag'));
+    const words=el('span','send-words');words.append(el('b','',`${r.verb} ${place(r.id).name}`),el('small','',r.line));b.append(words,el('span','send-go','›'));
+    list.append(b);
+  }
+  return [...(rows.length?[list]:[]),el('span','card-hint',rows.length?'Or tap any target on the map (or drag from this counter).':'Tap a target on the map (or drag from this counter).')];
 }
 /** "More": the advanced details under the expanded card. */
 function moreProvince(id,order){
@@ -921,7 +971,7 @@ function renderJournal(){
 async function home(){resetPresentation();sounds.leave();review?.destroy();review=null;closeCard();closeMenu();setSheet(null);expander.set(false,{fromBrowser:true});document.body.classList.remove('reviewing','spectating');generation++;pollController?.abort();document.body.classList.remove('in-game');document.body.dataset.screen='home';delete document.body.dataset.status;matchId=null;state=null;spectating=false;herald.reset();comms.reset();comms.room=null;messageCatchupComplete=false;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');placeSound();await rooms();}
 
 /* ── First-match coach marks: three tips, dismissible, stored per browser. ── */
-const COACH=[['card-anchor','Drag from your province to any target — or tap your province, then the target. Tap more of your provinces to attack together.'],
+const COACH=[['card-anchor','Tap your province, then any target — or drag from it to the target. Tap more of your provinces to attack together.'],
   ['leaderboard','Tap a country — a standard on the Powers list or a province’s owner — to talk, ally, declare war or make peace.'],
   ['hud-standard','The Messages button counts what needs you: red for decisions, brass for unread. Press C to open it.']];
 let coachStep=-1;
@@ -979,6 +1029,15 @@ async function perform(act,arg){
 }
 
 /* ── Wiring ── */
+// Phones: a tap on the map opens a sheet right under the finger, and the browser then fires its synthetic click for that
+// same tap at the same point, on whatever is there *now*: the new sheet (it used to open the owner's country card or
+// press a button). That one click is swallowed; the map itself already handled the tap through pointer events.
+let mapTap=null;
+document.addEventListener('pointerup',event=>{if(event.pointerType!=='mouse' && event.target.closest?.('#map'))mapTap={t:performance.now(),x:event.clientX,y:event.clientY};},true);
+document.addEventListener('click',event=>{
+  if(!mapTap)return;const tap=mapTap;mapTap=null;
+  if(performance.now()-tap.t<750 && Math.hypot(event.clientX-tap.x,event.clientY-tap.y)<30 && !event.target.closest?.('#map')){event.preventDefault();event.stopImmediatePropagation();}
+},true);
 $('create-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('display-name').value);const g=await request('/api/games','POST',{name:$('room-name').value,preset:$('preset').value});await openRoom(g.id);}));
 $('join-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('join-name').value);await request(`/api/games/${matchId}/join`,'POST',{country:$('country-choice').value,kind:'human'});await poll();toast('Your seat is reserved.');}));
 $('fill-bots').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/bots`,'POST',state?.you?{}:{country:$('country-choice').value});await poll();}));
@@ -997,10 +1056,22 @@ $('zoom-in').onclick=()=>atlas.zoom(.7);$('zoom-out').onclick=()=>atlas.zoom(1.4
 $('world-view').onclick=()=>{closeMenu();atlas.world();};$('europe-view').onclick=()=>{closeMenu();atlas.europe();};$('home-view').onclick=focusCountry;$('world-button').onclick=()=>atlas.world();
 // Expand map: real fullscreen where available, a CSS pseudo-fullscreen otherwise (iPhone Safari).
 expander=new ExpandableMap($('stage'),$('map-expand'),{label:'map',target:document.documentElement,escape:false,iconOnly:true,onChange:on=>{
+  if(on && !fullscreenSupported() && !installed()){let told=false;try{told=localStorage.getItem('coi.install-tip')==='shown';localStorage.setItem('coi.install-tip','shown');}catch{}
+    if(!told)toast(iOS()?'Safari keeps its bars on screen. For true full screen: Share → Add to Home Screen.':'For true full screen, add Council to your home screen (browser menu).');}
   $('fullscreen-toggle').setAttribute('aria-pressed',String(on));$('fullscreen-toggle').textContent=on?'Exit expanded map':'Expand map';
   requestAnimationFrame(()=>{atlas?.layout();syncInsets();});
 }});
 $('fullscreen-toggle').addEventListener('click',()=>{closeMenu();expander.toggle();});
+/** Install on your phone (☰ → Map): the web app manifest opens the game full screen without browser bars. It is the only
+ * real full screen on an iPhone, where Safari cannot hide its bars for a page (Expand then only gives the map more room). */
+const installed=()=>matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone===true;
+const iOS=()=>/iP(hone|od|ad)/.test(navigator.userAgent) || navigator.platform==='MacIntel' && navigator.maxTouchPoints>1;
+function installHint(){
+  $('install-hint').textContent=installed()?'Running as an app: full screen, no browser bars.'
+    :iOS()?'Full screen on iPhone: Share → Add to Home Screen, then open Council from the Home Screen.'
+    :'Full screen without browser bars: browser menu ⋮ → Add to Home screen (Install app).';
+}
+installHint();
 /* Menu, war log and the phones' Powers sheet share one place (the right column / the sheet): one at a time. */
 function closeMenu(focus=false){
   if($('hud-menu').hidden)return;
@@ -1089,6 +1160,7 @@ document.addEventListener('click',safely(async event=>{
     if(card?.kind==='province')openCard('province',target || sources[0] || card.id);
     paintMap();
   }
+  if(b.dataset.pickTarget && state && active())selectProvince(b.dataset.pickTarget);
   if(b.dataset.feedProvince && state)showProvince(b.dataset.feedProvince);
   if(b.dataset.openCountry && state)openCard('country',b.dataset.openCountry,{focus:!b.closest('#card')});
   if(b.dataset.recall)await perform('recall',b.dataset.recall);
@@ -1123,6 +1195,18 @@ const sounds=new SoundBoard($('sound-control'));
 compact.addEventListener('change',()=>{setSheet(null);if(state)comms.update(state,history);requestAnimationFrame(syncInsets);});
 try{map=await request('/map.json','GET',undefined,null);initMap();showIdentity();const params=new URL(location).searchParams,initial=params.get('match');if(initial)await openRoom(initial,params.get('spectate')==='1');else await rooms();setConnection(state?.status==='finished'?'Review':'Live');}catch(e){toast(e.message,true);}
 addEventListener('resize',()=>requestAnimationFrame(syncInsets));
+/* Phones: the on-screen keyboard. iOS Safari (and Android without interactive-widget support) keeps the layout
+ * viewport and slides the keyboard over it, hiding the composer. While the visual viewport is clearly shorter,
+ * the War Room is sized to it, so the Messages composer and the latest messages stay above the keyboard. */
+function syncViewport(){
+  const vv=window.visualViewport;if(!vv)return;
+  const open=innerHeight-vv.height>80,root=document.documentElement.style,key=open?`${Math.round(vv.offsetTop)}|${Math.round(vv.height)}`:'';
+  if(key===viewportKey)return;viewportKey=key;
+  if(open){root.setProperty('--vv-top',`${Math.round(vv.offsetTop)}px`);root.setProperty('--vv-h',`${Math.round(vv.height)}px`);}
+  document.body.classList.toggle('keyboard-open',open);requestAnimationFrame(()=>{comms?.keepLatest();syncInsets();});
+}
+let viewportKey='';
+window.visualViewport?.addEventListener('resize',syncViewport);window.visualViewport?.addEventListener('scroll',syncViewport);
 // Poll the room; not while the page is hidden (a phone in a pocket), and a little less often on touch devices.
 setInterval(()=>{if(matchId && !document.hidden)poll();},matchMedia('(pointer: coarse)').matches?1000:750);
 document.addEventListener('visibilitychange',()=>{if(matchId && !document.hidden)poll();});
