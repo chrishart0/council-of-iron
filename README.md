@@ -81,9 +81,11 @@ npm run check
 npm test
 npm run test:balance -- --rounds 32 --mode diplomacy
 python -m pip install -r tests/requirements.txt && python -m playwright install chromium
-npm run test:browser        # live match, review, UI layout/tasks and voice suites
+npm run test:browser        # live match, review, UI layout/tasks, voice and phone performance suites
+python tests/browser.py --full    # also: practice bots in the live match, full-length performance budgets
+python tests/browser.py --only ui # one suite: live, review, ui, ui-tasks, voice or perf
 ```
 
-The browser test drives the real controls, a separate CLI player and practice bots through a whole match on an accelerated clock (the whole clock, never one timer), then reviews it. Self-play with practice bots checks invariants and that matches resolve; it does not prove balance or fun. [Balance runs](docs/BALANCE.md) · [Playtest record](docs/PLAYTEST.md)
+The browser test drives the real controls and a separate CLI player (later an external agent process) through a whole match on an accelerated clock (the whole clock, never one timer), with the other seats held by idle agents so every step is deterministic, then reviews it; the other suites run on paused recorded positions (the two UI parts beside the rest, each with its own server). `--full` fills those seats with practice bots instead, and enforces the phone CPU budgets, which depend on the host's load. Self-play with practice bots checks invariants and that matches resolve; it does not prove balance or fun. [Balance runs](docs/BALANCE.md) · [Playtest record](docs/PLAYTEST.md)
 
 One process owns all games; SQLite keeps identities, messages, match state and results; server downtime pauses the clock. Rooms from earlier versions of the game are not loaded. Standings are a win/draw/loss record, not a skill rating. Runtime: Node + SQLite + local HTML/CSS/JavaScript. Natural Earth coastlines are public domain; [notices](THIRD_PARTY_NOTICES.md). Authored code is MIT licensed.

@@ -25,11 +25,12 @@ ROOT = Path(__file__).resolve().parents[1]
 _children = []
 signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
 
-def spawn(args, env=None):
-    """Start a child in its own process group; stdout is a pipe, stderr goes to a log file (never an undrained pipe)."""
-    log = tempfile.NamedTemporaryFile(prefix='council-test-', suffix='.log', delete=False)
-    proc = subprocess.Popen(args, cwd=ROOT, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=log, text=True,
-                            start_new_session=True)
+def spawn(args, env=None, output=None):
+    """Start a child in its own process group; stdout is a pipe, stderr goes to a log file (never an undrained pipe).
+    With `output` (a path), stdout and stderr both go to that file."""
+    log = open(output, 'w') if output else tempfile.NamedTemporaryFile(prefix='council-test-', suffix='.log', delete=False)
+    proc = subprocess.Popen(args, cwd=ROOT, env=env, stdin=subprocess.PIPE, stdout=log if output else subprocess.PIPE, stderr=log,
+                            text=True, start_new_session=True)
     proc.log_path = log.name; log.close(); _children.append(proc)
     return proc
 
@@ -42,6 +43,7 @@ def stop(proc):
         except ProcessLookupError: pass
     log = server_log(proc)  # a child that failed shows its stderr
     if proc.returncode not in (0, -signal.SIGTERM, -signal.SIGKILL) and log.strip(): print(f'--- stderr of {" ".join(proc.args)} (last 3000 bytes) ---\n{log}', file=sys.stderr)
+    if not proc.log_path.startswith(tempfile.gettempdir()): return  # a kept output file
     try: Path(proc.log_path).unlink()
     except FileNotFoundError: pass
 
@@ -126,3 +128,17 @@ def close_comms(page):
         if view == 'thread' and back.is_visible(): back.click()
         elif close.is_visible(): close.click()
         else: return  # docked resting thread (spectators)
+
+def settle(read, ok, timeout=5):
+    """Poll `read()` until `ok(value)` or the timeout; returns the last value (assert on it). For measurements of
+    elements that live polling may re-render between two reads (a detached node measures as NaN)."""
+    import time
+    deadline = time.monotonic() + timeout
+    while True:
+        try: value = read()
+        except Exception as error:  # the node was replaced mid-read
+            value = error
+        if not isinstance(value, Exception) and ok(value) or time.monotonic() > deadline:
+            if isinstance(value, Exception): raise value
+            return value
+        time.sleep(0.1)

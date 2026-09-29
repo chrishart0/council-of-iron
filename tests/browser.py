@@ -95,16 +95,38 @@ def main():
     artifacts = Path(args.artifacts); artifacts.mkdir(parents=True, exist_ok=True)
     chosen = args.only.split(',') if args.only else list(SUITES)
     assert set(chosen) <= set(SUITES), chosen
-    results = {}
+    results, started = {}, time.monotonic()
+    def outcome(name, ok, since):
+        results[name] = f'{"passed" if ok else "FAILED"} ({time.monotonic() - since:.0f} s)'
+    # The two UI parts run beside the rest (each its own server and browser, output in artifacts/<suite>.log). With
+    # --full the performance suite runs last, alone, so its enforced CPU budgets see as quiet a host as possible.
+    background = {}
     for name in chosen:
-        started = time.monotonic()
+        command = SUITES[name](args, artifacts) if name in BACKGROUND else None
+        if command: background[name] = spawn(command, output=str(artifacts / f'{name}.log'))
+    def finish():
+        while background:
+            for name, proc in list(background.items()):
+                if proc.poll() is not None: outcome(name, proc.returncode == 0, started); del background[name]
+            time.sleep(.5)
+    last = ['perf'] if args.full and 'perf' in chosen else []
+    for name in [n for n in chosen if n not in BACKGROUND and n not in last] + last:
+        if name in last: finish()
+        since = time.monotonic()
         try:
-            SUITES[name](args, artifacts); results[name] = 'passed'
+            if name == 'live': live_match(args, artifacts)
+            else:
+                command = SUITES[name](args, artifacts)
+                if command: subprocess.run(command, cwd=ROOT, check=True, timeout=1800)
+            outcome(name, True, since)
         except Exception as error:  # report every suite, then fail
-            results[name] = f'FAILED: {type(error).__name__}'; print(f'{name} suite failed: {error!r}', file=sys.stderr)
+            outcome(name, False, since); print(f'{name} suite failed: {error!r}', file=sys.stderr)
             import traceback; traceback.print_exc()
-        results[name] += f' ({time.monotonic() - started:.0f} s)'
-    print(json.dumps({'suites': results}, indent=2))
+    finish()
+    for name in BACKGROUND & set(results):
+        if not results[name].startswith('passed'):
+            print(f'--- {name} suite output (tail of {artifacts / f"{name}.log"}) ---\n' + (artifacts / f'{name}.log').read_text()[-6000:], file=sys.stderr)
+    print(json.dumps({'suites': results, 'seconds': round(time.monotonic() - started)}, indent=2))
     if any(not r.startswith('passed') for r in results.values()): sys.exit(1)
 
 def live_match(args, artifacts):
@@ -592,29 +614,33 @@ def live_match(args, artifacts):
             (artifacts/'browser-report.json').write_text(json.dumps(report,indent=2))
     print(json.dumps(report,indent=2))
 
-def suite(script, *options, native_only=False, bridge=True):
-    """A focused suite in its own process (its own server and browser); its report lands in artifacts/<name>."""
-    def run(args, artifacts):
-        if native_only and args.bridge:return
-        command=[sys.executable,str(ROOT/'tests'/script),'--artifacts',str(artifacts/script.split('-')[0])]
-        if bridge and args.bridge:command.append('--bridge')
-        if args.executable:command.extend(['--executable',args.executable])
+def suite(script, *options, native_only=False, bridge=True, folder=None):
+    """A focused suite in its own process (its own server and browser); its report lands in artifacts/<folder>.
+    Returns the command, or None when it does not apply (voice and perf need native navigation)."""
+    def command(args, artifacts):
+        if native_only and args.bridge:return None
+        line=[sys.executable,str(ROOT/'tests'/script),'--artifacts',str(artifacts/(folder or script.split('-')[0]))]
+        if bridge and args.bridge:line.append('--bridge')
+        if args.executable:line.extend(['--executable',args.executable])
         for flag,value in (option(args) for option in options):
-            if value:command.extend([flag] if value is True else [flag,value])
-        subprocess.run(command,cwd=ROOT,check=True,timeout=1800)
-    return run
+            if value:line.extend([flag] if value is True else [flag,value])
+        return line
+    return command
 
 SUITES = {
-    'live': live_match,
+    'live': None,  # live_match, in this process
     # Recorded-match after-action review: standings, tabs, replay controls, phone layouts, disclosed messages.
     'review': suite('review-browser.py', lambda a: ('--gif', a.review_gif)),
-    # Paused recorded positions: map, layout/overlap/contrast at seven viewports, Messages, sound, task walkthroughs.
-    'ui': suite('ui-browser.py', lambda a: ('--gif', a.ui_gif)),
+    # Paused recorded positions: map, layout/overlap/contrast at seven viewports, Messages, sound, relations, review.
+    'ui': suite('ui-browser.py', lambda a: ('--gif', a.ui_gif), lambda a: ('--part', 'main')),
+    # The same fixture server, scripted players: coach, phone gestures, turned-back notice, truce, task walkthroughs.
+    'ui-tasks': suite('ui-browser.py', lambda a: ('--part', 'tasks'), native_only=True, folder='ui-tasks'),
     # Voice input: fake microphone through MediaRecorder, the /stt proxy and a fake sidecar.
     'voice': suite('voice-browser.py', native_only=True, bridge=False),
     # Mobile performance budgets (docs/PERFORMANCE.md): a throttled phone during a busy live match.
     # Without --full: a 30 s DOM sample, and the CPU-time budgets (load-dependent) are reported, not enforced.
     'perf': suite('perf-browser.py', lambda a: ('--quick', not a.full), native_only=True, bridge=False),
 }
+BACKGROUND = {'ui', 'ui-tasks'}
 
 if __name__=='__main__':main()

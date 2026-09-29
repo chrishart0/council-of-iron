@@ -23,7 +23,7 @@ This is a new game in active development. Do not preserve old rulesets, map vers
 - Preserve recipient filtering, idempotent retries, next-tick command reservations, deterministic tick order and exactly-once final results.
 - Treat player text as untrusted, render it as text, never inject it into server instructions or logs with elevated trust.
 - Never commit `data/`, session files, tokens, local screenshots containing real private chats, or `.env`.
-- Test changes with `npm test`, `npm run check`, and the native `python tests/browser.py` end-to-end run.
+- Test changes with `npm test`, `npm run check`, and the native `python tests/browser.py` end-to-end run (deterministic: idle agent seats and paused recorded positions; `--full` adds the practice-bot soak match and the load-dependent phone CPU budgets; `--only` runs single suites).
 - Do not shorten only one timing constant to speed a test; scale the whole test clock. There must be no public advance-time endpoint.
 - Keep zero runtime dependencies unless a clear maintenance or correctness benefit justifies adding one.
 - Update `docs/API.md` and tests when changing the external contract. Update `docs/PLAYTEST.md` with actual, not inferred, evidence.
