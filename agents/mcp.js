@@ -75,7 +75,7 @@ tool('turn_around','Bring troops back, or send them back again. Pass a march gro
     if(a.preview)return client.plan({type:'turn_around',armyId:a.id});
     return client.action(army?.returning?{type:'turn_around',armyId:a.id}:{type:'recall',id:a.id},a.opId);
   });
-tool('rally','Rally point: at every recruitment, the new troops of each source province march to one of your own provinces along the quickest path through your or allied land. They never attack. to:null clears. Set it once and your fronts are fed without further orders. preview:true only forecasts the paths.',
+tool('rally','Rally point: at every recruitment, the new troops of each source province march to a different province you own along the quickest path through your or allied land. A province already keeps its own recruits without a rally; from and to must differ. They never attack. to:null clears. Set it once and your fronts are fed without further orders. preview:true only forecasts the paths.',
   {from:{type:['string','array'],minItems:1,maxItems:16,items:string},to:{type:['string','null']},preview:{type:'boolean'},...op},['from','to'],
   a=>a.preview?client.plan({type:'rally',from:a.from,to:a.to}):client.action({type:'rally',from:a.from,to:a.to},a.opId));
 tool('develop','Spend local troops to raise a province\'s industry (more troops every 20 s, +1 on the best defending die). I→II costs 24 and takes 120 s; II→III costs 48 and takes 180 s. Use a province from board.readyDevelopments. Capture keeps finished factories but loses unfinished work.',

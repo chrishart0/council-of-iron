@@ -4,9 +4,11 @@ Actual test evidence only, newest first. Automated self-play and bot matches che
 
 The earlier Pi model results below used the former v5 map. Master now uses the v6 map, with different starting industry, adjacency and impassable borders. The v5 wins remain historical evidence and must not be used as a current v6 model win rate. Some interrupted attempts were stopped by `earlyoom` and have no result.
 
-# First v6 Pi result — 29 September 2026
+# v6 Pi results — 29 September 2026
 
-DeepSeek V4 Flash Vision Exp played Britain at normal speed against seven practice bots (`v6-britain-01`, v6 map and standard preset). It won by domination at tick 701 in a Britain–France–USA coalition, with 33 own industry (50 accepted and 3 rejected actions, 6 failed tool calls of 150, 1,614,813 reported tokens, 22 turns, no timed-out turn). The result is in `agents/pi/benchmarks.json`; it is one current-map sample, not a measured win rate. Qing and France starts are queued separately.
+DeepSeek V4 Flash Vision Exp played Britain at normal speed against seven practice bots (`v6-britain-01`, v6 map and standard preset, `decision-turn-v3`). It won by domination at tick 701 in a Britain–France–USA coalition, with 33 own industry (50 accepted and 3 rejected actions, 6 failed tool calls of 150, 1,614,813 reported tokens, 22 turns, no timed-out turn).
+
+The first Qing attempt stopped at tick 1206 with no final result after a 120-second turn and two connection errors; the Goodwin ML SSH tunnel timed out and restarted. It is excluded from the ledger. A fresh Qing start (`v6-qing-02r`, same v3 interface) won by domination at tick 953 in a Qing–Russia–USA coalition, but Qing owned one province and 2 industry while Russia and USA owned 30 and 31. Qing made 64 actions and 215 tool calls (19 failed, mostly route previews and rallies), reported 2,450,790 tokens, and had one timed-out turn after five accepted actions. This is a valid win under the rules but weak individual performance. Both completed results are in `agents/pi/benchmarks.json`; two wins are too few to establish a reliable win rate. Route and rally guidance was clarified for the next interface version before the France start.
 
 # v6 trial environment — 29 September 2026
 
