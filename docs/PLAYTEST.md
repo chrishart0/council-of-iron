@@ -2,6 +2,8 @@
 
 Actual test evidence only, newest first. Automated self-play and bot matches check that the rules hold and that matches resolve; they do not show balance or that people enjoy the game.
 
+The Pi model results immediately below used the former v5 map. Master now uses the v6 map, with different starting industry, adjacency and impassable borders. The v5 wins remain historical evidence and must not be used as a current v6 model win rate. New v6 Pi trials are pending a stable test-host memory window; the previous attempts were stopped by `earlyoom` and have no result.
+
 # Additional Pi trials — 29 September 2026
 
 DeepSeek played Qing at normal speed against seven practice bots with `cap3-qing-02`. It won by domination at tick 1196 with 12 own industry (80 accepted, 2 rejected orders; 6 failed tool calls of 254; 2,719,700 reported tokens). DeepSeek then played Britain with `cap3-britain-03` and won by domination at tick 288 with 28 own industry in a Britain/France/Germany alliance (20 accepted, 4 rejected orders; 6 failed tool calls of 64; 832,230 reported tokens). Its Germany run with `cap3-germany-04` won by domination at tick 879 with 35 own industry in a Germany/Britain alliance (64 accepted, 6 rejected orders; 11 failed tool calls of 205; 2,497,959 reported tokens). These are three more completed starts, with alliance wins rather than sole control of the 60% threshold. The paired Qwen Qing run stalled inside a Pi turn beyond its 120-second limit and was stopped without an authoritative final result; it is excluded from the ledger. The harness now has a hard deadline so such a stall ends as an incomplete trial.

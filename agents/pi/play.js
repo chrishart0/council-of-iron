@@ -154,6 +154,7 @@ try {
   if (!liveUrl) { await client.bots(); await client.start(); }
   const gameMap = await client.map();
   record.match = created.id;
+  record.mapId = gameMap.id;
   record.url = gameUrl;
   save();
   if (liveUrl) {

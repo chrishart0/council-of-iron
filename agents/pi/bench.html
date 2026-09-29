@@ -55,7 +55,7 @@
 <body>
 <main>
   <header>
-    <div><div class="eyebrow">Council of Iron / integration trial ledger</div><h1>Agent <em>trials</em></h1><p>One agent seat against seven practice bots. These runs expose tool failures and latency; a few quick rooms do not establish playing strength. A shared seed fixes combat rolls for the same state, but agents create different states.</p></div>
+    <div><div class="eyebrow">Council of Iron / <span id="map-id">current map</span> trials</div><h1>Agent <em>trials</em></h1><p>One agent seat against seven practice bots. These runs expose tool failures and latency; a few quick rooms do not establish playing strength. A shared seed fixes combat rolls for the same state, but agents create different states.</p></div>
     <div class="seal" aria-hidden="true">IRON<br>COUNCIL<br>LAB</div>
   </header>
   <section class="controls" aria-label="Filter benchmark results">
@@ -160,7 +160,7 @@ function drawTask() {
   if(!selected.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=12;td.textContent='No completed fixed-board task for this model yet.';tr.append(td);rows.append(tr);}
 }
 for(const id of ['model','country','preset','seed','measure']) $(id).addEventListener('change',draw);
-try { const response=await fetch('./benchmarks.json',{cache:'no-store'});if(!response.ok)throw new Error(`HTTP ${response.status}`);const data=await response.json();if(data.schemaVersion!==2||!Array.isArray(data.runs))throw new Error('Unsupported benchmark file');runs=data.runs;for(const country of [...new Set(runs.map(run=>run.country))].sort()){const option=document.createElement('option');option.value=country;option.textContent=country;$('country').append(option);}for(const seed of [...new Set(runs.map(run=>run.combatSeed).filter(Boolean))].sort()){const option=document.createElement('option');option.value=seed;option.textContent=seed;$('seed').append(option);}draw(); }
+try { const response=await fetch('./benchmarks.json',{cache:'no-store'});if(!response.ok)throw new Error(`HTTP ${response.status}`);const data=await response.json();if(data.schemaVersion!==3||!data.mapId||!Array.isArray(data.runs)||data.runs.some(run=>run.mapId!==data.mapId))throw new Error('Unsupported benchmark file');$('map-id').textContent=data.mapId;runs=data.runs;for(const country of [...new Set(runs.map(run=>run.country))].sort()){const option=document.createElement('option');option.value=country;option.textContent=country;$('country').append(option);}for(const seed of [...new Set(runs.map(run=>run.combatSeed).filter(Boolean))].sort()){const option=document.createElement('option');option.value=seed;option.textContent=seed;$('seed').append(option);}draw(); }
 catch(error){$('error').hidden=false;$('error').textContent=`Could not load benchmarks.json (${error.message}). Serve this folder with: python -m http.server 8000`;}
 try { const response=await fetch('./task-benchmarks.json',{cache:'no-store'});if(!response.ok)throw new Error(`HTTP ${response.status}`);const data=await response.json();if(data.schemaVersion!==1||!Array.isArray(data.runs))throw new Error('Unsupported fixed-board benchmark file');taskRuns=data.runs;drawTask(); }
 catch(error){$('task-error').hidden=false;$('task-error').textContent=`Could not load task-benchmarks.json (${error.message}).`;}

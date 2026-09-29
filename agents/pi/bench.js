@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const output = fileURLToPath(new URL('./benchmarks.json', import.meta.url));
+export const CURRENT_MAP_ID = JSON.parse(readFileSync(fileURLToPath(new URL('../../public/imperial-map.json', import.meta.url)), 'utf8')).id;
 const number = value => Number.isFinite(value) ? value : null;
 const round = value => number(value) === null ? null : Math.round(value * 100) / 100;
 const finiteSum = (items, key) => items.every(item => number(item[key]) !== null)
@@ -27,6 +28,8 @@ export function summarizeRun(raw, modelGroup) {
   if (!raw.runId || !raw.startedAt || !raw.match || raw.status !== 'finished' ||
       !['win', 'loss', 'draw'].includes(raw.score?.result) || !Number.isFinite(raw.score.industry))
     throw new Error(`Run ${raw.runId || '(unknown)'} has no authoritative finished result.`);
+  if (raw.mapId !== CURRENT_MAP_ID)
+    throw new Error(`Run ${raw.runId} used map ${raw.mapId || '(unknown)'}; current map is ${CURRENT_MAP_ID}.`);
   if (raw.score.industry === 0 && raw.score.result !== 'loss')
     throw new Error(`Run ${raw.runId} has a result from rules that credited a country with no industry.`);
   const client = raw.client === 'codex' ? 'Codex' : 'Pi';
@@ -67,7 +70,7 @@ export function summarizeRun(raw, modelGroup) {
   const durationSeconds = raw.finishedAt ? (Date.parse(raw.finishedAt) - Date.parse(raw.startedAt)) / 1000 : null;
   const won = raw.score.result === 'win';
   return {
-    id: raw.runId, match: raw.match, combatSeed: raw.combatSeed || null,
+    id: raw.runId, match: raw.match, mapId: raw.mapId, combatSeed: raw.combatSeed || null,
     startedAt: raw.startedAt, modelGroup, client, access, country: raw.country,
     interfaceVersion: raw.interfaceVersion, turnView: raw.turnView || null,
     strategy: raw.embeddedBoard ? usedView ? `${raw.turnView === 'decision' ? 'decision view' : 'board'} prompt + visual`
@@ -101,6 +104,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     process.exit(2);
   }
   const previous = JSON.parse(readFileSync(output, 'utf8'));
+  if (previous.schemaVersion !== 3 || previous.mapId !== CURRENT_MAP_ID || !Array.isArray(previous.runs))
+    throw new Error(`Benchmark ledger must use schema 3 and current map ${CURRENT_MAP_ID}.`);
   const entries = new Map(previous.runs.map(run => [run.id, run]));
   for (const path of paths) {
     const run = summarizeRun(JSON.parse(readFileSync(path, 'utf8')), group);

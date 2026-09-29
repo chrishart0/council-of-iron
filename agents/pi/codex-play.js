@@ -79,6 +79,7 @@ try {
   await client.start();
   const gameMap = await client.map();
   record.match = created.id;
+  record.mapId = gameMap.id;
   record.url = url;
   save();
   const serverConfig = `{command="/opt/node/bin/node",args=["/game/agents/mcp.js"],env={COUNCIL_URL="${url}",COUNCIL_SESSION="/workspace/${runId}-seat.session.json",COUNCIL_MATCH="",COUNCIL_TOKEN=""},default_tools_approval_mode="auto"}`;
