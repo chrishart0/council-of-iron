@@ -430,10 +430,18 @@ def main():
                 page.screenshot(path=str(artifacts/'07-recalling.png'),full_page=True)
                 capture(page,1300)
                 report['assertions'].append('Browser committed a two-source attack (a second province added by tapping it beside the target) as one order, then recalled the group with real return time.')
-                # Alaska starts undeveloped; let natural recruitment fund construction.
-                province(page,'alaska')
+                # An undeveloped province of the USA (Alaska or the Philippines at the start, or a capture); natural recruitment funds
+                # the construction. The bots keep playing, so pick whichever the USA still holds with the most troops.
+                usa_state=lambda:{p['id']:p for p in http(f'/api/games/{room2}')['provinces']}
+                deadline=time.monotonic()+60;build=None
+                while time.monotonic()<deadline:
+                    ready=[p for p in usa_state().values() if p['owner']=='usa' and p['development']==1 and p['troops']-1>=26]
+                    if ready:build=max(ready,key=lambda p:(p['troops'],p['id']))['id'];break
+                    page.wait_for_timeout(1000)
+                assert build,'no undeveloped USA province reached 25 troops'
+                province(page,build)
                 develop=page.locator('#develop-province')
-                expect(develop).to_be_enabled(timeout=40000)
+                expect(develop).to_be_enabled(timeout=10000)
                 page.locator('#card-size').click();expect(page.locator('#development-payback')).to_contain_text('payback')
                 develop.click()
                 expect(page.locator('#confirm-dialog')).to_contain_text('Spend 24 troops')
@@ -442,31 +450,42 @@ def main():
                 expect(develop).to_contain_text(re.compile('Construction queued|Building level'),timeout=6000)
                 page.screenshot(path=str(artifacts/'08-development.png'),full_page=True)
                 capture(page,1300)
-                # Construction takes 120 game seconds; Alaska borders Canada, so the build either completes or the province
+                # Construction takes 120 game seconds; the province may be attacked, so the build either completes or the province
                 # falls first (and the unfinished work is lost). Both are the real rule; the card must show whichever happened.
                 deadline=time.monotonic()+25
                 while time.monotonic()<deadline:
-                    alaska=next(p for p in http(f'/api/games/{room2}')['provinces'] if p['id']=='alaska')
-                    if alaska['owner']!='usa' or alaska['development']>=2:break
+                    built=usa_state()[build]
+                    if built['owner']!='usa' or built['development']>=2:break
                     page.wait_for_timeout(300)
-                if alaska['owner']=='usa':
-                    assert alaska['development']==2,alaska
-                    province(page,'alaska');expect(page.locator('#card-sub')).to_contain_text('industry Ⅱ',timeout=5000)
-                    report['assertions'].append('Browser funded, confirmed and completed province development using naturally recruited manpower.')
+                if built['owner']=='usa':
+                    assert built['development']==2,built
+                    province(page,build);expect(page.locator('#card-sub')).to_contain_text('industry Ⅱ',timeout=5000)
+                    report['assertions'].append(f'Browser funded, confirmed and completed province development ({build}) using naturally recruited manpower.')
                 else:
-                    assert alaska['developing'] is None and alaska['development']==1,alaska
-                    report['assertions'].append('Browser funded and confirmed province development with naturally recruited manpower; a bot captured Alaska before the 120-second build finished, and the unfinished work was lost (the capture rule).')
-                # A long march: through your own land to a province beyond the neighbours (one controlled route).
-                order(page,'west-us','east-us')
+                    assert built['developing'] is None and built['development']==1,built
+                    report['assertions'].append(f'Browser funded and confirmed province development with naturally recruited manpower; a bot captured {build} before the 120-second build finished, and the unfinished work was lost (the capture rule).')
+                # A long march: through your own land to a province of yours beyond the neighbours (one controlled route).
+                owners={i:p['owner'] for i,p in usa_state().items()}
+                def via(a,b):
+                    seen={a};queue=[a]
+                    while queue:
+                        x=queue.pop(0)
+                        for n in nb[x]:
+                            if n==b:return True
+                            if n not in seen and owners[n]=='usa':seen.add(n);queue.append(n)
+                    return False
+                mine=sorted(i for i,o in owners.items() if o=='usa')
+                start,end=next((a,b) for a in mine for b in mine if a!=b and b not in nb[a] and via(a,b) and usa_state()[a]['troops']>3)
+                order(page,start,end)
                 expect(page.locator('#primary')).to_contain_text('Reinforce')
                 expect(page.locator('#order-details')).to_contain_text('Via',timeout=5000)
                 expect(page.locator('#primary')).to_be_enabled(timeout=10000)
                 page.screenshot(path=str(artifacts/'10-long-march.png'))
                 page.locator('#primary').click();confirmed(page,'Sent')
                 deadline=time.monotonic()+8
-                while time.monotonic()<deadline and not any(a.get('path') and a['path'][-1]=='east-us' for a in http(f'/api/games/{room2}')['armies']):page.wait_for_timeout(250)
-                assert any(a.get('path') and a['path'][-1]=='east-us' for a in http(f'/api/games/{room2}')['armies']),lane(page).inner_text()
-                report['assertions'].append('Browser sent a long march from West US to East US through its own land: the card showed the route and the server moved one column along it.')
+                while time.monotonic()<deadline and not any(a.get('path') and a['path'][-1]==end for a in http(f'/api/games/{room2}')['armies']):page.wait_for_timeout(250)
+                assert any(a.get('path') and a['path'][-1]==end for a in http(f'/api/games/{room2}')['armies']),lane(page).inner_text()
+                report['assertions'].append(f'Browser sent a long march from {start} to {end} through its own land: the card showed the route and the server moved one column along it.')
                 page.set_viewport_size({'width':390,'height':844})
                 assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1')
                 page.screenshot(path=str(artifacts/'09-mobile-orders.png'),full_page=True)
