@@ -685,7 +685,7 @@ function sendChoices(from){
     }
   }
   // Best chances first (a province under attack counts as .95, the front line as .6), then the nearest.
-  return rows.sort((a,b)=>b.score-a.score || a.travel-b.travel).slice(0,innerHeight<820 && innerHeight>=500?3:4);  // small phones: three, so the map and its camera keep their room
+  return rows.sort((a,b)=>b.score-a.score || a.travel-b.travel).slice(0,innerHeight<820?3:4);  // small phones and landscape: three, so the map, its camera and the actions keep their room
 }
 function sendList(from){
   const rows=sendChoices(from),list=el('div','send-list');list.setAttribute('role','group');list.setAttribute('aria-label','Send troops to');
