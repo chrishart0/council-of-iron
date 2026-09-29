@@ -253,7 +253,7 @@ window.addEventListener('keydown', e => {
 }, true);
 // Re-check the spectator flag when the room in the address bar changes (the app uses replaceState).
 addEventListener('popstate', () => composers.forEach(c => c.render()));
-setInterval(() => composers.forEach(c => c.box.hidden !== (!mode || (mode !== 'insecure' && credential().spectating)) && c.render()), 2000);
+setInterval(() => !document.hidden && composers.forEach(c => c.box.hidden !== (!mode || (mode !== 'insecure' && credential().spectating)) && c.render()), 2000);
 
 mode = await detectMode();
 document.querySelectorAll('[data-voice]').forEach(attachVoice);

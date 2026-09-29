@@ -488,10 +488,13 @@ function confirmWar(owner,amount,plan){
 async function sendOrder(){
   const plan=orderPlan();if(plan.disabled)return;
   if(plan.war && !await confirmWar(plan.owner,plan.total,plan.war))return;
-  // One order, one opId: declare war and march together, or neither (the engine validates both).
-  const r=await command(marchAction(plan.war));if(!r)return;
+  if(!target)return; // the card closed while the confirmation was open (the match ended)
+  // One order, one opId: declare war and march together, or neither (the engine validates both). The amounts are read
+  // again after the confirmation: polling may have changed the free troops meanwhile.
+  const action=marchAction(plan.war),to=place(target).name,total=action.amount ?? action.sources.reduce((n,s)=>n+s.amount,0);
+  const r=await command(action);if(!r)return;
   const n=r.sources?.length || 1;
-  toast(`${plan.war?'War declared. ':''}Sent ${plan.total} → ${place(target).name}${n>1?` from ${n} provinces`:''}. ${n>1?'All arrive':'Arrives'} ${time(r.arrivesAt)}.`);
+  toast(`${plan.war?'War declared. ':''}Sent ${total} → ${to}${n>1?` from ${n} provinces`:''}. ${n>1?'All arrive':'Arrives'} ${time(r.arrivesAt)}.`);
   closeCard();
 }
 /** The one march order for the current selection (several sources arrive together). */
@@ -1179,8 +1182,9 @@ comms=new Comms({button:$('comms-button'),toasts:$('toasts'),panel:$('comms'),na
   onRead:keys=>saveRead(keys),
   onOpen:view=>{if(compact.matches && view!=='closed'){closeCard();setSheet(null);closeMenu();}requestAnimationFrame(syncInsets);},
   onView:({province,country:id})=>{if(province)showProvince(province);else if(id)openCard('country',id,{focus:true});},
-  onAct:async(action)=>{const r=await command(action);if(r)toast(action.type==='accept'?(r.status==='pending'?`Alliance agreed: it starts at ${time(r.activateAt)}.`:'Terms accepted; waiting for the others.'):action.type==='decline'?'Offer declined.':'Peace agreed; attacking troops are returning.');return r;},
-  onSend:async(channel,to,text)=>Boolean(await command({type:'chat',channel,...(channel==='dm'?{to}:{}),text})),
+  // A refused decision or message (an offer that just expired, a lost connection) says why in the toast lane.
+  onAct:async(action)=>{try{const r=await command(action);if(r)toast(action.type==='accept'?(r.status==='pending'?`Alliance agreed: it starts at ${time(r.activateAt)}.`:'Terms accepted; waiting for the others.'):action.type==='decline'?'Offer declined.':'Peace agreed; attacking troops are returning.');return r;}catch(e){toast(e.message,true);return null;}},
+  onSend:async(channel,to,text)=>{try{return Boolean(await command({type:'chat',channel,...(channel==='dm'?{to}:{}),text}));}catch(e){toast(e.message,true);return false;}},
   onPropose:id=>{if(!id){comms.openThread('alliance');return;}if(compact.matches)comms.close();openCard('country',id,{focus:true});if(active())perform('propose').catch(e=>toast(e.message,true));},
   onNotice:async(act,arg)=>{try{if(act==='show-army')showArmy(arg);else await perform(act,arg);}catch(e){toast(e.message,true);}}});
 standings=new LeaderboardPanel({root:$('leaderboard'),rows:$('lb-rows'),toggle:$('lb-toggle'),summary:$('lb-summary'),modes:[...document.querySelectorAll('[data-lb-mode]')],fronts:$('lb-fronts'),frontCount:$('lb-front-count'),powers:$('lb-powers'),
