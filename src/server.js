@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import { performance } from 'node:perf_hooks';
 import { Store } from './store.js';
 import { RULES, act, attention, inbox, markRead, rallyPlan, turnAroundPlan, createGame, displayName, join, observe, preview, start, tick, worldFeed, RuleError, requireRule, text } from './engine.js';
@@ -102,7 +103,12 @@ async function body(req) {
   try { const result=JSON.parse(Buffer.concat(chunks).toString('utf8')); requireRule(result && typeof result==='object' && !Array.isArray(result),'Expected a JSON object.'); return result; }
   catch (e) { if (e instanceof RuleError) throw e; throw new RuleError('Invalid JSON.'); }
 }
-function json(res, status, data) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); }
+/** JSON, gzipped for clients that accept it: a busy observation is ~40 KB of JSON, ~6 KB compressed, polled every second. */
+function json(res, status, data) {
+  const body = JSON.stringify(data), gzip = body.length > 1024 && /\bgzip\b/.test(res.req?.headers['accept-encoding'] || '');
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', Vary: 'Accept-Encoding', ...(gzip ? { 'Content-Encoding': 'gzip' } : {}) });
+  res.end(gzip ? gzipSync(body, { level: 4 }) : body);
+}
 /** `clockScale` accelerates ALL game timing in local tests; no HTTP endpoint can advance time. */
 export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScale = 1,
   publicOrigin = process.env.PUBLIC_ORIGIN || '', automatic = true,

@@ -1,4 +1,6 @@
 const $ = id => document.getElementById(id);
+/** Polling writes the same text most of the time: an unchanged write would still be a DOM mutation. */
+const setText=(e,v)=>{v=String(v);if(e.textContent!==v)e.textContent=v;};
 import { AfterAction } from './review.js';
 import { developmentForecast, allianceForecast } from './insights.js';
 import { faction, insignia, icon, battleSignal } from './presentation.js';
@@ -230,7 +232,7 @@ function startingSummary(c){
   const production=c.start.reduce((n,id)=>n+(c.development?.[id] ?? 1),0)*3;
   return `${c.start.length} holdings · ${troops} troops · ${production} recruits a minute · ${c.colonies?.length || 0} colonies. ${c.start.map(id=>place(id).name).join(', ')}.`;
 }
-function setConnection(text){$('connection').textContent=text;$('hud-connection').textContent=text;}
+function setConnection(text){setText($('connection'),text);setText($('hud-connection'),text);}
 function showIdentity(){ $('identity').textContent=identity?.name || 'Observer';$('hud-identity').textContent=identity?.name || 'Observer';$('display-name').value=identity?.name || '';$('join-name').value=identity?.name || ''; }
 async function rooms(){
   const data=await request('/api/games');
@@ -795,9 +797,9 @@ function renderHud(){
   const land=state.provinces.filter(p=>p.owner===state.you && state.you);
   const troops=land.reduce((n,p)=>n+p.troops,0)+state.armies.filter(a=>a.country===state.you).reduce((n,a)=>n+a.amount,0);
   const enemies=me?relationsOf(state,state.you).enemies.length:0;
-  $('commander-title').textContent=state.you?(compact.matches?faction(state.you).short:country(state.you).name):(state.status==='running'?'Spectating':'Observer');
+  setText($('commander-title'),state.you?(compact.matches?faction(state.you).short:country(state.you).name):(state.status==='running'?'Spectating':'Observer'));
   setHTML($('commander-insignia'),insignia(state.you));
-  $('commander-side').textContent=me?(me.eliminatedAt!==null?'Fallen':`${me.side.startsWith('solo:')?'Independent':namedSide(me.side)}${enemies?` · at war with ${enemies}`:''}`):'Watching';
+  setText($('commander-side'),me?(me.eliminatedAt!==null?'Fallen':`${me.side.startsWith('solo:')?'Independent':namedSide(me.side)}${enemies?` · at war with ${enemies}`:''}`):'Watching');
   $('hud-standard').disabled=!me || spectating;
   $('hud-standard').setAttribute('aria-label',me && !spectating?`${country(state.you).name}: your alliance and diplomacy`:'Spectating');
   const economy=team?.economy ?? 0,threshold=state.economyThreshold || 1;
@@ -810,8 +812,8 @@ function renderHud(){
   document.querySelector('.clock-plaque').classList.toggle('victory-warning',Boolean(dominant) && state.status==='running');
   $('victory-status').setAttribute('role','timer');$('victory-status').setAttribute('aria-live','off');
   const leader=[...state.sides].sort((a,b)=>b.economy-a.economy)[0];
-  $('victory-status').textContent=dominant && state.status==='running'?`${namedSide(dominant[0])} wins in ${state.rules.hold-(state.tick-dominant[1])}s unless stopped`:
-    leader?`Win: ${threshold} industry for ${state.rules.hold}s · ${namedSide(leader.id)} leads with ${leader.economy}`:`${threshold} industry held ${state.rules.hold}s wins`;
+  setText($('victory-status'),dominant && state.status==='running'?`${namedSide(dominant[0])} wins in ${state.rules.hold-(state.tick-dominant[1])}s unless stopped`:
+    leader?`Win: ${threshold} industry for ${state.rules.hold}s · ${namedSide(leader.id)} leads with ${leader.economy}`:`${threshold} industry held ${state.rules.hold}s wins`);
 }
 
 /* ── Rendering ── */
@@ -902,15 +904,19 @@ function render(){
   document.body.classList.toggle('spectating',state.status==='running' && (!state.you || spectating));
   document.body.dataset.status=state.status;
   if(state.status!=='running' && card)closeCard();
-  document.querySelector('.scenario-note').textContent=map.notice;
-  $('game-name').textContent=state.name;$('lobby-room').textContent=state.name;$('room-label').textContent=`${state.players.length}/8 seats`;
-  renderLobby();
-  $('phase').textContent=state.status==='lobby'?'Assembling':state.status==='finished'?'Concluded':seated()?'In session':'Watching';
-  $('clock').textContent=time(state.tick);$('clock-total').textContent=`/ ${time(state.rules.duration)}`;
-  renderRules();$('pace-badge').textContent=state.speed===1?'Standard pace':`Quick · ${state.speed}×`;
+  setText(document.querySelector('.scenario-note'),map.notice);
+  setText($('game-name'),state.name);setText($('lobby-room'),state.name);setText($('room-label'),`${state.players.length}/8 seats`);
+  $('lobby').hidden=state.status!=='lobby';if(state.status==='lobby')renderLobby();
+  setText($('phase'),state.status==='lobby'?'Assembling':state.status==='finished'?'Concluded':seated()?'In session':'Watching');
+  setText($('clock'),time(state.tick));setText($('clock-total'),`/ ${time(state.rules.duration)}`);
+  renderRules();setText($('pace-badge'),state.speed===1?'Standard pace':`Quick · ${state.speed}×`);
   placeSound();
-  paintMap();renderHud();renderResult();renderLeaderboard();
-  $('events').innerHTML=history.map(e=>({e,description:describe(e)})).filter(x=>x.description).slice(-30).reverse().map(({e,description})=>`<div class="event"><time>${time(e.tick)}</time>${esc(description)}</div>`).join('');
+  paintMap();renderHud();renderResult();renderLeaderboard();renderJournal();
+}
+/** The war log (☰ → War log): drawn only while it is open. */
+function renderJournal(){
+  if($('war-journal').hidden)return;
+  setHTML($('events'),history.map(e=>({e,description:describe(e)})).filter(x=>x.description).slice(-30).reverse().map(({e,description})=>`<div class="event"><time>${time(e.tick)}</time>${esc(description)}</div>`).join(''));
 }
 async function home(){resetPresentation();sounds.leave();review?.destroy();review=null;closeCard();closeMenu();setSheet(null);expander.set(false,{fromBrowser:true});document.body.classList.remove('reviewing','spectating');generation++;pollController?.abort();document.body.classList.remove('in-game');document.body.dataset.screen='home';delete document.body.dataset.status;matchId=null;state=null;spectating=false;herald.reset();comms.reset();comms.room=null;messageCatchupComplete=false;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');placeSound();await rooms();}
 
@@ -1003,7 +1009,7 @@ function closeMenu(focus=false){
 }
 function openMenu(){setSheet(null);if(compact.matches && comms.view!=='closed')comms.close();$('hud-menu').hidden=false;$('menu-button').setAttribute('aria-expanded','true');syncDock();$('hud-menu').querySelector('button').focus();}
 function toggleJournal(open){
-  $('war-journal').hidden=!open;$('journal-toggle').setAttribute('aria-expanded',String(open));
+  $('war-journal').hidden=!open;$('journal-toggle').setAttribute('aria-expanded',String(open));if(open && state)renderJournal();
   if(open)$('journal-close').focus();requestAnimationFrame(syncInsets);
 }
 /** Phones: the Powers list is a sheet opened from the dock (null closes it). */
@@ -1117,4 +1123,6 @@ const sounds=new SoundBoard($('sound-control'));
 compact.addEventListener('change',()=>{setSheet(null);if(state)comms.update(state,history);requestAnimationFrame(syncInsets);});
 try{map=await request('/map.json','GET',undefined,null);initMap();showIdentity();const params=new URL(location).searchParams,initial=params.get('match');if(initial)await openRoom(initial,params.get('spectate')==='1');else await rooms();setConnection(state?.status==='finished'?'Review':'Live');}catch(e){toast(e.message,true);}
 addEventListener('resize',()=>requestAnimationFrame(syncInsets));
-setInterval(()=>{if(matchId)poll();},750);
+// Poll the room; not while the page is hidden (a phone in a pocket), and a little less often on touch devices.
+setInterval(()=>{if(matchId && !document.hidden)poll();},matchMedia('(pointer: coarse)').matches?1000:750);
+document.addEventListener('visibilitychange',()=>{if(matchId && !document.hidden)poll();});

@@ -11,6 +11,12 @@ function node(tag, attributes = {}) {
   for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, value);
   return element;
 }
+/* Write only what changed: every poll repaints the same map, and an unchanged write still costs a mutation, a style
+ * invalidation and, inside the world layers, a rebuild of both <use> copies. */
+const setAttr = (el, key, value) => { value = String(value); if (el.getAttribute(key) !== value) el.setAttribute(key, value); };
+const setText = (el, value) => { value = String(value); if (el.textContent !== value) el.textContent = value; };
+const setDisplay = (el, value) => { if (el.style.display !== value) el.style.display = value; };
+const setData = (el, values) => { for (const [k, v] of Object.entries(values)) { const s = String(v); if (el.dataset[k] !== s) el.dataset[k] = s; } };
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 /** Decorative on-map effects other modules may request with `atlas.effect(kind, data)`. */
 export const MAP_EFFECTS = Object.freeze(['industry_up', 'captured', 'alliance', 'war', 'peace', 'eliminated']);
@@ -30,6 +36,8 @@ const FACTORY = 'M-8 7V-1l4.5 3V-1l4.5 3V-7h3.5V7Z';
 const ARROW = 'M-6.5-5.5L7.5 0-6.5 5.5-3 0Z';
 const counterWidth = troops => Math.max(32, String(troops).length * 7 + 15);
 const networks = new WeakMap();
+/** Army interpolation frame rate: armies cross a province in seconds, so 30 fps (15 on touch screens) is smooth. */
+const ARMY_FPS = matchMedia('(pointer: coarse)').matches ? 15 : 30;
 /** World width in map units: the map repeats horizontally at this period. */
 export const WORLD = 1280;
 let instances = 0;
@@ -169,7 +177,7 @@ export class Atlas {
     svg.addEventListener('pointerup', event => this.up(event));
     svg.addEventListener('pointercancel', event => { if (this.gesture?.command) this.endDraft(null); this.endLasso(); clearTimeout(this.pressTimer); this.pointers.delete(event.pointerId); this.gesture = null; this.dragged = true; });
     svg.addEventListener('pointerleave', () => { this.tooltip.hidden = true; this.hoverCountry(null); });
-    if (!svg.hasAttribute('tabindex')) svg.setAttribute('tabindex', 0);
+    if (!svg.hasAttribute('tabindex')) setAttr(svg, 'tabindex', 0);
     svg.addEventListener('keydown', event => {
       // Arrow keys pan (wrapping east–west); never while typing, since only map elements listen.
       const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
@@ -181,6 +189,7 @@ export class Atlas {
       else if (id) { event.preventDefault(); onSelect(id, { shiftKey: event.shiftKey, toggle: event.shiftKey || event.ctrlKey || event.metaKey, keyboard: true }); }
     });
     this.resize = new ResizeObserver(() => this.applyView()); this.resize.observe(svg);
+    this.onVisibility = () => this.animateSoon(); document.addEventListener('visibilitychange', this.onVisibility);
     this.applyView();
   }
   path(from, to) {
@@ -346,7 +355,7 @@ export class Atlas {
     if (shift) { this.view.x -= shift; if (this.gesture) this.gesture.vx -= shift; }
     const low = -this.view.h * .35, high = 680 - this.view.h * .65;
     this.view.y = low > high ? 340 - this.view.h / 2 : clamp(this.view.y, low, high);
-    this.svg.setAttribute('viewBox', `${this.view.x} ${this.view.y} ${this.view.w} ${this.view.h}`);
+    setAttr(this.svg, 'viewBox', `${this.view.x} ${this.view.y} ${this.view.w} ${this.view.h}`);
     this.requestLayout();
   }
   requestLayout() {
@@ -416,7 +425,7 @@ export class Atlas {
   /** Collapse the key to a single chip (the mode toggle hides with it). */
   setLegendCollapsed(collapsed) {
     this.chip.classList.toggle('collapsed', Boolean(collapsed));
-    this.keyButton.setAttribute('aria-expanded', String(!collapsed));
+    setAttr(this.keyButton, 'aria-expanded', String(!collapsed));
     this.keyButton.textContent = collapsed ? 'Map key' : 'Hide key';
     return Boolean(collapsed);
   }
@@ -467,17 +476,17 @@ export class Atlas {
   }
   layout() {
     const matrix = this.svg.getScreenCTM(); if (!matrix || matrix.a <= 0) return;
-    const px = matrix.a, scale = 1 / px, level = this.level(px);
-    this.grain.setAttribute('patternTransform', `scale(${scale})`);
-    this.svg.dataset.lod = level; this.svg.classList.toggle('atlas-zoomed', level === 'near');
+    const px = matrix.a, scale = 1 / px, level = this.level(px); this.px = px;
+    setAttr(this.grain, 'patternTransform', `scale(${scale})`);
+    setData(this.svg, { lod: level }); this.svg.classList.toggle('atlas-zoomed', level === 'near');
     // Keep the mode chip inside the visible map, whatever else shares the container.
     // Expose the visible map's insets so CSS can place the key inside it, whatever shares the container.
     const box = this.svg.getBoundingClientRect(), host = this.chip.parentElement?.getBoundingClientRect();
     if (host && !this.chipDetached) for (const side of ['top', 'right', 'bottom', 'left'])
       this.chip.style.setProperty(`--atlas-map-${side}`, `${Math.max(0, side === 'top' || side === 'left' ? box[side] - host[side] : host[side] - box[side])}px`);
-    for (const fx of this.pointEffects) fx.g.setAttribute('transform', `translate(${fx.x} ${fx.y}) scale(${scale})`);
+    for (const fx of this.pointEffects) setAttr(fx.g, 'transform', `translate(${fx.x} ${fx.y}) scale(${scale})`);
     if (!this.state) {
-      for (const p of this.map.provinces) this.markers.get(p.id).group.setAttribute('transform', `translate(${p.x} ${p.y}) scale(${scale})`);
+      for (const p of this.map.provinces) setAttr(this.markers.get(p.id).group, 'transform', `translate(${p.x} ${p.y}) scale(${scale})`);
       return;
     }
     this.armyRects = this.armyObstacles(px);
@@ -508,17 +517,16 @@ export class Atlas {
       placed.push(u.rect);
       if (Math.hypot(u.dx, u.dy) > 3) leaders.push(`M${u.x},${u.y}L${u.x + u.dx * scale},${u.y + u.dy * scale}`);
     }
-    this.leaders.replaceChildren();
-    if (leaders.length) this.leaders.append(node('path', { d: leaders.join(''), class: 'counter-leader' }));
+    this.keyed(this.leaders, leaders.join(''), d => d ? [node('path', { d, class: 'counter-leader' })] : []);
     // Paint: single provinces reuse their persistent, focusable counters; merges get cluster counters.
     const shownMarkers = new Set(), usedClusters = new Set(), labels = [];
     for (const u of units) {
       const at = `translate(${u.x + u.dx * scale} ${u.y + u.dy * scale}) scale(${scale})`;
       if (u.members.length === 1) {
         const id = u.members[0];
-        if (this.battleInfo.has(id)) { const mark = this.battleMarks.get(id); mark?.group.setAttribute('transform', at); mark?.group.classList.toggle('named', level !== 'far'); continue; }
+        if (this.battleInfo.has(id)) { const mark = this.battleMarks.get(id); if (mark) { setAttr(mark.group, 'transform', at); mark.group.classList.toggle('named', level !== 'far'); } continue; }
         const marker = this.markers.get(id); shownMarkers.add(id);
-        marker.group.setAttribute('transform', at);
+        setAttr(marker.group, 'transform', at);
         // Names: reserved space when zoomed in, only where uncrowded at mid, never at country level.
         // Try above the counter, then below it; otherwise the name waits for more zoom.
         const width = this.places.get(id).name.length * 5.8 + 4;
@@ -527,13 +535,13 @@ export class Atlas {
           const label = { x: u.x * px + u.dx - width / 2, y: u.y * px + u.dy + dy, w: width, h: 13 };
           const overlaps = q => label.x < q.x + q.w && q.x < label.x + label.w && label.y < q.y + q.h && q.y < label.y + label.h;
           if (u.locked && y < 0 || !placed.some(q => q !== u.rect && overlaps(q)) && !labels.some(overlaps) && !this.armyRects.some(overlaps)) {
-            named = true; labels.push(label); marker.label.setAttribute('y', y); break;
+            named = true; labels.push(label); setAttr(marker.label, 'y', y); break;
           }
         }
-        marker.label.style.display = named ? '' : 'none';
+        setDisplay(marker.label, named ? '' : 'none');
       } else {
         const key = [...u.members].sort().join(','); usedClusters.add(key);
-        const cluster = this.cluster(key); cluster.group.setAttribute('transform', at);
+        const cluster = this.cluster(key); setAttr(cluster.group, 'transform', at);
         this.paintCluster(cluster, u);
       }
     }
@@ -545,6 +553,12 @@ export class Atlas {
     this.paintAllianceNames(level, px, scale, taken);
     this.positions();
   }
+  /** Replace a layer's children only when `key` (what it draws) changed. */
+  keyed(layer, key, build) {
+    if (layer.__key === key) return;
+    layer.__key = key; layer.replaceChildren(...build(key));
+  }
+  keyedPaths(layer, list) { this.keyed(layer, JSON.stringify(list), () => list.map(attributes => node('path', attributes))); }
   cluster(key) {
     if (!this.clusters.has(key)) {
       const group = node('g', { class: 'map-counter map-cluster', 'data-cluster': key, tabindex: 0, role: 'button' });
@@ -566,21 +580,21 @@ export class Atlas {
   }
   paintCluster(cluster, u) {
     const width = counterWidth(u.troops), color = this.countries.get(u.owner)?.color || NEUTRAL, count = String(u.members.length);
-    cluster.disc.setAttribute('width', width); cluster.disc.setAttribute('x', -width / 2); cluster.disc.setAttribute('stroke', color);
-    cluster.stripe.setAttribute('x', -width / 2); cluster.stripe.setAttribute('fill', color);
-    const blocColor = this.blocColor?.(u.owner); cluster.bloc.style.display = blocColor ? '' : 'none';
-    if (blocColor) { cluster.bloc.setAttribute('fill', blocColor); cluster.bloc.setAttribute('x', -width / 2 - 3); }
-    cluster.text.textContent = u.troops; cluster.badgeText.textContent = count;
-    const bw = 6 + count.length * 6; cluster.badgeBody.setAttribute('width', bw); cluster.badgeBody.setAttribute('x', width / 2 - bw + 4);
-    cluster.badgeText.setAttribute('x', width / 2 - bw / 2 + 4);
+    setAttr(cluster.disc, 'width', width); setAttr(cluster.disc, 'x', -width / 2); setAttr(cluster.disc, 'stroke', color);
+    setAttr(cluster.stripe, 'x', -width / 2); setAttr(cluster.stripe, 'fill', color);
+    const blocColor = this.blocColor?.(u.owner); setDisplay(cluster.bloc, blocColor ? '' : 'none');
+    if (blocColor) { setAttr(cluster.bloc, 'fill', blocColor); setAttr(cluster.bloc, 'x', -width / 2 - 3); }
+    setText(cluster.text, u.troops); setText(cluster.badgeText, count);
+    const bw = 6 + count.length * 6; setAttr(cluster.badgeBody, 'width', bw); setAttr(cluster.badgeBody, 'x', width / 2 - bw + 4);
+    setAttr(cluster.badgeText, 'x', width / 2 - bw / 2 + 4);
     const industry = u.owner ? u.members.reduce((n, id) => n + (this.state.provinces.find(p => p.id === id)?.development || 0), 0) : 0;
-    cluster.industry.style.display = industry ? '' : 'none'; cluster.industryText.textContent = industry;
+    setDisplay(cluster.industry, industry ? '' : 'none'); setText(cluster.industryText, industry);
     const tagW = 12 + String(industry).length * 5.4, left = -tagW / 2;
-    cluster.industryBody.setAttribute('x', left); cluster.industryBody.setAttribute('width', tagW);
-    cluster.factory.setAttribute('transform', `translate(${left + 2} 0)`); cluster.industryText.setAttribute('x', left + 10.5);
-    cluster.group.dataset.total = u.troops; cluster.group.dataset.owner = u.owner || ''; cluster.group.dataset.industry = industry;
+    setAttr(cluster.industryBody, 'x', left); setAttr(cluster.industryBody, 'width', tagW);
+    setAttr(cluster.factory, 'transform', `translate(${left + 2} 0)`); setAttr(cluster.industryText, 'x', left + 10.5);
+    setData(cluster.group, { total: u.troops, owner: u.owner || '', industry });
     cluster.group.classList.toggle('owned', Boolean(u.owner && u.owner === this.state.you));
-    cluster.group.setAttribute('aria-label', `${this.countries.get(u.owner)?.name || 'Uncontrolled'}: ${u.members.length} provinces, ${u.troops} troops${industry ? `, industry ${industry}` : ''} combined. Activate to zoom in.`);
+    setAttr(cluster.group, 'aria-label', `${this.countries.get(u.owner)?.name || 'Uncontrolled'}: ${u.members.length} provinces, ${u.troops} troops${industry ? `, industry ${industry}` : ''} combined. Activate to zoom in.`);
   }
   /** Screen rectangles swept by each visible army over the next interpolation window. */
   armyObstacles(px) {
@@ -610,8 +624,16 @@ export class Atlas {
   }
   /** Coalition names across each bloc (player text: textContent only, length capped). */
   paintAllianceNames(level, px, scale, taken) {
-    this.allianceNames.replaceChildren();
-    if (level === 'near') return;
+    const specs = [];
+    if (level !== 'near') this.placeAllianceNames(px, scale, taken, specs);
+    this.keyed(this.allianceNames, JSON.stringify(specs), () => specs.map(({ bloc, transform, text, color, pips }) => {
+      const g = node('g', { class: 'alliance-name', 'data-bloc': bloc, transform });
+      const label = node('text', { class: 'alliance-label', fill: color }); label.textContent = text;
+      g.append(label, ...pips.map((fill, i, all) => node('rect', { class: 'alliance-pip', x: (i - all.length / 2) * 11 + 1, y: 9, width: 9, height: 5, fill })));
+      return g;
+    }));
+  }
+  placeAllianceNames(px, scale, taken, specs) {
     const overlaps = r => taken.some(q => r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.y + q.h && q.y < r.y + r.h);
     for (const bloc of this.blocInfo || []) {
       const members = new Set(bloc.members), owned = this.state.provinces.filter(p => members.has(p.owner)).map(p => p.id);
@@ -625,17 +647,20 @@ export class Atlas {
       search: for (const { x, y } of anchors) for (const dy of [0, 30, -30, 48, -48]) {
         const sx = this.near(x), r = { x: sx * px - width / 2, y: y * px + dy - 11, w: width, h: height };
         if (!onLand(x, y + dy * scale) || overlaps(r)) continue;
-        const g = node('g', { class: 'alliance-name', 'data-bloc': bloc.id, transform: `translate(${sx} ${y + dy * scale}) scale(${scale})` });
-        const label = node('text', { class: 'alliance-label', fill: bloc.color }); label.textContent = text;
-        g.append(label);
-        bloc.members.slice(0, 8).forEach((id, i, all) => g.append(node('rect', { class: 'alliance-pip', x: (i - all.length / 2) * 11 + 1, y: 9, width: 9, height: 5, fill: this.countries.get(id)?.color || NEUTRAL })));
-        this.allianceNames.append(g); taken.push(r); break search;
+        specs.push({ bloc: bloc.id, transform: `translate(${sx} ${y + dy * scale}) scale(${scale})`, text, color: bloc.color,
+          pips: bloc.members.slice(0, 8).map(id => this.countries.get(id)?.color || NEUTRAL) });
+        taken.push(r); break search;
       }
     }
   }
   paintCountryNames(level, px, scale, taken) {
-    this.countryNames.replaceChildren();
-    if (level !== 'far') return;
+    const specs = [];
+    if (level === 'far') this.placeCountryNames(px, scale, taken, specs);
+    this.keyed(this.countryNames, JSON.stringify(specs), () => specs.map(({ country, transform, text }) => {
+      const label = node('text', { transform, class: 'country-name', 'data-country': country }); label.textContent = text; return label;
+    }));
+  }
+  placeCountryNames(px, scale, taken, specs) {
     for (const c of this.map.countries) {
       const owned = this.state.provinces.filter(p => p.owner === c.id).map(p => p.id);
       if (!owned.length) continue;
@@ -656,8 +681,7 @@ export class Atlas {
       search: for (const { x, y } of anchors) for (const dy of [0, -24, 24, -36, 36]) {
         const sx = this.near(x), r = { x: sx * px - width / 2, y: y * px + dy - height / 2, w: width, h: height };
         if (!onLand(x, y + dy * scale) || taken.some(q => r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.y + q.h && q.y < r.y + r.h)) continue;
-        const label = node('text', { transform: `translate(${sx} ${y + dy * scale}) scale(${scale})`, class: 'country-name', 'data-country': c.id });
-        label.textContent = text; this.countryNames.append(label); taken.push(r); break search;
+        specs.push({ country: c.id, transform: `translate(${sx} ${y + dy * scale}) scale(${scale})`, text }); taken.push(r); break search;
       }
     }
   }
@@ -681,12 +705,12 @@ export class Atlas {
       if (!shape) continue;
       const role = picked.has(p.id) ? 'selected' : p.id === destination ? 'destination' : (reach ? reach.has(p.id) : neighbors.includes(p.id)) ? 'neighbor' : '';
       const how = reach && role === 'neighbor' ? ` reach-${lit ? lit.get(p.id) : friendly(p.owner) ? 'friendly' : 'attack'}` : '';
-      shape.setAttribute('class', `province ${role}${how}${p.owner ? ' occupied' : ''}${threatened.has(p.id) ? ' threatened' : ''}`);
-      marker.group.setAttribute('class', `map-counter ${role}${p.owner === state.you && state.you ? ' owned' : ''}${threatened.has(p.id) ? ' threatened' : ''}`);
-      marker.disc.setAttribute('stroke', this.countries.get(p.owner)?.color || NEUTRAL);
-      marker.stripe.setAttribute('fill', this.countries.get(p.owner)?.color || NEUTRAL);
-      const width = counterWidth(p.troops); marker.disc.setAttribute('width', width); marker.disc.setAttribute('x', -width / 2); marker.stripe.setAttribute('x', -width / 2);
-      marker.text.textContent = p.troops;
+      setAttr(shape, 'class', `province ${role}${how}${p.owner ? ' occupied' : ''}${threatened.has(p.id) ? ' threatened' : ''}`);
+      setAttr(marker.group, 'class', `map-counter ${role}${p.owner === state.you && state.you ? ' owned' : ''}${threatened.has(p.id) ? ' threatened' : ''}`);
+      setAttr(marker.disc, 'stroke', this.countries.get(p.owner)?.color || NEUTRAL);
+      setAttr(marker.stripe, 'fill', this.countries.get(p.owner)?.color || NEUTRAL);
+      const width = counterWidth(p.troops); setAttr(marker.disc, 'width', width); setAttr(marker.disc, 'x', -width / 2); setAttr(marker.stripe, 'x', -width / 2);
+      setText(marker.text, p.troops);
       // Industry as drawn pips (font-independent): one per level, a small arrow while building.
       const level = p.owner ? clamp(p.development || 1, 0, 5) : 0, key = `${level}${p.developing ? '+' : ''}`;
       if (marker.industry.dataset.level !== key) {
@@ -695,7 +719,7 @@ export class Atlas {
         for (let i = 0; i < level; i++) marker.industry.append(node('rect', { x: -span / 2 + i * 6, y: 13, width: 4, height: 4 }));
         if (p.developing) marker.industry.append(node('path', { class: 'industry-rising', d: `M${span / 2 - 4},17.5l2-5 2 5Z` }));
       }
-      marker.group.setAttribute('aria-label', `${this.places.get(p.id).name}, ${p.troops} troops, ${this.countries.get(p.owner)?.name || 'uncontrolled'}${p.owner ? `, industry ${p.development}` : ''}`);
+      setAttr(marker.group, 'aria-label', `${this.places.get(p.id).name}, ${p.troops} troops, ${this.countries.get(p.owner)?.name || 'uncontrolled'}${p.owner ? `, industry ${p.development}` : ''}`);
     }
     this.paintRelations();
     for (const c of this.map.countries) {
@@ -703,22 +727,20 @@ export class Atlas {
       if (owned.length) this.lastOwned.set(c.id, owned);
     }
     for (const edge of this.seas.children) edge.classList.toggle('selected-connection', edge.dataset.edge.split('|').includes(source));
-    this.connections.replaceChildren();
-    for (const id of neighbors) this.connections.append(node('path', { d: this.path(source, id), class: id === destination ? 'target-connection' : 'adjacent-connection', ...(id === destination ? { 'marker-end': `url(#${this.prefix}march-head)` } : {}) }));
+    // These layers are repeated by <use>: rebuilt only when what they draw changes.
+    const head = { 'marker-end': `url(#${this.prefix}march-head)` }, lines = [];
+    for (const id of neighbors) lines.push({ d: this.path(source, id), class: id === destination ? 'target-connection' : 'adjacent-connection', ...(id === destination ? head : {}) });
     // A longer march: the quickest route through your own and allied land, leg by leg (the server's route).
     if (source && destination && !neighbors.includes(destination) && state.you && state.travelTimes) {
       const route = friendlyPath(state, state.you, source, destination)?.path || [];
-      route.forEach((id, i) => this.connections.append(node('path', { d: this.path(i ? route[i - 1] : source, id), class: 'target-connection route-leg',
-        ...(i === route.length - 1 ? { 'marker-end': `url(#${this.prefix}march-head)` } : {}) })));
+      route.forEach((id, i) => lines.push({ d: this.path(i ? route[i - 1] : source, id), class: 'target-connection route-leg', ...(i === route.length - 1 ? head : {}) }));
     }
-    this.routes.replaceChildren();
+    this.keyedPaths(this.connections, lines);
     // Your rally points (private to you): a dashed arrow in your colour from source to rally province.
-    for (const r of state.rallies || []) this.routes.append(node('path', { d: this.path(r.from, r.to), class: 'rally-halo' }), node('path', { d: this.path(r.from, r.to), stroke: this.countries.get(r.country)?.color || NEUTRAL,
-      class: `rally-connection${r.status === 'paused' ? ' paused' : ''}`, 'data-rally': r.from, 'marker-end': `url(#${this.prefix}march-head)` }));
-    this.trails.replaceChildren();
-    for (const a of state.armies) if (a.amount >= 5 && !a.engaged && (a.country === state.you || a.to === destination || a.from === source)) {
-      this.trails.append(node('path', { d: this.pointPath(a.startPoint || this.places.get(a.from), this.places.get(a.to)), class: `army-trail${a.returning ? ' returning' : ''}` }));
-    }
+    this.keyedPaths(this.routes, (state.rallies || []).flatMap(r => [{ d: this.path(r.from, r.to), class: 'rally-halo' }, { d: this.path(r.from, r.to), stroke: this.countries.get(r.country)?.color || NEUTRAL,
+      class: `rally-connection${r.status === 'paused' ? ' paused' : ''}`, 'data-rally': r.from, ...head }]));
+    this.keyedPaths(this.trails, state.armies.filter(a => a.amount >= 5 && !a.engaged && (a.country === state.you || a.to === destination || a.from === source))
+      .map(a => ({ d: this.pointPath(a.startPoint || this.places.get(a.from), this.places.get(a.to)), class: `army-trail${a.returning ? ' returning' : ''}` })));
     const ids = new Set(state.armies.map(a => a.id));
     for (const [id, entry] of this.armies) if (!ids.has(id)) { entry.group.remove(); this.armies.delete(id); }
     // Moving armies: the top map layer, drawn once on the copy nearest the view centre.
@@ -736,9 +758,9 @@ export class Atlas {
       }
       const entry = this.armies.get(army.id), hostile = Boolean(me) && threatening(state, army, state.you);
       const origin = army.startPoint || this.places.get(army.from), target = this.places.get(army.to), dx = wrapDelta(target.x - origin.x);
-      entry.body.setAttribute('transform', `rotate(${Math.atan2(target.y - origin.y, dx) * 180 / Math.PI})`);
+      setAttr(entry.body, 'transform', `rotate(${Math.atan2(target.y - origin.y, dx) * 180 / Math.PI})`);
       const color = this.countries.get(army.country)?.color || NEUTRAL;
-      entry.disc.setAttribute('fill', color); entry.pill.setAttribute('stroke', color);
+      setAttr(entry.disc, 'fill', color); setAttr(entry.pill, 'stroke', color);
       // Engaged armies are shown by the battle marker at their target, not as a moving arrow.
       entry.group.classList.toggle('hostile', Boolean(hostile)); entry.group.classList.toggle('engaged', Boolean(army.engaged));
       entry.group.classList.toggle('returning', Boolean(army.returning));
@@ -746,14 +768,14 @@ export class Atlas {
       entry.large = !army.engaged && army.amount >= 5 && (army.amount >= .25 * (strength.get(army.country) || Infinity) || biggest.has(army.id));
       entry.group.classList.toggle('large', entry.large);
       const count = army.amount >= 3 ? String(army.amount) : '', w = count.length * 6.6 + 7;
-      entry.label.textContent = count; entry.pill.style.display = count ? '' : 'none';
-      entry.pill.setAttribute('width', w); entry.pill.setAttribute('x', -w / 2);
-      entry.group.setAttribute('aria-label', `${this.countries.get(army.country)?.name || 'Army'}: ${army.amount} troops, ${this.places.get(army.from)?.name} to ${this.places.get(army.to)?.name}${army.returning ? ', returning' : ''}`);
+      setText(entry.label, count); setDisplay(entry.pill, count ? '' : 'none');
+      setAttr(entry.pill, 'width', w); setAttr(entry.pill, 'x', -w / 2);
+      setAttr(entry.group, 'aria-label', `${this.countries.get(army.country)?.name || 'Army'}: ${army.amount} troops, ${this.places.get(army.from)?.name} to ${this.places.get(army.to)?.name}${army.returning ? ', returning' : ''}`);
     }
     this.paintBattles(state);
     this.paintDraft();
     this.layout();
-    if (!this.frame && !this.reducedMotion && state.status === 'running') this.frame = requestAnimationFrame(() => this.animate());
+    this.animateSoon();
   }
   /** Colours, border classes, war fronts, alliance blocs, hover outlines and the legend. */
   paintRelations() {
@@ -766,13 +788,13 @@ export class Atlas {
     const fill = country => !rel ? this.countries.get(country)?.color || '#aaa994' : !country ? RELATION.none : country === focus ? RELATION.focus :
       rel.allies.includes(country) ? RELATION.ally : rel.enemies.includes(country) ? RELATION.enemy : RELATION.neutral;
     for (const p of state.provinces) {
-      this.shapes.get(p.id)?.setAttribute('fill', fill(p.owner));
+      setAttr(this.shapes.get(p.id), 'fill', fill(p.owner));
       const marker = this.markers.get(p.id), bloc = this.blocColor(p.owner);
       if (!marker) continue;
-      marker.bloc.style.display = bloc ? '' : 'none';
-      if (bloc) { marker.bloc.setAttribute('fill', bloc); marker.bloc.setAttribute('x', -counterWidth(p.troops) / 2 - 3); }
+      setDisplay(marker.bloc, bloc ? '' : 'none');
+      if (bloc) { setAttr(marker.bloc, 'fill', bloc); setAttr(marker.bloc, 'x', -counterWidth(p.troops) / 2 - 3); }
     }
-    this.svg.dataset.mode = rel ? 'diplomacy' : 'political'; this.svg.dataset.relationFocus = focus || '';
+    setData(this.svg, { mode: rel ? 'diplomacy' : 'political', relationFocus: focus || '' });
     // Province borders (same owner), softened allied borders (same coalition), country borders.
     for (const b of this.borders) {
       const oa = owner(b.a), ob = owner(b.b);
@@ -791,12 +813,9 @@ export class Atlas {
       el.append(node('path', { d: b.d, class: 'war-front-glow' }), node('path', { d: b.d, class: 'war-front-teeth' }));
       this.fronts.append(el); this.frontEls.set(key, el);
     }
-    this.seaFronts.replaceChildren();
-    for (const e of this.map.edges) {
-      const oa = owner(e.from), ob = owner(e.to);
-      if (e.sea && oa && ob && oa !== ob && atWar(state, oa, ob) && !contact.has(warKey(oa, ob)))
-        this.seaFronts.append(node('path', { d: this.path(e.from, e.to), class: 'sea-front', 'data-sea-front': `${e.from}|${e.to}` }));
-    }
+    this.keyedPaths(this.seaFronts, this.map.edges.filter(e => { const oa = owner(e.from), ob = owner(e.to);
+      return e.sea && oa && ob && oa !== ob && atWar(state, oa, ob) && !contact.has(warKey(oa, ob)); })
+      .map(e => ({ d: this.path(e.from, e.to), class: 'sea-front', 'data-sea-front': `${e.from}|${e.to}` })));
     // Alliance blocs: one outline around the union of the members' land, inner glow via a clip.
     const live = new Set();
     this.blocInfo = [];
@@ -813,10 +832,10 @@ export class Atlas {
       const key = ids.join(',');
       if (e.key !== key) {
         e.key = key; const d = this.outline(new Set(ids));
-        e.shape.setAttribute('d', ids.map(id => this.places.get(id).path).join('')); e.band.setAttribute('d', d); e.line.setAttribute('d', d);
+        setAttr(e.shape, 'd', ids.map(id => this.places.get(id).path).join('')); setAttr(e.band, 'd', d); setAttr(e.line, 'd', d);
       }
-      e.g.dataset.bloc = c.id; e.g.dataset.members = c.members.join(','); e.g.dataset.provinces = key;
-      e.band.setAttribute('stroke', colors[c.id]); e.line.setAttribute('stroke', colors[c.id]);
+      setData(e.g, { bloc: c.id, members: c.members.join(','), provinces: key });
+      setAttr(e.band, 'stroke', colors[c.id]); setAttr(e.line, 'stroke', colors[c.id]);
     }
     // Forming alliances (approved, inside the activation delay): dashed outline in the future colour.
     this.formingInfo = [];
@@ -827,9 +846,9 @@ export class Atlas {
       let e = this.blocEls.get(key);
       if (!e) { const g = node('g', { class: 'alliance-bloc forming' }), line = node('path', { class: 'bloc-line bloc-forming' }); g.append(line); this.blocs.append(g); e = { g, line }; this.blocEls.set(key, e); }
       const provinces = ids.join(',');
-      if (e.key !== provinces) { e.key = provinces; e.line.setAttribute('d', this.outline(new Set(ids))); }
-      e.g.dataset.forming = f.id; e.g.dataset.members = f.members.join(','); e.g.dataset.provinces = provinces;
-      e.line.setAttribute('stroke', colors[f.id]);
+      if (e.key !== provinces) { e.key = provinces; setAttr(e.line, 'd', this.outline(new Set(ids))); }
+      setData(e.g, { forming: f.id, members: f.members.join(','), provinces });
+      setAttr(e.line, 'stroke', colors[f.id]);
     }
     for (const [id, e] of this.blocEls) if (!live.has(id)) { e.g.remove(); this.blocEls.delete(id); }
     this.paintOutlines(); this.paintLegend(colors, focus);
@@ -841,8 +860,8 @@ export class Atlas {
     const rel = who ? relationsOf(this.state, who) : null;
     const land = countries => this.state.provinces.filter(p => countries.includes(p.owner)).map(p => p.id);
     for (const [kind, list] of [['focus', rel ? [who] : []], ['ally', rel?.allies || []], ['enemy', rel?.enemies || []]])
-      this.relationPaths[kind].setAttribute('d', list.length ? this.outline(new Set(land(list))) : '');
-    this.svg.dataset.outlineFocus = who || '';
+      setAttr(this.relationPaths[kind], 'd', list.length ? this.outline(new Set(land(list))) : '');
+    setData(this.svg, { outlineFocus: who || '' });
   }
   paintRelationsSoon() {
     if (this.relationsFrame) return;
@@ -850,14 +869,11 @@ export class Atlas {
   }
   paintLegend(colors, focus) {
     const diplomacy = this.mode === 'diplomacy';
-    this.modeButton.textContent = diplomacy ? 'Political view' : 'Diplomacy view';
-    this.modeButton.setAttribute('aria-pressed', String(diplomacy)); this.chip.classList.toggle('diplomacy', diplomacy);
-    this.legend.replaceChildren();
-    const heading = text => { const b = document.createElement('b'); b.textContent = text; this.legend.append(b); };
-    const item = (color, text, kind) => {
-      const row = document.createElement('span'), swatch = document.createElement('i'), label = document.createElement('span');
-      row.className = `legend-item legend-${kind}`; swatch.style.background = color; swatch.style.color = color; label.textContent = text; row.append(swatch, label); this.legend.append(row);
-    };
+    setText(this.modeButton, diplomacy ? 'Political view' : 'Diplomacy view');
+    setAttr(this.modeButton, 'aria-pressed', String(diplomacy)); this.chip.classList.toggle('diplomacy', diplomacy);
+    const specs = [];
+    const heading = text => specs.push([text]);
+    const item = (color, text, kind) => specs.push([text, color, kind]);
     if (diplomacy) {
       heading(focus ? `Relations of ${this.countries.get(focus)?.name || focus}` : 'Hover a country');
       item(RELATION.focus, focus ? this.countries.get(focus)?.name || 'Focus' : 'Focus', 'focus'); item(RELATION.ally, 'Allies', 'ally');
@@ -872,7 +888,12 @@ export class Atlas {
       for (const pair of wars.slice(0, 4)) item('#d8342a', pair.split(':').map(id => faction(id).short).join(' – '), 'war');
       if (wars.length > 4) heading(`+${wars.length - 4} more wars`);
     }
-    this.legend.hidden = !this.legend.childElementCount;
+    this.keyed(this.legend, JSON.stringify(specs), () => specs.map(([text, color, kind]) => {
+      if (!kind) { const b = document.createElement('b'); b.textContent = text; return b; }
+      const row = document.createElement('span'), swatch = document.createElement('i'), label = document.createElement('span');
+      row.className = `legend-item legend-${kind}`; swatch.style.background = color; swatch.style.color = color; label.textContent = text; row.append(swatch, label); return row;
+    }));
+    this.legend.hidden = !specs.length;
     this.keyButton.hidden = this.legend.hidden; this.chip.classList.toggle('empty', this.legend.hidden);
   }
   /** Persistent clash markers for phased battles: attacker strength vs defending garrison. */
@@ -903,21 +924,20 @@ export class Atlas {
         const swords = node('path', { class: 'battle-swords', d: SWORDS }), flashes = node('g', { class: 'battle-flashes', 'aria-hidden': 'true' });
         const name = node('text', { class: 'province-name battle-name', y: -20 }); name.textContent = this.places.get(id).name;
         group.append(pulse, right, left, divider, body, attack, swords, defend, name, flashes); this.battleLayer.append(group);
-        this.battleMarks.set(id, { group, pulse, body, left, right, divider, attack, defend, flashes });
+        this.battleMarks.set(id, { group, pulse, body, left, right, divider, attack, defend, flashes, swords });
       }
       const mark = this.battleMarks.get(id), w = info.width, aw = String(info.attack).length * 7.5 + 8, dw = String(info.defend).length * 7.5 + 8;
-      mark.pulse.setAttribute('x', -w / 2 - 3); mark.pulse.setAttribute('width', w + 6);
-      mark.body.setAttribute('x', -w / 2); mark.body.setAttribute('width', w);
+      setAttr(mark.pulse, 'x', -w / 2 - 3); setAttr(mark.pulse, 'width', w + 6);
+      setAttr(mark.body, 'x', -w / 2); setAttr(mark.body, 'width', w);
       mark.info = info; mark.w = w;
-      mark.left.setAttribute('fill', info.colors.attacker); mark.right.setAttribute('fill', info.colors.defender);
+      setAttr(mark.left, 'fill', info.colors.attacker); setAttr(mark.right, 'fill', info.colors.defender);
       this.setSplit(mark, info.ratio);
       const swordsAt = -w / 2 + 5 + aw + 11;
-      mark.attack.setAttribute('x', -w / 2 + 5 + aw / 2); mark.attack.textContent = info.attack;
-      mark.group.querySelector('.battle-swords').setAttribute('transform', `translate(${swordsAt} 0)`);
-      mark.defend.setAttribute('x', w / 2 - 5 - dw / 2); mark.defend.textContent = info.defend;
-      mark.group.dataset.attack = info.attack; mark.group.dataset.defend = info.defend; mark.group.dataset.ratio = info.ratio.toFixed(4);
-      mark.group.dataset.attackColor = info.colors.attacker; mark.group.dataset.defendColor = info.colors.defender;
-      mark.group.setAttribute('aria-label', `Battle at ${this.places.get(id).name}: ${info.attack} attacking, ${info.defend} defending`);
+      setAttr(mark.attack, 'x', -w / 2 + 5 + aw / 2); setText(mark.attack, info.attack);
+      setAttr(mark.swords, 'transform', `translate(${swordsAt} 0)`);
+      setAttr(mark.defend, 'x', w / 2 - 5 - dw / 2); setText(mark.defend, info.defend);
+      setData(mark.group, { attack: info.attack, defend: info.defend, ratio: info.ratio.toFixed(4), attackColor: info.colors.attacker, defendColor: info.colors.defender });
+      setAttr(mark.group, 'aria-label', `Battle at ${this.places.get(id).name}: ${info.attack} attacking, ${info.defend} defending`);
       // Flash only a round this atlas has not shown yet; a fresh load never replays old rounds.
       const round = info.battle.lastRound, key = info.battle.id || id, seen = this.seenRounds.get(key);
       if (round && seen !== undefined && round.tick > seen) this.roundFlash(mark, round, w, aw);
@@ -934,10 +954,10 @@ export class Atlas {
   }
   setSplit(mark, ratio) {
     const w = mark.w;
-    for (const bar of [mark.left, mark.right]) { bar.setAttribute('x', -w / 2); bar.setAttribute('width', w); }
+    for (const bar of [mark.left, mark.right]) { setAttr(bar, 'x', -w / 2); setAttr(bar, 'width', w); }
     mark.left.style.transform = `scaleX(${ratio})`;
     mark.divider.style.transform = `translateX(${-w / 2 + ratio * w}px)`;
-    mark.divider.style.display = ratio <= 0 || ratio >= 1 ? 'none' : '';
+    setDisplay(mark.divider, ratio <= 0 || ratio >= 1 ? 'none' : '');
   }
   /** A finished battle fills with the winner's colour for a final flash, then disappears. */
   resolveBattle(id, mark) {
@@ -947,14 +967,13 @@ export class Atlas {
     this.setSplit(mark, won ? 1 : 0);
     this.later(() => { mark.group.remove(); if (this.battleMarks.get(id) === mark) this.battleMarks.delete(id); }, this.reducedMotion ? 600 : 900);
   }
+  /** The last round's losses under the counter as plain text, cleared shortly after. Battles roll every game second,
+   * so nothing here animates or restarts an animation (that was a constant flicker on busy maps). */
   roundFlash(mark, round, w, aw) {
-    mark.group.classList.remove('battle-hit'); void mark.group.getBBox?.(); mark.group.classList.add('battle-hit');
-    mark.flashes.replaceChildren();
-    for (const [loss, x] of [[round.attackerLoss, -w / 2 + 4 + aw / 2], [round.defenderLoss, w / 2 - 14]]) {
-      if (!(loss > 0)) continue;
-      const text = node('text', { class: 'round-loss', x, y: 27 }); text.textContent = `−${loss}`; mark.flashes.append(text);
-    }
-    this.later(() => { mark.flashes.replaceChildren(); mark.group.classList.remove('battle-hit'); }, 1300);
+    const losses = [[round.attackerLoss, -w / 2 + 4 + aw / 2], [round.defenderLoss, w / 2 - 14]].filter(([loss]) => loss > 0);
+    this.keyed(mark.flashes, JSON.stringify(losses), () => losses.map(([loss, x]) => { const text = node('text', { class: 'round-loss', x, y: 27 }); text.textContent = `−${loss}`; return text; }));
+    mark.flashAt = round.tick;
+    this.later(() => { if (mark.flashAt === round.tick) this.keyed(mark.flashes, '[]', () => []); }, 1300);
   }
   later(fn, ms) { const t = setTimeout(() => { this.timers.delete(t); fn(); }, ms); this.timers.add(t); }
   /** Decorative, aria-hidden map animation. Unknown kinds or ids are a no-op; never throws. */
@@ -1014,7 +1033,7 @@ export class Atlas {
   pointEffect(g, at, still) {
     const entry = { g, x: at.x, y: at.y }; this.pointEffects.add(entry);
     g.classList.add('map-effect'); if (still) g.classList.add('still');
-    g.setAttribute('transform', `translate(${at.x} ${at.y}) scale(${1 / (this.svg.getScreenCTM()?.a || 1)})`);
+    setAttr(g, 'transform', `translate(${at.x} ${at.y}) scale(${1 / (this.svg.getScreenCTM()?.a || 1)})`);
     this.effects.append(g);
     this.later(() => { g.remove(); this.pointEffects.delete(entry); }, still ? 1600 : 2400);
   }
@@ -1050,13 +1069,16 @@ export class Atlas {
   positions() {
     if (!this.state) return;
     const elapsed = this.reducedMotion || this.state.status !== 'running' ? 0 : Math.min(2, (performance.now() - this.receivedAt) / 1000) * this.state.speed;
-    const px = this.svg.getScreenCTM()?.a || 1, scale = 1 / px, counters = this.counterRects || [];
+    // px is cached by layout(): reading the CTM here would force a layout on every animation frame.
+    const px = this.px || this.svg.getScreenCTM()?.a || 1, scale = 1 / px, counters = this.counterRects || [];
     for (const army of this.state.armies) {
       const point = journeyPoint(army, this.positionsById, Math.min(this.state.tick + elapsed, army.arrivesAt - .01));
       const entry = this.armies.get(army.id);
       if (!entry) continue;
       const size = entry.large ? 1.3 : 1, x = this.near(point.x);
-      entry.group.setAttribute('transform', `translate(${x} ${point.y}) scale(${scale * size})`);
+      // Move the marker only when it would move on screen (half a pixel): zoomed out, most frames change nothing.
+      const at = `${Math.round(x * px * 2)} ${Math.round(point.y * px * 2)} ${px} ${size}`;
+      if (entry.at !== at) { entry.at = at; setAttr(entry.group, 'transform', `translate(${x.toFixed(2)} ${point.y.toFixed(2)}) scale(${(scale * size).toFixed(4)})`); }
       // Taps on a province counter always win: an army's small hit target (≤17 px) switches off
       // while it overlaps any counter or battle box. Keyboard focus (Tab) is unaffected.
       const r = 6.5 * size, sx = x * px, sy = point.y * px;
@@ -1121,8 +1143,8 @@ export class Atlas {
   /** The selection rectangle between two map points (drawn in map units above the counters). */
   drawLasso(a, b) {
     if (!this.lassoRect) { this.lassoRect = node('rect', { class: 'lasso', 'pointer-events': 'none', 'aria-hidden': 'true' }); this.svg.append(this.lassoRect); }
-    this.lassoRect.setAttribute('x', Math.min(a.x, b.x)); this.lassoRect.setAttribute('y', Math.min(a.y, b.y));
-    this.lassoRect.setAttribute('width', Math.abs(a.x - b.x)); this.lassoRect.setAttribute('height', Math.abs(a.y - b.y));
+    setAttr(this.lassoRect, 'x', Math.min(a.x, b.x)); setAttr(this.lassoRect, 'y', Math.min(a.y, b.y));
+    setAttr(this.lassoRect, 'width', Math.abs(a.x - b.x)); setAttr(this.lassoRect, 'height', Math.abs(a.y - b.y));
   }
   endLasso() { this.lassoRect?.remove(); this.lassoRect = null; }
   /** Provinces whose counter point lies inside the rectangle, on any repeated world copy. */
@@ -1132,11 +1154,16 @@ export class Atlas {
       return q.y >= y0 && q.y <= y1 && [-WORLD, 0, WORLD, 2 * WORLD].some(k => q.x + k >= x0 && q.x + k <= x1); }).map(p => p.id);
   }
   destroy() {
-    if (this.frame) cancelAnimationFrame(this.frame); this.frame = null;
+    this.destroyed = true; clearTimeout(this.frame); this.frame = null; document.removeEventListener('visibilitychange', this.onVisibility);
     if (this.layoutFrame) cancelAnimationFrame(this.layoutFrame); this.layoutFrame = null;
     for (const t of this.timers) clearTimeout(t); this.timers.clear(); clearTimeout(this.pressTimer);
     clearTimeout(this.hoverTimer); if (this.relationsFrame) cancelAnimationFrame(this.relationsFrame);
     this.resize.disconnect(); this.tooltip.remove(); this.chip.remove();
   }
-  animate() { this.frame = null; this.positions(); if (this.state?.status === 'running') this.frame = requestAnimationFrame(() => this.animate()); }
+  /** Army interpolation: a capped frame rate (ARMY_FPS, lower on touch devices), and no loop at all while nothing
+   * marches, the match is not running, motion is reduced or the page is hidden. update() and visibility restart it. */
+  animateSoon() {
+    if (this.frame || this.destroyed || this.reducedMotion || document.hidden || this.state?.status !== 'running' || !this.state.armies.some(a => !a.engaged)) return;
+    this.frame = setTimeout(() => requestAnimationFrame(() => { this.frame = null; this.positions(); this.animateSoon(); }), 1000 / ARMY_FPS);
+  }
 }

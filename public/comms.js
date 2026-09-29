@@ -9,7 +9,7 @@
 import { inbox, arrivals } from './comms-model.js';
 import { headlineCopy, systemCopy } from './feed-model.js';
 import { icon, insignia, faction } from './presentation.js';
-import { escapeHTML as esc, clock } from './ui.js';
+import { escapeHTML as esc, clock, patchList } from './ui.js';
 import { relationsOf } from './relations.js';
 
 const QUICK = ['Agreed.', 'Not now.', 'Let us talk terms.'];
@@ -222,15 +222,17 @@ export class Comms {
     const a = this.toast.actions, p = this.toast.personal, f = this.toast.flash;
     // ONE lane: a decision owns it; otherwise the answer to your own last order (brief); otherwise a personal toast.
     const loudHTML = a.length ? this.actionToast(a[0], a.length - 1) : '', quietHTML = a.length ? '' : f ? this.flashToast(f) : p ? this.personalToast(p) : '';
-    if (loud.dataset.html !== loudHTML) { loud.dataset.html = loudHTML; loud.innerHTML = loudHTML; }
-    if (quiet.dataset.html !== quietHTML) { quiet.dataset.html = quietHTML; quiet.innerHTML = quietHTML; }
+    // Rebuilt only when the toast itself changes (never for a ticking countdown), so its entrance does not replay.
+    if (loud.__html !== loudHTML) { loud.__html = loudHTML; loud.innerHTML = loudHTML; }
+    if (quiet.__html !== quietHTML) { quiet.__html = quietHTML; quiet.innerHTML = quietHTML; }
+    for (const eta of this.toasts.querySelectorAll('[data-eta]')) { const s = String(Math.max(0, Number(eta.dataset.eta) - this.state.tick)); if (eta.textContent !== s) eta.textContent = s; }
     this.toasts.dataset.state = a.length ? 'action' : f ? 'flash' : p ? 'personal' : 'empty';
   }
   actionToast(r, more) {
     const i = r.item, n = this.names;
     let text, buttons;
     if (i.type === 'threat') {
-      text = `<b>${esc(n.country(i.army.country))}</b> attacks ${esc(n.province(i.army.to))} in ${Math.max(0, i.army.arrivesAt - this.state.tick)}s`;
+      text = `<b>${esc(n.country(i.army.country))}</b> attacks ${esc(n.province(i.army.to))} in <span data-eta="${Number(i.army.arrivesAt)}"></span>s`;
       buttons = `<button type="button" class="cx-primary" data-do="view">View</button>`;
     } else if (i.system === 'offer') {
       text = i.candidate && i.candidate !== this.state.you ? `<b>${esc(n.country(i.from))}</b> proposes <b>${esc(n.country(i.candidate))}</b> for the <b>${esc(i.name)}</b>`
@@ -270,7 +272,7 @@ export class Comms {
   }
   renderList() {
     const list = this.$('.cx-list'), box = this.box; if (!box) return;
-    const html = this.ordered().map(c => {
+    const items = this.ordered().map(c => {
       const noAlliance = c.kind === 'alliance' && !c.side;
       const preview = c.last ? this.preview(c.last) : noAlliance ? 'You are independent. Propose an alliance to open a group chat.' : c.kind === 'dm' ? 'No messages yet. Say hello.' : 'No messages yet.';
       const chip = c.action ? `<span class="cx-chip">${c.rows.find(r => r.pending)?.item.system === 'offer' ? 'Offer' : c.rows.find(r => r.pending)?.item.type === 'threat' ? 'Attack' : 'Decide'}</span>` : '';
@@ -279,9 +281,9 @@ export class Comms {
       const glyph = c.kind === 'dm' ? insignia(c.country) : icon(c.kind === 'world' ? 'globe' : 'ally');
       const title = c.kind === 'alliance' ? (c.side ? `Your alliance: ${this.names.side(c.side)}` : 'No alliance yet') : this.convTitle(c);
       const propose = noAlliance && !this.readOnly && this.state.status === 'running' ? '<button type="button" class="cx-propose" data-propose="">Propose an alliance</button>' : '';
-      return `<li${c.kind === 'alliance' ? ' class="cx-pinned"' : ''}><button type="button" class="cx-conv" aria-current="${c.key === this.conv && this.view === 'thread'}" data-conv="${esc(c.key)}" data-kind="${c.kind}" data-state="${c.action ? 'action' : c.unread ? 'unread' : 'read'}"${c.kind === 'world' && this.pulse ? ' data-pulse="1"' : ''}><span class="cx-standard">${glyph}</span><span class="cx-conv-main"><b>${esc(title)}</b><span class="cx-preview">${esc(preview)}</span></span><span class="cx-conv-meta"><time>${c.last ? clock(c.last.tick) : ''}</time>${tag ? `<small class="cx-rel" data-rel="${esc(tag)}">${esc(tag)}</small>` : ''}${chip}${badge}</span></button>${propose}</li>`;
-    }).join('');
-    if (list.dataset.html !== html) { list.dataset.html = html; list.innerHTML = html; }
+      return { key: c.key, html: `<li${c.kind === 'alliance' ? ' class="cx-pinned"' : ''}><button type="button" class="cx-conv" aria-current="${c.key === this.conv && this.view === 'thread'}" data-conv="${esc(c.key)}" data-kind="${c.kind}" data-state="${c.action ? 'action' : c.unread ? 'unread' : 'read'}"${c.kind === 'world' && this.pulse ? ' data-pulse="1"' : ''}><span class="cx-standard">${glyph}</span><span class="cx-conv-main"><b>${esc(title)}</b><span class="cx-preview">${esc(preview)}</span></span><span class="cx-conv-meta"><time>${c.last ? clock(c.last.tick) : ''}</time>${tag ? `<small class="cx-rel" data-rel="${esc(tag)}">${esc(tag)}</small>` : ''}${chip}${badge}</span></button>${propose}</li>` };
+    });
+    patchList(list, items);
   }
   preview(r) {
     const i = r.item, n = this.names;
@@ -305,7 +307,7 @@ export class Comms {
     const title = this.$('.cx-title'); title.textContent = this.view === 'thread' && conv ? this.convTitle(conv) : 'Messages'; title.tabIndex = -1;
     this.$('.cx-readall').hidden = !this.box || this.readOnly;
     const composer = this.$('.cx-composer'), quick = this.$('.cx-quick');
-    if (this.view !== 'thread' || !conv) { if (rowsEl.dataset.html) { rowsEl.dataset.html = ''; rowsEl.innerHTML = ''; } composer.hidden = quick.hidden = true; return; }
+    if (this.view !== 'thread' || !conv) { if (rowsEl.firstChild) rowsEl.replaceChildren(); rowsEl.__conv = null; composer.hidden = quick.hidden = true; return; }
     const me = this.state.players?.find(p => p.id === this.state.you);
     const canWrite = !this.readOnly && this.state.status === 'running' && me?.eliminatedAt == null && (conv.kind !== 'alliance' || conv.side) && !(conv.kind === 'dm' && conv.eliminated);
     composer.hidden = !canWrite; quick.hidden = !canWrite || conv.kind !== 'dm';
@@ -314,17 +316,24 @@ export class Comms {
     this.$('.cx-note').textContent = conv.kind === 'alliance' && this.state.rules?.revealAllianceChatAfterMatch ? 'Alliance chat becomes public in the replay after the match ends.' : '';
     this.renderSwitch(conv); this.renderMembers(conv);
     const qhtml = QUICK.map(q => `<button type="button" data-quick="${esc(q)}">${esc(q)}</button>`).join('');
-    if (quick.dataset.html !== qhtml) { quick.dataset.html = qhtml; quick.innerHTML = qhtml; }
-    let minute = -1, html = '';
+    if (quick.__html !== qhtml) { quick.__html = qhtml; quick.innerHTML = qhtml; }
+    // Keyed rows: a new message adds one row; existing rows (and their entrance animation) are left alone.
+    let minute = -1, items = [];
     for (const r of conv.rows) {
       if (r.item.system === 'accepted' && r.item.country === this.state.you) continue; // the offer row already says so
       const m = Math.floor(r.tick / 60);
-      if (m !== minute) { minute = m; html += `<li class="cx-sep" aria-hidden="true"><span>${m === 0 ? 'Opening' : clock(m * 60)}</span></li>`; }
-      if (r.key === this.divider) html += '<li class="cx-divider" role="separator"><span>Unread</span></li>';
-      html += this.row(r);
+      if (m !== minute) { minute = m; items.push({ key: `sep:${m}`, html: `<li class="cx-sep" aria-hidden="true"><span>${m === 0 ? 'Opening' : clock(m * 60)}</span></li>` }); }
+      if (r.key === this.divider) items.push({ key: 'divider', html: '<li class="cx-divider" role="separator"><span>Unread</span></li>' });
+      items.push({ key: `row:${r.key}`, html: this.row(r) });
     }
-    if (!conv.rows.length) html = `<li class="cx-empty">${conv.kind === 'alliance' && !conv.side ? `You are independent. Propose an alliance to open a group chat.${this.readOnly ? '' : `<span class="cx-propose-list">${(this.state.players || []).filter(p => p.id !== this.state.you && p.eliminatedAt == null).map(p => `<button type="button" data-propose="${esc(p.id)}">${insignia(p.id)}<span>${esc(faction(p.id).short)}</span></button>`).join('')}</span>`}` : conv.kind === 'alliance' ? 'No alliance messages yet. Write below.' : conv.kind === 'world' ? 'Nothing has happened yet.' : `No messages with ${esc(n.country(conv.country))} yet.${canWrite ? ' Write below.' : ''}`}</li>`;
-    if (rowsEl.dataset.html !== html) { rowsEl.dataset.html = html; const keep = rowsEl.scrollTop, bottom = rowsEl.scrollHeight - rowsEl.scrollTop - rowsEl.clientHeight < 32; rowsEl.innerHTML = html; rowsEl.scrollTop = bottom ? rowsEl.scrollHeight : keep; requestAnimationFrame(() => this.clampCheck()); }
+    if (!conv.rows.length) items = [{ key: 'empty', html: `<li class="cx-empty">${conv.kind === 'alliance' && !conv.side ? `You are independent. Propose an alliance to open a group chat.${this.readOnly ? '' : `<span class="cx-propose-list">${(this.state.players || []).filter(p => p.id !== this.state.you && p.eliminatedAt == null).map(p => `<button type="button" data-propose="${esc(p.id)}">${insignia(p.id)}<span>${esc(faction(p.id).short)}</span></button>`).join('')}</span>`}` : conv.kind === 'alliance' ? 'No alliance messages yet. Write below.' : conv.kind === 'world' ? 'Nothing has happened yet.' : `No messages with ${esc(n.country(conv.country))} yet.${canWrite ? ' Write below.' : ''}`}</li>` }];
+    const key = `${conv.key}|${items.map(i => i.html).join('')}`;
+    if (rowsEl.__rendered !== key) {
+      if (rowsEl.__conv !== conv.key) rowsEl.replaceChildren(); // another conversation: start clean
+      rowsEl.__rendered = key; rowsEl.__conv = conv.key;
+      const keep = rowsEl.scrollTop, bottom = rowsEl.scrollHeight - rowsEl.scrollTop - rowsEl.clientHeight < 32;
+      patchList(rowsEl, items); rowsEl.scrollTop = bottom ? rowsEl.scrollHeight : keep; requestAnimationFrame(() => this.clampCheck());
+    }
     const unreadKeys = new Set(conv.rows.filter(r => r.unread).map(r => r.key));
     for (const li of rowsEl.querySelectorAll('[data-key]')) li.classList.toggle('cx-is-unread', unreadKeys.has(li.dataset.key));
   }
@@ -332,15 +341,15 @@ export class Comms {
   renderSwitch(conv) {
     const nav = this.$('.cx-switch');
     const items = this.ordered().filter(c => c.kind !== 'dm' || c.active || c.key === conv.key || !this.readOnly);
-    const html = this.readOnly ? '' : items.map(c => `<button type="button" data-conv="${esc(c.key)}" aria-current="${c.key === conv.key}" title="${esc(c.kind === 'alliance' ? (c.side ? this.names.side(c.side) : 'Alliance') : this.convTitle(c))}" aria-label="${esc(c.kind === 'alliance' ? 'Alliance chat' : this.convTitle(c))}${c.unread ? `, ${c.unread} unread` : ''}">${c.kind === 'dm' ? insignia(c.country) : icon(c.kind === 'world' ? 'globe' : 'ally')}${c.unread || c.action ? '<i class="cx-dot"></i>' : ''}</button>`).join('');
-    if (nav.dataset.html !== html) { nav.dataset.html = html; nav.innerHTML = html; }
-    nav.hidden = !html;
+    const buttons = this.readOnly ? [] : items.map(c => ({ key: c.key, html: `<button type="button" data-conv="${esc(c.key)}" aria-current="${c.key === conv.key}" title="${esc(c.kind === 'alliance' ? (c.side ? this.names.side(c.side) : 'Alliance') : this.convTitle(c))}" aria-label="${esc(c.kind === 'alliance' ? 'Alliance chat' : this.convTitle(c))}${c.unread ? `, ${c.unread} unread` : ''}">${c.kind === 'dm' ? insignia(c.country) : icon(c.kind === 'world' ? 'globe' : 'ally')}${c.unread || c.action ? '<i class="cx-dot"></i>' : ''}</button>` }));
+    patchList(nav, buttons);
+    nav.hidden = !buttons.length;
   }
   /** The alliance thread names its members (standards and names). */
   renderMembers(conv) {
     const box = this.$('.cx-members'), side = conv.kind === 'alliance' && conv.side ? (this.state.sides || []).find(s => s.id === conv.side) : null;
     const html = side ? side.members.map(id => `<span>${insignia(id)}<b>${id === this.state.you ? 'You' : esc(faction(id).short)}</b></span>`).join('') : '';
-    if (box.dataset.html !== html) { box.dataset.html = html; box.innerHTML = html; }
+    if (box.__html !== html) { box.__html = html; box.innerHTML = html; }
     box.hidden = !html;
   }
   row(r) {

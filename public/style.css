@@ -32,7 +32,7 @@ h1,h2,h3{font-weight:700}
 a{color:var(--brass-hi)}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .ui-icon{width:20px;height:20px;flex:none;vertical-align:middle;pointer-events:none}
-.insignia{width:26px;height:31px;flex:none;color:var(--brass-hi);vertical-align:middle;filter:drop-shadow(0 1px 1px #0005)}
+.insignia{width:26px;height:31px;flex:none;color:var(--brass-hi);vertical-align:middle}
 .insignia[data-faction=BR]{--banner:#643f36}.insignia[data-faction=FR]{--banner:#2b4d66}.insignia[data-faction=DE]{--banner:#484f4a}.insignia[data-faction=RU]{--banner:#4b5732}.insignia[data-faction=OT]{--banner:#68512e}.insignia[data-faction=QI]{--banner:#695d36}.insignia[data-faction=JP]{--banner:#614454}.insignia[data-faction=US]{--banner:#325954}
 .insignia-shield{fill:var(--banner,#233640);stroke:var(--brass);stroke-width:.8}.insignia-rim{fill:none;stroke:var(--brass);stroke-width:.5}
 
@@ -453,7 +453,7 @@ body[data-status=lobby] .war-room>:is(.topbar#hud,.strip,.left,.maparea,.powers,
   .lb-power{position:relative;display:grid;place-items:center;width:44px;height:48px;padding:0}
   .lb-power .insignia{width:28px;height:34px}
   .lb-power[data-relation=enemy]::after,.lb-power[data-relation=offer]::after{content:'';position:absolute;right:2px;bottom:4px;width:13px;height:13px;border-radius:50%;background:var(--oxblood);border:1.5px solid var(--brass)}
-  .lb-power[data-relation=offer]::after{background:var(--verdigris);animation:pulse-dot 2s ease-in-out infinite}
+  .lb-power[data-relation=offer]::after{background:var(--verdigris);animation:pulse-dot 2s ease-in-out 3}
   .lb-power[data-relation=ally]{box-shadow:inset 0 -3px 0 var(--band,var(--verdigris))}
   @keyframes pulse-dot{50%{transform:scale(1.25)}}
   .left{grid-area:bottom;padding:0}

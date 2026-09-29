@@ -12,6 +12,8 @@ import { seatType, clock } from './ui.js';
 const ARROW_MS = 4000;
 const node = (tag, className) => { const e = document.createElement(tag); e.className = className; return e; };
 const setText = (element, value) => { if (element.textContent !== value) element.textContent = value; };
+// Rows are refilled every poll: write an attribute only when its value changed.
+const setAttr = (element, name, value) => { if (element.getAttribute(name) !== value) element.setAttribute(name, value); };
 const RELATION = { enemy: ['war', 'at war with you'], ally: ['ally', 'allied with you'] };
 const percent = n => `${Math.round(n * 100)}%`;
 
@@ -97,30 +99,29 @@ export class LeaderboardPanel {
   fill(li, { row, type, group }, now, board, state) {
     const [rank, move, flags, name, rel, land, troops] = li.children;
     const [expand, , standards] = flags.children, [label, bar, pct] = name.children;
-    li.className = `lb-row lb-${type}`;
-    li.classList.toggle('you', Boolean(row.you) && type !== 'group'); li.classList.toggle('your-team', type === 'group' && Boolean(row.you));
-    li.classList.toggle('eliminated', row.eliminated);
-    li.classList.toggle('detached', type !== 'member' && board.rows.indexOf(row) !== row.rank - 1); // own entry outside the top N
-    Object.assign(li.dataset, { id: row.id, kind: type, provinces: String(row.provinces), troops: String(row.troops), focus: row.countries[0] || '',
-      relation: row.relation || '', countries: row.countries.join(','), share: type === 'member' ? String(row.shareOfAlliance) : '' });
+    setAttr(li, 'class', `lb-row lb-${type}${row.you && type !== 'group' ? ' you' : ''}${type === 'group' && row.you ? ' your-team' : ''}${row.eliminated ? ' eliminated' : ''}${
+      type !== 'member' && board.rows.indexOf(row) !== row.rank - 1 ? ' detached' : ''}`); // detached: own entry outside the top N
+    for (const [k, v] of Object.entries({ id: row.id, kind: type, provinces: String(row.provinces), troops: String(row.troops), focus: row.countries[0] || '',
+      relation: row.relation || '', countries: row.countries.join(','), share: type === 'member' ? String(row.shareOfAlliance) : '' })) if (li.dataset[k] !== v) li.dataset[k] = v;
     // Alliance colour: a band on the row edge (group, its members, and players-view rows of a member).
     const alliance = type === 'group' ? row : group || null, pending = !alliance && this.forming.get(row.id);
     const side = alliance ? (alliance.forming ? '' : alliance.id) : state.players.find(p => p.id === row.id)?.side;
     const active = !alliance && side && !side.startsWith('solo:') ? state.sides.find(s => s.id === side) : null;
     const color = alliance ? this.colors[alliance.id] : active ? this.colors[active.id] : pending ? this.colors[pending.id] : null;
-    li.dataset.band = alliance ? (alliance.forming ? 'forming' : 'active') : active ? 'active' : pending ? 'forming' : '';
-    li.dataset.side = alliance ? (alliance.forming ? '' : alliance.id) : active?.id || '';
-    if (color) li.style.setProperty('--band', color); else li.style.removeProperty('--band');
+    const band = alliance ? (alliance.forming ? 'forming' : 'active') : active ? 'active' : pending ? 'forming' : '', sideId = alliance ? (alliance.forming ? '' : alliance.id) : active?.id || '';
+    if (li.dataset.band !== band) li.dataset.band = band;
+    if (li.dataset.side !== sideId) li.dataset.side = sideId;
+    if (li.style.getPropertyValue('--band') !== (color || '')) { if (color) li.style.setProperty('--band', color); else li.style.removeProperty('--band'); }
     setText(rank, type === 'member' ? '' : String(row.rank));
     const arrow = type !== 'member' && this.arrows.get(row.id), live = arrow && arrow.until > now;
     setText(move, live ? (arrow.up ? '▲' : '▼') : '');
-    move.className = `lb-move${live ? (arrow.up ? ' up' : ' down') : ''}`;
-    move.setAttribute('aria-label', live ? (arrow.up ? 'rank up' : 'rank down') : '');
-    expand.hidden = type !== 'group';
+    setAttr(move, 'class', `lb-move${live ? (arrow.up ? ' up' : ' down') : ''}`);
+    setAttr(move, 'aria-label', live ? (arrow.up ? 'rank up' : 'rank down') : '');
+    if (expand.hidden !== (type !== 'group')) expand.hidden = type !== 'group';
     if (type === 'group') {
       const open = !this.collapsed.has(row.id);
-      expand.setAttribute('aria-expanded', String(open)); setText(expand, open ? '▾' : '▸');
-      expand.setAttribute('aria-label', `${open ? 'Collapse' : 'Expand'} ${row.name}: ${row.countries.length} members`);
+      setAttr(expand, 'aria-expanded', String(open)); setText(expand, open ? '▾' : '▸');
+      setAttr(expand, 'aria-label', `${open ? 'Collapse' : 'Expand'} ${row.name}: ${row.countries.length} members`);
     }
     const shown = type === 'group' ? [] : type === 'member' ? [row.id] : row.countries.slice(0, 3);
     const key = shown.join(',');
@@ -128,17 +129,17 @@ export class LeaderboardPanel {
     const player = type === 'group' ? null : state.players.find(p => p.id === row.id);
     const role = player ? seatType(player) : '';
     setText(label, `${this.label(row)}${row.eliminated ? ' · fallen' : ''}${type === 'group' && row.forming ? ' · forming' : ''}`); // alliance name: text
-    bar.hidden = pct.hidden = type !== 'member';
-    if (type === 'member') { bar.firstChild.style.width = percent(row.shareOfAlliance); setText(pct, percent(row.shareOfAlliance)); }
+    if (bar.hidden !== (type !== 'member')) bar.hidden = pct.hidden = type !== 'member';
+    if (type === 'member') { if (bar.firstChild.style.width !== percent(row.shareOfAlliance)) bar.firstChild.style.width = percent(row.shareOfAlliance); setText(pct, percent(row.shareOfAlliance)); }
     const [mark, words] = RELATION[row.relation] || ['', ''];
     if (rel.dataset.mark !== mark) { rel.dataset.mark = mark; rel.innerHTML = mark ? icon(mark) : ''; } // authored SVG only
-    rel.className = `lb-rel${row.relation ? ` ${row.relation}` : ''}`;
+    setAttr(rel, 'class', `lb-rel${row.relation ? ` ${row.relation}` : ''}`);
     const membership = type === 'group' ? `${row.forming ? 'Forming alliance' : 'Alliance'} of ${row.countries.map(this.names.country).join(', ')}`
       : type === 'member' ? `${percent(row.shareOfAlliance)} of ${group.name}'s troops` : active ? `Member of ${active.name}` : pending ? `Forming ${pending.name}` : row.kind === 'alliance' ? '' : 'Independent';
     const enemies = row.atWarWith.map(this.names.country).join(', ');
     const summary = [type === 'group' ? '' : row.countries.map(this.names.country).join(' + '), role, player?.displayName || player?.name, membership, words, enemies ? `at war with ${enemies}` : ''].filter(Boolean).join(' · ');
-    if (li.title !== summary) { li.title = summary; li.setAttribute('aria-label', `${type === 'member' ? '' : `#${row.rank} `}${this.label(row)} · ${summary} · ${(row.share * 100).toFixed(1)}% land · ${row.troops} troops`); }
-    setText(land, `${(row.share * 100).toFixed(1)}%`); land.title = `${row.provinces} of ${board.provinces} provinces`;
+    setAttr(li, 'title', summary); setAttr(li, 'aria-label', `${type === 'member' ? '' : `#${row.rank} `}${this.label(row)} · ${summary} · ${(row.share * 100).toFixed(1)}% land · ${row.troops} troops`);
+    setText(land, `${(row.share * 100).toFixed(1)}%`); setAttr(land, 'title', `${row.provinces} of ${board.provinces} provinces`);
     setText(troops, String(row.troops));
   }
   /** Collapsed strip (phones): every other country's standard, ranked, as a one-tap way into diplomacy. */
