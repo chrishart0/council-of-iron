@@ -65,10 +65,13 @@ def main():
             page.evaluate("""() => { Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
               Object.defineProperty(document, 'hidden', { value: false, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); }""")
             # 4. Long run: the DOM does not grow with the match (armies come and go, the history grows by rows only).
-            wait_tick(url, room, me['token'], 1500)
-            page.wait_for_timeout(2000)
-            last = page.evaluate('() => document.getElementsByTagName("*").length')
-            report['nodes'] = {'start': first, 'later': last}
+            # Sampled while the match runs (a win may end it early; the after-action report is a different screen).
+            last = first
+            for _ in range(120):
+                s = page.evaluate('() => ({ status: document.body.dataset.status, nodes: document.getElementsByTagName("*").length, tick: document.getElementById("clock").textContent })')
+                if s['status'] != 'running' or s['tick'] >= '25:00': break
+                last = max(last, s['nodes']); page.wait_for_timeout(2000)
+            report['nodes'] = {'start': first, 'maxWhileRunning': last, 'until': s['tick']}
             assert last < first * BUDGET['node_growth'], ('DOM growth', first, last)
             context.close()
             # 5. Nothing moves (a lobby): no animation frames at all.

@@ -96,4 +96,4 @@ Pixel 7, 4× throttle, the live room above:
 - observation < 15 KB on the wire;
 - no World-thread row re-created by polling when its content did not change;
 - page hidden: no poll and no animation frame; a lobby (nothing moves): no animation frame;
-- DOM elements grow by < 25 % from 5:00 to 25:00 game time.
+- DOM elements grow by < 25 % from 5:00 to 25:00 game time (sampled while the match runs).
