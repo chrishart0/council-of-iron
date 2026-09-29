@@ -307,12 +307,15 @@ Readings (not claims):
 
 ### Screenshots
 
-These come from a bot-played position at 04:00 in a local preview room (not a live match), with the Britain seat's view, an Entente alliance and several wars.
+These are from a bot-played local preview position at 04:00, not a live match. They show the Britain seat's view, an Entente alliance and several wars.
 
 | | |
 |---|---|
 | ![World, 1920×1080](media/map-v6-world-1920.png) | ![Europe mid zoom, 1920×1080](media/map-v6-mid-1920.png) |
 | ![Europe near zoom, 1920×1080](media/map-v6-near-1920.png) | ![World, 390×844](media/map-v6-world-390.png) |
+| ![Europe and Africa, 390×844](media/map-v6-near-390.png) | ![Himalayas](media/map-v6-himalayas.png) |
+| ![Urals](media/map-v6-urals.png) | ![Sahara](media/map-v6-sahara.png) |
+| ![Alps](media/map-v6-alps.png) | |
 
 ## Optional, not implemented: region bonuses
 
@@ -320,9 +323,20 @@ Risk's continent bonus would fit the region structure: for example, +1 troop per
 
 ## Merge notes
 
-- One map: `imperial-1910-v6` replaces v5 everywhere on this branch. Rooms saved on v5 are skipped at startup (`loadable`).
-- The recorded handplay match is now replayed on v6. `RECORDED_PROVINCE` in `scripts/replay-handplay.js` maps the 26 merged v4/v5 ids.
+- One map: `imperial-1910-v6` replaces v5 everywhere. Rooms saved on v5 are skipped at startup (`loadable`/`startupPlan`); a live v5 room in play makes startup refuse, as the deploy guard intends.
+- The branch contains origin/master and origin/ui-v0.9-gameui: the border attack rule, multi-select, truces, the inbox, the playtest harness and the shared lobby.
+- Merged tests that named v5 provinces now use v6 ids:
+  - `ui-multi-*` attacks the Pacific States from Canada, the Great Plains, Mexico and Hawaii;
+  - the truce room uses Ireland;
+  - the decision-view partner test uses Germany.
+- **Handplay recording.** The recorded match is replayed on v6. `RECORDED_PROVINCE` in `scripts/replay-handplay.js` maps the 26 merged v4/v5 ids.
   - Its golden hashes were re-baselined. It now reaches the deadline, with the Atlantic Accord winning on industry, instead of a tick-553 hold.
   - `tests/fixtures/handplay-map.json` is deleted.
-- Province ids used by clients: `west-canada`/`east-canada` → `canada`; `north-japan`/`south-japan` → `japan`; `scotland`/`midlands` → `england`, and so on (see the table above). Bots and agents read the map, not hard-coded ids.
-- The sibling march-multiselect branch (attack from anywhere into any province bordering your land) needs no map change: the shared-border adjacency and the named sea links are the frontier it uses.
+  - The review and UI suites were re-baselined on the replayed position, with the reasons in the commits.
+- **Browser second room.** In `tests/browser.py`, the second room's joint attack, development and long march pick provinces the idle USA still holds. On v6, Britain's single 22-troop Canada borders all three US states, and the practice bots attack an idle USA.
+- **Province ids used by clients:**
+  - `west-canada`/`east-canada` → `canada`
+  - `north-japan`/`south-japan` → `japan`
+  - `scotland`/`midlands` → `england`
+  - and so on (see the table above). Bots and agents read the map, not hard-coded ids.
+- **Map changes** go through `scripts/build-imperial-v6.js`, never the JSON. `npm test` fails if the published file differs from the builder's output.
