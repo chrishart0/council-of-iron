@@ -113,6 +113,14 @@ test('multi-source plan validates atomically, reserves exact amounts, dispatches
   tick(g);const battle=g.battles.find(b=>b.province===to);
   assert.equal(battle.arrivals.length,2);assert.equal(battle.engaged,10);
 });
+test('an invalid multi-source march names the depleted source and current free troops',()=>{
+  const g=game();province(g,'central-us').troops=2;
+  const before=JSON.stringify(g);
+  assert.throws(()=>action(g,'usa',{type:'march',to:'mexico',sources:[
+    {from:'west-us',amount:5},{from:'central-us',amount:2},
+  ]}),error=>/central-us: 2 selected, 1 free/.test(error.message));
+  assert.equal(JSON.stringify(g),before);
+});
 test('duplicate sources, mixed units and impossible percentages are rejected',()=>{
   const g=game(),s={from:'west-us',amount:5};
   for(const sources of [[s,s],[{...s,percent:50}],[{from:'west-us',percent:0}],[{from:'west-us',percent:101}],[{from:'west-us',percent:.001}]])

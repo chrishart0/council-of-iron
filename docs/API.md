@@ -95,6 +95,8 @@ Casualties are one shared total; nobody is credited with kills in a shared battl
 
 **Limits.** An invisible anti-spam limit refuses more than 10 orders per 10 game seconds (429 "Too many orders at once") and more than one message per 2 s. Rally marches are automatic and free. Invalid actions change nothing.
 
+When a march selects more than a source can send (or a percentage rounds to zero), its refusal names that source, the selected number and its current free troops after queued orders and one home garrison. A multi-source march is rejected as a whole.
+
 **Attacks need a border of your own.** A march to neutral land or another side's province is legal only if you own a province bordering it; an ally's border is not enough. Otherwise 409 "You have no province bordering X. Take or hold a province next to it first." followed by your nearest provinces and any allied border. Nothing is declared or reserved.
 
 **Long marches.** A source may be any province reachable through your own and allied provinces (not through battles), and the march may end one step beyond them; each source's `path` is the quickest such route by current travel times (internal links ×2). With no such route the march is refused ("No route from A to B: a march passes only through your own or allied provinces …"). A column re-checks its way at each province: if a later province is no longer friendly it takes the quickest friendly way from where it is (private `army_rerouted {armyId, province, to, path}`), otherwise it turns back (`transit_blocked`, `noRoute: true`). A waiting source re-routes at departure the same way.
