@@ -411,7 +411,8 @@ def main():
                 for attempt in range(4):  # the bots keep playing at 12×: a chosen province may fall before the taps land
                     st=http(f'/api/games/{room2}');owner={p['id']:p['owner'] for p in st['provinces']};troops={p['id']:p['troops'] for p in st['provinces']}
                     mine=sorted((i for i,o in owner.items() if o=='usa' and troops[i]>=3),key=lambda i:-troops[i])
-                    src,second,target=next((a,b,t) for t in sorted(nb) if owner[t] is None for a in mine for b in mine if a!=b and t in nb[a] and t in nb[b])
+                    # The longest such attack, so the group is still on its way when the recall below looks for it.
+                    tt=st['travelTimes'];src,second,target=max(((a,b,t) for t in sorted(nb) if owner[t] is None for a in mine for b in mine if a!=b and t in nb[a] and t in nb[b]),key=lambda x:(min(tt[x[0]][x[2]],tt[x[1]][x[2]]),x))
                     order(page,src,target);page.locator('[data-fraction="0.5"]').click()
                     page.locator('#card-size').click()  # back to peek so the map is free
                     if not page.locator(f'#marker-{second} .counter-body').is_visible() or not (0<centre(page.locator(f'#marker-{second} .counter-body'))[0]<page.viewport_size['width']):bring(page,second)
