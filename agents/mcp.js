@@ -28,7 +28,7 @@ const marchProperties={to:string,from:{type:'string',description:'One source pro
 const marchAction=a=>{const {opId,...action}=a;return {type:'march',...action};};
 
 tool('list_matches','List rooms. Join a country before the host starts.',{},[],()=>client.list(),true);
-tool('map','Read province IDs, adjacency, coordinates, connections (sea links name their strait), impassable terrain (barriers: two provinces that share a border but are not neighbours, with the way around) and starting countries. Decorative SVG paths are omitted.',{},[],async()=>{const map=await client.map();return {...map,provinces:map.provinces.map(({path,...province})=>province)};},true);
+tool('map','Read province IDs, adjacency, coordinates, connections (sea links name their strait), impassable terrain (barriers: two provinces that share a border but are not neighbours, with the way around) and starting countries. Decorative SVG paths are omitted.',{},[],()=>client.mapData(),true);
 tool('create_match','Create a room. Registers a local identity if needed. Standard is 30 real minutes, quick is five.',
   {name:string,playerName:string,preset:{type:'string',enum:['standard','quick']}},['name','playerName'],async a=>{
     if(!client.session.profileToken && !client.explicitToken)await client.register(a.playerName);return client.create(a.name,a.preset || 'standard');});
@@ -70,11 +70,8 @@ tool('preview','Forecast a march without sending it: the path each source takes,
 tool('march','Send troops to one province, from one or several of your provinces at once; all columns arrive on the same tick. Sources: from (one), sources:[{from, amount|percent}] (several, anywhere in your empire, e.g. {to:"X", sources:[{from:"A",percent:50},{from:"B",percent:50}]}), or fromAllBordering:true with amount|percent (every province of yours next to the target with free troops). amount/percent apply to EACH source. Each column takes the quickest path through your own and allied land (twice as fast there) and makes the last step into the target. ATTACK (target neutral or another side\'s): you can attack any province that borders your own territory (board.own[].neighbors; an ally\'s border is not enough). REINFORCE (target yours or an ally\'s). Leave one troop at home (board.own[].available already does). Attacking another country needs a war: declareWar:true declares war on the owner in the same action (nothing happens if the march is invalid). Troops sent to an ally become the ally\'s. Response: total, sources [{from, amount, departsAt}], arrivesAt.',
   {...marchProperties,declareWar:{type:'boolean'},...op},['to'],a=>client.action(marchAction(a),a.opId));
 tool('turn_around','Bring troops back, or send them back again. Pass a march groupId or an advancing army ID: waiting sources are cancelled and marching troops turn home from where they are (they take as long as they have been out). Pass a RETURNING army ID (recalled, or turned back automatically; see the army_recalled reason): it marches again toward the target it had been heading for, from where it is now, if that is still a legal march (at war, neutral or allied). At most twice per army; engaged armies cannot. preview:true only forecasts (mode recall|resume, arrivesAt, any battle already there).',
-  {id:string,preview:{type:'boolean'},...op},['id'],async a=>{
-    const o=await client.observe(Number.MAX_SAFE_INTEGER),army=o.armies.find(x=>x.id===a.id && x.country===o.you);
-    if(a.preview)return client.plan({type:'turn_around',armyId:a.id});
-    return client.action(army?.returning?{type:'turn_around',armyId:a.id}:{type:'recall',id:a.id},a.opId);
-  });
+  {id:string,preview:{type:'boolean'},...op},['id'],
+  a=>a.preview?client.plan({type:'turn_around',armyId:a.id}):client.turnAround(a.id,a.opId));
 tool('rally','Rally point: at every recruitment, the new troops of each source province march to one of your own provinces along the quickest path through your or allied land. They never attack. to:null clears. Set it once and your fronts are fed without further orders. preview:true only forecasts the paths.',
   {from:{type:['string','array'],minItems:1,maxItems:16,items:string},to:{type:['string','null']},preview:{type:'boolean'},...op},['from','to'],
   a=>a.preview?client.plan({type:'rally',from:a.from,to:a.to}):client.action({type:'rally',from:a.from,to:a.to},a.opId));

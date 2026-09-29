@@ -1,5 +1,5 @@
 import { developmentForecast } from '../public/insights.js';
-import { truceUntil, trucesOf } from '../public/relations.js';
+import { atWar, truceUntil, trucesOf } from '../public/relations.js';
 
 /** Uncommitted troops after queued departures and one home garrison. */
 export function troopAvailability(o) {
@@ -34,7 +34,6 @@ export function boardView(observation, map) {
   const allies = new Set(o.players.filter(player => player.side === side).map(player => player.id));
   const provinces = new Map(o.provinces.map(province => [province.id, province]));
   const available = troopAvailability(o);
-  const atWar = owner => owner && o.wars.includes([o.you, owner].sort().join(':'));
   const own = map.provinces.filter(place => provinces.get(place.id)?.owner === o.you).map(place => {
     const p = provinces.get(place.id);
     const develop = developRow(o, p, available.get(p.id));
@@ -48,9 +47,9 @@ export function boardView(observation, map) {
       })(),
       neighbors: place.neighbors.map(id => {
         const target = provinces.get(id), hostile = target.owner && !allies.has(target.owner);
-        const truce = hostile && !atWar(target.owner) ? truceUntil(o, o.you, target.owner) : null;
+        const war = hostile && atWar(o, o.you, target.owner), truce = hostile && !war ? truceUntil(o, o.you, target.owner) : null;
         return { id, owner: target.owner, troops: target.troops, industry: target.development,
-          ...(hostile ? { attackReady: Boolean(atWar(target.owner)) } : {}), ...(truce !== null ? { truceUntil: truce } : {}) };
+          ...(hostile ? { attackReady: war } : {}), ...(truce !== null ? { truceUntil: truce } : {}) };
       }),
     };
   });
