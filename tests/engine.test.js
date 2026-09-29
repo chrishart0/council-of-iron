@@ -11,14 +11,6 @@ function game(ids=map.countries.map(c=>c.id)){
 }
 let serial=0;const command=(g,id,action,opId=`rules-${++serial}`)=>act(g,map,id,action,opId);
 const advance=(g,n)=>{for(let i=0;i<n;i++)tick(g);};
-test('industrial map is connected and country starts do not overlap',()=>{
-  assert.equal(map.id,'imperial-1910-v6');assert.equal(map.provinces.length,59);
-  const starts=map.countries.flatMap(c=>c.start);
-  assert.equal(starts.length,new Set(starts).size);
-  const byId=new Map(map.provinces.map(p=>[p.id,p]));let seen=new Set([map.provinces[0].id]);
-  for(let i=0;i<map.provinces.length;i++)seen=new Set([...seen,...[...seen].flatMap(id=>byId.get(id).neighbors)]);
-  assert.equal(seen.size,map.provinces.length);
-});
 test('lobby closes at start and all clients share retry and reservation rules',()=>{
   const g=game();assert.throws(()=>join(g,map,{profileId:'late',name:'late',country:'usa'}),/closed/);
   const order={type:'march',from:'west-us',to:'mexico',amount:6};

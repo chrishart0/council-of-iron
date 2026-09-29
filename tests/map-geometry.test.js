@@ -98,6 +98,7 @@ for (const name of ['imperial-map.json']) {
     const reach = from => { const seen = new Set(from); for (const id of seen) for (const n of next.get(id)) seen.add(n); return seen; };
     assert.equal(reach([map.provinces[0].id]).size, map.provinces.length);
     const held = new Set(map.countries.flatMap(c => c.start));
+    assert.equal(held.size, map.countries.flatMap(c => c.start).length, 'country starts do not overlap');
     for (const c of map.countries) {
       const frontier = new Set(c.start.flatMap(id => next.get(id)).filter(id => !c.start.includes(id)));
       assert.ok([...frontier].some(id => !held.has(id)), `${c.id} borders no neutral province`);
