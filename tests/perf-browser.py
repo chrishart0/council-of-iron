@@ -15,7 +15,8 @@ from perf_room import start_server, busy_room, wait_tick, open_match, http
 from browser_helpers import stop
 
 THROTTLE = 4
-BUDGET = {'busy_pct': 60, 'long_task_ms': 200, 'infinite_anims': 0, 'poll_wire_kb': 15, 'node_growth': 1.25}
+BUDGET = {'busy_pct': 60, 'long_task_ms': 200, 'infinite_anims': 0, 'poll_wire_kb': 15, 'node_growth': 1.25,
+          'heap_growth_mb': 16}
 
 # Remember the World thread's rows (key, content, node); later, a row showing the same key and content must be the same node.
 TAG = """() => { window.__before = new Map([...document.querySelectorAll('#comms .cx-rows > li')].map(e => [e.__key, { html: e.__html, node: e }]));
@@ -45,6 +46,9 @@ def main():
             cdp = context.new_cdp_session(page); cdp.send('Performance.enable')
             cdp.send('Emulation.setCPUThrottlingRate', {'rate': THROTTLE})
             page.wait_for_timeout(4000)
+            cdp.send('HeapProfiler.enable');cdp.send('HeapProfiler.collectGarbage')
+            heap_start=cdp.send('Performance.getMetrics')['metrics']
+            heap_start=next(m['value'] for m in heap_start if m['name']=='JSHeapUsedSize')/2**20
             first = page.evaluate('() => document.getElementsByTagName("*").length')
             # 1. The map during a busy match.
             live = window(page, cdp, 12); report['map'] = live
@@ -75,12 +79,36 @@ def main():
             # Sampled while the match runs (a win may end it early; the after-action report is a different screen):
             # until 25:00, or for 30 s with --quick.
             last = first
-            for _ in range(15 if args.quick else 120):
+            for _ in range(15 if args.quick else 180):
                 s = page.evaluate('() => ({ status: document.body.dataset.status, nodes: document.getElementsByTagName("*").length, tick: document.getElementById("clock").textContent })')
-                if s['status'] != 'running' or s['tick'] >= '25:00': break
+                if s['status'] != 'running' or s['tick'] >= '30:00': break
                 last = max(last, s['nodes']); page.wait_for_timeout(2000)
             report['nodes'] = {'start': first, 'maxWhileRunning': last, 'until': s['tick']}
             assert last < first * BUDGET['node_growth'], ('DOM growth', first, last)
+            cdp.send('HeapProfiler.collectGarbage')
+            metrics=cdp.send('Performance.getMetrics')['metrics']
+            heap_end=next(m['value'] for m in metrics if m['name']=='JSHeapUsedSize')/2**20
+            listeners=next(m['value'] for m in metrics if m['name']=='JSEventListeners')
+            report['long_match_memory']={'heap_start_mb':round(heap_start,1),'heap_end_mb':round(heap_end,1),
+                'heap_growth_mb':round(heap_end-heap_start,1),'dom_nodes':s['nodes'],'event_listeners':listeners,'game_clock':s['tick']}
+            assert heap_end-heap_start < BUDGET['heap_growth_mb'], ('browser heap growth', report['long_match_memory'])
+            assert listeners < 300, ('browser event listeners grew without a bound', report['long_match_memory'])
+            if not args.quick:
+                if s['status'] != 'finished':
+                    page.wait_for_function("() => document.body.dataset.status === 'finished'",timeout=120000)
+                review_heaps=[]
+                for _ in range(3):
+                    page.locator('#aar-back').click()
+                    page.locator(f'#rooms [data-room="{room}"]').click()
+                    page.wait_for_function("() => document.body.dataset.status === 'finished' && !document.getElementById('result').hidden")
+                    page.wait_for_timeout(100)
+                    page.locator('#aar-back').click()
+                    page.wait_for_selector(f'#rooms [data-room="{room}"]')
+                    cdp.send('HeapProfiler.collectGarbage')
+                    values=cdp.send('Performance.getMetrics')['metrics']
+                    review_heaps.append(round(next(m['value'] for m in values if m['name']=='JSHeapUsedSize')/2**20,1))
+                report['review_open_close_heap_mb']=review_heaps
+                assert max(review_heaps)-min(review_heaps)<8, ('review open/close retained heap',review_heaps)
             context.close()
             # 5. Nothing moves (a lobby): no animation frames at all.
             lobby = http(url, '/api/games', 'POST', {'name': 'Quiet room', 'preset': 'quick'}, me['token'])['id']

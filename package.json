@@ -21,6 +21,7 @@
     "test:review": "python tests/review-browser.py",
     "test:voice": "python tests/voice-browser.py",
     "test:perf": "python tests/perf-browser.py",
+    "test:memory": "node --expose-gc --test tests/memory-regression.mjs",
     "stt": "cd tools/stt && uv run server.py",
     "test:stt": "cd tools/stt && uv run test_sidecar.py",
     "bench:stt": "cd tools/stt && uv run bench.py"

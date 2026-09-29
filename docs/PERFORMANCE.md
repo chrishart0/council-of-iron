@@ -99,3 +99,49 @@ Pixel 7, 4× throttle, the live room above:
 - no World-thread row re-created by polling when its content did not change;
 - page hidden: no poll and no animation frame; a lobby (nothing moves): no animation frame;
 - DOM elements grow by < 25 % from 5:00 to 25:00 game time (sampled while the match runs; `--quick`, used by the default `python tests/browser.py`, samples 30 s of it).
+
+## Memory profile (2026-09-29)
+
+### Server
+
+I ran three 8-seat quick matches to completion back to back in one `makeServer` process with an in-memory SQLite
+store, seven built-in practice bots and one seated agent doing `boardView` / `decisionView`, plus spectator-shaped
+polling. It fetched observations, feed and inbox every 120 ticks. Each match reached the 30-minute/finish window
+(one ended early at tick 1,751). I called V8 GC before each
+heap sample. Before the fix, finished rooms stayed in `games`; the finished `g` retained both the full private event
+and action history and the materialized public replay. The rooms had 6.4–8.2k events, 719–922 accepted commands and
+receipts, and 89–112 headlines. `JSON.stringify(g)` was 21–32 MB per room. The heap grew from
+8.5 MB at startup to 59.7 MB after match one, 99.4 MB after match two and 154.6 MB after match three. RSS was
+226 MB / 597 MB / 657 MB at those checkpoints. Early and late heap snapshots were 95 MB and 260 MB respectively.
+The retaining path in the server was `games` Map → finished game → `events` / `actionLog` / `receipts` and
+`afterAction.replay`; this is directly visible in the server ownership path (`games` stores each `g`, and `afterAction`
+stores the archive on that same object).
+
+Once review reconstruction succeeds (or is withheld with saved scores), the server now writes the materialized,
+allowlisted archive to a separate SQLite table, releases the accepted-command log and review opening, and removes
+the archive, event stream, headlines and receipts from the in-memory room. Recipient-filtered observations, inboxes,
+feed pages and same-operation retries load the saved history on demand; the room shell keeps its final board and
+scores. Startup checks finished archive markers without parsing the large replay blobs, then compacts the room shell.
+It also prunes finished-room entries from the activity, fraction, bot-memory and write-throttle maps. The latest
+three-match rerun had 46–51 KB per in-memory room and heap after GC of 11.4 MB / 14.3 MB / 14.8 MB, about 1.9 MB
+retained per finished match across the run. RSS was 234 MB / 323 MB / 355 MB. RSS includes the `:memory:` SQLite
+store's durable 1.5–1.9 MB history snapshot plus 20–32 MB public archive per row, and V8 allocator high-water memory;
+it is not a measure of the remaining JavaScript room object alone. This brought third-room heap from 154.6 MB to
+14.8 MB and RSS from 657 MB to 355 MB.
+
+The repeatable server regression is `npm run test:memory`: three full 8-seat bot matches, observer/feed/inbox polling,
+archive and history reads, and a post-GC heap bound (<55 MB aggregate growth, with headroom for test-runner variation).
+It also asserts the compact room size and that the persisted recipient-filtered event stream, retry receipts, public
+report and replay survive materialization.
+
+### Browser
+
+`tests/memory-browser.py` ran the accelerated phone match with a player and spectator page through the 30:00 finish,
+then opened and closed the finished report three times. The player measured 5.9 MB heap, 3,728 CDP DOM nodes and
+142 event listeners; the spectator measured 7.3 MB, 4,992 nodes and 154 listeners. After report reopen, the player
+measured 7.4 / 7.4 / 7.5 MB, 6,094 nodes and 153 listeners on each cycle. These post-GC readings show no retained
+report DOM/listener growth across room changes. The 30-second phone regression sample in
+`python tests/perf-browser.py --quick` grew from 5.0 MB to 5.8 MB after GC, with 138 listeners. The full long-run
+browser check now asserts <16 MB heap growth and <300 listeners after GC; DOM growth remains bounded by the existing
+25% budget. The full CPU profile run was load-sensitive on this host and once measured 68.4% busy against the 60%
+budget before reaching its memory sample; the quick memory/performance run passed.
