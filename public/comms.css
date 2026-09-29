@@ -57,7 +57,7 @@
 .cx-preview{font-size:15px;color:#bdb79f}
 .cx-conv time{font-size:13px;color:var(--muted)}
 .cx-conv[data-state=unread]{border-left-color:var(--brass)}
-.cx-conv[data-state=unread] .cx-conv-main b{color:var(--brass-hi)}.cx-conv[data-state=unread] .cx-preview{color:#e2d9bf}
+.cx-conv[data-state=unread] .cx-conv-main b{font-weight:700;color:#fff0cf}.cx-conv[data-state=unread] .cx-preview{color:#e2d9bf}
 .cx-conv[data-state=action]{border-left-color:var(--oxblood-hi);background:linear-gradient(90deg,#4a1f1b,#1d2325 70%)}
 .cx-conv[data-state=action] .cx-conv-main b{color:#fff0cf}.cx-conv[data-state=action] .cx-preview{color:#ecd9c6}
 .cx-conv[data-pulse]{animation:cx-pulse 1.6s ease-out 2}
@@ -70,7 +70,7 @@
 .cx-button[aria-expanded=true]{border-color:var(--brass-hi);box-shadow:inset 0 0 0 1px var(--iron-deep),0 0 0 3px #c29a5240}
 .cx-button:not([data-action="0"]){border-color:var(--oxblood-hi);color:#ffcbbd}
 .cx-button .cx-count[data-tier=action]{top:-6px;right:-7px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:var(--oxblood-hi);border:1.5px solid var(--brass-hi);color:#fff4e0;font:600 13px/17px var(--ui);text-align:center}
-.cx-button .cx-count[data-tier=personal]{bottom:-6px;right:-7px}
+.cx-button .cx-count[data-tier=personal]{bottom:-6px;right:-7px;min-width:22px;height:22px;font-size:14px;line-height:22px;border:1.5px solid var(--iron-deep)}
 /* Thread */
 .cx-rows{padding:6px 8px 10px;display:flex;flex-direction:column;gap:6px;scrollbar-width:thin;scrollbar-color:var(--brass-lo) transparent}
 .cx-sep{display:flex;align-items:center;gap:8px;font:600 12px var(--ui);color:var(--muted)}
@@ -131,7 +131,7 @@
 .cx-conv[data-kind=alliance]{border-left-color:var(--verdigris)}
 .cx-propose{align-self:flex-start;margin-left:10px;min-height:32px;padding:0 12px;border:1px solid var(--verdigris);background:linear-gradient(180deg,#2c4b41,#1f3530);color:#e6f1ea;font:600 15px var(--ui);clip-path:var(--cham-in)}
 .cx-propose:hover{filter:brightness(1.2)}
-.cx-rel{font:600 12px/1 var(--ui);color:var(--muted)}.cx-rel[data-rel=Ally]{color:var(--verdigris-hi)}.cx-rel[data-rel="At war"],.cx-rel[data-rel=Hostile]{color:var(--war)}
+.cx-rel{font:600 12px/1 var(--ui);color:var(--muted)}.cx-rel[data-rel=Ally]{color:var(--verdigris-hi)}.cx-rel[data-rel="At war"]{color:var(--war)}
 .cx-propose-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .cx-propose-list button{display:inline-flex;align-items:center;gap:5px;min-height:36px;padding:2px 10px 2px 4px;border:1px solid var(--verdigris);background:linear-gradient(180deg,#2c4b41,#1f3530);color:#e6f1ea;font:600 15px var(--ui);clip-path:var(--cham-in)}
 .cx-propose-list .insignia{width:18px;height:22px}
@@ -162,7 +162,7 @@ textarea.cx-input{resize:none;line-height:1.3;padding-top:9px;padding-bottom:9px
 .cx-toast:focus-visible{outline:2px solid var(--brass-hi);outline-offset:2px}
 /* Voice input (public/voice.js adds the mic beside the composer): a brass bezel key. */
 .cx-composer .voice{display:contents}
-.voice-mic{display:grid;place-items:center;width:42px;height:42px;min-width:42px;border-radius:50%;border:2px solid var(--brass);background:radial-gradient(circle at 50% 35%,#3c4548,#1f2527 70%);color:var(--brass-hi)}
+.voice-mic{display:grid;place-items:center;width:42px;height:42px;min-width:42px;border-radius:50%;border:2px solid var(--brass);background:radial-gradient(circle at 50% 35%,#3c4548,#1f2527 70%);color:var(--brass-hi);position:relative;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:filter .12s}
 @media (max-width:1023px){
   .comms{grid-area:auto;grid-column:1;grid-row:2/5;z-index:6;border-top:2px solid;border-image:var(--rim) 1;border-left:0}
   .war-room:has(#comms:not([hidden])) :is(.strip,.dock,.left,.maparea,.powers){visibility:hidden}
@@ -170,16 +170,13 @@ textarea.cx-input{resize:none;line-height:1.3;padding-top:9px;padding-bottom:9px
   .cx-toast{font-size:15px;gap:6px;min-height:50px}
   .cx-toast[data-tier=action] .cx-standard{width:34px;height:34px}
   .cx-primary,.cx-secondary{padding:0 10px;min-height:40px}
-}
-/* A notice with two actions (March again · Show army): on phones the words get the whole first row, the actions the second. */
-@media (max-width:1023px){
+  /* A notice with two actions (March again · Show army): the words get the whole first row, the actions the second. */
   .cx-toast.cx-wide{grid-template-columns:auto minmax(0,1fr) minmax(0,1fr) auto;grid-template-areas:"s p p x" "s . . x"}
   .cx-wide .cx-standard{grid-area:s}.cx-wide p{grid-area:p}.cx-wide .cx-dismiss{grid-area:x}
 }
 @media (pointer:coarse){.cx-toast :is(.cx-primary,.cx-secondary){min-height:44px}.cx-toast .cx-dismiss{width:44px;height:44px}}
 @media (max-height:499px) and (min-width:560px){.comms{grid-area:sheet;grid-row:2;grid-column:1;width:min(420px,60vw);border-top:0;border-left:0;border-right:2px solid}.war-room:has(#comms:not([hidden])) :is(.left,.powers){visibility:hidden}.war-room:has(#comms:not([hidden])) :is(.maparea,.dock){visibility:visible}}
 /* Voice states (public/voice.js). */
-.voice-mic{position:relative;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:filter .12s}
 .voice-mic:hover{filter:brightness(1.2)}
 .voice-glyph{width:18px;height:18px;background:currentColor;pointer-events:none;
   -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='8' y='2' width='8' height='13' rx='4'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0' fill='none' stroke='%23000' stroke-width='2'/%3E%3Cpath d='M12 18v4M8 22h8' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E") center/contain no-repeat;
@@ -203,10 +200,8 @@ textarea.cx-input{resize:none;line-height:1.3;padding-top:9px;padding-bottom:9px
    carries the sender, the first line and a brass Reply. Unread conversations are bold and listed first. */
 .cx-button.cx-bump{animation:cx-bump 1.5s ease-out}
 @keyframes cx-bump{0%,40%,80%{transform:scale(1)}20%,60%{transform:scale(1.14);box-shadow:inset 0 0 0 1px var(--iron-deep),0 0 0 5px #e8c98a77}}
-.cx-button .cx-count[data-tier=personal]{min-width:22px;height:22px;font-size:14px;line-height:22px;border:1.5px solid var(--iron-deep)}
 .cx-toast[data-message]{border-left:5px solid var(--brass-hi)}
 .cx-reply{background:var(--face);color:var(--ink);box-shadow:inset 0 0 0 1px var(--brass-lo)}
-.cx-conv[data-state=unread] .cx-conv-main b{font-weight:700;color:#fff0cf}
 .cx-conv[data-state=unread] .cx-standard{position:relative}
 .cx-conv[data-state=unread] .cx-standard::after{content:'';position:absolute;top:-3px;right:-5px;width:9px;height:9px;border-radius:50%;background:var(--brass-hi);border:1.5px solid #15191b}
 @media (prefers-reduced-motion:reduce){.cx-button.cx-bump{animation:none}}

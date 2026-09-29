@@ -2,6 +2,7 @@ import { journeyPoint, friendlyPath } from './movement.js';
 import { borderNetwork, insideRings, provinceRings } from './map-geometry.js';
 import { allianceColors, atWar, battleColors, coalitions, formingAlliances, relationsOf, teamColor, threatening, warKey } from './relations.js';
 import { faction } from './presentation.js';
+import { setAttr, setText } from './ui.js';
 /** Presentation only: the server decides every movement, battle and ownership change.
  * Every SVG fragment below is an authored constant; player text never enters map markup.
  */
@@ -11,10 +12,6 @@ function node(tag, attributes = {}) {
   for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, value);
   return element;
 }
-/* Write only what changed: every poll repaints the same map, and an unchanged write still costs a mutation, a style
- * invalidation and, inside the world layers, a rebuild of both <use> copies. */
-const setAttr = (el, key, value) => { value = String(value); if (el.getAttribute(key) !== value) el.setAttribute(key, value); };
-const setText = (el, value) => { value = String(value); if (el.textContent !== value) el.textContent = value; };
 const setDisplay = (el, value) => { if (el.style.display !== value) el.style.display = value; };
 const setData = (el, values) => { for (const [k, v] of Object.entries(values)) { const s = String(v); if (el.dataset[k] !== s) el.dataset[k] = s; } };
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
@@ -94,7 +91,7 @@ export class Atlas {
     this.frontEls = new Map(); this.blocEls = new Map(); this.blocSeq = 0; this.mode = 'political'; this.relationFocus = null; this.hoverFocus = null;
     this.armyRects = [];
     this.reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    svg.replaceChildren(); svg.classList.add('atlas-v6');
+    svg.replaceChildren(); svg.classList.add('atlas');
     if (!svg.id) svg.id = `atlas-${++instances}`;
     // Horizontal wraparound: world-space layers live once in `base` (fills, borders, blocs,
     // fronts), `lines` (routes, traces) or `fx` (effects); two <use> copies repeat each at

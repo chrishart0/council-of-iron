@@ -39,7 +39,7 @@
 <header class="topbar" id="hud" data-region="hud" aria-label="Campaign status">
 <button id="hud-standard" class="nation" type="button" aria-label="Your alliance"><span id="commander-insignia"></span><span class="nation-name"><b id="commander-title">Observer</b><small id="commander-side"></small></span></button>
 <div id="operations" class="stats" role="group" aria-label="Your forces"></div>
-<div class="clock-plaque" role="group" aria-label="Clock and victory"><div class="clock-face"><span class="sr-only" id="phase">Assembling</span><b id="clock">00:00</b><small id="clock-total">/ 30:00</small></div><span id="victory-status" class="victory"></span></div>
+<div class="clock-plaque" role="group" aria-label="Clock and victory"><div class="clock-face"><span class="sr-only" id="phase">Assembling</span><b id="clock">00:00</b><small id="clock-total">/ 30:00</small></div><span id="victory-status" class="victory" role="timer" aria-live="off"></span></div>
 <div class="hud-actions"><button id="comms-button" type="button"></button><button id="menu-button" class="bezel-btn" type="button" aria-expanded="false" aria-controls="hud-menu" aria-label="Menu: views, sound, voice, map key, war log, room and identity" data-icon="gear"></button></div>
 </header>
 <nav class="strip" data-region="strip" aria-label="Powers"><div id="lb-powers" class="standards" role="group" aria-label="Countries: select one to open diplomacy"></div></nav>
@@ -51,7 +51,7 @@
 <div id="card-body" class="card-body"></div>
 <div id="card-dock" class="card-dock">
 <div id="sources" class="sources" role="group" aria-label="Sending from"></div>
-<div id="amount-control" class="amount-control"><div class="amount-line"><label for="amount-slider" id="amount-label">Troops to send</label><output id="amount-out" for="amount-slider"></output></div><input id="amount-slider" class="slider" type="range" min="1" max="100" value="50" aria-describedby="amount-out"><div class="amount-presets presets" role="group" aria-label="Share of free troops"><button type="button" class="chip" data-fraction="0.25">25%</button><button type="button" class="chip" data-fraction="0.5">50%</button><button type="button" class="chip" data-fraction="0.75">75%</button><button type="button" class="chip" data-fraction="1">100%</button></div></div>
+<div id="amount-control" class="amount-control"><div class="amount-line"><label for="amount-slider">Troops to send</label><output id="amount-out" for="amount-slider"></output></div><input id="amount-slider" class="slider" type="range" min="1" max="100" value="50" aria-describedby="amount-out"><div class="amount-presets presets" role="group" aria-label="Share of free troops"><button type="button" class="chip" data-fraction="0.25">25%</button><button type="button" class="chip" data-fraction="0.5">50%</button><button type="button" class="chip" data-fraction="0.75">75%</button><button type="button" class="chip" data-fraction="1">100%</button></div></div>
 <p id="order-preview" class="order-preview"></p>
 <div id="card-actions" class="card-actions"></div>
 </div>
@@ -90,7 +90,7 @@
 <div id="coach" class="coach" data-region="coach" role="dialog" aria-modal="false" aria-labelledby="coach-text" hidden><p id="coach-step" class="coach-step"></p><p id="coach-text"></p><div class="coach-actions"><button id="coach-skip" type="button" class="btn btn-ghost small">Skip</button><button id="coach-next" type="button" class="btn btn-primary small">Next</button></div></div>
 <section id="lobby" class="lobby" aria-labelledby="lobby-room" hidden>
 <header class="topbar lobby-bar" data-region="lobby-bar"><button type="button" class="bezel-btn" data-home="true" aria-label="Back to rooms" data-icon="back"></button><div class="lobby-title"><b id="lobby-room">The council</b><small id="lobby-note"></small></div><button type="button" class="btn btn-ghost" data-share>Copy invite link</button></header>
-<div class="plate dossier" data-region="dossier"><header class="plaque"><h2 id="dossier-title">Choose your country</h2></header>
+<div class="plate dossier" data-region="dossier"><header class="plaque"><h2>Choose your country</h2></header>
 <div class="card-body"><div id="dossier-head" class="dossier-head"></div><p id="starting-holdings" class="starting-holdings"></p>
 <form id="join-form"><label class="field">Commander<span class="slot"><input id="join-name" maxlength="40" required placeholder="Your name" autocomplete="nickname"></span></label><input type="hidden" id="country-choice" value=""><button type="submit" class="btn btn-primary wide">Take this seat</button></form>
 </div>

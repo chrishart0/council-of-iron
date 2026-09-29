@@ -60,7 +60,7 @@ const staticFiles = new Map([
   ...['comms', 'style', 'review', 'map-layers'].map(n => [`/${n}.css`, [`public/${n}.css`, 'text/css; charset=utf-8']]),
   ['/', ['public/index.html', 'text/html; charset=utf-8']],
   // v0.9 War Room type (SIL OFL 1.1; licences in public/fonts).
-  ...['alegreya-sc-regular', 'alegreya-sc-bold', 'barlow-condensed-medium', 'barlow-condensed-semibold'].map(f => [`/fonts/${f}.woff2`, [`public/fonts/${f}.woff2`, 'font/woff2']]),
+  ...['alegreya-sc-bold', 'barlow-condensed-medium', 'barlow-condensed-semibold'].map(f => [`/fonts/${f}.woff2`, [`public/fonts/${f}.woff2`, 'font/woff2']]),
   ['/audio/manifest.json', ['public/audio/manifest.json', 'application/json']],
   ...['theme', 'tension', 'effects'].flatMap(stem => [['ogg', 'audio/ogg'], ['mp3', 'audio/mpeg']]
     .map(([ext, type]) => [`/audio/${stem}.${ext}`, [`public/audio/${stem}.${ext}`, type]])),

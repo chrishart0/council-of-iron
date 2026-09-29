@@ -220,17 +220,6 @@
       phrase(bell(out, -22), 0.5, [[0, 'G5', 1, 0.5], [1, 'D6', 1, 0.5]], 0.25);
       return 2.0;
     },
-    async industry_down() { // crunch, then steam escaping downward
-      const out = await hall({ decay: 1.6, wet: 0.2 });
-      const crunch = new Tone.MetalSynth({ volume: -14, harmonicity: 3.7, modulationIndex: 30, resonance: 1200, octaves: 0.8, envelope: { attack: 0.001, decay: 0.35, release: 0.2 } }).connect(out);
-      crunch.triggerAttackRelease(95, 0.3, 0.0, 1); crunch.triggerAttackRelease(70, 0.3, 0.09, 0.8);
-      noise(filtered(out, 1500), { type: 'brown', volume: -4, decay: 0.35 }).triggerAttackRelease(0.35, 0.0, 1);
-      timpani(out, -9).triggerAttackRelease('C2', 0.4, 0.02, 0.8);
-      const hissFilter = new Tone.Filter({ frequency: 5000, type: 'bandpass', Q: 1.2 }).connect(out);
-      hissFilter.frequency.setValueAtTime(5000, 0.3); hissFilter.frequency.exponentialRampToValueAtTime(350, 1.7);
-      noise(hissFilter, { volume: -10, attack: 0.05, decay: 1.2, sustain: 0.2, release: 0.3 }).triggerAttackRelease(1.2, 0.3, 0.8);
-      return 2.2;
-    },
     async countdown() { // accelerating ticks over a low dissonant swell
       const out = await hall({ decay: 2.2, wet: 0.22 });
       const tick = new Tone.MembraneSynth({ volume: -10, pitchDecay: 0.008, octaves: 2, envelope: { attack: 0.001, decay: 0.07, sustain: 0, release: 0.02 } }).connect(filtered(out, 1800, 'highpass'));

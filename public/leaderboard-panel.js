@@ -7,13 +7,10 @@
 import { leaderboard, warsOf, truceFronts } from './leaderboard.js';
 import { allianceColors } from './relations.js';
 import { insignia, icon } from './presentation.js';
-import { seatType, clock } from './ui.js';
+import { seatType, clock, setText, setAttr } from './ui.js';
 
 const ARROW_MS = 4000;
 const node = (tag, className) => { const e = document.createElement(tag); e.className = className; return e; };
-const setText = (element, value) => { if (element.textContent !== value) element.textContent = value; };
-// Rows are refilled every poll: write an attribute only when its value changed.
-const setAttr = (element, name, value) => { if (element.getAttribute(name) !== value) element.setAttribute(name, value); };
 const RELATION = { enemy: ['war', 'at war with you'], ally: ['ally', 'allied with you'] };
 const percent = n => `${Math.round(n * 100)}%`;
 
@@ -89,16 +86,16 @@ export class LeaderboardPanel {
   slot() {
     const li = node('li', 'lb-row'); li.tabIndex = 0;
     const flags = node('span', 'lb-flags'), expand = node('button', 'lb-expand'); expand.type = 'button';
-    flags.append(expand, node('i', 'lb-swatch'), node('span', 'lb-standards'));
+    flags.append(expand, node('span', 'lb-standards'));
     const name = node('span', 'lb-name'), bar = node('i', 'lb-bar');
     bar.append(node('i', ''));
-    name.append(node('span', 'lb-label'), bar, node('small', 'lb-pct'));
+    name.append(node('span', 'lb-label'), bar);
     li.append(node('span', 'lb-rank'), node('span', 'lb-move'), flags, name, node('span', 'lb-rel'), node('span', 'lb-land'), node('span', 'lb-troops'));
     return li;
   }
   fill(li, { row, type, group }, now, board, state) {
     const [rank, move, flags, name, rel, land, troops] = li.children;
-    const [expand, , standards] = flags.children, [label, bar, pct] = name.children;
+    const [expand, standards] = flags.children, [label, bar] = name.children;
     setAttr(li, 'class', `lb-row lb-${type}${row.you && type !== 'group' ? ' you' : ''}${type === 'group' && row.you ? ' your-team' : ''}${row.eliminated ? ' eliminated' : ''}${
       type !== 'member' && board.rows.indexOf(row) !== row.rank - 1 ? ' detached' : ''}`); // detached: own entry outside the top N
     for (const [k, v] of Object.entries({ id: row.id, kind: type, provinces: String(row.provinces), troops: String(row.troops), focus: row.countries[0] || '',
@@ -129,8 +126,8 @@ export class LeaderboardPanel {
     const player = type === 'group' ? null : state.players.find(p => p.id === row.id);
     const role = player ? seatType(player) : '';
     setText(label, `${this.label(row)}${row.eliminated ? ' · fallen' : ''}${type === 'group' && row.forming ? ' · forming' : ''}`); // alliance name: text
-    if (bar.hidden !== (type !== 'member')) bar.hidden = pct.hidden = type !== 'member';
-    if (type === 'member') { if (bar.firstChild.style.width !== percent(row.shareOfAlliance)) bar.firstChild.style.width = percent(row.shareOfAlliance); setText(pct, percent(row.shareOfAlliance)); }
+    if (bar.hidden !== (type !== 'member')) bar.hidden = type !== 'member';
+    if (type === 'member' && bar.firstChild.style.width !== percent(row.shareOfAlliance)) bar.firstChild.style.width = percent(row.shareOfAlliance);
     const [mark, words] = RELATION[row.relation] || ['', ''];
     if (rel.dataset.mark !== mark) { rel.dataset.mark = mark; rel.innerHTML = mark ? icon(mark) : ''; } // authored SVG only
     setAttr(rel, 'class', `lb-rel${row.relation ? ` ${row.relation}` : ''}`);
