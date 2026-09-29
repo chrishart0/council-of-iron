@@ -474,7 +474,11 @@ def main():
                     page.wait_for_timeout(300)
                 if built['owner']=='usa':
                     assert built['development']==level+1,built
-                    province(page,build);expect(page.locator('#card-sub')).to_contain_text(f"industry {['','Ⅰ','Ⅱ','Ⅲ'][level+1]}",timeout=5000)
+                    for _ in range(3):  # counters shift as the live match moves; make sure the card is this province's
+                        province(page,build)
+                        if page.locator('#card-title').inner_text().strip()==names[build]:break
+                    expect(page.locator('#card-title')).to_have_text(names[build])
+                    expect(page.locator('#card-sub')).to_contain_text(f"industry {['','Ⅰ','Ⅱ','Ⅲ'][level+1]}",timeout=5000)
                     report['assertions'].append(f'Browser funded, confirmed and completed province development ({build}, level {level}→{level+1}) using naturally recruited manpower.')
                 else:
                     assert built['developing'] is None and built['development']==level,built
