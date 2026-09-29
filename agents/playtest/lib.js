@@ -1,10 +1,10 @@
 /** Pure helpers of the playtest harness: seat specs, prompts, client argv, triggers, parsing and reports.
  * No I/O here, so every rule the runner applies is unit-tested. */
 
-export const CLIENTS = ['codex', 'grok', 'hermes', 'fake'];
+const CLIENTS = ['codex', 'grok', 'hermes', 'fake'];
 export const MEMORY_LIMIT = 600;
 /** Tools that change the game (a preview:true call is a read). */
-export const ORDER_TOOLS = new Set(['march', 'turn_around', 'rally', 'develop', 'declare_war', 'offer_peace', 'accept_peace',
+const ORDER_TOOLS = new Set(['march', 'turn_around', 'rally', 'develop', 'declare_war', 'offer_peace', 'accept_peace',
   'propose_alliance', 'accept_alliance', 'decline_alliance', 'leave_alliance', 'send_message']);
 /** Room-setup tools are hidden from a seated agent: one of them could move its session to another room. */
 export const HIDDEN_TOOLS = new Set(['list_matches', 'create_match', 'join_match', 'start_match', 'add_practice_bots']);
@@ -163,7 +163,7 @@ export const tomlServerNames = text => [...new Set([...String(text).matchAll(/^\
 
 /** Grok imports Claude/Cursor skills, rules, hooks and MCP servers and keeps cross-session memory; these
  * variables turn all of that off for the agent process only (the user's configs are never edited). */
-export const GROK_ENV = { GROK_MEMORY: '0', ...Object.fromEntries(['CLAUDE', 'CURSOR'].flatMap(vendor =>
+const GROK_ENV = { GROK_MEMORY: '0', ...Object.fromEntries(['CLAUDE', 'CURSOR'].flatMap(vendor =>
   ['AGENTS', 'HOOKS', 'MCPS', 'RULES', 'SKILLS'].map(cell => [`GROK_${vendor}_${cell}_ENABLED`, 'false']))) };
 
 /** Exact argv for one turn. `mcp` = {command, args, env} of the logging MCP proxy. Never a shell string. */

@@ -19,7 +19,7 @@ The v5 map for comparison is `git show 683661d:public/imperial-map.json`.
 - Recruitment is 1/2/3 troops per 20 s by industry level. Development costs 24 troops and 2 min for I→II, 48 troops and 3 min for II→III.
 - A province at industry II–III adds +1 to the defender's best die.
 - Win condition: hold 60% of the owned industry for 90 s, or have the most industry at 30:00.
-- **Attacks** (merged from ui-v0.9-gameui): you may attack any province that borders your territory, by land or by a declared sea link. Troops can come from anywhere in your empire, travelling through your own and allied land.
+- **Attacks**: you may attack any province that borders your territory, by land or by a declared sea link. Troops can come from anywhere in your empire, travelling through your own and allied land.
   - So a power's **frontier** is the set of provinces bordering its land. Long internal redeployments stay fast.
   - Chokepoints and sea links decide where fronts form, because every attack needs a border to launch from.
 
@@ -319,23 +319,3 @@ These are from a bot-played local preview position at 04:00, not a live match. T
 ## Optional, not implemented: region bonuses
 
 Risk's continent bonus would fit the region structure: for example, +1 troop per 20 s for holding a whole region. It would sharpen the expansion decision, but it is a new rule. The one-screen rules and `SIMPLIFY-PLAN.md` would have to justify it. The user should decide.
-
-## Merge notes
-
-- One map: `imperial-1910-v6` replaces v5 everywhere. Rooms saved on v5 are skipped at startup (`loadable`/`startupPlan`); a live v5 room in play makes startup refuse, as the deploy guard intends.
-- The branch contains origin/master and origin/ui-v0.9-gameui: the border attack rule, multi-select, truces, the inbox, the playtest harness and the shared lobby.
-- Merged tests that named v5 provinces now use v6 ids:
-  - `ui-multi-*` attacks the Pacific States from Canada, the Great Plains, Mexico and Hawaii;
-  - the truce room uses Ireland;
-  - the decision-view partner test uses Germany.
-- **Handplay recording.** The recorded match is replayed on v6. `RECORDED_PROVINCE` in `scripts/replay-handplay.js` maps the 26 merged v4/v5 ids.
-  - Its golden hashes were re-baselined. It now reaches the deadline, with the Atlantic Accord winning on industry, instead of a tick-553 hold.
-  - `tests/fixtures/handplay-map.json` is deleted.
-  - The review and UI suites were re-baselined on the replayed position, with the reasons in the commits.
-- **Browser second room.** In `tests/browser.py`, the second room's joint attack, development and long march pick provinces the idle USA still holds. On v6, Britain's single 22-troop Canada borders all three US states, and the practice bots attack an idle USA.
-- **Province ids used by clients:**
-  - `west-canada`/`east-canada` → `canada`
-  - `north-japan`/`south-japan` → `japan`
-  - `scotland`/`midlands` → `england`
-  - and so on (see the table above). Bots and agents read the map, not hard-coded ids.
-- **Map changes** go through `scripts/build-imperial-v6.js`, never the JSON. `npm test` fails if the published file differs from the builder's output.

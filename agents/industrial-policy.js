@@ -1,7 +1,7 @@
 import { truceUntil } from '../public/relations.js';
 /** A bot does not re-declare war on a country for this long after making peace with it (ticks, from
  * the peace). Longer than the rules' truce so a bot never ping-pongs war and peace. Bot-only. */
-export const PEACE_MEMORY = 600;
+const PEACE_MEMORY = 600;
 /** Public-observation-only practice policy. Intentionally not a language model.
  * The tournament supplies seeded preferences; runtime bots use deterministic defaults.
  * `options.memory` (a Map the caller keeps per bot) remembers when it last made peace with each

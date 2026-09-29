@@ -4,9 +4,11 @@ Actual test evidence only, newest first. Automated self-play and bot matches che
 
 The earlier Pi model results below used the former v5 map. Master now uses the v6 map, with different starting industry, adjacency and impassable borders. The v5 wins remain historical evidence and must not be used as a current v6 model win rate. Some interrupted attempts were stopped by `earlyoom` and have no result.
 
-# First v6 Pi result — 29 September 2026
+# v6 Pi results — 29 September 2026
 
-DeepSeek V4 Flash Vision Exp played Britain at normal speed against seven practice bots (`v6-britain-01`, v6 map and standard preset). It won by domination at tick 701 in a Britain–France–USA coalition, with 33 own industry (50 accepted and 3 rejected actions, 6 failed tool calls of 150, 1,614,813 reported tokens, 22 turns, no timed-out turn). The result is in `agents/pi/benchmarks.json`; it is one current-map sample, not a measured win rate. Qing and France starts are queued separately.
+DeepSeek V4 Flash Vision Exp played Britain at normal speed against seven practice bots (`v6-britain-01`, v6 map and standard preset, `decision-turn-v3`). It won by domination at tick 701 in a Britain–France–USA coalition, with 33 own industry (50 accepted and 3 rejected actions, 6 failed tool calls of 150, 1,614,813 reported tokens, 22 turns, no timed-out turn).
+
+The first Qing attempt stopped at tick 1206 with no final result after a 120-second turn and two connection errors; the Goodwin ML SSH tunnel timed out and restarted. It is excluded from the ledger. A fresh Qing start (`v6-qing-02r`, same v3 interface) won by domination at tick 953 in a Qing–Russia–USA coalition, but Qing owned one province and 2 industry while Russia and USA owned 30 and 31. Qing made 64 actions and 215 tool calls (19 failed, mostly route previews and rallies), reported 2,450,790 tokens, and had one timed-out turn after five accepted actions. This is a valid win under the rules but weak individual performance. Both completed results are in `agents/pi/benchmarks.json`; two wins are too few to establish a reliable win rate. Route and rally guidance was clarified for the next interface version before the France start.
 
 # v6 trial environment — 29 September 2026
 
@@ -52,7 +54,7 @@ The rules were cut down to one `march` order, rally points only, recall only, al
 
 - **Node:** `npm test` 161 pass / 0 fail; `npm run check` passes.
 - **Browser:** the full `python tests/browser.py` passed with no page errors: a live match with a browser seat, a CLI player and six bots to a finished result, the after-action review, the UI layout, overlap and contrast audits at seven viewports (1920×1080, 1536×864, 1440×900, 1366×768, 1280×800, 390×844, 844×390), the `tests/ui_tasks.py` walkthroughs and the voice suite.
-- **Tap counts** are equal to or better than before on every task; two bounds were tightened: declare war and march 4 → 3, reply to a DM 3 → 2. The `turn` (turn around) task was removed with the mechanic. Current bounds are in [UI-DESIGN.md](UI-DESIGN.md#verified-automated-not-a-usability-study).
+- **Tap counts** are equal to or better than before on every task; two bounds were tightened: declare war and march 4 → 3, reply to a DM 3 → 2. The `turn` (turn around) task was removed with the mechanic (both were restored the same day). Current bounds are in [UI-DESIGN.md](UI-DESIGN.md#verified-automated-not-a-usability-study).
 - **Balance gate:** `npm run test:balance -- --rounds 32 --mode diplomacy` had 0 invariant failures; 25 of 32 decisive, 7 deadline wins, 0 draws.
 - **Same-seed before/after runs:** 256 diplomacy + 256 solo matches on each side, in [BALANCE.md](BALANCE.md).
 - **Handplay replay** re-baselined: the recorded eight-seat match now ends at tick 553 by domination of the Britain/France/USA alliance.
@@ -88,7 +90,8 @@ Everything below was measured under earlier rules: Prestige scores and prize poo
 
 ## Hand-played match
 
-- **27 September 2026** (commit 6062d8c): one assistant played all eight seats over real HTTP on a stepped clock; the Atlantic Accord (Britain, France, USA) won by domination at tick 630. See [PLAYTEST-HANDPLAY.md](PLAYTEST-HANDPLAY.md).
+- **27 September 2026** (commit 6062d8c, map `imperial-1910-v3`): one ChatGPT assistant controlled all eight countries through eight authenticated HTTP seats on a locally stepped clock (the server test seam, not a public endpoint; 12 irregular decision rounds to tick 630). It is one controller, not independent players: no information isolation between countries, and the messages are synthetic dialogue authored for the test. The Atlantic Accord (Britain, France, USA) won by domination at tick 630 with 50 of 79 provinces: 343 accepted actions, 108 battles, three orders correctly rejected, no engine bug found; the troop ledger reconciled every tick (`659 + 3,959 recruited − 192 invested − 2,102 casualties = 2,324`). Findings that shaped the rules: coordinated arrivals and recalls earned their complexity; recruitment arrows were a trap (a chain left 50 idle troops), which led to the single `march` and rally-only reinforcement ([SIMPLIFY-PLAN.md](SIMPLIFY-PLAN.md)).
+- **The fixture today:** `tests/fixtures/handplay-20260927.json.gz` holds every accepted command, rejected input and clock advance (no credentials, no database, no decision policy). `node scripts/replay-handplay.js` (`--http` for real HTTP seats) replays those decisions under the current rules through an adapter (war declarations before marches, merged province ids mapped, rejected orders skipped and counted); on the v6 map it reaches the 1800-tick deadline, where the same alliance wins on industry. Its golden hashes are re-baselined whenever the rules change, and the review tests compare its public replay at every tick. Replaying it is verification, not an additional match.
 
 ## Verification history
 
@@ -107,10 +110,14 @@ Each release passed its Node tests, syntax checks, the 32-round diplomacy balanc
 - **26 Sep — v0.2 seeded playtesting and atlas UX** (44a2435): 41 tests; 3,488 heuristic matches; native CI [run 36289994282](https://github.com/chrishart0/council-of-iron/actions/runs/36289994282).
 - **26 Sep — v0.1** (7b6305f, a1555cc): 33 tests; a browser seat, a CLI seat and six bots played to a finished result; native CI [run 36270303625](https://github.com/chrishart0/council-of-iron/actions/runs/36270303625).
 
-Early local runs used a managed-Chromium HTTP bridge because the sandbox blocked navigation; native navigation, origin and CSP were verified only by the CI runs linked above and later native local runs. Their machine-readable receipts (`docs/testing/*.json`, except the handplay record) were removed in commit 06d3ec6 and remain in git history.
+Early local runs used a managed-Chromium HTTP bridge because the sandbox blocked navigation; native navigation, origin and CSP were verified only by the CI runs linked above and later native local runs. Their machine-readable receipts (`docs/testing/*.json`) were removed (most in commit 06d3ec6, the handplay record later) and remain in git history.
 
 ## Still unproven
 
 Apart from the user's own phone playtests of earlier versions (the feedback behind [SIMPLIFY-PLAN.md](SIMPLIFY-PLAN.md): "too complex, I get lost"; "the map is good"), no human players have rated clarity or enjoyment. Real devices and iOS Safari, screen readers, public-internet hardening, load and calibrated rankings are untested.
 
-**Agent-harness evidence merged from master (old rules, 28 September 2026).** Review reconstruction of the external-profile quick room `a09b0d68` shows four model turns spanning ticks 0–1727 at the 6× clock (turn wall times 35.1, 120.0 capped, 72.5, 72.6 s); Britain ended with six provinces and no alliance. Two normal-speed external-profile records stopped early (a connection error at tick 291; an output-length stop at tick 295) and are excluded. Three completed normal-speed Qwen Pi Germany runs on seed `normal02` differ (one tool-led win, two compact-board losses) with divergent boards and alliances, so they cannot attribute the gap to the prompt; the harness now records `turnView` and a per-turn position trace for matched comparisons. See [HARNESS-REVIEW.md](HARNESS-REVIEW.md).
+**Agent-harness evidence merged from master (old rules, 28 September 2026).** Review reconstruction of the external-profile quick room `a09b0d68` shows four model turns spanning ticks 0–1727 at the 6× clock (turn wall times 35.1, 120.0 capped, 72.5, 72.6 s); Britain ended with six provinces and no alliance. Two normal-speed external-profile records stopped early (a connection error at tick 291; an output-length stop at tick 295) and are excluded. Three completed normal-speed Qwen Pi Germany runs on seed `normal02` differ (one tool-led win, two compact-board losses) with divergent boards and alliances, so they cannot attribute the gap to the prompt; the harness now records `turnView` and a per-turn position trace for matched comparisons.
+
+## History
+
+Removed records, in git history: `docs/HARNESS-REVIEW.md` (28 Sep 2026 agent-harness review written under the Prestige rules: decision views, critical-state tests, verified memory), `docs/PLAYTEST-HANDPLAY.md` (the full hand-played match write-up) with its receipt `docs/testing/handplay-20260927.json`, `docs/AFTER-ACTION.md` (folded into docs/API.md and docs/UI-DESIGN.md), and the old-UI media `docs/media/after-action.gif`, `command-table.png` and `interface.gif`.

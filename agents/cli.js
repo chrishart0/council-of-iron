@@ -84,14 +84,10 @@ try {
     case 'inbox':result=await client.readInbox();break;
     case 'decision':result=decisionView(await client.observe(Number(args[0] || 0),{inbox:true}),await client.map());break;
     case 'board':result=boardView(await client.observe(Number.MAX_SAFE_INTEGER,{inbox:true}),await client.map());break;
-    case 'map':{const map=await client.map();result={...map,provinces:map.provinces.map(({path,...province})=>province)};break;}
+    case 'map':result=await client.mapData();break;
     case 'march':result=await client.action({...marchAction(args),...(declareWar?{declareWar:true}:{})});break;
     case 'preview':result=await client.plan(marchAction(args));break;
-    case 'turn-around': {
-      if(previewOnly){result=await client.plan({type:'turn_around',armyId:args[0]});break;}
-      const army=(await client.observe(Number.MAX_SAFE_INTEGER)).armies.find(a=>a.id===args[0]);
-      result=await client.action(army?.returning?{type:'turn_around',armyId:args[0]}:{type:'recall',id:args[0]});break;
-    }
+    case 'turn-around':result=previewOnly?await client.plan({type:'turn_around',armyId:args[0]}):await client.turnAround(args[0]);break;
     case 'rally': {
       const from=args[0].split(','),action={type:'rally',from:from.length===1?from[0]:from,to:args[1]==='clear'?null:args[1]};
       result=previewOnly?await client.plan(action):await client.action(action);break;

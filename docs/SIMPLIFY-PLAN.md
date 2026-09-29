@@ -73,7 +73,7 @@ Heuristic self-play is only used for invariants and "matches still resolve", nev
 | M2 | `route` (recruits hop one link) **and** `rally` (recruits, or "everything above N", march along a path) | **Rally only**: "new troops from these provinces march to X". No `keep`. | Decision 5 in one order; fixes the "route chain left 50 idle troops" trap. | `route`, route-reserve insights, recruitment-arrow UI, `keep` input | Stockpiles need one ordinary march. | **Merge** |
 | M3 | `recall` **and** `turn_around` (resume toward the target, at most twice, with its own preview/endpoint) | ~~Recall only~~ — **restored at the user's request** ("Turn around is an important feature. Units should be able to be brought back."): one concept, *turn around*: an advancing army is recalled home; a returning army (recalled or turned back automatically) **marches again** toward its target from where it is, at most twice. One tool/command for agents. | Decision 5: pull back and push again without micromanaging. | preview endpoint and separate preview tool folded into `/plan` and the one `turn_around` tool | — | **Keep (merged)** |
 | M4 | Solo countries declare instantly; alliances vote by majority (60 s); peace is a vote, then an offer, then a vote on the other side | **Any member speaks for the alliance.** Declaring war puts both whole sides at war at once (1914 chains). Peace: any member offers, any member of the other side accepts within 60 s. | Decision 4 is one button for everyone; "declare war & march" works in alliances too. Betrayal risk is real diplomacy. | `vote_war`, `vote_peace`, majority/motion states, war-vote UI and toasts | An ally can drag you into war — you can leave. | **Merge** |
-| M5 | Prestige = payout − 100 from a 100×players pool, split by industry^0.75, × maturity over 300 s; deadline pays 50/25/25; all-player coalition draws; league eligibility | **Win or lose.** Your alliance holds 60% of the world's industry for 90 s → every member wins. At 30:00 the side with the most industry wins; a tie is a draw. **Alliances hold at most half the countries** (so there is always an opponent; 2–3 player games are free-for-all). Your score is your own industry at the end (bragging rights, tiebreak within a side). Standings count wins/draws/losses. | One obvious goal; ends negative-Prestige-while-winning and "+100 for surviving". The size cap keeps alliances meaningful without prize maths. | `score`/`leaderboard` prize maths, maturity/tenure, `deadlinePrizes`, `strengthExponent`, negotiated draw, `eligible`/league mode, `coalitionForecast`, `alliance_victory_share`, `match_leaderboard`, Prestige UI and review tenure track | Less incentive to be the biggest inside a winning alliance (score keeps a little). | **Replace** |
+| M5 | Prestige = payout − 100 from a 100×players pool, split by industry^0.75, × maturity over 300 s; deadline pays 50/25/25; all-player coalition draws; league eligibility | **Win or lose.** Your alliance holds 60% of the world's industry for 90 s → every member wins. At 30:00 the side with the most industry wins; a tie is a draw. **Alliances hold at most half the countries** (so there is always an opponent; 2–3 player games are free-for-all; since capped at three countries as well). Your score is your own industry at the end (bragging rights, tiebreak within a side). Standings count wins/draws/losses. | One obvious goal; ends negative-Prestige-while-winning and "+100 for surviving". The size cap keeps alliances meaningful without prize maths. | `score`/`leaderboard` prize maths, maturity/tenure, `deadlinePrizes`, `strengthExponent`, negotiated draw, `eligible`/league mode, `coalitionForecast`, `alliance_victory_share`, `match_leaderboard`, Prestige UI and review tenure track | Less incentive to be the biggest inside a winning alliance (score keeps a little). | **Replace** |
 | M6 | 90 s opening council: lock a leader name and a declaration before armies move | **Start means start.** Say hello in World chat whenever you like. | Removes a phase and a form between "Start" and play. | `opening` status, `lockOpening`, `/opening`, `lock_opening`, dossier form | Slow agents lose 90 s of reading time; first recruitment (20 s) and slow battles cushion it. | **Cut** |
 | M7 | "3 military commands per rolling 10 s" shown in rules/UI; chat cooldown 10 s across channels with a countdown | **Invisible anti-spam limits**: 10 orders per 10 s, one chat message per 2 s. Never in the rules, never a countdown. | Nobody plans around a budget; multi-front play is not throttled. | budget copy/UI/insights, chat countdown | Scripts can act faster than a human, but not much. | **Simplify** |
 | M8 | Capture has a battle-size-based chance to knock a completed factory down a level | **Capture keeps the factory.** Unfinished construction is still lost. | Conquest is predictable; industry is a prize worth taking. | `industry_damaged` and its headline, crack effect, sound cue, review rows | Snowball slightly stronger. | **Cut** |
@@ -81,7 +81,7 @@ Heuristic self-play is only used for invariants and "matches still resolve", nev
 | M10 | Defender +1 on the best die at industry II/III | unchanged | Factories are worth defending; trench feel. | — | — | **Keep** |
 | M11 | Development I→II→III (24/120 s, 48/180 s) | unchanged | Decision 2. | — | — | **Keep** |
 | M12 | 30 s notice to join or leave an alliance; offers expire | unchanged, stated as one rule | Backstab warning is the heart of diplomacy. | — | — | **Keep** |
-| M13 | (after M4) nothing stopped an instant re-declaration: in match 877de196 the Qing bot declared war 17× and accepted peace 17×, 25 treaties in 24 min, while an AI sent 22 peace offers | **Truce after peace**: for 60 s neither side (both whole alliances as they were) may declare war on the other; an offer that expires unanswered is not repeated to the same side for 30 s | Decision 4: peace becomes a commitment worth weighing, not a free pause | none (a small check on declaration and offer) | A player cannot punish a treaty-breaker for 1 min; the truce is short | **Added** |
+| M13 | (after M4) nothing stopped an instant re-declaration: in match 877de196 the Qing bot declared war 17× and accepted peace 17×, 25 treaties in 24 min, while an AI sent 22 peace offers | **Truce after peace**: for 60 s neither side (both whole alliances as they were) may declare war on the other (a truce blocks declaring war; joining an alliance that is already at war brings you into its wars immediately); an offer that expires unanswered is not repeated to the same side for 30 s | Decision 4: peace becomes a commitment worth weighing, not a free pause | none (a small check on declaration and offer) | A player cannot punish a treaty-breaker for 1 min; the truce is short | **Added** |
 
 ## Bucket 3 — KEEP
 
@@ -96,24 +96,9 @@ Heuristic self-play is only used for invariants and "matches still resolve", nev
 - **Headlines + World feed, the Messages inbox with ACTION/PERSONAL/WORLD tiers**, one toast slot.
 - **Spectating, the after-action replay** (minus Prestige), sound, voice input, practice bots, quick pace.
 
-## How to play (one screen, after simplification)
+## How to play (one screen)
 
-1. **Goal.** Hold **60% of the world's industry** with your alliance for **90 seconds**. If nobody does by
-   **30:00**, the side with the most industry wins. A tie is a draw. A player with no industry at the finish loses, even if their alliance wins.
-2. **Troops.** Each province makes troops every 20 s: 1, 2 or 3 by its industry level.
-3. **March.** Drag from your province to another. You can attack any province that borders your own
-   territory, sending troops from anywhere in your empire (the quickest way through your and your allies'
-   land, twice as fast there, re-routed if part of it is lost). Select several of your provinces to send
-   together — they arrive at the same moment. Always leave one troop at home.
-4. **Battle.** Arriving attackers fight dice rounds until one side is gone. Defenders win ties, and a
-   factory (industry II or III) gives them +1. Send help or **recall** to pull back.
-5. **Rally.** Pick provinces and a rally point: their new troops march there automatically.
-6. **Build.** Spend troops to raise a province's industry: I→II costs 24 (2 min), II→III costs 48 (3 min).
-   Capture takes the factory; unfinished work is lost.
-7. **War and peace.** You must declare war before attacking another country; the whole of both alliances
-   goes to war. Anyone can offer peace; anyone on the other side can accept. Peace brings a 1-minute truce.
-8. **Alliances.** Propose to a country; it starts 30 s after everyone accepts. Leaving also takes 30 s.
-   An alliance holds at most half the countries. Promises in chat are not orders.
+The current one-screen rules are README "How to play"; agents read `docs/AGENT-RULES.md`.
 
 ## Estimated reduction
 
@@ -144,7 +129,7 @@ Player-facing concepts removed: transit, long-march-only-through-own-land, arriv
 
 Tap counts (tests/ui_tasks.py, 390×844 touch / 1366×768 mouse): declare 3/3 (bound 4 → 3), attack 3/3, recall 2/2, propose 3/3, respond 2/2, reply 2/2 (bound 3 → 2), develop 3/3, rally 3/3, converse 7/6; the turn-around task is gone. None got worse.
 
-Gates: `npm test` 161/161, `npm run check`, full `python tests/browser.py` (live match, review, UI layout/overlap/contrast audits at 7 viewports, task walkthroughs, voice; no page errors), `npm run test:balance -- --rounds 32 --mode diplomacy` (0 invariant failures, 25 decisive, 7 deadline wins, 0 draws), and 256+256 same-seed before/after runs in `docs/BALANCE.md`. The handplay golden hashes were re-baselined (the recording now ends at tick 553). No human has played the simplified rules yet.
+Gates: `npm test` 161/161, `npm run check`, full `python tests/browser.py` (live match, review, UI layout/overlap/contrast audits at 7 viewports, task walkthroughs, voice; no page errors), `npm run test:balance -- --rounds 32 --mode diplomacy` (0 invariant failures, 25 decisive, 7 deadline wins, 0 draws), and 256+256 same-seed before/after runs in `docs/BALANCE.md`. The handplay golden hashes were re-baselined (the recording then ended at tick 553). No human has played the simplified rules yet.
 
 ### Follow-up (same day): turn-around restored, long marches made explicit
 

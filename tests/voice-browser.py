@@ -16,9 +16,8 @@ import time
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-import sys
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
-from browser_helpers import open_thread, close_comms
+from browser_helpers import open_thread, close_comms, start_server, stop
 from playwright.sync_api import sync_playwright, expect
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -73,9 +72,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix='council-voice-') as tmp:
         wav = speech_wav(tmp)
         env = {**os.environ, 'PORT': '0', 'TEST_DB': str(Path(tmp) / 'test.db'), 'TEST_CLOCK_SCALE': '1', 'STT_URL': args.real_stt or fake_url}
-        server = subprocess.Popen(['node', 'tests/browser-server.js'], cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        server, settings = start_server('tests/browser-server.js', env); url = settings['url']
         try:
-            url = json.loads(server.stdout.readline())['url']
 
             def http(path, data=None, token=None):
                 request = urllib.request.Request(url + path, method='POST' if data is not None else 'GET', data=json.dumps(data).encode() if data is not None else None,
@@ -201,7 +199,7 @@ def main():
                 browser.close()
             assert not report['pageErrors'], report['pageErrors']
         finally:
-            server.terminate(); server.wait(timeout=10)
+            stop(server)
             fake.shutdown()
             (artifacts / 'voice-report.json').write_text(json.dumps(report, indent=2))
     print(json.dumps(report, indent=2))

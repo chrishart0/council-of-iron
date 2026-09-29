@@ -73,10 +73,6 @@ export function buildReview(game, map) {
     if (g.tick % 10 === 0 || g.status === 'finished') report.series.push(sample);
   }
   function addEvent(e) { report.events.push(e); }
-  for(const e of g.events)if(e.type==='message' && e.archiveEligible===true){
-    report.messages.push({id:e.id,tick:e.tick,from:e.from,to:e.to,side:e.side,channel:e.channel,text:e.text});
-    addEvent({tick:e.tick,type:'dispatch',from:e.from,channel:e.channel});
-  }
   record();
   while (g.status === 'running' && g.tick < game.tick) {
     while (game.actionLog[actionIndex]?.tick === g.tick) {

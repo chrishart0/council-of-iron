@@ -12,6 +12,7 @@ from playwright.sync_api import sync_playwright
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from perf_probe import INIT, window
 from perf_room import start_server, busy_room, wait_tick, open_match, http
+from browser_helpers import stop
 
 THROTTLE = 4
 BUDGET = {'busy_pct': 60, 'long_task_ms': 200, 'infinite_anims': 0, 'poll_wire_kb': 15, 'node_growth': 1.25}
@@ -24,9 +25,15 @@ RECREATED = """() => [...document.querySelectorAll('#comms .cx-rows > li')].filt
 
 def main():
     parser = argparse.ArgumentParser(); parser.add_argument('--artifacts', default='artifacts/perf'); parser.add_argument('--executable')
+    parser.add_argument('--quick', action='store_true', help='Sample DOM growth for 30 s instead of until 25:00, and report the '
+        'CPU-time budgets (busy share, long tasks) without failing: they depend on the load of the host.')
     args = parser.parse_args()
     artifacts = Path(args.artifacts); artifacts.mkdir(parents=True, exist_ok=True)
     report = {'throttle': THROTTLE, 'budget': BUDGET, 'status': 'failed'}
+    def timing(ok, what):
+        if ok: return
+        if not args.quick: raise AssertionError(what)
+        report.setdefault('timingOverBudget', []).append(what); print('over the CPU-time budget (not enforced with --quick):', what, file=sys.stderr)
     server, url = start_server(2)
     try:
         me, room = busy_room(url)
@@ -41,8 +48,8 @@ def main():
             first = page.evaluate('() => document.getElementsByTagName("*").length')
             # 1. The map during a busy match.
             live = window(page, cdp, 12); report['map'] = live
-            assert live['busy_pct'] < BUDGET['busy_pct'], ('main thread busy', live)
-            assert max(live['long_tasks'] or [0]) < BUDGET['long_task_ms'], ('long task', live['long_tasks'])
+            timing(live['busy_pct'] < BUDGET['busy_pct'], ('main thread busy', live))
+            timing(max(live['long_tasks'] or [0]) < BUDGET['long_task_ms'], ('long task', live['long_tasks']))
             assert live['infinite_anims'] == BUDGET['infinite_anims'], ('endless animation', live)
             assert live['poll_wire_kb'] < BUDGET['poll_wire_kb'], ('observation payload on the wire', live)
             assert 0 < live['raf_per_s'] <= 12, ('army animation frame rate on a touch screen', live['raf_per_s'])
@@ -54,7 +61,7 @@ def main():
             thread = window(page, cdp, 8); report['world_thread'] = thread
             recreated = page.evaluate(RECREATED); report['rows'] = {'tagged': tagged, 'recreated': recreated}
             assert tagged > 10 and recreated == 0, ('thread rows re-created by polling', report['rows'])
-            assert thread['busy_pct'] < BUDGET['busy_pct'], ('main thread busy with Messages open', thread)
+            timing(thread['busy_pct'] < BUDGET['busy_pct'], ('main thread busy with Messages open', thread))
             page.evaluate("() => document.querySelector('#comms .cx-close')?.click()")
             # 3. Hidden page: no polling, no animation loop.
             page.evaluate("""() => { Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
@@ -65,9 +72,10 @@ def main():
             page.evaluate("""() => { Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
               Object.defineProperty(document, 'hidden', { value: false, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); }""")
             # 4. Long run: the DOM does not grow with the match (armies come and go, the history grows by rows only).
-            # Sampled while the match runs (a win may end it early; the after-action report is a different screen).
+            # Sampled while the match runs (a win may end it early; the after-action report is a different screen):
+            # until 25:00, or for 30 s with --quick.
             last = first
-            for _ in range(120):
+            for _ in range(15 if args.quick else 120):
                 s = page.evaluate('() => ({ status: document.body.dataset.status, nodes: document.getElementsByTagName("*").length, tick: document.getElementById("clock").textContent })')
                 if s['status'] != 'running' or s['tick'] >= '25:00': break
                 last = max(last, s['nodes']); page.wait_for_timeout(2000)
@@ -84,7 +92,7 @@ def main():
             browser.close()
         report['status'] = 'passed'
     finally:
-        server.terminate(); server.wait(timeout=10)
+        stop(server)
         (artifacts / 'perf-report.json').write_text(json.dumps(report, indent=2))
     print(json.dumps(report, indent=2))
 

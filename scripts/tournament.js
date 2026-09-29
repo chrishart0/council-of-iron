@@ -22,7 +22,7 @@ if(!Object.hasOwn(restrictions,policy))throw new Error('Unknown policy restricti
 const mode = option('--mode', 'solo');
 if (!['solo', 'diplomacy'].includes(mode)) throw new Error('Unknown mode.');
 const enginePath = resolve(option('--engine', 'src/engine.js'));
-const { createGame, join, start, act, tick, observe, RuleError } = await import(pathToFileURL(enginePath));
+const { createGame, join, start, act, tick, observe, maxAlliance, RuleError } = await import(pathToFileURL(enginePath));
 const mapBytes = readFileSync(option('--map', 'public/imperial-map.json')), map = JSON.parse(mapBytes);
 const variant = option('--variant', 'v01');
 const cases = JSON.parse(readFileSync(new URL('../tests/balance-cases.json', import.meta.url)));
@@ -87,7 +87,7 @@ function run(seed) {
       if (p.eliminatedAt !== null) continue;
       if (mode === 'diplomacy' && g.tick > 90 && g.tick % 60 === 0) {
         const s = observe(g, p.id, g.sequence);
-        const offer = s.proposals.find(q => q.status === 'open' && q.roster.includes(p.id) && !q.accepted.includes(p.id) && q.roster.length <= 4);
+        const offer = s.proposals.find(q => q.status === 'open' && q.roster.includes(p.id) && !q.accepted.includes(p.id));
         if (offer) command(p.id, {type:'accept', proposalId:offer.id});
         else if (!p.side.startsWith('solo:') && rng() < .12) command(p.id,{type:'leave'});
         else if (rng() < .25) {
@@ -135,13 +135,13 @@ function run(seed) {
     invariant(total(g) === oldTotal + born - lost - interned - (g.economy.invested-oldEconomy.invested), 'troop conservation', g);
     invariant(g.provinces.every(p=>Number.isSafeInteger(p.troops) && p.troops>=0), 'negative or noninteger garrison',g);
     invariant(g.armies.every(a=>Number.isSafeInteger(a.amount) && a.amount>0 && (a.engaged || a.arrivesAt>g.tick)), 'invalid moving army',g);
-    invariant(g.tick<=1800, 'deadline overrun',g);
+    invariant(g.tick<=g.rules.duration, 'deadline overrun',g);
     if ([300,600,1200].includes(g.tick)) checkpoints[g.tick] = Object.fromEntries(g.players.map(p=>[p.id,g.provinces.filter(v=>v.owner===p.id).length]));
   }
   invariant(g.outcome.scores.every(s=>['win','draw','loss'].includes(s.result) && Number.isSafeInteger(s.industry)), 'invalid result',g);
   // A country without territory at the finish loses even in a draw (engine score()); everyone else draws.
   invariant(g.outcome.draw === g.outcome.scores.filter(s=>s.industry>0).every(s=>s.result==='draw'), 'inconsistent draw',g);
-  invariant(g.players.every(p=>g.players.filter(q=>q.side===p.side).length<=Math.max(1,Math.floor(g.players.length/2))), 'alliance over the size cap',g);
+  invariant(g.players.every(p=>g.players.filter(q=>q.side===p.side).length<=Math.max(1,maxAlliance(g))), 'alliance over the size cap',g);
   const outcome = structuredClone(g.outcome), endTick = g.tick; tick(g);
   invariant(g.tick===endTick && JSON.stringify(g.outcome)===JSON.stringify(outcome), 'nonterminal outcome',g);
   return {seed,reason:outcome.reason,draw:outcome.draw,tick:endTick,winningCountries:g.players.filter(p=>p.side===outcome.winningSide).map(p=>p.id),

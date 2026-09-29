@@ -64,8 +64,15 @@ export class CouncilClient {
   action(action,opId=randomUUID()) { return this.request(this.gamePath('/actions'),'POST',{action,opId}); }
   /** Read-only forecast of a march ({to, from, amount|percent} or {to, sources}) or a rally ({type:'rally', from, to}). */
   plan(action) {return this.request(this.gamePath('/plan'),'POST',action);}
+  /** Turn one of your armies or march groups around: a returning army marches again, anything else is recalled. */
+  async turnAround(id,opId) {
+    const o=await this.observe(Number.MAX_SAFE_INTEGER),army=o.armies.find(a=>a.id===id && a.country===o.you);
+    return this.action(army?.returning?{type:'turn_around',armyId:id}:{type:'recall',id},opId);
+  }
   list() {return this.request('/api/games','GET',undefined,'');}
   map() {return this.request(this.match ? this.gamePath('/map') : '/map.json','GET',undefined,'');}
+  /** The map without its decorative SVG paths: IDs, adjacency, coordinates, connections, barriers, countries. */
+  async mapData() {const map=await this.map();return {...map,provinces:map.provinces.map(({path,...province})=>province)};}
   start() {return this.request(this.gamePath('/start'),'POST',{});}
   bots() {return this.request(this.gamePath('/bots'),'POST',{});}
   standings() {return this.request('/api/standings','GET',undefined,'');}

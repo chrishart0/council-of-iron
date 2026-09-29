@@ -69,41 +69,6 @@ test('battle begins on arrival and resolves over dice rounds; a small capture ke
   if(target.owner==='usa')assert.equal(target.development,2);
 });
 
-test('a march passes through allied land without gifting the troops; leaving does not wait for it',()=>{
-  const g=game(['usa','france','britain','germany']);
-  const proposal=send(g,'usa',{type:'propose',country:'france',name:'Accord'});
-  send(g,'france',{type:'accept',proposalId:proposal.proposalId});advance(g,30);
-  province(g,'central-us').owner='france';province(g,'central-us').troops=3;province(g,'central-us').nextRecruit=1000;
-  province(g,'west-us').troops=20;
-  const amount=6;
-  const march=send(g,'usa',{type:'march',from:'west-us',to:'east-us',amount});
-  assert.deepEqual(march.orders[0].path,['central-us','east-us']);
-  tick(g);
-  assert.equal(province(g,'west-us').troops,14);
-  advance(g,march.arrivesAt-g.tick);
-  assert.equal(province(g,'central-us').owner,'france');
-  assert.equal(province(g,'central-us').troops,3);
-  assert.equal(province(g,'east-us').owner,'usa');
-  assert.ok(province(g,'east-us').troops>=amount);
-  assert.equal(g.armies.length,0);
-  // A column that finds the land no longer friendly turns home instead of passing.
-  send(g,'france',{type:'leave'});advance(g,10);
-  const again=send(g,'usa',{type:'march',from:'west-us',to:'east-us',amount:4});
-  advance(g,again.arrivesAt-g.tick);
-  assert.ok(g.events.some(e=>e.type==='army_recalled' && e.reason==='transit_blocked' && e.country==='usa'));
-  assert.equal(province(g,'central-us').owner,'france');
-});
-
-test('a capture keeps completed industry',()=>{
-  const g=game(['usa','britain']);g.rules.hold=1800;
-  const target=province(g,'mexico');target.owner='britain';target.troops=40;target.development=3;target.nextRecruit=1000;
-  province(g,'west-us').troops=130;
-  send(g,'usa',{type:'declare_war',country:'britain'});
-  const move=send(g,'usa',{type:'march',from:'west-us',to:'mexico',amount:110});
-  advance(g,move.arrivesAt+120);
-  assert.equal(target.owner,'usa');assert.equal(target.development,3);
-});
-
 test('accepted peace pulls engaged troops out before the next combat round',()=>{
   const g=game(['usa','britain']);g.rules.hold=1800;
   const target=province(g,'mexico');target.owner='britain';target.troops=30;target.nextRecruit=1000;

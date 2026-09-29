@@ -18,10 +18,8 @@ test('industrial map has more European provinces, colonial footholds and explici
   assert.ok(province(g,'ruhr').development>province(g,'namibia').development);
   assert.equal(gameRules(g).economyShare,.6);
   assert.equal(economyThreshold(g),Math.ceil(g.provinces.filter(p=>p.owner).reduce((n,p)=>n+p.development,0)*.6));
-  const byId=new Map(map.provinces.map(p=>[p.id,p]));let seen=new Set(['england']);
-  for(let i=0;i<map.provinces.length;i++)seen=new Set([...seen,...[...seen].flatMap(id=>byId.get(id).neighbors)]);
-  assert.equal(seen.size,map.provinces.length);
-  for(const p of map.provinces)for(const n of p.neighbors){assert.ok(byId.get(n).neighbors.includes(p.id));assert.equal(g.travelTimes[p.id][n],g.travelTimes[n][p.id]);}
+  // Connectivity and neighbour symmetry: map-geometry.test.js. Travel is symmetric too.
+  for(const p of map.provinces)for(const n of p.neighbors)assert.equal(g.travelTimes[p.id][n],g.travelTimes[n][p.id]);
 });
 test('completed development alone can reach 60% of active industry and start a continuous hold',()=>{
   const g=createGame({id:'growth',name:'Growth',hostId:'usa'},map);

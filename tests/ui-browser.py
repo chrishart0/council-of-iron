@@ -4,7 +4,7 @@ Not a new strategic match. Native navigation by default; explicit bridge optiona
 import argparse,io,json,os,re,subprocess
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
-from browser_helpers import load_bridge, lane, open_thread, close_comms
+from browser_helpers import load_bridge, lane, open_thread, close_comms, start_server, stop, settle
 from ui_tasks import walkthrough, multiselect
 from ui_phone import phone_checks
 ROOT=Path(__file__).resolve().parents[1]
@@ -675,10 +675,10 @@ def feed_checks(page,report):
     expect(row).to_contain_text('sea lanes',timeout=5000)
     assert history.evaluate('(l)=>l.scrollHeight-l.scrollTop-l.clientHeight')<40  # your own message: the thread follows it
     measure='(e)=>({lines:Math.round(e.clientHeight/parseFloat(getComputedStyle(e).lineHeight)),clipped:e.scrollHeight>e.clientHeight+1})'
-    fresh=clamp.evaluate(measure);assert fresh['lines']<=4 and fresh['clipped'],fresh
+    fresh=settle(lambda:clamp.evaluate(measure),lambda r:r['lines']<=4 and r['clipped']);assert fresh['lines']<=4 and fresh['clipped'],fresh
     more=row.locator('.cx-more-btn');expect(more).to_be_visible();expect(more).to_have_text('More')
     more.click();expect(more).to_have_text('Less')
-    full=clamp.evaluate(measure);assert not full['clipped'] and full['lines']>4,full
+    full=settle(lambda:clamp.evaluate(measure),lambda r:not r['clipped'] and r['lines']>4);assert not full['clipped'] and full['lines']>4,full
     more.focus();page.keyboard.press('Enter');expect(more).to_have_text('More')
     assert page.locator('#comms img').count()==0
     report['assertions'].append('World thread (the history): older items are reachable by scrolling to the top of the match; the composer is pinned to the panel bottom; sending follows your own message; a long message is clamped to ≤4 lines with a More/Less control (click and Enter) that reveals it in full.')
@@ -984,24 +984,46 @@ def truce_checks(browser,url,identity,report,out):
     assert not errors,errors;context.close()
     report['assertions'].append('Truce (recorded position ui-truce, Britain–France peace at 00:00): Powers lists the truce under the war fronts (“Truce until 01:00”, marked as involving you); the French country card states the truce and offers a disabled “Truce until 01:00” instead of Declare war; the order card’s one primary is the disabled truce; a province short of troops shows “Needs 24 · you have N” on its disabled Develop button.')
 
+def task_checks(browser,url,identity,server,report,out):
+    """Scripted players on their own contexts and task rooms: coach tips, phone gestures, the turned-back notice,
+    the truce, the core-task walkthroughs and multi-select (run apart with --part tasks)."""
+    coach_and_drag_checks(browser,url,identity,report,out)
+    phone_checks(browser,url,identity,server,report,out,check_layout,check_contrast,check_commit)
+    turn_notice_checks(browser,url,identity,server,report,out)
+    truce_checks(browser,url,identity,report,out)
+    # v0.8 core tasks, scripted like a player, with measured interaction counts (bounds in ui_tasks.BOUNDS).
+    report['tapCounts']={'390x844 touch':walkthrough(browser,url,identity,server,report,out,'ui-tasks-m',390,844,True),
+        '1366x768 mouse':walkthrough(browser,url,identity,server,report,out,'ui-tasks-d',1366,768,False)}
+    # Several sources, one target: "Select all bordering", Shift-click, a Shift-drag rectangle, Select mode, long-press.
+    report['tapCounts']['multi-select 1536x864 mouse']=multiselect(browser,url,identity,server,report,out,'ui-multi-d',1536,864,False)
+    report['tapCounts']['multi-select 390x844 touch']=multiselect(browser,url,identity,server,report,out,'ui-multi-m',390,844,True)
+    report['assertions'].append('Multi-select: attack the Atlantic States from all four bordering British provinces with "Select all bordering" (3 interactions at 1536×864 mouse and 390×844 touch; one order group, one arrival, 4 arrows and source chips), Shift-click two provinces then the target (desktop), a Shift-drag rectangle selects only your provinces and a province you cannot attack is dimmed with the reason on hover (desktop), Select mode taps and a long-press add sources (phone), Escape clears the selection and the mode.')
+    report['assertions'].append('Core tasks at 390×844 (touch) and 1366×768 (mouse), counted interactions within bounds: declare war on a neutral country and march ≤3, attack a neighbouring enemy with 50% ≤3 (drag on desktop, tap on phone), recall an army ≤2, march a returning army again ≤2, propose an alliance ≤3, answer an alliance offer from the badge ≤2, reply to a DM ≤2 plus typing, develop a province ≤3, set a rally point ≤3, a DM/alliance conversation ≤7, a long move through your own land ≤3 and one through an ally’s land ≤3 (tap source, tap destination, one button; the preview names the way and the arrow follows it; routes in tapCounts) (actual counts in tapCounts; screenshots in tasks/).')
+
+
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--bridge',action='store_true')
     parser.add_argument('--executable',default=os.environ.get('BROWSER_EXECUTABLE'))
     parser.add_argument('--artifacts',default=str(ROOT/'artifacts/ui'))
     parser.add_argument('--gif')
+    parser.add_argument('--part',choices=['all','main','tasks'],default='all',help='main: everything but task_checks; tasks: only '
+        'task_checks (python tests/browser.py runs the two parts side by side, each with its own server)')
     args=parser.parse_args();out=Path(args.artifacts);out.mkdir(parents=True,exist_ok=True)
     report={'status':'not completed','transport':'python-http-bridge' if args.bridge else 'native-browser-http','assertions':[],'pageErrors':[],'fixture':'Recorded decisions replayed under the current rules, paused at tick 480; not a new balance sample'}
-    server=subprocess.Popen(['node','tests/ui-browser-server.js'],cwd=ROOT,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    server,settings=start_server('tests/ui-browser-server.js');url=settings['url'];identity=settings['identity']
     frames=[]
     try:
-        settings=json.loads(server.stdout.readline());url=settings['url'];identity=settings['identity']
         with sync_playwright() as p:
             launch={'headless':True}
             if args.executable:launch['executable_path']=args.executable
             browser=p.chromium.launch(**launch)
             context=browser.new_context(viewport={'width':1600,'height':1000})
             context.add_init_script(SOUND_SPY);context.add_init_script(COACH_DONE)
+            if args.part=='tasks':
+                task_checks(browser,url,identity,server,report,out)
+                assert not report['pageErrors'],report['pageErrors'];report['status']='passed';browser.close()
+                return
             page=context.new_page();page.on('pageerror',lambda e:report['pageErrors'].append(str(e)))
             if args.bridge:load_bridge(page,url,{'coi.identity':json.dumps(identity)})
             else:
@@ -1303,19 +1325,7 @@ def main():
             if not args.bridge:expand_checks(browser,url,identity,report,out)  # real navigation and an init script
             assert spy(page,'csp')==[],spy(page,'csp')
             if not args.bridge:mobile_checks(browser,url,identity,report,out)
-            if not args.bridge:
-                coach_and_drag_checks(browser,url,identity,report,out)
-                phone_checks(browser,url,identity,server,report,out,check_layout,check_contrast,check_commit)
-                turn_notice_checks(browser,url,identity,server,report,out)
-                truce_checks(browser,url,identity,report,out)
-                # v0.8 core tasks, scripted like a player, with measured interaction counts (bounds in ui_tasks.BOUNDS).
-                report['tapCounts']={'390x844 touch':walkthrough(browser,url,identity,server,report,out,'ui-tasks-m',390,844,True),
-                    '1366x768 mouse':walkthrough(browser,url,identity,server,report,out,'ui-tasks-d',1366,768,False)}
-                # Several sources, one target: "Select all bordering", Shift-click, a Shift-drag rectangle, Select mode, long-press.
-                report['tapCounts']['multi-select 1536x864 mouse']=multiselect(browser,url,identity,server,report,out,'ui-multi-d',1536,864,False)
-                report['tapCounts']['multi-select 390x844 touch']=multiselect(browser,url,identity,server,report,out,'ui-multi-m',390,844,True)
-                report['assertions'].append('Multi-select: attack the Atlantic States from all four bordering British provinces with "Select all bordering" (3 interactions at 1536×864 mouse and 390×844 touch; one order group, one arrival, 4 arrows and source chips), Shift-click two provinces then the target (desktop), a Shift-drag rectangle selects only your provinces and a province you cannot attack is dimmed with the reason on hover (desktop), Select mode taps and a long-press add sources (phone), Escape clears the selection and the mode.')
-                report['assertions'].append('Core tasks at 390×844 (touch) and 1366×768 (mouse), counted interactions within bounds: declare war on a neutral country and march ≤3, attack a neighbouring enemy with 50% ≤3 (drag on desktop, tap on phone), recall an army ≤2, march a returning army again ≤2, propose an alliance ≤3, answer an alliance offer from the badge ≤2, reply to a DM ≤2 plus typing, develop a province ≤3, set a rally point ≤3, a DM/alliance conversation ≤7, a long move through your own land ≤3 and one through an ally’s land ≤3 (tap source, tap destination, one button; the preview names the way and the arrow follows it; routes in tapCounts) (actual counts in tapCounts; screenshots in tasks/).')
+            if not args.bridge and args.part!='main':task_checks(browser,url,identity,server,report,out)
             assert not report['pageErrors'],report['pageErrors'];report['status']='passed'
             browser.close()
         if args.gif:
@@ -1329,6 +1339,6 @@ def main():
             result[0].save(target,save_all=True,append_images=result[1:],duration=[d for _,d in frames],loop=0,disposal=2)
             report['gif']={'path':str(target),'frames':len(result),'bytes':target.stat().st_size,'kind':'Actual interface tour of recorded state; not live play'}
     finally:
-        server.terminate();server.wait(timeout=10);(out/'ui-browser-report.json').write_text(json.dumps(report,indent=2)+'\n')
+        stop(server);(out/'ui-browser-report.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report,indent=2))
 if __name__=='__main__':main()

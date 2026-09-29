@@ -9,7 +9,7 @@ from pathlib import Path
 import subprocess
 import urllib.request
 from playwright.sync_api import sync_playwright, expect
-from browser_helpers import load_bridge
+from browser_helpers import load_bridge, start_server, stop
 
 ROOT = Path(__file__).resolve().parents[1]
 # Anchored-region audit: visible [data-region] boxes inside #result never overlap (>4 px), leave the viewport, or scroll the page.
@@ -27,11 +27,8 @@ def main():
     out=Path(args.artifacts);out.mkdir(parents=True,exist_ok=True)
     report={'transport':'python-http-bridge' if args.bridge else 'native-browser-http','assertions':[],'pageErrors':[]}
     frames=[]
-    server=subprocess.Popen(['node','tests/review-browser-server.js'],cwd=ROOT,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    server,settings=start_server('tests/review-browser-server.js');url=settings['url']
     try:
-        line=server.stdout.readline()
-        assert line,server.stderr.read()
-        url=json.loads(line)['url']
         def api(path):
             with urllib.request.urlopen(url+path,timeout=20) as response:return json.load(response)
         def capture(page,name=None,delay=700):
@@ -199,7 +196,7 @@ def main():
             images[0].save(path,save_all=True,append_images=images[1:],duration=durations,loop=0,optimize=True,disposal=2)
             report['gif']={'path':str(path),'frames':len(images),'bytes':path.stat().st_size}
     finally:
-        server.terminate();server.wait(timeout=10)
+        stop(server)
         (out/'review-browser-report.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report,indent=2))
 

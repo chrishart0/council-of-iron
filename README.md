@@ -12,7 +12,7 @@
 4. **Battle.** Arriving attackers fight dice rounds until one side is gone. Defenders win ties, and a factory (industry II or III) gives them +1. Send help, **recall** an army to bring it home, or send a returning army back to its target (**march again**, twice per army).
 5. **Rally.** Pick provinces and a rally point: their new troops march there automatically.
 6. **Build.** Spend troops to raise a province's industry: I→II costs 24 (2 min), II→III costs 48 (3 min). A capture takes the factory; unfinished work is lost.
-7. **War and peace.** Declare war before attacking another country; both whole alliances go to war. Anyone can offer peace; anyone on the other side can accept. Peace brings a **1-minute truce**: neither side can declare war on the other until it ends.
+7. **War and peace.** Declare war before attacking another country; both whole alliances go to war. Anyone can offer peace; anyone on the other side can accept. Peace brings a **1-minute truce**: neither side can declare war on the other until it ends. A truce blocks declaring war; joining an alliance that is already at war brings you into its wars immediately.
 8. **Alliances.** Propose to a country; the alliance starts 30 s after everyone accepts, and leaving also takes 30 s. An alliance holds at most three countries, and never more than half the match. Promises in chat are not orders.
 
 Everything starts from the map. Tap a province for its card: one button says exactly what will happen (`Attack Normandy with 5`, `Declare war on France & send 9`, `Rally troops here`). Tap a country (a standard or a Powers row) to ally, declare war, make peace or talk. The Messages button (**C**) shows what needs you first; offers are accepted right in the message.
@@ -27,7 +27,7 @@ cd council-of-iron
 npm start
 ```
 
-Open **http://192.168.1.216:3107** (the default `npm start` binds all interfaces for this LAN; `HOST`, `PORT` and `PUBLIC_ORIGIN` override it). Create a room, pick a country, invite humans or attach agents, fill empty seats with practice bots if you like, and start. Two to eight countries can play; unclaimed countries stay neutral. **Standard** lasts at most 30 minutes; **Quick** runs every timer 6× faster (5 minutes) — it does not speed up model thinking.
+Open **http://192.168.1.216:3107** (the default `npm start` binds all interfaces for this LAN, and serves `https://` instead once `scripts/dev-cert.sh` has made a certificate; `HOST`, `PORT` and `PUBLIC_ORIGIN` override it). Create a room, pick a country, invite humans or attach agents, fill empty seats with practice bots if you like, and start. Two to eight countries can play; unclaimed countries stay neutral. **Standard** lasts at most 30 minutes; **Quick** runs every timer 6× faster (5 minutes) — it does not speed up model thinking.
 
 The room list shows running games first. **Spectate** opens the same map read-only with the public World history; **Resume** returns to your seat. Finished games open the after-action **Review**: the result, a replay of the whole match, battles and turning points.
 
@@ -81,9 +81,11 @@ npm run check
 npm test
 npm run test:balance -- --rounds 32 --mode diplomacy
 python -m pip install -r tests/requirements.txt && python -m playwright install chromium
-npm run test:browser        # live match, review, UI layout/tasks and voice suites
+npm run test:browser        # live match, review, UI layout/tasks, voice and phone performance suites
+python tests/browser.py --full    # also: practice bots in the live match, full-length performance budgets
+python tests/browser.py --only ui # one suite: live, review, ui, ui-tasks, voice or perf
 ```
 
-The browser test drives the real controls, a separate CLI player and practice bots through a whole match on an accelerated clock (the whole clock, never one timer), then reviews it. Self-play with practice bots checks invariants and that matches resolve; it does not prove balance or fun. [Balance runs](docs/BALANCE.md) · [Playtest record](docs/PLAYTEST.md)
+The browser test drives the real controls and a separate CLI player (later an external agent process) through a whole match on an accelerated clock (the whole clock, never one timer), with the other seats held by idle agents so every step is deterministic, then reviews it; the other suites run on paused recorded positions (the two UI parts beside the rest, each with its own server). `--full` fills those seats with practice bots instead, and enforces the phone CPU budgets, which depend on the host's load. Self-play with practice bots checks invariants and that matches resolve; it does not prove balance or fun. [Balance runs](docs/BALANCE.md) · [Playtest record](docs/PLAYTEST.md)
 
 One process owns all games; SQLite keeps identities, messages, match state and results; server downtime pauses the clock. Rooms from earlier versions of the game are not loaded. Standings are a win/draw/loss record, not a skill rating. Runtime: Node + SQLite + local HTML/CSS/JavaScript. Natural Earth coastlines are public domain; [notices](THIRD_PARTY_NOTICES.md). Authored code is MIT licensed.

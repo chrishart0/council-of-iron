@@ -92,5 +92,5 @@ export function makeStt({ url = process.env.STT_URL || '', openAiKey = process.e
     for (const [key, times] of windows) if (!times.some(t => now - t < 60000)) windows.delete(key);
   }
 
-  return { configured: Boolean(base), provider: openAi ? 'openai' : base ? 'local' : null, available, transcribe, prune };
+  return { provider: openAi ? 'openai' : base ? 'local' : null, available, transcribe, prune };
 }
