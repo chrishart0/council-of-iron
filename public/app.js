@@ -1,11 +1,9 @@
 const $ = id => document.getElementById(id);
-/** Polling writes the same text most of the time: an unchanged write would still be a DOM mutation. */
-const setText=(e,v)=>{v=String(v);if(e.textContent!==v)e.textContent=v;};
 import { AfterAction } from './review.js';
 import { developmentForecast, allianceForecast } from './insights.js';
 import { faction, insignia, icon, battleSignal } from './presentation.js';
 import { Atlas } from './atlas.js';
-import { escapeHTML as esc, setHTML, operationId, confirmAction, clock as time, seatType } from './ui.js';
+import { escapeHTML as esc, setHTML, setText, operationId, confirmAction, clock as time, seatType } from './ui.js';
 import { Herald, presentHeadline } from './feed.js';
 import { viewerOf, turnedBackReason } from './feed-model.js';
 import { Comms } from './comms.js';
@@ -224,7 +222,7 @@ async function request(path,method='GET',data,token=identity?.token){
 async function ensureIdentity(name, force=false){
   name=name.trim();if(!force && identity?.name===name)return;
   const profile=await request('/api/players','POST',{name},null);
-  generation++;pollController?.abort();review?.destroy();review=null;resetPresentation();identity=profile;cursor=0;history=[];comms.reset();comms.room=null;messageCatchupComplete=false;localStorage.setItem('coi.identity',JSON.stringify(identity));showIdentity();
+  leaveRoom();identity=profile;localStorage.setItem('coi.identity',JSON.stringify(identity));showIdentity();
 }
 function startingSummary(c){
   if(!c)return 'All countries are taken. You can still observe.';
@@ -254,9 +252,8 @@ const rallyOf=id=>(state?.rallies || []).find(r=>r.from===id);
 const RALLY_PAUSE={destination_lost:'paused: the rally province is not yours',no_path:'paused: no path through your or allied land'};
 function rallyText(r){return `Rally → ${place(r.to).name}${r.status==='paused'?` · ${RALLY_PAUSE[r.reason] || 'paused'}`:''}`;}
 async function openRoom(id,watch=false){
-  generation++;pollController?.abort();review?.destroy();review=null;document.body.classList.remove('reviewing');
-  closeCard();closeMenu();pastSides.clear();turnedBack.clear();spectating=watch;messageCatchupComplete=false;herald.reset();comms.reset();comms.room=null;
-  resetPresentation();matchId=id;mapReadyFor=null;state=null;cursor=0;history=[];clearSelection();previewKey='';
+  leaveRoom();document.body.classList.remove('reviewing');closeCard();closeMenu();
+  spectating=watch;matchId=id;mapReadyFor=null;state=null;clearSelection();previewKey='';
   document.body.classList.add('in-game');document.body.dataset.screen='match';atlas.world();
   $('home').hidden=true;$('game').hidden=false;$('result').hidden=true;
   const url=new URL(location);url.searchParams.set('match',id);if(watch)url.searchParams.set('spectate','1');else url.searchParams.delete('spectate');url.hash='';window.history.replaceState({},'',url);
@@ -358,9 +355,10 @@ function paintMap(){
   $('select-mode').hidden=!active();
   const many=sources.length>1;
   atlas.update(state,many?null:sources[0] || null,target,many?{selected:sources,reach:target?null:selectionReach()}:{});
-  const plan=card?.kind==='province' && target && sources.length?orderPlan():null;
-  atlas.setDraft(plan?{sources,to:target,label:plan.arrowLabel}:null);
+  paintDraft();
 }
+/** The order arrow of the open province card (sources → target), or none. */
+function paintDraft(){const plan=card?.kind==='province' && target && sources.length?orderPlan():null;atlas.setDraft(plan?{sources,to:target,label:plan.arrowLabel}:null);}
 function freeTroops(id) {
   const p=prov(id);
   const reserved=state.orders.filter(o=>o.from===id && ['march','develop'].includes(o.type)).reduce((n,o)=>n+o.amount,0);
@@ -612,10 +610,8 @@ function renderCard(){
     if(a.id)b.id=a.id;b.disabled=Boolean(a.disabled);return b;}));
   $('card-dock').hidden=$('sources').hidden && $('amount-control').hidden && $('order-preview').hidden && !view.actions.length;
   if(order){const pct=Math.round(fraction*100);$('amount-slider').style.setProperty('--fill',`${pct}%`);}
-  if(card.kind==='province'){paintMapDraftOnly();if(order && order.parts.length)updatePreview();}
+  if(card.kind==='province'){paintDraft();if(order && order.parts.length)updatePreview();}
 }
-function paintMapDraftOnly(){const plan=target && sources.length?orderPlan():null;atlas.setDraft(plan?{sources,to:target,label:plan.arrowLabel}:null);}
-function detailsHTML(html){const d=el('div','card-more');d.innerHTML=html;return d;} // callers escape every name
 function provinceCard(){
   const id=target || sources[0] || card.id,p=prov(id);
   if(!p){return {title:'',actions:[]};}
@@ -905,9 +901,12 @@ function renderResult(){
   $('result').hidden=false;document.body.classList.add('reviewing');placeSound();closeCard();
   if(!review || review.id!==state.id){review?.destroy();review=new AfterAction($('result'),state,map);}
 }
-function resetPresentation(){
-  signalCursor=null;clearTimeout(toastTimer);$('toast').hidden=true;
-  toggleJournal(false);
+/** Forget the room on screen (another room, home, a new identity): stop polling; drop its review, events, banners,
+ * messages and notices. */
+function leaveRoom(){
+  generation++;pollController?.abort();review?.destroy();review=null;
+  signalCursor=null;clearTimeout(toastTimer);$('toast').hidden=true;toggleJournal(false);
+  herald.reset();comms.reset();comms.room=null;messageCatchupComplete=false;cursor=0;history=[];pastSides.clear();turnedBack.clear();
 }
 /** The lobby: a dossier and a rack of standards. */
 function renderLobby(){
@@ -971,7 +970,7 @@ function renderJournal(){
   if($('war-journal').hidden)return;
   setHTML($('events'),history.map(e=>({e,description:describe(e)})).filter(x=>x.description).slice(-30).reverse().map(({e,description})=>`<div class="event"><time>${time(e.tick)}</time>${esc(description)}</div>`).join(''));
 }
-async function home(){resetPresentation();sounds.leave();review?.destroy();review=null;closeCard();closeMenu();setSheet(null);expander.set(false,{fromBrowser:true});document.body.classList.remove('reviewing','spectating');generation++;pollController?.abort();document.body.classList.remove('in-game');document.body.dataset.screen='home';delete document.body.dataset.status;matchId=null;state=null;spectating=false;herald.reset();comms.reset();comms.room=null;messageCatchupComplete=false;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');placeSound();await rooms();}
+async function home(){leaveRoom();sounds.leave();closeCard();closeMenu();setSheet(null);expander.set(false,{fromBrowser:true});document.body.classList.remove('reviewing','spectating','in-game');document.body.dataset.screen='home';delete document.body.dataset.status;matchId=null;state=null;spectating=false;$('home').hidden=false;$('game').hidden=true;window.history.replaceState({},'','/');placeSound();await rooms();}
 
 /* ── First-match coach marks: three tips, dismissible, stored per browser. ── */
 const COACH=[['card-anchor','Tap your province, then any target — or drag from it to the target. Tap more of your provinces to attack together.'],
@@ -1045,7 +1044,9 @@ $('create-form').addEventListener('submit',safely(async()=>{await ensureIdentity
 $('join-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('join-name').value);await request(`/api/games/${matchId}/join`,'POST',{country:$('country-choice').value,kind:'human'});await poll();toast('Your seat is reserved.');}));
 $('fill-bots').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/bots`,'POST',state?.you?{}:{country:$('country-choice').value});await poll();}));
 $('start-match').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/start`,'POST',{});await poll();toast('The match has begun.');}));
-$('amount-slider').addEventListener('input',()=>{fraction=Math.max(.01,Math.min(1,Number($('amount-slider').value)/100));try{localStorage.setItem('coi.fraction',String(fraction));}catch{}if(state){renderCard();paintMapDraftOnly();}});
+/** The share of free troops to send (slider or 25/50/75/100%), remembered per browser. */
+function setFraction(f){fraction=Math.max(.01,Math.min(1,f));try{localStorage.setItem('coi.fraction',String(fraction));}catch{}if(state)renderCard();}
+$('amount-slider').addEventListener('input',()=>setFraction(Number($('amount-slider').value)/100));
 $('lb-toggle').addEventListener('click',()=>{
   const open=!standings.open;standings.setOpen(open);
   try{localStorage.setItem('coi.leaderboard',open?'open':'collapsed');}catch{}
@@ -1153,7 +1154,7 @@ document.addEventListener('click',safely(async event=>{
   if(b.dataset.countrySeat){$('country-choice').value=b.dataset.countrySeat;if(state)renderLobby();atlas.home(b.dataset.countrySeat);}
   if(b.dataset.room)await openRoom(b.dataset.room,b.dataset.spectate==='true');
   if(b.dataset.home)await home();
-  if(b.dataset.fraction){fraction=Number(b.dataset.fraction);try{localStorage.setItem('coi.fraction',String(fraction));}catch{}renderCard();paintMapDraftOnly();}
+  if(b.dataset.fraction)setFraction(Number(b.dataset.fraction));
   if(b.dataset.removeSource){sources=sources.filter(s=>s!==b.dataset.removeSource);if(!sources.length && !target)closeCard();else{if(!target)openCard('province',sources[0]);else renderCard();paintMap();}}
   if(b.id==='select-mode' && active()){
     const on=!selectMode;

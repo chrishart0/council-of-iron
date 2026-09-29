@@ -7,13 +7,10 @@
 import { leaderboard, warsOf, truceFronts } from './leaderboard.js';
 import { allianceColors } from './relations.js';
 import { insignia, icon } from './presentation.js';
-import { seatType, clock } from './ui.js';
+import { seatType, clock, setText, setAttr } from './ui.js';
 
 const ARROW_MS = 4000;
 const node = (tag, className) => { const e = document.createElement(tag); e.className = className; return e; };
-const setText = (element, value) => { if (element.textContent !== value) element.textContent = value; };
-// Rows are refilled every poll: write an attribute only when its value changed.
-const setAttr = (element, name, value) => { if (element.getAttribute(name) !== value) element.setAttribute(name, value); };
 const RELATION = { enemy: ['war', 'at war with you'], ally: ['ally', 'allied with you'] };
 const percent = n => `${Math.round(n * 100)}%`;
 

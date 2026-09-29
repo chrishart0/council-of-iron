@@ -4,6 +4,10 @@ export const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g,c=>({'
 export const clock = n => `${Math.floor(Math.max(0, n) / 60).toString().padStart(2, '0')}:${Math.floor(Math.max(0, n) % 60).toString().padStart(2, '0')}`;
 /** Who sits in a seat, in two words or fewer. */
 export const seatType = p => !p ? '' : p.kind === 'bot' ? 'Bot' : p.kind === 'agent' ? 'AI' : 'Human';
+/* Write only what changed: polling repaints the same UI, and an unchanged write still costs a mutation and a style
+ * invalidation (inside the map's world layers, also a rebuild of both <use> copies). */
+export const setText = (element, value) => { value = String(value); if (element.textContent !== value) element.textContent = value; };
+export const setAttr = (element, name, value) => { value = String(value); if (element.getAttribute(name) !== value) element.setAttribute(name, value); };
 export function setHTML(element, html) {
   if(element.__html!==html){element.innerHTML=html;element.__html=html;}
 }
