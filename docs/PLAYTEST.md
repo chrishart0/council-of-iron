@@ -2,6 +2,10 @@
 
 Actual test evidence only, newest first. Automated self-play and bot matches check that the rules hold and that matches resolve; they do not show balance or that people enjoy the game.
 
+# Mixed-client human room — 28 September 2026
+
+Room `39104252` started on the live HTTPS server at normal speed with a human Britain seat, Pi seats for Qwen 27B (France), DeepSeek V4 (Germany) and Luna (USA), Hermes Luna with low reasoning (Russia, using the existing `councilluna` profile), Grok 4.7 CLI with low reasoning (Japan), and two practice bots (Ottoman and Qing). At tick 171 all five model services were active; Hermes had 15 accepted orders and 5 sent messages, and Grok had 13 accepted orders and 7 sent messages. This records a live launch and early activity; the match result and human experience remain to be assessed.
+
 # Current-rules Japan trials — 28 September 2026
 
 Two isolated normal-speed Pi/MCP matches used the same combat seed (`latest-japan-01`), Japan against seven practice bots, and the `decision-turn-v3` interface. These are individual observations, not a model win-rate estimate.

@@ -98,7 +98,7 @@ function inboxLine(item) {
 
 export function turnRules({ country, match, interval }) {
   return `You command ${country} in Council of Iron, a real-time diplomacy war game (match ${match}). Other seats may be humans, other AI agents or practice bots.
-WIN: your alliance must hold 60% of the world's industry for 90 s, or have the most industry at the deadline. Your own industry at the end is your score.
+WIN: your alliance must hold 60% of the world's industry for 90 s, or have the most industry at the deadline. You must still own a province at the finish to share its win; a country with no industry loses. Your own industry at the end is your score.
 
 This is ONE short turn. The game clock keeps running while you think. You get a fresh turn about every ${interval} game seconds, and at once when someone messages you or makes you an offer. Nothing carries over between turns except the MEMORY note below.
 
@@ -167,7 +167,7 @@ export const GROK_ENV = { GROK_MEMORY: '0', ...Object.fromEntries(['CLAUDE', 'CU
   ['AGENTS', 'HOOKS', 'MCPS', 'RULES', 'SKILLS'].map(cell => [`GROK_${vendor}_${cell}_ENABLED`, 'false']))) };
 
 /** Exact argv for one turn. `mcp` = {command, args, env} of the logging MCP proxy. Never a shell string. */
-export function turnCommand(seat, { prompt, work, mcp, usageFile, hermesProvider = 'openai-codex', fakeScript }) {
+export function turnCommand(seat, { prompt, work, mcp, usageFile, hermesProvider = 'openai-codex', hermesProfileName, fakeScript }) {
   switch (seat.client) {
     case 'codex': return { command: 'codex', cwd: work, args: ['exec', '--json', '--ephemeral', '--skip-git-repo-check',
       '--ignore-user-config', '--sandbox', 'read-only', '-C', work, '-m', seat.model,
@@ -180,7 +180,7 @@ export function turnCommand(seat, { prompt, work, mcp, usageFile, hermesProvider
       '--reasoning-effort', seat.effort, '--always-approve', '--disable-web-search', '--no-subagents',
       // Only the MCP gateway tools: no shell, file, image or scheduler tools.
       '--tools', 'search_tool,use_tool', '--output-format', 'streaming-json'], env: GROK_ENV };
-    case 'hermes': return { command: 'hermes', cwd: work, args: ['-p', hermesProfile(seat.slot), '-z', prompt, '-m', seat.model,
+    case 'hermes': return { command: 'hermes', cwd: work, args: ['-p', hermesProfileName || hermesProfile(seat.slot), '-z', prompt, '-m', seat.model,
       '--provider', hermesProvider, '--reasoning', seat.effort, '--yolo', '--ignore-rules', '-t', 'council', '--usage-file', usageFile] };
     case 'fake': return { command: process.execPath, cwd: work, args: [fakeScript, prompt],
       env: { PLAYTEST_FAKE_MCP: JSON.stringify(mcp) } };
@@ -189,9 +189,9 @@ export function turnCommand(seat, { prompt, work, mcp, usageFile, hermesProvider
 }
 
 /** One-time setup commands for a seat (argv arrays; `input` is piped to stdin). */
-export function setupCommands(seat, { mcp, profileExists, enabledOtherServers = [] }) {
+export function setupCommands(seat, { mcp, profileExists, enabledOtherServers = [], hermesProfileName }) {
   if (seat.client !== 'hermes') return [];
-  const profile = hermesProfile(seat.slot), steps = [];
+  const profile = hermesProfileName || hermesProfile(seat.slot), steps = [];
   // --clone copies config, .env, SOUL.md and skills only. Never --clone-all: it copies all state and filled the disk.
   if (!profileExists) steps.push({ command: 'hermes', args: ['profile', 'create', profile, '--clone', '--no-alias'] });
   steps.push({ command: 'hermes', args: ['-p', profile, 'mcp', 'remove', 'council'], mayFail: true, input: 'Y\n' });

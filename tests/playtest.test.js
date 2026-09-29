@@ -9,7 +9,7 @@ import { makeServer } from '../src/server.js';
 import { LocalMcpClient } from '../agents/pi/mcp-client.js';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { backoffMs, buildPrompt, decisionKey, extractMemory, grokConfig, hermesEnabledServers, inboxDelivery, inboxItems, inboxUrgent, nextTurn, parseClientOutput,
-  parseSeat, seatReport, setupCommands, stopReason, summarizeCalls, tomlServerNames, tomlValue, turnCommand, validateSeats,
+  parseSeat, seatReport, setupCommands, stopReason, summarizeCalls, tomlServerNames, tomlValue, turnCommand, turnRules, validateSeats,
   MEMORY_LIMIT } from '../agents/playtest/lib.js';
 
 const mcp = { command: '/usr/bin/node', args: ['/repo/agents/playtest/mcp-proxy.js'],
@@ -81,8 +81,16 @@ test('hermes argv and profile setup: one-shot, own profile, never --clone-all, o
   assert.ok(add.args.includes('COUNCIL_SESSION=/d/s.json'));
   assert.deepEqual(steps.at(-1).args, ['-p', 'councilpthermes', 'config', 'set', 'mcp_servers.context7.enabled', 'false']);
   assert.equal(setupCommands(seat, { mcp, profileExists: true })[0].args[2], 'mcp');
+  const custom = turnCommand(seat, { prompt: 'P', work: '/w', mcp, usageFile: '/d/u.json', hermesProfileName: 'councilluna' });
+  assert.equal(at(custom.args, '-p'), 'councilluna');
+  assert.equal(at(custom.args, '-m'), 'gpt-6-luna');
+  assert.deepEqual(setupCommands(seat, { mcp, profileExists: true, hermesProfileName: 'councilluna' })[0].args.slice(0, 2), ['-p', 'councilluna']);
   assert.deepEqual(setupCommands(parseSeat('c:usa:codex:m:low'), { mcp }), []);
   assert.deepEqual(hermesEnabledServers('  brave_search     npx -y   all          ✗ disabled\n  council          /x   all          ✓ enabled\n  context7   https://x  all ✓ enabled\n'), ['council', 'context7']);
+});
+
+test('playtest turns state the individual survival requirement', () => {
+  assert.match(turnRules({ country: 'japan', match: 'example', interval: 30 }), /must still own a province at the finish/);
 });
 
 test('inbox: messages and offers come from the server inbox; events add world chat and war notices', () => {
