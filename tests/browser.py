@@ -487,7 +487,7 @@ def main():
                     envoy=http('/api/players','POST',{'name':f'Envoy {c}'})
                     http(f'/api/games/{shared}/join','POST',{'country':c,'kind':'agent'},envoy['token'])
                 expect(page.locator('#start-match')).to_be_enabled();expect(page.locator('#start-match')).to_have_text('Start and watch')
-                page.locator('#start-match').click();expect(page.locator('#phase')).to_have_text('In session')
+                page.locator('#start-match').click();expect(page.locator('#phase')).to_have_text('Watching')  # no seat: a spectator
                 shared_room=http(f'/api/games/{shared}')
                 assert shared_room['status']=='running' and len(shared_room['players'])==2,shared_room
                 report['assertions'].append('A seatless host started a shared lobby that two agent seats had joined, and watched the running match.')
