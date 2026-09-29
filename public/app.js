@@ -301,6 +301,8 @@ async function command(action){
   }finally{pendingCommand=false;if(epoch===generation && state)renderCard();}
 }
 const safely=fn=>async event=>{if(event?.type==='submit')event.preventDefault();try{await fn(event);}catch(e){toast(e.message,true);}};
+/** A second press while the first request is still out is ignored (a double tap on Create made two rooms). */
+const once=fn=>{let busy=false;return async event=>{if(busy)return;busy=true;try{await fn(event);}finally{busy=false;}};};
 
 /* ── Map ── */
 function initMap(){
@@ -1040,10 +1042,10 @@ document.addEventListener('click',event=>{
   if(!mapTap)return;const tap=mapTap;mapTap=null;
   if(performance.now()-tap.t<750 && Math.hypot(event.clientX-tap.x,event.clientY-tap.y)<30 && !event.target.closest?.('#map')){event.preventDefault();event.stopImmediatePropagation();}
 },true);
-$('create-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('display-name').value);const g=await request('/api/games','POST',{name:$('room-name').value,preset:$('preset').value});await openRoom(g.id);}));
-$('join-form').addEventListener('submit',safely(async()=>{await ensureIdentity($('join-name').value);await request(`/api/games/${matchId}/join`,'POST',{country:$('country-choice').value,kind:'human'});await poll();toast('Your seat is reserved.');}));
-$('fill-bots').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/bots`,'POST',state?.you?{}:{country:$('country-choice').value});await poll();}));
-$('start-match').addEventListener('click',safely(async()=>{await request(`/api/games/${matchId}/start`,'POST',{});await poll();toast('The match has begun.');}));
+$('create-form').addEventListener('submit',safely(once(async()=>{await ensureIdentity($('display-name').value);const g=await request('/api/games','POST',{name:$('room-name').value,preset:$('preset').value});await openRoom(g.id);})));
+$('join-form').addEventListener('submit',safely(once(async()=>{await ensureIdentity($('join-name').value);await request(`/api/games/${matchId}/join`,'POST',{country:$('country-choice').value,kind:'human'});await poll();toast('Your seat is reserved.');})));
+$('fill-bots').addEventListener('click',safely(once(async()=>{await request(`/api/games/${matchId}/bots`,'POST',state?.you?{}:{country:$('country-choice').value});await poll();})));
+$('start-match').addEventListener('click',safely(once(async()=>{await request(`/api/games/${matchId}/start`,'POST',{});await poll();toast('The match has begun.');})));
 /** The share of free troops to send (slider or 25/50/75/100%), remembered per browser. */
 function setFraction(f){fraction=Math.max(.01,Math.min(1,f));try{localStorage.setItem('coi.fraction',String(fraction));}catch{}if(state)renderCard();}
 $('amount-slider').addEventListener('input',()=>setFraction(Number($('amount-slider').value)/100));
