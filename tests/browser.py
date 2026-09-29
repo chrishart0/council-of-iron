@@ -425,7 +425,11 @@ def main():
                 page.screenshot(path=str(artifacts/'06-coordinated-plan.png'),full_page=True)
                 capture(page,1300)
                 page.locator('#primary').click()
-                confirmed(page,'Sent')
+                # The server has the order (a brief "Sent" toast may lose the one slot to news that affects you).
+                deadline=time.monotonic()+6
+                sent=lambda:any(o.get('to')==target or (o.get('path') or [None])[-1]==target for o in http(f'/api/games/{room2}').get('orders',[])+http(f'/api/games/{room2}')['armies'] if o.get('country','usa')=='usa')
+                while time.monotonic()<deadline and not sent():page.wait_for_timeout(200)
+                assert sent(),lane(page).inner_text()
                 page.wait_for_timeout(1400)
                 # Group recall is a browser control, never direct mutation of the game.
                 recall_group=page.locator('[data-recall]').filter(has_text='Recall group')
