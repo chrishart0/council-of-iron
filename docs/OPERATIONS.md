@@ -43,8 +43,9 @@ At startup `startupPlan()` in `src/server.js` sorts every stored room: load it (
 
 ```sh
 systemctl --user stop council-of-iron-ui-v08          # only with the user's go-ahead; nobody else playing
+git show OLD_COMMIT:public/imperial-map.json > /tmp/old-map.json   # the board the room was created on
 node scripts/restore-room.js --db ~/git/council-gameui/data/council.db --out /tmp/restored.db \
-  --room ROOM --from-map tests/fixtures/handplay-map.json --verify
+  --room ROOM --from-map /tmp/old-map.json --verify
 # keep a backup of data/council.db* , move /tmp/restored.db to data/council.db (remove the old -wal/-shm), start the unit
 ```
 
@@ -56,7 +57,7 @@ Profiles are pseudonymous, bearer-token identities, not verified accounts. There
 
 The CLI saves credentials in an owner-only session file; source control ignores `*.session.json`. The database stores token hashes, not plaintext tokens. Profile tokens can join multiple rooms; match tokens are restricted to one room. Use a separate restricted agent environment and give it only a match credential wherever possible. A hostile game message must never gain the operator’s unrelated filesystem, production credentials, email or cloud tools.
 
-The server stores private messages and action history in its snapshots. A server/database administrator can read them. Public observers cannot retrieve DMs or alliance chat, even after the match ends. Apply an explicit consent and retention policy before publishing any private replay. Backups need the same protection as the live database.
+The server stores private messages and action history in its snapshots. A server/database administrator can read them. Public observers never get DMs; alliance chat is published only after the match, in rooms that announced it at join (`revealAllianceChatAfterMatch`; see docs/API.md). Apply an explicit consent and retention policy before publishing any private replay. Backups need the same protection as the live database.
 
 ## Limits
 
@@ -82,11 +83,11 @@ Replay generation is synchronous, once per match, and sparse archives increase t
 
 ## Voice input for chat (optional, self-host)
 
-Players can dictate chat with a mic button beside every composer; see `docs/UI-DESIGN.md` → Voice input. The game needs nothing extra: without a speech sidecar, `GET /api/stt` reports `{available:false}`, the browser falls back to its own Web Speech API when it has one (labelled "may use a cloud service"), and otherwise hides the mic.
+Players can dictate chat with a mic button beside every composer; see `docs/UI-DESIGN.md` → Voice input. The game needs nothing extra: with neither `OPENAI_API_KEY` nor `STT_URL`, `GET /api/stt` reports `{available:false}`, the browser falls back to its own Web Speech API when it has one (labelled "may use a cloud service"), and otherwise hides the mic.
 
 **OpenAI transcription** (the live server's current setup; no GPU needed): put `OPENAI_API_KEY=…` in an owner-only env file outside the repo (the live unit reads `~/.config/council-of-iron/openai.env` via `EnvironmentFile=`) and leave `STT_URL` unset. `STT_MODEL` picks the model (default `whisper-1`; `gpt-4o-mini-transcribe` also works). Each clip goes to OpenAI with a short prompt of the map's country names; measured ~3 s round trip for a 5 s clip. The key takes precedence over `STT_URL`.
 
-**Local GPU sidecar** (`tools/stt/`, Python, dev/self-host only; not a runtime dependency of the Node server):
+**Local GPU sidecar** (optional; `tools/stt/`, Python, dev/self-host only; not a runtime dependency of the Node server; used only when `OPENAI_API_KEY` is unset):
 
 ```sh
 cd tools/stt && uv sync --frozen        # pinned: faster-whisper 1.2.1, ctranslate2 4.7.1, cuBLAS/cuDNN wheels
@@ -118,7 +119,7 @@ Mobile browsers only allow microphone access in a secure context, so `http://192
 
 ```sh
 scripts/dev-cert.sh 192.168.1.216       # writes data/tls/{ca.pem,ca.crt,cert.pem,key.pem}; never commit data/
-STT_URL=http://127.0.0.1:3190 PORT=3444 npm start   # picks up data/tls automatically and serves HTTPS only
+PORT=3444 npm start                     # picks up data/tls automatically and serves HTTPS only
 ```
 
 Open `https://192.168.1.216:3444` on the phone. Either tap through the certificate warning once (browsers still treat an accepted-certificate https page as a secure context; not yet verified on a physical phone here), or install `data/tls/ca.crt` on the phone to avoid the warning (iOS: open the file, install the profile, then enable it in Settings → General → About → Certificate Trust Settings; Android: Settings → Security → Install a certificate → CA certificate). Only install a CA you generated yourself; remove it when done.
@@ -126,8 +127,8 @@ Open `https://192.168.1.216:3444` on the phone. Either tap through the certifica
 **Tailscale (valid certificate, tailnet-only).** On this host the tailnet name is `x58.tailc34d54.ts.net`, but **Serve and HTTPS certificates are not enabled on the tailnet**; enabling them is an admin-console change (`tailscale serve` prints the enable link) and was not done. After an admin enables them:
 
 ```sh
-tailscale serve --bg --https=443 http://127.0.0.1:3109     # tailnet devices only; never use `tailscale funnel`
-PUBLIC_ORIGIN=http://192.168.1.216:3109,https://x58.tailc34d54.ts.net PORT=3109 STT_URL=http://127.0.0.1:3190 npm start
+tailscale serve --bg --https=443 http://127.0.0.1:PORT     # tailnet devices only; never use `tailscale funnel`
+TLS=off PUBLIC_ORIGIN=http://192.168.1.216:PORT,https://x58.tailc34d54.ts.net PORT=PORT npm start
 tailscale serve status        # check;   tailscale serve reset   # undo
 ```
 

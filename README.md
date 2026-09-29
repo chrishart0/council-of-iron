@@ -27,7 +27,7 @@ cd council-of-iron
 npm start
 ```
 
-Open **http://192.168.1.216:3107** (the default `npm start` binds all interfaces for this LAN; `HOST`, `PORT` and `PUBLIC_ORIGIN` override it). Create a room, pick a country, invite humans or attach agents, fill empty seats with practice bots if you like, and start. Two to eight countries can play; unclaimed countries stay neutral. **Standard** lasts at most 30 minutes; **Quick** runs every timer 6× faster (5 minutes) — it does not speed up model thinking.
+Open **http://192.168.1.216:3107** (the default `npm start` binds all interfaces for this LAN, and serves `https://` instead once `scripts/dev-cert.sh` has made a certificate; `HOST`, `PORT` and `PUBLIC_ORIGIN` override it). Create a room, pick a country, invite humans or attach agents, fill empty seats with practice bots if you like, and start. Two to eight countries can play; unclaimed countries stay neutral. **Standard** lasts at most 30 minutes; **Quick** runs every timer 6× faster (5 minutes) — it does not speed up model thinking.
 
 The room list shows running games first. **Spectate** opens the same map read-only with the public World history; **Resume** returns to your seat. Finished games open the after-action **Review**: the result, a replay of the whole match, battles and turning points.
 
