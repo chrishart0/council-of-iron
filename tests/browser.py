@@ -445,13 +445,16 @@ def main():
                 else:
                     assert alaska['developing'] is None and alaska['development']==1,alaska
                     report['assertions'].append('Browser funded and confirmed province development with naturally recruited manpower; a bot captured Alaska before the 120-second build finished, and the unfinished work was lost (the capture rule).')
-                # A long march: through your own land to a province beyond the neighbours (one controlled route).
+                # A long march through your own land to a province beyond the neighbours. The destination
+                # can change hands during this live bot match, so the same route may reinforce or attack.
                 order(page,'west-us','east-us')
-                expect(page.locator('#primary')).to_contain_text('Reinforce')
+                expect(page.locator('#primary')).to_contain_text(re.compile('Reinforce|Attack'))
                 expect(page.locator('#order-details')).to_contain_text('Via',timeout=5000)
                 expect(page.locator('#primary')).to_be_enabled(timeout=10000)
                 page.screenshot(path=str(artifacts/'10-long-march.png'))
-                page.locator('#primary').click();confirmed(page,'Sent')
+                page.locator('#primary').click()
+                if page.locator('#confirm-dialog').is_visible():page.locator('#confirm-dialog [value="confirm"]').click()
+                confirmed(page,'Sent')
                 deadline=time.monotonic()+8
                 while time.monotonic()<deadline and not any(a.get('path') and a['path'][-1]=='east-us' for a in http(f'/api/games/{room2}')['armies']):page.wait_for_timeout(250)
                 assert any(a.get('path') and a['path'][-1]=='east-us' for a in http(f'/api/games/{room2}')['armies']),lane(page).inner_text()
