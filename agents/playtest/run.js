@@ -18,6 +18,9 @@ import { backoffMs, buildPrompt, decisionKey, extractMemory, formatTable, grokCo
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const here = fileURLToPath(new URL('./', import.meta.url));
 const PROXY = resolve(here, 'mcp-proxy.js'), FAKE = resolve(here, 'fake-agent.js');
+// User services have a smaller PATH than login shells; these are the documented CLI install locations.
+process.env.PATH = [resolve(homedir(), '.grok/bin'), resolve(homedir(), '.local/bin'), resolve(process.execPath, '..'),
+  process.env.PATH || ''].join(':');
 
 // ------------------------------------------------------------------ arguments
 const argv = process.argv.slice(2);
@@ -339,7 +342,7 @@ function setupHermes(s, log, profileOverride) {
   const profile = profileOverride || hermesProfile(s.slot), profileDir = resolve(hermesHome(), 'profiles', profile);
   const run = (step, allowFail = false) => {
     const result = spawnSync(step.command, step.args, { input: step.input ?? '', encoding: 'utf8', timeout: 120_000 });
-    if (result.status !== 0 && !allowFail && !step.mayFail) throw new Error(`${step.command} ${step.args.slice(0, 4).join(' ')} failed: ${(result.stderr || result.stdout || '').slice(-400)}`);
+    if (result.status !== 0 && !allowFail && !step.mayFail) throw new Error(`${step.command} ${step.args.slice(0, 4).join(' ')} failed (${result.error?.message || result.signal || result.status}): ${(result.stderr || result.stdout || '').slice(-400)}`);
     return result.stdout || '';
   };
   for (const step of setupCommands(s, { mcp: s.mcp, profileExists: existsSync(profileDir), hermesProfileName: profile })) {

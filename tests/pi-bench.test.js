@@ -73,6 +73,7 @@ test('finished Grok and Hermes seats become sanitized, comparable harness rows',
   const calls = [{ ok: true, acceptedTick: 5, at: '2026-09-29T00:00:05Z', args: { text: 'secret' } }, { ok: false }];
   const row = summarizePlaytestSeat(run, report, grok, turns, calls);
   assert.equal(row.harness, 'Grok CLI');
+  assert.equal(row.arena, 'shared room');
   assert.equal(row.modelGroup, 'grok');
   assert.equal(row.result, 'win');
   assert.equal(row.totalTokens, 120);
@@ -84,6 +85,9 @@ test('finished Grok and Hermes seats become sanitized, comparable harness rows',
   assert.equal(hermes.harness, 'Hermes');
   assert.equal(hermes.modelGroup, 'luna');
   assert.equal(hermes.result, 'loss');
+  assert.equal(summarizePlaytestSeat({ ...run, arena: 'seven practice bots' }, report, grok, turns, calls).arena,
+    'seven practice bots');
+  assert.throws(() => summarizePlaytestSeat({ ...run, arena: 'unverified' }, report, grok, turns, calls), /Unknown playtest arena/);
   assert.throws(() => summarizePlaytestSeat(run, { ...report, status: 'running' }, grok, turns, calls), /finished room/);
   assert.throws(() => summarizePlaytestSeat({ ...run, mapId: 'old-map' }, report, grok, turns, calls), /current map/);
 });

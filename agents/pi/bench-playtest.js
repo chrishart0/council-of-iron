@@ -25,6 +25,8 @@ export function summarizePlaytestSeat(run, report, seat, turns = [], calls = [])
   if (score.industry === 0 && score.result !== 'loss') throw new Error('An eliminated seat cannot win.');
   if (!harnessName[seat.client] || !seat.slot || !seat.model || !run.startedAt)
     throw new Error('Expected a Grok, Hermes or Codex CLI seat with a model and run start.');
+  if (run.arena && !['shared room', 'seven practice bots'].includes(run.arena))
+    throw new Error('Unknown playtest arena.');
   if (!Number.isSafeInteger(seat.ordersAccepted) || !Number.isSafeInteger(seat.ordersRejected) ||
       !Number.isSafeInteger(seat.timedOut)) throw new Error('Playtest seat is missing order or timeout counts.');
   const usage = key => turns.length && turns.every(turn => Number.isFinite(turn.tokens?.[key]))
@@ -40,7 +42,7 @@ export function summarizePlaytestSeat(run, report, seat, turns = [], calls = [])
     id: `${run.match}:${seat.slot}`, match: run.match, mapId: run.mapId, combatSeed: null,
     startedAt: run.startedAt, modelGroup: family(modelId), modelId,
     client: harnessName[seat.client], access: 'MCP', harness: harnessName[seat.client],
-    arena: 'shared room', sourceRevision: run.sourceRevision || null, country: seat.country,
+    arena: run.arena || 'shared room', sourceRevision: run.sourceRevision || null, country: seat.country,
     interfaceVersion: 'playtest-episodic', turnView: 'decision', strategy: 'decision view in prompt',
     maxTurnSeconds: round(run.turnTimeoutMs / 1000), decisionIntervalTicks: finite(run.interval),
     sessionMode: 'fresh', preset: report.speed === 1 ? 'standard' : report.speed === 6 ? 'quick' : 'unknown',

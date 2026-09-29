@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Run the ordinary Grok/Hermes/Codex CLI harness in an isolated normal-speed bot room. */
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -56,6 +56,9 @@ try {
   console.log(`Started isolated room ${seed}: ${seats.length} CLI seats and ${8 - seats.length} practice bots.`);
   const code = await closed;
   if (code !== 0) throw new Error(`CLI harness exited ${code}; private run kept for diagnosis.`);
+  const runPath = resolve(output, seed, 'run.json');
+  const run = JSON.parse(readFileSync(runPath, 'utf8'));
+  writeFileSync(runPath, `${JSON.stringify({ ...run, arena: 'seven practice bots' })}\n`, { mode: 0o600 });
   const imported = spawnSync(process.execPath, [resolve(root, 'agents/pi/bench-playtest.js'), resolve(output, seed)],
     { cwd: root, stdio: 'inherit' });
   if (imported.status !== 0) throw new Error('Finished run could not be imported.');

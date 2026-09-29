@@ -4,7 +4,15 @@ Actual test evidence only, newest first. Automated self-play and bot matches che
 
 The earlier Pi model results below used the former v5 map. Master now uses the v6 map, with different starting industry, adjacency and impassable borders. The v5 wins remain historical evidence and must not be used as a current v6 model win rate. Some interrupted attempts were stopped by `earlyoom` and have no result.
 
-# v6 Pi results — 29 September 2026
+# v6 agent results — 29 September 2026
+
+## CLI harness benchmark — 29 September 2026
+
+Three finished normal-speed CLI seats now appear in the HTML benchmark ledger with their harness, model, arena and industry-over-time trace. In shared room `v6-cli-grok-hermes-04` (Grok CLI 4.7 low as Japan, Hermes Luna low as Russia, six practice bots), a solo German bot won at the tick-1800 deadline with 57 industry. Grok Japan lost with 11 industry (70 accepted / 7 rejected orders; 10 failed tool calls of 156; 23 turns, 2 timeouts). Hermes Luna Russia was eliminated and lost with 0 industry (86 accepted / 19 rejected; 27 failed calls of 178; 34 turns, 1 timeout). Model-reported input/output token counts covered only 20 of Grok's 23 turns and 33 of Luna's 34, so the ledger leaves their full token totals blank.
+
+In a separate seven-bot room, `v6-cli-hermes-sol-france-01`, Hermes GPT-6 Sol low played France and won by domination at tick 1419. France held 59 industry and its Britain ally 11; it made 100 accepted / 4 rejected orders, 4 failed calls of 126, and 12 messages over 41 turns without a timeout. The CLI reported 696,897 input-plus-output tokens across all 41 turns. These are one start per model, with different countries and opponents in the shared room; the win and losses do not rank models or harnesses. The report keeps shared-room rows separate from seven-bot rows. Both rooms used game source revision `774febc`; the local launcher's PATH was corrected before they started so the systemd Hermes command could be found.
+
+After integrating master revision `8237a58`, `npm test` passed 231 tests, `npm run check` passed, the 32-round diplomacy balance run had zero invariant failures (23 decisive wins, 8 deadline wins, 1 draw), and the native `python tests/browser.py --executable /usr/bin/google-chrome` suite passed live, review, UI tasks, voice, performance and UI checks. The arena-label importer correction then passed the same 231 Node tests and syntax check; it does not change game or browser code.
 
 Qwen3.8 27B Unsloth Q4 XL played France at normal speed against seven practice bots (`v6-france-03`, `decision-turn-v4`, revision `43aea05`). France allied with Qing, fell to one province by tick 664, and was eliminated at tick 770. The room finished at the tick-1800 deadline with a solo German bot winning on 51 industry; France and Qing had 0. Qwen made 49 accepted and 13 rejected actions, 163 tool calls (19 failed), reported 1,699,239 tokens over 23 turns, and had no timed-out turn. Failed calls included invalid routes, unavailable development manpower, and messages addressed to a non-country. This run used the newer alliance-war revision, so its outcome cannot be attributed to the model alone when compared with the earlier DeepSeek France run. Its numeric industry path is in the HTML benchmark ledger.
 
