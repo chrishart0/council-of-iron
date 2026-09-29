@@ -3,7 +3,7 @@ import { AfterAction } from './review.js';
 import { developmentForecast, allianceForecast } from './insights.js';
 import { faction, insignia, icon, battleSignal } from './presentation.js';
 import { Atlas } from './atlas.js';
-import { escapeHTML as esc, setHTML, setText, setAttr, setHidden, operationId, confirmAction, clock as time, seatType } from './ui.js';
+import { escapeHTML as esc, setHTML, setText, setAttr, setHidden, patchList, operationId, confirmAction, clock as time, seatType } from './ui.js';
 import { Herald, presentHeadline } from './feed.js';
 import { viewerOf, turnedBackReason } from './feed-model.js';
 import { Comms } from './comms.js';
@@ -708,41 +708,53 @@ function moreProvince(id,order){
   const lastBattle=history.filter(e=>e.type==='battle' && e.province===id).at(-1);
   const key=JSON.stringify([id,order,sources,state.tick,fraction,state.orders,mine && p.troops]);
   const body=$('card-body');if(body.dataset.key===key)return;body.dataset.key=key;
-  const scroll=body.scrollTop;
-  let html='';
+  // Keyed parts (one element each): a tick replaces only the parts whose text changed, so an open destination list,
+  // focus and a button under the finger survive polling.
+  const parts=[],add=(k,html)=>parts.push({key:k,html});
   if(order){
     const known=marchPlan.key===JSON.stringify(marchAction())?planDetails(marchPlan.result):null;
     const previous=known ?? ($('order-details')?.dataset.for===`${sources.join()}>${id}`?$('order-details').innerHTML:null); // server text, escaped when written
-    html+=`<p id="order-details" class="order-details" data-for="${esc(`${sources.join()}>${id}`)}">${previous ?? 'Checking the route and the garrison…'}</p>`;
+    add('order',`<p id="order-details" class="order-details" data-for="${esc(`${sources.join()}>${id}`)}">${previous ?? 'Checking the route and the garrison…'}</p>`);
   }else if(mine){
     const reserved=state.orders.filter(o=>o.from===id && ['march','develop'].includes(o.type)).reduce((n,o)=>n+o.amount,0);
-    html+=`<div class="province-readout"><div><span>FREE</span><strong>${freeTroops(id)}</strong></div><div><span>GARRISON</span><strong>${p.troops}</strong></div><div><span>RECRUIT IN</span><strong>${p.nextRecruit===null?'—':Math.max(0,p.nextRecruit-state.tick)+'s'}</strong></div></div>${reserved?`<p class="small muted">${reserved} troops reserved for queued orders.</p>`:''}`;
+    add('readout',`<div class="province-readout"><div><span>FREE</span><strong>${freeTroops(id)}</strong></div><div><span>GARRISON</span><strong>${p.troops}</strong></div><div><span>RECRUIT IN</span><strong>${p.nextRecruit===null?'—':Math.max(0,p.nextRecruit-state.tick)+'s'}</strong></div></div>`);
+    if(reserved)add('reserved',`<p class="small muted">${reserved} troops reserved for queued orders.</p>`);
     const rally=rallyOf(id);
-    html+=`<p class="small" id="rally-status">${rally?esc(rallyText(rally)):'No rally point. “Rally troops to…”, then tap one of your provinces: new troops from here march there at each recruitment.'}</p>`;
+    add('rally',`<p class="small" id="rally-status">${rally?esc(rallyText(rally)):'No rally point. “Rally troops to…”, then tap one of your provinces: new troops from here march there at each recruitment.'}</p>`);
     const f=developmentForecast(state,id);
-    if(f)html+=`<p id="development-payback" class="development-payback">${f.alreadyInvested?'Investment already spent. ':''}Develop to level ${f.level} for ${f.cost} troops. Earliest payback ${time(f.paybackAt)} game time; up to ${f.additionalRecruits} extra recruits by ${time(state.rules.duration)} (net ${f.netBeforeDeadline>=0?'+':''}${f.netBeforeDeadline}). ${f.paysBackBeforeDeadline?'':'This will not repay before the deadline. '}${esc(f.assumption)}</p>`;
+    if(f)add('payback',`<p id="development-payback" class="development-payback">${f.alreadyInvested?'Investment already spent. ':''}Develop to level ${f.level} for ${f.cost} troops. Earliest payback ${time(f.paybackAt)} game time; up to ${f.additionalRecruits} extra recruits by ${time(state.rules.duration)} (net ${f.netBeforeDeadline>=0?'+':''}${f.netBeforeDeadline}). ${f.paysBackBeforeDeadline?'':'This will not repay before the deadline. '}${esc(f.assumption)}</p>`);
   }
   const fight=state.battles?.find(b=>b.province===id);
-  if(fight?.rounds?.length)html+=`<h3>${esc(place(id).name)} · battle rounds</h3><div class="battle-rolls">${fight.rounds.slice(-6).reverse().map(r=>`<p class="small"><time>${time(r.tick)}</time> attack ${r.attackDice.join(' ')} · defence ${r.defendDice.join(' ')} — attackers −${r.attackerLoss}, defenders −${r.defenderLoss}</p>`).join('')}</div>`;
-  html+=`<h3>${esc(place(id).name)} · incoming</h3>${waves.length?waves.slice(0,4).map(a=>`<p class="small">${a.amount} ${esc(country(a.country).name)} · ${a.returning?'returning':'marching'} · arrives ${time(a.arrivesAt)} (${Math.max(0,a.arrivesAt-state.tick)}s)</p>`).join(''):'<p class="small muted">No armies on the way.</p>'}${waves.length>4?`<p class="small">Plus ${waves.length-4} later armies.</p>`:''}${lastBattle?`<p class="small muted">Last battle ${time(lastBattle.tick)}: ${lastBattle.troops} survivors; ${esc(country(lastBattle.owner)?.name || 'neutral')} held afterward.</p>`:''}`;
-  if(active())html+=marchesHTML();
-  if(active() && order===false && mine)html+=`<label class="keyboard-select">Keyboard: send to<select id="destination"><option value="">Choose a destination…</option>${reachable(id).map(n=>`<option value="${esc(n)}">${esc(place(n).name)} · ${prov(n).troops} · ${esc(country(prov(n).owner)?.name || 'Unclaimed')}</option>`).join('')}</select></label>`;
-  // Rebuilt every tick: keep what the player typed or chose, and where focus was.
-  const kept=Object.fromEntries([...body.querySelectorAll('input[id],select[id]')].map(e=>[e.id,e.value])),focused=body.contains(document.activeElement)?document.activeElement.id:null;
-  body.innerHTML=html;body.scrollTop=scroll;
-  for(const [key,value] of Object.entries(kept)){const e=body.querySelector(`#${CSS.escape(key)}`);if(e && value)e.value=value;}
-  if(focused)body.querySelector(`#${CSS.escape(focused)}`)?.focus({preventScroll:true});
+  if(fight?.rounds?.length){
+    add('rounds-title',`<h3>${esc(place(id).name)} · battle rounds</h3>`);
+    add('rounds',`<div class="battle-rolls">${fight.rounds.slice(-6).reverse().map(r=>`<p class="small"><time>${time(r.tick)}</time> attack ${r.attackDice.join(' ')} · defence ${r.defendDice.join(' ')} — attackers −${r.attackerLoss}, defenders −${r.defenderLoss}</p>`).join('')}</div>`);
+  }
+  add('incoming-title',`<h3>${esc(place(id).name)} · incoming</h3>`);
+  if(!waves.length)add('incoming-none','<p class="small muted">No armies on the way.</p>');
+  for(const a of waves.slice(0,4))add(`incoming:${a.id}`,`<p class="small">${a.amount} ${esc(country(a.country).name)} · ${a.returning?'returning':'marching'} · arrives ${time(a.arrivesAt)} (${Math.max(0,a.arrivesAt-state.tick)}s)</p>`);
+  if(waves.length>4)add('incoming-more',`<p class="small">Plus ${waves.length-4} later armies.</p>`);
+  if(lastBattle)add('last-battle',`<p class="small muted">Last battle ${time(lastBattle.tick)}: ${lastBattle.troops} survivors; ${esc(country(lastBattle.owner)?.name || 'neutral')} held afterward.</p>`);
+  const orders=active()?marchRows():[];
+  if(orders.length){add('orders-title',`<h3>Your orders <span class="count">${orders.filter(r=>!r.key.startsWith('group:')).length}</span></h3>`);add('orders','<div class="march-list"></div>');}
+  if(active() && order===false && mine){
+    const open=document.activeElement?.id==='destination' && body.contains(document.activeElement)?document.activeElement.parentElement.__html:null;
+    add('destination',open ?? `<label class="keyboard-select">Keyboard: send to<select id="destination"><option value="">Choose a destination…</option>${reachable(id).map(n=>`<option value="${esc(n)}">${esc(place(n).name)} · ${prov(n).troops} · ${esc(country(prov(n).owner)?.name || 'Unclaimed')}</option>`).join('')}</select></label>`);
+  }
+  if(body.firstElementChild && body.firstElementChild.__key===undefined)body.replaceChildren(); // the alliance-offer form was here
+  const scroll=body.scrollTop;patchList(body,parts);if(orders.length)patchList(body.querySelector('.march-list'),orders);body.scrollTop=scroll;
   if(order)updatePreview();
 }
-function marchesHTML(){
+/** "Your orders" under the expanded card: queued orders and moving armies, one keyed row each. */
+function marchRows(){
   const moving=state.armies.filter(a=>a.country===state.you).sort((a,b)=>a.arrivesAt-b.arrivesAt),queued=state.orders;
-  if(!moving.length && !queued.length)return '';
   const can=!pendingCommand;
   const recall=(id,label)=>`<button type="button" data-recall="${esc(id)}" ${can?'':'disabled'}>${label}</button>`;
   const again=a=>{const o=resumeOption(a);return !o || o.queued?'':`<button type="button" data-turn="${esc(a.id)}" ${can && !o.spent?'':'disabled'} title="${o.spent?esc(o.why):''}">March again</button>`;};
   const groups=[...new Set([...moving,...queued].filter(a=>a.groupId && !a.returning).map(a=>a.groupId))].filter(id=>[...moving,...queued].filter(a=>a.groupId===id && !a.returning).length>1);
   const where=a=>a.path?.at(-1) || a.to;
-  return `<h3>Your orders <span class="count">${moving.length+queued.length}</span></h3><div class="march-list">${groups.map(id=>{const cols=[...moving,...queued].filter(a=>a.groupId===id && !a.returning);return `<div class="march-row"><span>Marching together<small>${cols.length} columns → ${esc(place(where(cols[0])).name)}</small></span>${recall(id,'Recall group')}</div>`;}).join('')}${queued.map(o=>`<div class="march-row"><span>${o.type==='recall'?'Recall queued':o.type==='turn_around'?'March again queued':o.type==='develop'?'Construction queued':o.type==='rally'?'Rally order queued':`${o.amount} · ${esc(place(o.from).name)} → ${esc(place(o.to).name)}`}<small>${Math.max(0,o.executeAt-state.tick)}s until ${o.type==='march'?'departure':'it takes effect'}</small></span>${o.type==='march'?recall(o.id,'Cancel'):''}</div>`).join('')}${moving.map(a=>`<div class="march-row ${a.returning?'returning':''}"><button class="march-focus" data-feed-province="${esc(where(a))}"><b>${a.amount}</b> ${a.returning?'↶':'→'} ${esc(place(where(a)).name)}<small>${a.returning?'Returning · ':''}arrives ${time(a.arrivesAt)} · ${Math.max(0,a.arrivesAt-state.tick)}s</small></button>${a.returning?again(a):recallOption(a)?.queued?'':recall(a.id,'Recall')}</div>`).join('')}</div>`;
+  return [...groups.map(id=>{const cols=[...moving,...queued].filter(a=>a.groupId===id && !a.returning);return {key:`group:${id}`,html:`<div class="march-row"><span>Marching together<small>${cols.length} columns → ${esc(place(where(cols[0])).name)}</small></span>${recall(id,'Recall group')}</div>`};}),
+    ...queued.map(o=>({key:`order:${o.id}`,html:`<div class="march-row"><span>${o.type==='recall'?'Recall queued':o.type==='turn_around'?'March again queued':o.type==='develop'?'Construction queued':o.type==='rally'?'Rally order queued':`${o.amount} · ${esc(place(o.from).name)} → ${esc(place(o.to).name)}`}<small>${Math.max(0,o.executeAt-state.tick)}s until ${o.type==='march'?'departure':'it takes effect'}</small></span>${o.type==='march'?recall(o.id,'Cancel'):''}</div>`})),
+    ...moving.map(a=>({key:`army:${a.id}`,html:`<div class="march-row ${a.returning?'returning':''}"><button class="march-focus" data-feed-province="${esc(where(a))}"><b>${a.amount}</b> ${a.returning?'↶':'→'} ${esc(place(where(a)).name)}<small>${a.returning?'Returning · ':''}arrives ${time(a.arrivesAt)} · ${Math.max(0,a.arrivesAt-state.tick)}s</small></button>${a.returning?again(a):recallOption(a)?.queued?'':recall(a.id,'Recall')}</div>`}))];
 }
 function armyCard(){
   const a=state.armies.find(a=>a.id===card.id),option=recallOption(a),again=resumeOption(a),dest=a.path?.at(-1) || a.to;
