@@ -15,8 +15,8 @@ import { choose } from '../agents/policy.js';
 import { makeStt } from './stt.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-import { MAP } from './maps.js';
-export { MAP };
+/** The one published map (served at /map.json); rooms on any other map are not loaded (startupPlan). */
+export const MAP = JSON.parse(readFileSync(resolve(root, 'public/imperial-map.json'), 'utf8'));
 const PRESETS = { standard: 1, quick: 6 };
 /** A stored room is loaded only when it was created on the current map and rules (every current rule
  * key is present, and none that has been removed); a finished one also needs its public record.
@@ -55,38 +55,16 @@ export class StartupRefused extends Error {}
 const same = (a, b) => a.length === b.length && [...a].sort().every((key, i) => key === [...b].sort()[i]);
 export const ALLIANCE_CHAT_NOTICE = 'Alliance chat becomes public in the replay after the match ends.';
 const staticFiles = new Map([
+  ...['app', 'atlas', 'presentation', 'feed', 'feed-model', 'leaderboard', 'leaderboard-panel', 'comms', 'comms-model', 'ui',
+    'review', 'map-geometry', 'relations', 'replay-model', 'insights', 'movement', 'sound', 'sound-model', 'combat', 'expand', 'voice'].map(n => [`/${n}.js`, [`public/${n}.js`, 'text/javascript; charset=utf-8']]),
+  ...['comms', 'style', 'review', 'map-layers'].map(n => [`/${n}.css`, [`public/${n}.css`, 'text/css; charset=utf-8']]),
   ['/', ['public/index.html', 'text/html; charset=utf-8']],
-  ['/app.js', ['public/app.js', 'text/javascript; charset=utf-8']],
-  ['/atlas.js', ['public/atlas.js', 'text/javascript; charset=utf-8']],
-  ['/presentation.js', ['public/presentation.js', 'text/javascript; charset=utf-8']],
-  ['/feed.js', ['public/feed.js', 'text/javascript; charset=utf-8']],
-  ['/feed-model.js', ['public/feed-model.js', 'text/javascript; charset=utf-8']],
-  ['/leaderboard.js', ['public/leaderboard.js', 'text/javascript; charset=utf-8']],
-  ['/leaderboard-panel.js', ['public/leaderboard-panel.js', 'text/javascript; charset=utf-8']],
-  ['/comms.css', ['public/comms.css', 'text/css; charset=utf-8']],
-  ['/comms.js', ['public/comms.js', 'text/javascript; charset=utf-8']],
-  ['/comms-model.js', ['public/comms-model.js', 'text/javascript; charset=utf-8']],
   // v0.9 War Room type (SIL OFL 1.1; licences in public/fonts).
   ...['alegreya-sc-regular', 'alegreya-sc-bold', 'barlow-condensed-medium', 'barlow-condensed-semibold'].map(f => [`/fonts/${f}.woff2`, [`public/fonts/${f}.woff2`, 'font/woff2']]),
-  ['/ui.js', ['public/ui.js', 'text/javascript; charset=utf-8']],
-  ['/style.css', ['public/style.css', 'text/css; charset=utf-8']],
-  ['/review.js', ['public/review.js', 'text/javascript; charset=utf-8']],
-  ['/review.css', ['public/review.css', 'text/css; charset=utf-8']],
-  ['/map-layers.css', ['public/map-layers.css', 'text/css; charset=utf-8']],
-  ['/map-geometry.js', ['public/map-geometry.js', 'text/javascript; charset=utf-8']],
-  ['/relations.js', ['public/relations.js', 'text/javascript; charset=utf-8']],
-  ['/replay-model.js', ['public/replay-model.js', 'text/javascript; charset=utf-8']],
-  ['/insights.js', ['public/insights.js', 'text/javascript; charset=utf-8']],
-  ['/movement.js', ['public/movement.js', 'text/javascript; charset=utf-8']],
-  ['/sound.js', ['public/sound.js', 'text/javascript; charset=utf-8']],
-  ['/sound-model.js', ['public/sound-model.js', 'text/javascript; charset=utf-8']],
   ['/audio/manifest.json', ['public/audio/manifest.json', 'application/json']],
   ...['theme', 'tension', 'effects'].flatMap(stem => [['ogg', 'audio/ogg'], ['mp3', 'audio/mpeg']]
     .map(([ext, type]) => [`/audio/${stem}.${ext}`, [`public/audio/${stem}.${ext}`, type]])),
-  ['/combat.js', ['public/combat.js', 'text/javascript; charset=utf-8']],
   ['/map.json', ['public/imperial-map.json', 'application/json']],
-  ['/expand.js', ['public/expand.js', 'text/javascript; charset=utf-8']],
-  ['/voice.js', ['public/voice.js', 'text/javascript; charset=utf-8']],
   // Installable web app: "Add to Home Screen" opens a chrome-free full-screen game (manifest-src falls under default-src 'self').
   ['/manifest.webmanifest', ['public/manifest.webmanifest', 'application/manifest+json']],
   ['/icon.svg', ['public/icon.svg', 'image/svg+xml']],
