@@ -12,8 +12,8 @@ The published map became `imperial-1910-v6`:
 
 The full analysis, the static exposure table and the self-play comparison are in [MAP-V6.md](MAP-V6.md).
 
-On the merged engine (border attack rule), over 256 matches the spread of winning-side appearances fell:
-- diplomacy: from 143/40 (SD 41.4) on v5 to 145/66 (SD 25.9) on v6;
+On the final merged engine (border attack rule, alliances of at most three), over 256 matches the spread of winning-side appearances fell:
+- diplomacy: from 130/25 (SD 44.9) on v5 to 133/53 (SD 25.9) on v6;
 - solo: from 108/0 to 83/3.
 
 The watch items are the USA's lead, Japan, and Britain in solo mode. These results come from heuristic bots, not humans.

@@ -257,27 +257,26 @@ Starting armies were not tuned further to the bots.
 
 ### Balance comparison
 
-Heuristic self-play on the merged engine, which includes the border attack rule and truces. There are 256 matches per cell, with the same engine and seeds (diplomacy 950000–950255, solo 960000–960255). "v6 open" is the same map with the five barriers turned back into land links, to isolate their effect.
+Heuristic self-play on the final merged engine, which includes the border attack rule, truces, alliances capped at three countries and no victory credit without territory. There are 256 matches per cell with the same seeds (diplomacy 950000–950255, solo 960000–960255). "v6 open" is the same map with the five barriers turned back into land links, to isolate their effect. The solo columns ran before the alliance cap, which does not apply without alliances.
 
 | | v5 diplomacy | v6 open | **v6 diplomacy** | v5 solo | v6 open | **v6 solo** |
 |---|---:|---:|---:|---:|---:|---:|
-| Mean · median match (ticks) | 1246 · 1320 | 1236 · 1200 | 1309 · 1320 | 1734 · 1800 | 1720 · 1800 | 1755 · 1800 |
-| Decisive (60% hold) · deadline wins · draws | 207 · 49 · 0 | 218 · 38 · 0 | 212 · 44 · 0 | 65 · 188 · 3 | 69 · 184 · 3 | 51 · 199 · 6 |
-| Battles per match · median battle (ticks) | 318 · 10 | 234 · 10 | 238 · 10 | 449 · 10 | 332 · 10 | 320 · 10 |
-| Idle share · interior-only idle | 19.8% · 6.7% | 15.3% · 3.5% | **15.1% · 3.4%** | 23.3% · 7.0% | 18.8% · 5.3% | **18.0% · 4.7%** |
-| Mean leg ticks internal / foreign / sea | 21.1 / 41.9 / 47.5 | | 24.4 / 47.3 / 43.8 | 20.9 / 41.9 / 49.9 | | 24.6 / 47.7 / 44.8 |
-| Wins Britain / France / Germany / Russia | 137 / 133 / 143 / 72 | 84 / 131 / 98 / 80 | 108 / 134 / 77 / 81 | 28 / 63 / 108 / 3 | 3 / 70 / 35 / 19 | 5 / 83 / 25 / 25 |
-| Wins Ottoman / Qing / Japan / USA | 40 / 49 / 61 / 132 | 117 / 85 / 75 / 145 | 91 / 101 / 66 / 145 | 3 / 0 / 0 / 48 | 60 / 8 / 1 / 57 | 57 / 12 / 3 / 40 |
-| **Max / min (SD)** | **143 / 40 (41.4)** | 145 / 75 (24.4) | **145 / 66 (25.9)** | **108 / 0 (36.6)** | 70 / 1 (26.0) | **83 / 3 (25.9)** |
+| Mean · median match (ticks) | 1368 · 1440 | 1378 · 1404 | 1397 · 1440 | 1734 · 1800 | 1720 · 1800 | 1755 · 1800 |
+| Decisive (60% hold) · deadline wins · draws | 185 · 70 · 1 | 202 · 54 · 0 | 186 · 68 · 2 | 65 · 188 · 3 | 69 · 184 · 3 | 51 · 199 · 6 |
+| Battles per match · median battle (ticks) | 347 · 10 | 260 · 10 | 255 · 10 | 449 · 10 | 332 · 10 | 320 · 10 |
+| Idle share · interior-only idle | 20.7% · 7.1% | 15.7% · 3.7% | **15.5% · 3.5%** | 23.3% · 7.0% | 18.8% · 5.3% | **18.0% · 4.7%** |
+| Mean leg ticks internal / foreign / sea | 21.2 / 42.1 / 48.0 | | 24.4 / 47.4 / 44.4 | 20.9 / 41.9 / 49.9 | | 24.6 / 47.7 / 44.8 |
+| Wins Britain / France / Germany / Russia | 120 / 121 / 130 / 44 | 65 / 105 / 89 / 63 | 91 / 111 / 63 / 58 | 28 / 63 / 108 / 3 | 3 / 70 / 35 / 19 | 5 / 83 / 25 / 25 |
+| Wins Ottoman / Qing / Japan / USA | 29 / 25 / 33 / 116 | 90 / 58 / 46 / 128 | 75 / 80 / 53 / 133 | 3 / 0 / 0 / 48 | 60 / 8 / 1 / 57 | 57 / 12 / 3 / 40 |
+| **Max / min (SD)** | **130 / 25 (44.9)** | 128 / 46 (25.6) | **133 / 53 (25.9)** | **108 / 0 (36.6)** | 70 / 1 (26.0) | **83 / 3 (25.9)** |
 
 The required gate (`npm run test:balance -- --rounds 32 --mode diplomacy`, seeds 1000–1031, 0 invariant failures):
 
 | | v5 | v6 |
 |---|---:|---:|
-| Max / min (SD) | 19 / 7 (5.6) | 16 / 6 (3.3) |
-| Wins | Britain 19, USA 19, France 18, Germany 16; Russia, Ottoman, Qing and Japan 7 each | France 16, Ottoman 15, USA 15, Qing 13, Germany 10, Russia 10, Britain 9, Japan 6 |
-| Decisive | 25 | 23 |
-| Mean match (ticks) | 1296 | 1261 |
+| Max / min (SD) | 15 / 3 (4.2) | 16 / 5 (3.1) |
+| Wins | Britain 15, USA 15, Germany 14, France 12, Russia 10, Japan 7, Ottoman 6, Qing 3 | USA 16, Ottoman 12, Qing 11, France 10, Germany 10, Russia 10, Britain 7, Japan 5 |
+| Decisive | 24 | 23 |
 
 The 32-round solo run:
 - v5: max/min 11 / 0.
@@ -286,22 +285,22 @@ The 32-round solo run:
 At 32 rounds this is noise-level; the 256-round runs are the comparison.
 
 **Effect of the impassable terrain** (v6 open → v6, 256 diplomacy; one standard error is about ±8):
-- **Britain / India: 84 → 108.** The Himalayas close Qing's direct road into India, so the Raj is attacked only through Afghanistan, Indochina or by sea.
-- **Qing: 85 → 101.** Qing no longer bleeds on the Indian border; its fronts are Russia, Japan and Indochina.
-- **Ottoman: 117 → 91; Germany: 98 → 77.** The Alps and the Sahara push the Mediterranean powers into each other: France's southern flank and Maghreb are safe, and the fighting moves to the Rhine and the Balkans.
-- **France: 131 → 134; Russia: 80 → 81.** France gains nothing further in diplomacy, but gains in solo (70 → 83): a safer North Africa. The Urals change Russia's routes but not its results.
-- **USA 145 → 145; Japan: 75 → 66.**
-- The spread is unchanged within noise (SD 24.4 → 25.9). The barriers reshape who fights whom, not who wins. The rejected seven-barrier draft pushed France to 165.
+- **Britain / India: 65 → 91.** The Himalayas close Qing's direct road into India, so the Raj is attacked only through Afghanistan, Indochina or by sea.
+- **Qing: 58 → 80.** Qing no longer bleeds on the Indian border; its fronts are Russia, Japan and Indochina.
+- **Germany: 89 → 63; Ottoman: 90 → 75.** The Alps and the Sahara push the Mediterranean powers into each other: France's southern flank and Maghreb are safe, and the fighting moves to the Rhine and the Balkans.
+- **France: 105 → 111; Russia: 63 → 58.** France gains a little, and more in solo (70 → 83): a safer North Africa. The Urals change Russia's routes more than its results.
+- **USA: 128 → 133; Japan: 46 → 53.**
+- The spread is unchanged within noise (SD 25.6 → 25.9). The barriers reshape who fights whom, not how uneven the table is. The rejected seven-barrier draft pushed France to 165 of 256.
 
 Readings (not claims):
-- **The winner spread shrinks** from v5: SD 41 → 26 in diplomacy and 37 → 26 in solo. The weakest power now reaches 66/256 (v5: 40), and three powers were below 50 in v5.
-  - The Eastern powers gain: Ottoman 40 → 91, Qing 49 → 101.
-  - Germany (143 → 77) and Britain (137 → 108) lose their v5 head start.
-- **Matches still resolve** at the same rate and length, with no stalemates. There are fewer battles (318 → 238), because there are fewer, larger provinces.
-- **Idle troops fall by a quarter** (19.8% → 15.1%). With fewer interior provinces, troops are nearer a front.
+- **The winner spread shrinks** from v5: SD 45 → 26 in diplomacy and 37 → 26 in solo. The weakest power now reaches 53/256 (v5: 25), and four powers were at or below 44 in v5.
+  - The Eastern powers gain: Ottoman 29 → 75, Qing 25 → 80, Japan 33 → 53.
+  - Germany (130 → 63) and Britain (120 → 91) lose their v5 head start.
+- **Matches still resolve** at about the same rate and length, with no stalemates. There are fewer battles (347 → 255), because there are fewer, larger provinces.
+- **Idle troops fall by a quarter** (20.7% → 15.5%). With fewer interior provinces, troops are nearer a front.
 - **Watch items for human play:**
-  - The USA leads in diplomacy (145/256), thanks to its secure Americas.
-  - Japan trails (66).
+  - The USA leads in diplomacy (133/256), thanks to its secure Americas.
+  - Japan trails (53).
   - Britain is weak in solo mode (5/256): the bots do not defend a scattered empire, and Canada falls to the USA in almost every solo match.
   - Starting armies were not tuned further to the bots.
 
