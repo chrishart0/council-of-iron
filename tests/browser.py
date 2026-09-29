@@ -401,14 +401,18 @@ def main():
                 # The practice bots have been playing against an idle USA for a few minutes, so pick two provinces the USA
                 # still holds that border the same neutral province (on v6 Britain's Canada borders all three US states).
                 room2=http('/api/games')['games'][0]['id']
-                st=http(f'/api/games/{room2}');owner={p['id']:p['owner'] for p in st['provinces']};troops={p['id']:p['troops'] for p in st['provinces']}
                 nb={p['id']:p['neighbors'] for p in http('/map.json')['provinces']}
-                mine=sorted(i for i,o in owner.items() if o=='usa' and troops[i]>=3)
-                src,second,target=next((a,b,t) for t in sorted(nb) if owner[t] is None for a in mine for b in mine if a<b and t in nb[a] and t in nb[b])
-                order(page,src,target);page.locator('[data-fraction="0.5"]').click()
-                page.locator('#card-size').click()  # back to peek so the map is free
-                if not page.locator(f'#marker-{second} .counter-body').is_visible() or not (0<centre(page.locator(f'#marker-{second} .counter-body'))[0]<page.viewport_size['width']):bring(page,second)
-                page.mouse.click(*centre(page.locator(f'#marker-{second} .counter-body')))
+                for attempt in range(4):  # the bots keep playing at 12×: a chosen province may fall before the taps land
+                    st=http(f'/api/games/{room2}');owner={p['id']:p['owner'] for p in st['provinces']};troops={p['id']:p['troops'] for p in st['provinces']}
+                    mine=sorted((i for i,o in owner.items() if o=='usa' and troops[i]>=3),key=lambda i:-troops[i])
+                    src,second,target=next((a,b,t) for t in sorted(nb) if owner[t] is None for a in mine for b in mine if a!=b and t in nb[a] and t in nb[b])
+                    order(page,src,target);page.locator('[data-fraction="0.5"]').click()
+                    page.locator('#card-size').click()  # back to peek so the map is free
+                    if not page.locator(f'#marker-{second} .counter-body').is_visible() or not (0<centre(page.locator(f'#marker-{second} .counter-body'))[0]<page.viewport_size['width']):bring(page,second)
+                    page.mouse.click(*centre(page.locator(f'#marker-{second} .counter-body')))
+                    page.wait_for_timeout(300)
+                    if page.locator('#sources .source-chip').count()==2 and page.locator('#card-title').inner_text()==names[target]:break
+                    page.keyboard.press('Escape');page.keyboard.press('Escape')
                 expect(page.locator('#sources .source-chip')).to_have_count(2)
                 page.locator('#card-size').click();expect(page.locator('#order-details')).to_contain_text('arrive together')
                 page.screenshot(path=str(artifacts/'06-coordinated-plan.png'),full_page=True)
