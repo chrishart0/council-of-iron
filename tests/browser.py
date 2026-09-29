@@ -446,7 +446,10 @@ def main():
                     page.wait_for_timeout(1000)
                 assert build,('no USA province can pay for development',[(p['id'],p['owner'],p['troops'],p['development']) for p in usa_state().values() if p['owner']=='usa'])
                 level,build=build['development'],build['id'];cost=24 if level==1 else 48
-                province(page,build)
+                for _ in range(3):  # a leftover source from the recall above turns a tap on a neighbour into a reinforcement target
+                    province(page,build)
+                    if page.locator('#develop-province').count():break
+                    page.locator('#card-close').click();page.wait_for_timeout(200)
                 develop=page.locator('#develop-province')
                 expect(develop).to_be_enabled(timeout=10000)
                 page.locator('#card-size').click();expect(page.locator('#development-payback')).to_contain_text('payback')
