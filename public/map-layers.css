@@ -1,21 +1,21 @@
 /* v0.6 map layers: border hierarchy, level-of-detail counters, battles and decorative effects.
    Kept separate from style.css. Every stroke is screen-constant (non-scaling). */
-.atlas-v6 .province:not(.selected):not(.destination):not(.neighbor){stroke:transparent}
+.atlas .province:not(.selected):not(.destination):not(.neighbor){stroke:transparent}
 .coast-shelf{fill:none;stroke:#a9cfc6;stroke-opacity:.2;stroke-width:4;stroke-linejoin:round;vector-effect:non-scaling-stroke}
 .coast-shelf-wide{stroke-opacity:.07;stroke-width:13}
-.atlas-v6[data-lod=far] .coast-shelf-wide{stroke-width:9}
+.atlas[data-lod=far] .coast-shelf-wide{stroke-width:9}
 /* Coast: a pale casing under a dark line (an engraved double line); the casing also lifts the land edge. */
 .coastline-casing{fill:none;stroke:#e6dcb8;stroke-opacity:.42;stroke-width:2.6;stroke-linejoin:round;vector-effect:non-scaling-stroke}
 .coastline{fill:none;stroke:#0c1b21;stroke-opacity:.9;stroke-width:1;stroke-linejoin:round;vector-effect:non-scaling-stroke}
-.atlas-v6[data-lod=far] .coastline-casing{stroke-width:2;stroke-opacity:.3}
+.atlas[data-lod=far] .coastline-casing{stroke-width:2;stroke-opacity:.3}
 /* Province borders inside one country: a clean light hairline (the smoothed v6 borders need no dashes). */
 .province-borders path{fill:none;stroke:#f6edd2;stroke-opacity:.5;stroke-width:.75;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
-.atlas-v6[data-lod=far] .province-borders path{stroke-opacity:.3}
-.atlas-v6[data-lod=near] .province-borders path{stroke-width:1;stroke-opacity:.55}
+.atlas[data-lod=far] .province-borders path{stroke-opacity:.3}
+.atlas[data-lod=near] .province-borders path{stroke-width:1;stroke-opacity:.55}
 /* Borders between countries: a strong dark line, heavier as you zoom in. */
 .country-borders path{fill:none;stroke:#0e1e25;stroke-opacity:.95;stroke-width:1.9;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
-.atlas-v6[data-lod=far] .country-borders path{stroke-width:1.5}
-.atlas-v6[data-lod=near] .country-borders path{stroke-width:2.6}
+.atlas[data-lod=far] .country-borders path{stroke-width:1.5}
+.atlas[data-lod=near] .country-borders path{stroke-width:2.6}
 /* Impassable terrain (map.barriers): the border is drawn as mountains or desert, not as a border line. */
 .terrain path{stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
 .terrain-edge,.terrain-ridge,.terrain-band,.terrain-dots,.terrain-hit{fill:none}
@@ -26,18 +26,18 @@
 .terrain-band{stroke:#e3c27f;stroke-opacity:.62;stroke-width:12}
 .terrain-dots{stroke:#6e4b1d;stroke-opacity:.95;stroke-width:2.1;stroke-dasharray:0 4.2}
 .terrain-hit{stroke:transparent;stroke-width:12;pointer-events:stroke;cursor:help}
-.atlas-v6[data-lod=far] .terrain-band{stroke-width:9}.atlas-v6[data-lod=far] .terrain-ridge{stroke-width:5}
-.atlas-v6[data-lod=near] .terrain{opacity:.7}
+.atlas[data-lod=far] .terrain-band{stroke-width:9}.atlas[data-lod=far] .terrain-ridge{stroke-width:5}
+.atlas[data-lod=near] .terrain{opacity:.7}
 .legend-mountains i{border:0!important;clip-path:polygon(0 100%,50% 0,100% 100%);background:#e8d4a2!important}
 .legend-desert i{background:radial-gradient(#6e4b1d 1px,transparent 1.3px) 0 0/4px 4px,#e3c27f!important}
 /* Region (continent) names at world zoom only: large, spaced, quiet; they sit in open sea or empty land. */
 .region-names text{display:none;font:italic 600 13px var(--map-serif);letter-spacing:5px;text-anchor:middle;fill:#efe2b9;fill-opacity:.5;paint-order:stroke;stroke:#0f2530;stroke-opacity:.55;stroke-width:2.5;stroke-linejoin:round}
-.atlas-v6[data-world=true] .region-names text{display:inline}
+.atlas[data-world=true] .region-names text{display:inline}
 /* Borders between members of one coalition: softer than a border between unrelated owners. */
 .allied-borders path{fill:none;stroke:#10232b;stroke-opacity:.45;stroke-width:.9;stroke-dasharray:5 2.5;vector-effect:non-scaling-stroke}
 /* Alliance blocs: an inner glow band (clipped to the bloc) plus a crisp outline in the alliance colour. */
 .bloc-band{fill:none;stroke-width:11;stroke-opacity:.42;stroke-linejoin:round;vector-effect:non-scaling-stroke}
-.atlas-v6[data-lod=far] .bloc-band{stroke-width:8}
+.atlas[data-lod=far] .bloc-band{stroke-width:8}
 .bloc-line{fill:none;stroke-width:2;stroke-linejoin:round;stroke-opacity:.95;vector-effect:non-scaling-stroke}
 .alliance-label{font:700 15px var(--map-serif,Georgia,serif);letter-spacing:3.4px;text-anchor:middle;dominant-baseline:central;paint-order:stroke;stroke:#0d1c22;stroke-width:4;stroke-linejoin:round}
 .alliance-pip{stroke:#0d1c22;stroke-width:1}
@@ -46,7 +46,7 @@
 .war-front path{fill:none;stroke-linejoin:round;vector-effect:non-scaling-stroke}
 .war-front-glow{stroke:#b3170f;stroke-opacity:.55;stroke-width:6;stroke-linecap:round}
 .war-front-teeth{stroke:#ff4a33;stroke-width:7;stroke-dasharray:1.6 2.4}
-.atlas-v6[data-lod=far] .war-front-glow{stroke-width:7}.atlas-v6[data-lod=far] .war-front-teeth{stroke-width:8.5;stroke-dasharray:1.8 2.2}
+.atlas[data-lod=far] .war-front-glow{stroke-width:7}.atlas[data-lod=far] .war-front-teeth{stroke-width:8.5;stroke-dasharray:1.8 2.2}
 .sea-front{fill:none;stroke:#e0372b;stroke-opacity:.8;stroke-width:1.3;stroke-dasharray:4 4;vector-effect:non-scaling-stroke}
 /* Hover/focus relations (also in political mode). */
 .relation-outlines path{fill:none;stroke-linejoin:round;vector-effect:non-scaling-stroke}
@@ -96,7 +96,7 @@
 .cluster-badge text{font:700 8.5px var(--map-sans,system-ui,sans-serif);fill:#132831;text-anchor:middle;dominant-baseline:central}
 .moving-army.engaged{display:none}
 /* Country view: small foreign columns keep their arrow; their numbers return when zoomed in. */
-.atlas-v6[data-lod=far] .moving-army.minor :is(text,.army-pill){display:none}
+.atlas[data-lod=far] .moving-army.minor :is(text,.army-pill){display:none}
 .industry-pips{pointer-events:none}.industry-pips .cluster-industry-body{fill:#132b34;stroke:#e9d29c;stroke-width:.7}.cluster-industry-icon{fill:#e9d29c;stroke:none}.cluster-industry-value{font:700 8.5px/1 system-ui,sans-serif;fill:#f3e3b8;stroke:none;text-anchor:start;dominant-baseline:middle}.industry-pips rect{fill:#e9d29c;stroke:#132b34;stroke-width:1}.industry-rising{fill:#a9e0a0;stroke:#132b34;stroke-width:.8}
 /* Battle in progress: attacker | crossed swords | defender. */
 .battle-counter{cursor:pointer}
@@ -147,7 +147,7 @@
 /* Reduced motion: no pulse or travel; effects are a brief static highlight. */
 .map-effect.still *,.map-effect.still{animation:none!important}
 .map-effect.still .fx-ring.fx-late{display:none}
-.atlas-v6:focus{outline:none}.atlas-v6:focus-visible{outline:2px solid #e2c993;outline-offset:-2px}
+.atlas:focus{outline:none}.atlas:focus-visible{outline:2px solid #e2c993;outline-offset:-2px}
 
 /* Map rules moved from the v0.8 style.css (v0.9): the atlas keeps its own type, independent of the HUD theme. */
 :root{--map-serif:Georgia,'Times New Roman',serif;--map-sans:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}

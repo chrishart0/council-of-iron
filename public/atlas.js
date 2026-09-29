@@ -91,7 +91,7 @@ export class Atlas {
     this.frontEls = new Map(); this.blocEls = new Map(); this.blocSeq = 0; this.mode = 'political'; this.relationFocus = null; this.hoverFocus = null;
     this.armyRects = [];
     this.reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    svg.replaceChildren(); svg.classList.add('atlas-v6');
+    svg.replaceChildren(); svg.classList.add('atlas');
     if (!svg.id) svg.id = `atlas-${++instances}`;
     // Horizontal wraparound: world-space layers live once in `base` (fills, borders, blocs,
     // fronts), `lines` (routes, traces) or `fx` (effects); two <use> copies repeat each at
