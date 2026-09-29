@@ -602,7 +602,8 @@ function renderCard(){
     ...(order.note?[el('small','sources-hint sources-off',order.note)]:[]),...(order.hint?[el('small','sources-hint',order.hint)]:[])]);
   setHidden($('amount-control'),!order || !order.parts.length);
   if(order){
-    const pct=Math.round(fraction*100);if(document.activeElement!==$('amount-slider') && $('amount-slider').value!==String(pct))$('amount-slider').value=String(pct);
+    const pct=Math.round(fraction*100),slider=$('amount-slider');if(document.activeElement!==slider)slider.value=String(pct);
+    if(slider.style.getPropertyValue('--fill')!==`${pct}%`)slider.style.setProperty('--fill',`${pct}%`);
     setText($('amount-out'),`${order.total} troops · ${pct}%`);
     for(const b of document.querySelectorAll('[data-fraction]'))setAttr(b,'aria-pressed',Math.abs(Number(b.dataset.fraction)-fraction)<.001);
   }
@@ -612,7 +613,6 @@ function renderCard(){
     const b=button(a.label,{act:a.act,...(a.arg!==undefined?{arg:a.arg}:{})},`${a.primary?'primary':''}${a.danger?' danger':''}`);
     if(a.id)b.id=a.id;b.disabled=Boolean(a.disabled);return b;}));
   setHidden($('card-dock'),$('sources').hidden && $('amount-control').hidden && $('order-preview').hidden && !view.actions.length);
-  if(order && $('amount-slider').style.getPropertyValue('--fill')!==`${Math.round(fraction*100)}%`)$('amount-slider').style.setProperty('--fill',`${Math.round(fraction*100)}%`);
   if(card.kind==='province'){paintDraft();if(order && order.parts.length)updatePreview();}
 }
 function provinceCard(){
@@ -867,11 +867,19 @@ function renderHud(){
   if($('hud-standard').disabled!==(!me || spectating))$('hud-standard').disabled=!me || spectating;
   setAttr($('hud-standard'),'aria-label',me && !spectating?`${country(state.you).name}: your alliance and diplomacy`:'Spectating');
   const economy=team?.economy ?? 0,threshold=state.economyThreshold || 1;
-  const stat=(name,label,value,title,extra='')=>`<span class="stat" title="${esc(title)}">${icon(name)}<span><b>${value}</b><small>${esc(label)}</small></span>${extra}</span>`;
   const holdings=state.you?land.length:state.provinces.filter(p=>p.owner).length,forces=state.you?troops:state.provinces.reduce((n,p)=>n+p.troops,0);
-  setHTML($('operations'),stat('troops',state.you?'troops':'troops on the map',forces,state.you?'Your troops: garrisons and armies':'All garrisoned troops')+
-    stat('land','provinces',`${holdings}<small>/${state.provinces.length}</small>`,`${state.you?'Your provinces':'Provinces held'}: ${holdings} of ${state.provinces.length}`)+
-    (me?stat('industry','industry to win',`${economy}<small>/${threshold}</small>`,`Your side's industry: ${economy} of the ${threshold} needed`,`<i class="gauge"><i style="width:${Math.min(100,Math.round(100*economy/threshold))}%"></i></i>`):''));
+  const stats=[{icon:'troops',label:state.you?'troops':'troops on the map',value:forces,title:state.you?'Your troops: garrisons and armies':'All garrisoned troops'},
+    {icon:'land',label:'provinces',value:holdings,of:state.provinces.length,title:`${state.you?'Your provinces':'Provinces held'}: ${holdings} of ${state.provinces.length}`},
+    ...(me?[{icon:'industry',label:'industry to win',value:economy,of:threshold,title:`Your side's industry: ${economy} of the ${threshold} needed`,gauge:Math.min(100,Math.round(100*economy/threshold))}]:[])];
+  // Built once per shape; each poll then writes only the numbers that changed (they change nearly every second).
+  const box=$('operations'),shape=stats.map(s=>`${s.icon}:${s.label}`).join('|');
+  if(box.dataset.shape!==shape){box.dataset.shape=shape;box.innerHTML=stats.map(s=>`<span class="stat">${icon(s.icon)}<span><b>0${s.of!==undefined?'<small></small>':''}</b><small>${esc(s.label)}</small></span>${s.gauge!==undefined?'<i class="gauge"><i></i></i>':''}</span>`).join('');}
+  stats.forEach((s,i)=>{
+    const e=box.children[i],b=e.querySelector('b');setAttr(e,'title',s.title);
+    if(b.firstChild.nodeValue!==String(s.value))b.firstChild.nodeValue=String(s.value);
+    if(s.of!==undefined)setText(b.querySelector('small'),`/${s.of}`);
+    const gauge=e.querySelector('.gauge>i');if(gauge && gauge.style.width!==`${s.gauge}%`)gauge.style.width=`${s.gauge}%`;
+  });
   const dominant=Object.entries(state.dominance)[0];
   document.querySelector('.clock-plaque').classList.toggle('victory-warning',Boolean(dominant) && state.status==='running');
   const leader=[...state.sides].sort((a,b)=>b.economy-a.economy)[0];
