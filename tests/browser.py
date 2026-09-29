@@ -487,11 +487,13 @@ def main():
                 mine=sorted(i for i,o in owners.items() if o=='usa')
                 start,end=next((a,b) for a in mine for b in mine if a!=b and b not in nb[a] and via(a,b) and usa_state()[a]['troops']>3)
                 order(page,start,end)
-                expect(page.locator('#primary')).to_contain_text('Reinforce')
+                expect(page.locator('#primary')).to_contain_text(re.compile('Reinforce|Attack'))  # the destination may change hands in this live bot match
                 expect(page.locator('#order-details')).to_contain_text('Via',timeout=5000)
                 expect(page.locator('#primary')).to_be_enabled(timeout=10000)
                 page.screenshot(path=str(artifacts/'10-long-march.png'))
-                page.locator('#primary').click();confirmed(page,'Sent')
+                page.locator('#primary').click()
+                if page.locator('#confirm-dialog').is_visible():page.locator('#confirm-dialog [value="confirm"]').click()
+                confirmed(page,'Sent')
                 deadline=time.monotonic()+8
                 while time.monotonic()<deadline and not any(a.get('path') and a['path'][-1]==end for a in http(f'/api/games/{room2}')['armies']):page.wait_for_timeout(250)
                 assert any(a.get('path') and a['path'][-1]==end for a in http(f'/api/games/{room2}')['armies']),lane(page).inner_text()
@@ -515,6 +517,22 @@ def main():
                 assert next(p for p in players if p['id']=='japan')['kind']=='human' and sum(p['kind']=='bot' for p in players)==7
                 page.locator('#start-match').click();expect(page.locator('#phase')).to_have_text('In session')
                 report['assertions'].append('A host who had not chosen a country took Japan and filled the other seven seats with bots in one step, then started the match.')
+                # A shared lobby run by a seatless host: live clients (here two agents via the join API) take seats,
+                # two practice bots are added by count, and the host starts the match without a seat and watches.
+                page.goto(url+'/');expect(page.locator('#room-name')).to_be_visible()
+                page.locator('#room-name').fill('Shared council')
+                page.locator('#create-form button[type=submit]').click()
+                expect(page.locator('#lobby')).to_be_visible()
+                shared=next(g['id'] for g in http('/api/games')['games'] if g['name']=='Shared council')
+                expect(page.locator('#start-match')).to_be_disabled()
+                for c in ('britain','france'):
+                    envoy=http('/api/players','POST',{'name':f'Envoy {c}'})
+                    http(f'/api/games/{shared}/join','POST',{'country':c,'kind':'agent'},envoy['token'])
+                expect(page.locator('#start-match')).to_be_enabled();expect(page.locator('#start-match')).to_have_text('Start and watch')
+                page.locator('#start-match').click();expect(page.locator('#phase')).to_have_text('Watching')  # no seat: a spectator
+                shared_room=http(f'/api/games/{shared}')
+                assert shared_room['status']=='running' and len(shared_room['players'])==2,shared_room
+                report['assertions'].append('A seatless host started a shared lobby that two agent seats had joined, and watched the running match.')
 
                 assert not report['pageErrors'],report['pageErrors']
                 if args.gif:

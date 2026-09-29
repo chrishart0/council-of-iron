@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, join, start, observe } from '../src/engine.js';
+import { createGame, join, start, act, observe, tick } from '../src/engine.js';
 import { MAP } from '../src/server.js';
 import { boardView } from '../agents/board.js';
 import { mapViewSvg } from '../agents/map-view.js';
@@ -71,6 +71,34 @@ test('decision view adds feasible frontier and filters delivered outcomes', () =
   assert.ok(JSON.stringify(view).length < 14000);
 });
 
+test('decision view shows public border links to possible alliance partners', () => {
+  const game = createGame({ id: 'decision-partner-borders', name: 'Borders', hostId: 'russia' }, MAP);
+  for (const country of ['russia', 'britain', 'ottoman'])
+    join(game, MAP, { profileId: country, name: country, country });
+  start(game);
+  const view = decisionView(observe(game, 'russia'), MAP);
+  const partners = new Map(view.possiblePartners.map(partner => [partner.country, partner]));
+  assert.equal(partners.get('britain').sharedBorderLinks, 0);
+  assert.ok(partners.get('ottoman').sharedBorderLinks > 0);
+});
+
+test('decision view separates country industry from alliance industry', () => {
+  const game = createGame({ id: 'decision-alliance-economy', name: 'Alliance economy', hostId: 'britain' }, MAP);
+  join(game, MAP, { profileId: 'britain', name: 'Britain', country: 'britain' });
+  join(game, MAP, { profileId: 'france', name: 'France', country: 'france' });
+  join(game, MAP, { profileId: 'usa', name: 'USA', country: 'usa' });
+  join(game, MAP, { profileId: 'japan', name: 'Japan', country: 'japan' });
+  start(game);
+  const { proposalId } = act(game, MAP, 'britain', { type: 'propose', country: 'france', name: 'Entente' }, 'pact');
+  act(game, MAP, 'france', { type: 'accept', proposalId }, 'pact-accept');
+  while (game.players.find(p => p.id === 'britain').side !== game.players.find(p => p.id === 'france').side) tick(game);
+  const industryOf = country => game.provinces.filter(p => p.owner === country).reduce((n, p) => n + p.development, 0);
+  const view = decisionView(observe(game, 'britain'), MAP);
+  assert.equal(view.position.ownIndustry, industryOf('britain'));
+  assert.equal(view.position.sideIndustry, industryOf('britain') + industryOf('france'));
+  assert.equal(view.position.allianceSize, 2);
+  assert.ok(!view.possiblePartners.some(p => p.country === 'france'));
+});
 test('map image uses public geometry and never inserts player text', () => {
   const game = createGame({ id: 'map-test', name: 'Map', hostId: 'britain' }, MAP);
   join(game, MAP, { profileId: 'britain', name: '<script>private speech</script>', country: 'britain' });

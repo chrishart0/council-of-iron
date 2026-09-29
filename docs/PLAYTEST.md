@@ -34,6 +34,14 @@ Everything below was measured under earlier rules: Prestige scores and prize poo
   - Fixed-board task (three orders in sequence, frozen board): Qwen and Luna completed it on both Pi and Codex paths with zero rejected orders.
   None of these games ranks models or clients; the details are in git history (this file at a148680).
 
+- **Pi decision-view trials and a shared human lobby, 28 September 2026** (master, commits ee96c3d–43abad4; pre-simplification rules, `decision-turn-v3`…`v10`). Normal-speed Pi runs against seven practice bots, one completed room each unless stated:
+  - Qwen won on the winning side in 8 of 10 completed normal-speed games with v6–v10 (7 of them also with positive personal Prestige); one DeepSeek Ottoman v3 game lost at the deadline (−39.88) despite 107 accepted orders. Versions, countries and seeds differ, so this is history, not a win rate.
+  - Opening partners: Qing v7 (with distant France) was eliminated at tick 406, Russia v8 (with Britain, no shared border) finished at −8.27, France v9 (with Russia) was eliminated at tick 605; Russia v9 and France v10 allied with adjacent Germany and won (+79.05, +131.45). A diagnostic association, not a measured cause; it motivated the `sharedBorderLinks` partner hint now in `decision_view`.
+  - Including delivered messages in the turn view coincided with far fewer `news` calls (19 → 2 on one seed). The same review found `position.ownIndustry` counted alliance industry; it was corrected (the simplified decision view computes own and side industry separately).
+  - Infrastructure: a local model server's `503 Loading model` stopped one run and a read timeout another; the Pi runner now waits on loading responses and retries read-only observations. A server needing explicit `reasoning_effort: "none"` got the `OFF_REASONING_EFFORT` profile option.
+  - In-process engine diagnostics with a fixed 30-tick cadence and local tool adapters (DeepSeek: four domination wins across Germany, Ottoman and Japan) are excluded from benchmark rows; they did not exercise MCP, the server clock or Pi.
+  - A shared normal-speed LAN lobby (`2e50471e`) was set up with five public AI seats (Qwen, DeepSeek and Luna in Pi, Luna through Hermes, Grok 4.7 through Grok CLI), two practice bots and one open seat for a human, started by a seatless host. No gameplay result was recorded from it. The server capability (seatless host start, bounded `count` of practice bots) and the Pi live-seat mode were kept in the simplified game.
+
 ## Hand-played match
 
 - **27 September 2026** (commit 6062d8c): one assistant played all eight seats over real HTTP on a stepped clock; the Atlantic Accord (Britain, France, USA) won by domination at tick 630. See [PLAYTEST-HANDPLAY.md](PLAYTEST-HANDPLAY.md).

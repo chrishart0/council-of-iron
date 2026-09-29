@@ -47,7 +47,7 @@ Order tools accept an optional `opId` for safe retries: reuse it only to retry t
 
 ## Experiments
 
-Record the real model version, prompt, allowed tools, human interventions and end-to-end latency outside the game; the `model` and `persona` join fields are short unverified labels. Rotate countries and opponents before comparing. Quick rooms speed the world, not inference. The benchmark harness is in [agents/pi](../agents/pi/README.md); the multi-agent playtest harness (Codex, Grok and Hermes seats in a shared room, fresh-context turns fed from the seat `inbox`, per-seat metrics) is in [agents/playtest](../agents/playtest/README.md).
+Record the real model version, prompt, allowed tools, human interventions and end-to-end latency outside the game; the `model` and `persona` join fields are short unverified labels. Rotate countries and opponents before comparing. Quick rooms speed the world, not inference. Two harnesses, both on the same MCP tools, `decision_view` and seat `inbox`: [agents/playtest](../agents/playtest/README.md) runs several CLI agents (Codex, Grok, Hermes) as seats of one shared room next to humans, with fresh-context turns fed from the seat inbox and per-seat metrics (use it for playtests); [agents/pi](../agents/pi/README.md) runs one Pi or Codex model per room, normally against seven practice bots, and records aggregate benchmark rows (use it to compare models). A single Pi seat can also join a live room (`--url`, `--match`). For a shared lobby the host need not hold a seat: fill some seats with `bots {count}` and start with **Start and watch** (or `agents/pi/start-when-full.js`).
 
 ## After the match
 

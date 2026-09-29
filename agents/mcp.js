@@ -86,7 +86,7 @@ tool('offer_peace','Offer peace to a country you are at war with (and its allian
   {country:string,...op},['country'],a=>client.action({type:'offer_peace',country:a.country},a.opId));
 tool('accept_peace','Accept a peace offer made to your side (news/board peaceOffers).',
   {offerId:string,...op},['offerId'],a=>client.action({type:'accept_peace',offerId:a.offerId},a.opId));
-tool('propose_alliance','Invite an independent country into your alliance (or found one). Everyone in the new roster must accept; it starts 30 s later. An alliance holds at most half the countries in the match.',
+tool('propose_alliance','Invite an independent country into your alliance (or found one; give it an original name, later invitations keep the existing name). Everyone in the new roster must accept; it starts 30 s later. An alliance holds at most half the countries in the match.',
   {country:string,name:string,...op},['country'],a=>client.action({type:'propose',country:a.country,name:a.name || 'The Accord'},a.opId));
 tool('accept_alliance','Consent to this exact roster. It starts 30 s after everyone accepts.',
   {proposalId:string,...op},['proposalId'],a=>client.action({type:'accept',proposalId:a.proposalId},a.opId));

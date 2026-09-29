@@ -23,7 +23,7 @@ The turn prompt is the fixed rules and goal, then a `MEMORY` note carried from t
 | `hermes` | `hermes -p councilpt<SLOT> -z PROMPT -m MODEL --provider openai-codex --reasoning EFFORT --yolo --ignore-rules -t council --usage-file …` | A dedicated profile per seat, created once with `hermes profile create NAME --clone --no-alias` (never `--clone-all`: it copied all state and filled the disk). The login (`~/.hermes/auth.json`) is copied owner-only when the profile lacks a newer copy. The council server is added with `echo Y \| hermes -p NAME mcp add council --command … --env … --args …`, every other enabled server is disabled, and `-t council` limits the turn to the council toolset. `--provider` is `--hermes-provider` (default `openai-codex`). |
 | `fake` | `node agents/playtest/fake-agent.js PROMPT` | Test-only stand-in (no model): checks the tool list, reads the board through the proxy, answers DMs, makes one legal march, calls `inbox`. |
 
-Pi seats are not wired in: `agents/pi` runs its own isolated server rather than joining a room.
+Pi seats are not part of this harness. A single Pi model can join the same live room on its own with `node agents/pi/play.js --url URL --match ROOM --country ID` (see [agents/pi](../pi/README.md)); it uses the same MCP tools, `decision_view` and seat inbox, but its own turn loop and records. Use this harness for multi-client playtests next to humans and `agents/pi` for model benchmarks.
 
 All commands are argv arrays (no shell, no word splitting); the prompt is a single argument. `COUNCIL_*` variables are removed from the agent's environment; only the MCP server gets the seat's session path.
 

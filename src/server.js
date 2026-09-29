@@ -285,14 +285,16 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
           save(g);touch(g);return json(res,200,{country:data.country,token:store.credential(me.id,g.id),match:g.id,
             notices:g.rules?.revealAllianceChatAfterMatch===true?[ALLIANCE_CHAT_NOTICE]:[]});
         }
-        if(endpoint==='start' && req.method==='POST') {host();seat();await body(req);start(g);fractions.set(g.id,0);save(g);return json(res,200,{ok:true,status:g.status});}
+        if(endpoint==='start' && req.method==='POST') {host();await body(req);start(g);fractions.set(g.id,0);save(g);return json(res,200,{ok:true,status:g.status});}
         if(endpoint==='bots' && req.method==='POST') {
           host();const data=await body(req);requireRule(g.status==='lobby','Cannot add seats during play.',409);
-          if (!g.players.some(p=>p.profileId===identity.id)) {
-            requireRule(typeof data.country==='string','Choose your country before filling practice seats.');
+          const count=data.count ?? gameMap.countries.length;
+          requireRule(Number.isSafeInteger(count) && count>=1 && count<=gameMap.countries.length,'Practice seat count must be 1–8.');
+          if (!g.players.some(p=>p.profileId===identity.id) && data.country !== undefined) {
             join(g,gameMap,{profileId:identity.id,name:identity.name,country:data.country,kind:'human'});
           }
-          for(const c of gameMap.countries.filter(c=>!g.players.some(p=>p.id===c.id))) {
+          const needed=Math.max(0,count-g.players.filter(p=>p.kind==='bot').length);
+          for(const c of gameMap.countries.filter(c=>!g.players.some(p=>p.id===c.id)).slice(0,needed)) {
             const profile=store.register(`${c.name.split(' ')[0]} automaton`);
             join(g,gameMap,{profileId:profile.id,name:profile.name,country:c.id,kind:'bot',model:'practice-bot',persona:'expansion-first'});
           }

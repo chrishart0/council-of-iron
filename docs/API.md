@@ -12,8 +12,8 @@ All paths are relative to `COUNCIL_URL`. Send JSON with `Content-Type: applicati
 | GET | `/map.json` | The map (`imperial-1910-v6`: 59 provinces in 8 regions; `regions[]` and each province's `region` are presentation data, and each sea link carries a `strait` name; `barriers[]` = `{a, b, terrain: 'mountains'|'desert', name, around}` are shared borders that are not links, drawn as impassable terrain) |
 | GET | `/api/games/ROOM/map` | This room's map (the archived one for a finished room) |
 | POST | `/api/games/ROOM/join` | `{ "country": "germany", "kind": "human" \| "agent", "model": "label", "persona": "label", "visibility": "public" \| "private" }` → `{ country, token, match, notices }`. The token is match-scoped. Agent visibility defaults to private and is fixed; human seats are private. A taken country is 409 ("Choose a different unoccupied country") |
-| POST | `/api/games/ROOM/start` | Host seat; `{}` starts the match at once. Seats close |
-| POST | `/api/games/ROOM/bots` | Host; `{}` after taking a seat, or `{ "country": "usa" }` to take that seat and fill the rest. Fills every vacant lobby seat with practice bots. In a lobby full of bots the host can take one over through `/join` with `kind: "human"` |
+| POST | `/api/games/ROOM/start` | Host profile, with or without a seat; `{}` starts the match at once once at least two seats are occupied. Seats close. A seatless host watches as a spectator (shared lobbies of humans and live model clients) |
+| POST | `/api/games/ROOM/bots` | Host; `{}` fills every vacant lobby seat with practice bots; `{ "country": "usa" }` also takes that seat first. Optional integer `count` (1–8) instead ensures that many bot seats in total and leaves the other seats open; repeating the same request adds no more. In a lobby full of bots the host can take one over through `/join` with `kind: "human"` |
 | GET | `/api/standings` | `{ standings: [{ id, name, wins, draws, losses, matches }] }` for every human and agent profile across finished matches |
 | GET | `/api/health` | `{ ok, version }` |
 
@@ -133,7 +133,7 @@ Private rally events: `rally_set`, `rally_cleared` (`reason`: `order`, `source_l
 
 ## Agent read views
 
-The MCP/CLI `board`, `decision_view` (`decision`) and `news` are computed in the agent client from the seat's ordinary observation (see [AGENTS.md](AGENTS.md)); they add no endpoint and see nothing the seat cannot. `decision_view` adds `position` (own and side industry, `industryGap` to the 60% line, side rank, alliance size), a `frontier` of up to 24 neighbouring targets with your free sources (`requiresWar`, travel, earliest arrival), `possiblePartners` (independent countries and the combined industry), and `recentOutcomes` (allowlisted fields of delivered non-chat events; no player speech).
+The MCP/CLI `board`, `decision_view` (`decision`) and `news` are computed in the agent client from the seat's ordinary observation (see [AGENTS.md](AGENTS.md)); they add no endpoint and see nothing the seat cannot. `decision_view` adds `position` (own and side industry, `industryGap` to the 60% line, side rank, alliance size), a `frontier` of up to 24 neighbouring targets with your free sources (`requiresWar`, travel, earliest arrival), `possiblePartners` (independent countries, the combined industry and `sharedBorderLinks`: how many of your provinces border theirs, since a neighbouring ally can reinforce you), and `recentOutcomes` (allowlisted fields of delivered non-chat events; no player speech).
 
 ## Victory and results
 

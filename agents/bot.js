@@ -15,7 +15,9 @@ try {
     if(state.status==='finished'){console.log(JSON.stringify(state.outcome));break;}
     if(state.hasMore)continue;
     const action=choose(state,map,country);
-    if(action)try{await client.action(action);}catch(e){if(![400,409,429].includes(e.status))throw e;}
+    if(action)try{await client.action(action);}catch(e){
+      if(![400,409,429].includes(e.status) && !(e.status===403 && e.message==='You do not own the source province.'))throw e;
+    }
     await new Promise(resolve=>setTimeout(resolve,Math.max(150,1000/state.speed)));
   }
 }catch(error){console.error(error.message);process.exitCode=1;}

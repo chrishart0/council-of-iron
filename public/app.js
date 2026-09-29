@@ -868,14 +868,14 @@ function renderLobby(){
   }
   $('lobby').hidden=state.status!=='lobby';$('join-form').hidden=Boolean(state.you);
   if(chosen && state.players.some(p=>p.id===chosen && !claimable(p)))$('country-choice').value='';
-  $('host-controls').hidden=!state.isHost;$('fill-bots').disabled=state.players.length===8 || !state.you && !$('country-choice').value;$('start-match').disabled=state.players.length<2 || !state.you;
+  $('host-controls').hidden=!state.isHost;$('fill-bots').disabled=state.players.length===8 || !state.you && !$('country-choice').value;$('start-match').disabled=state.players.length<2;$('start-match').textContent=state.you?'Start match':'Start and watch';
   $('fill-bots').textContent=state.you?'Fill empty seats with bots':'Take this seat and fill the rest with bots';
   const selected=country(state.you || $('country-choice').value);
   const head=selected?`${insignia(selected.id)}<div><h3>${esc(selected.name)}</h3><p>${state.you?'Your country':'Open seat'}</p></div>`:`${insignia(null)}<div><h3>Pick a standard</h3><p>Choose an open country from the rack.</p></div>`;
   if($('dossier-head').dataset.key!==head){$('dossier-head').dataset.key=head;setHTML($('dossier-head'),head);} // country names are authored map data
   $('starting-holdings').textContent=selected?startingSummary(selected):'Industrial homelands, colonial footholds. Unequal strengths, the same rules.';
   $('join-form').querySelector('button').disabled=!country($('country-choice').value);
-  $('lobby-note').textContent=state.you?`You command ${country(state.you).name}. ${state.isHost?'Invite players, attach agents or add bots, then start.':'Waiting for the host to start.'}`:state.isHost && state.players.length===8 && state.players.some(p=>p.kind==='bot')?'Bots fill every seat. Choose one to take command, then start.':`${state.players.length}/8 seats taken. Choose an open country to join.`;
+  $('lobby-note').textContent=state.you?`You command ${country(state.you).name}. ${state.isHost?'Invite players, attach agents or add bots, then start.':'Waiting for the host to start.'}`:state.isHost && state.players.length===8 && state.players.some(p=>p.kind==='bot')?'Bots fill every seat. Choose one to take command, then start.':`${state.players.length}/8 seats taken. ${state.isHost?'Choose an open country to join, or start and watch.':'Choose an open country to join.'}`;
 }
 /** How to play (☰ menu): the whole rulebook on one screen, with this room's numbers. */
 function renderRules(){
