@@ -60,14 +60,14 @@ An authenticated Jev smoke test returned in 328 ms and reported cost $0.00001449
 
 ## Measured decision speed
 
-There were 44 valid calls per model on the 22 positions, with zero failures:
+There were 44 valid decision trials per model on the 22 positions, with zero failures:
 
-| Model | Median request | Mean request | 95th percentile | Same choice across permutations |
+| Model | Median completed turn | Mean completed turn | 95th percentile | Same choice across permutations |
 | --- | ---: | ---: | ---: | ---: |
 | Jev `1.13-20260917` | 0.2134 s | 0.2516 s | 0.3825 s | 17/22 |
 | PI Space Bunny | 2.9153 s | 3.3067 s | 5.8689 s | 12/22 |
 
-The ratio of median request times was **13.7×**. Models chose the same option in 23/44 matched calls; each agreed with the heuristic in 18/44. This establishes latency for this bounded-choice interface, not tactical correctness. Jev reported approximately $0.0034 for these calls. The recorded dataset hash is `a5e54100982f2198bab4e8441d45986beeb476dc37f251e2d6259c524df55842`.
+The ratio of median completed-turn times was **13.7×**. The PI measurement includes `select_move` and its follow-up acknowledgement; Jev returns its typed decision in one request. First-choice availability was not timestamped separately, so this ratio must not be presented as an exact speedup in time to submit a move. Models chose the same option in 23/44 matched trials; each agreed with the heuristic in 18/44. This establishes latency for these bounded-choice interfaces, not tactical correctness. Jev reported approximately $0.0034 for these requests. The recorded dataset hash is `a5e54100982f2198bab4e8441d45986beeb476dc37f251e2d6259c524df55842`.
 
 The deterministic selector in real matches takes milliseconds, including the same candidate construction. Jev is useful only if its choices improve outcomes enough to offset extra inference, failure handling and coupling to the planner. A faster cadence and forecasts do not intrinsically require another model. The experiment executes tactics every five seconds; a 0.21-second response alone does not imply a 0.21-second reaction time.
 
@@ -100,9 +100,28 @@ Pure Jev completed seven original bot games, all coalition wins, with own indust
 
 ## Recommendation
 
-Keep the default PI player unchanged. If faster military reactions are worth a follow-up, first compare LLM strategy/diplomacy plus the small coded selector against the current PI system over a complete matched batch. Only add Jev if a replenished-account study shows a useful improvement over that same coded selector. Do not start with local model serving, fine-tuning, multiple planners or a larger game system.
+The surviving replacement controls both completed all eight starts:
+
+| Controller | Wins / draws / losses | Mean personal industry | Accepted / rejected military orders | Reported planner tokens |
+| --- | --- | ---: | ---: | ---: |
+| Current PI | 6 / 0 / 2 | 19.750 | 423 / 86 | 9,045,786 |
+| LLM + code | 7 / 0 / 1 | 21.875 | 866 / 0 | 5,940,641 |
+| LLM + Jev | No final results; eight credit-blocked trials | Unknown | 70 / 0 before stopping | 848,274 before stopping |
+| Pure Jev | No final results; eight credit-blocked trials | Unknown | 69 / 0 before stopping | No LLM |
+
+The coded selector's mean decision time, averaged equally across eight matches and including candidate construction, was **8 ms**. Its completed personal scores were Britain 19, France 11, Germany 29, Russia 5, Ottoman 49, Qing 32, Japan 12 and USA 18. Qing lost despite its high personal score. The corresponding PI scores were 22, 27, 26, 36, 9, 7, 9 and 22. This is evidence for valid and fast execution, not a reliable estimate of improved play. Win-rate Wilson 95% intervals overlap: current PI 40.9–92.9%; LLM + code 52.9–97.8%. Different launch load windows and independently generated plans limit causal interpretation.
+
+The exploratory paired code-minus-baseline mean difference was +2.125 industry, with four positive and four negative differences. Its exploratory paired bootstrap 95% interval was −11.625 to +16.625; exact two-sided sign-flip p = 0.8359. The estimate is too uncertain to claim improved strength. This is not the preregistered primary endpoint and does not rescue the missing Jev comparison.
+
+Across both main batches there were **64 attempts: 35 completed games, 13 infrastructure interruptions and 16 credit-blocked trials**. [jev-results.json](jev-results.json) preserves every allowlisted attempt; [jev-comparison.png](jev-comparison.png) plots the replacement controls and recorded-position timing. Zero completed primary pairs means the logical Jev-minus-code industry bounds are −21.875 to +155.125 across all eight blocks, which permit either sign and settle nothing.
+
+Keep the default PI player unchanged. If faster military reactions are worth a follow-up, test LLM strategy/diplomacy plus the small coded selector over more seeds under a matched launch load window. Only add Jev if a replenished-account study shows a useful improvement over that same coded selector. Do not start with local model serving, fine-tuning, multiple planners or a larger game system.
 
 The remaining uncertainties are playing strength over complete pairs, response to human negotiation, planner-model dependence, and the restricted candidate menu. The normal PI baseline retains long-range attacks and turn-around, which this experimental tactical menu lacks. The study does not establish human enjoyment, human-opponent strength or game balance.
+
+## Verification
+
+`npm test` passed all 244 tests; `npm run check` passed. The full native `python tests/browser.py` run passed live, recorded review, voice, phone performance, UI tasks and UI suites. `node scripts/build-imperial-v6.js --check` passed. `npm run test:balance -- --rounds 32 --mode diplomacy` completed with zero invariant failures. No runtime dependency was added. Engine, map, practice bots and default PI player are unchanged. Research units were collected after completion; the live deployment was never touched.
 
 Replacement analysis command:
 

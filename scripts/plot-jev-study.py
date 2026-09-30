@@ -22,6 +22,8 @@ for ax in axes:
     ax.set_axisbelow(True)
     ax.grid(axis='y', color='#deddd8', linewidth=.7)
 x = np.arange(len(countries))
+observed = [r['ownIndustry'] for r in data['runs'] if r['status'] == 'finished']
+axes[0].set_ylim(0, max(observed, default=1) * 1.6)
 for i, (arm, label, color) in enumerate(zip(arms, labels, colors)):
     values = []
     for country in countries:
@@ -44,10 +46,11 @@ for i, (field, label, color) in enumerate([('llmSeconds', 'PI LLM', colors[0]), 
     axes[1].plot([i - .23, i + .23], [np.median(values)] * 2, color=color, linewidth=3)
 axes[1].set_xticks([0, 1], ['PI LLM', 'Jev'])
 axes[1].set_xlim(-.5, 1.5)
-axes[1].set_ylabel('Decision response seconds (log scale)')
+axes[1].set_ylabel('Completed decision turn, seconds (log scale)')
 axes[1].set_yscale('log')
+axes[1].set_ylim(.15, 30)
 axes[1].set_title('Identical candidate menus', loc='left', fontweight='bold')
-axes[1].text(.04, .95, '22 recorded positions\nTwo option permutations each\nDots: each position’s mean latency',
+axes[1].text(.04, .95, '22 recorded positions · two permutations each\nLLM includes tool acknowledgement\nDots: each position’s mean elapsed time',
              transform=axes[1].transAxes, va='top', fontsize=10)
 fig.suptitle('Jev in Council of Iron: speed and playing results are separate measurements',
              x=.055, ha='left', fontsize=16, fontweight='bold')

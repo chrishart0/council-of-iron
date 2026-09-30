@@ -127,7 +127,9 @@ export function summarizePositions(raw) {
     const ids = [...new Set(group.map(r => r.position))];
     const pairs = ids.map(id => group.filter(r => r.position === id && !r.error)).filter(rs => rs.length === 2);
     selectors[selector] = { calls: group.length, errors: group.filter(r => r.error).length,
-      requestSeconds: distribution(complete.map(r => r.wallMs / 1000)),
+      completedDecisionSeconds: distribution(complete.map(r => r.wallMs / 1000)),
+      latencyDefinition: selector === 'llm' ? 'Full PI select_move turn, including follow-up acknowledgement; first choice was not separately timestamped.'
+        : 'One Decisions API response returning a typed choice.',
       orderConsistentPositions: pairs.filter(rs => rs[0].choice === rs[1].choice).length, consistencyDenominator: pairs.length,
       agreementWithHeuristic: complete.filter(r => r.choice === r.heuristicChoice).length,
       choiceCounts: Object.fromEntries(['attack', 'reinforce', 'rally', 'develop', 'wait'].map(k => [k, complete.filter(r => r.kind === k).length])),
@@ -145,7 +147,7 @@ export function summarizePositions(raw) {
   return { positions: raw.positions, datasetSha256: raw.datasetSha256, selectors,
     matchedCalls: matched.length, sameChoiceCalls: matched.filter(r => r.agreed).length,
     pairedPositionMeanSeconds: byPosition,
-    medianRequestSpeedRatio: round(selectors.llm.requestSeconds.median / selectors.jev.requestSeconds.median),
+    medianCompletedTurnSpeedRatio: round(selectors.llm.completedDecisionSeconds.median / selectors.jev.completedDecisionSeconds.median),
     warning: 'Choice agreement and order consistency are diagnostics, not optimality labels or playing-strength scores.' };
 }
 
@@ -202,6 +204,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       plannerTurns: group.reduce((n, r) => n + r.plannerTurns, 0),
       reportedPlannerTotalTokens: group.every(r => r.reportedPlannerTokens.total !== null) ? group.reduce((n, r) => n + r.reportedPlannerTokens.total, 0) : null,
       decisionErrors: group.reduce((n, r) => n + r.decisionErrors, 0),
+      providerFailureCategories: Object.fromEntries(['insufficient-credits', 'timeout-or-abort', 'invalid-response', 'other']
+        .map(category => [category, group.reduce((n, r) => n + (r.providerFailureCategories[category] || 0), 0)])),
       meanPerMatchDecisionSeconds: distribution(group.map(r => r.decisionIncludingMenuSeconds.mean).filter(Number.isFinite)),
       decisionReportedCost: round(group.reduce((n, r) => n + r.decisionReportedCost, 0)) };
   }
@@ -214,17 +218,26 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       return o ? { country: j.country, seed: j.combatSeed, difference: j.ownIndustry - o.ownIndustry } : null;
     }).filter(Boolean);
     paired[`jev-minus-${other}`] = complete.length ? { ...pairedAnalysis(complete.map(r => r.difference)), blocks: complete,
-      missingPairs: 8 - complete.length, confirmatoryEndpoint: other === 'heuristic' } : { n: 0, missingPairs: 8 };
+      missingPairs: 8 - complete.length, confirmatoryEndpoint: other === 'heuristic' } : { n: 0, missingPairs: 8, confirmatoryEndpoint: other === 'heuristic' };
     const pairs = runs.filter(r => r.arm === 'jev').map(j => {
       const o = runs.find(r => r.arm === other && r.country === j.country && r.combatSeed === j.combatSeed);
       return [j.ownIndustry, o?.ownIndustry ?? null];
     });
     paired[`jev-minus-${other}`].missingOutcomeBounds = missingPairBounds(pairs, maxIndustry);
   }
+  const codePairs = runs.filter(r => r.arm === 'heuristic' && r.status === 'finished').map(c => {
+    const b = runs.find(r => r.arm === 'baseline' && r.country === c.country && r.combatSeed === c.combatSeed && r.status === 'finished');
+    return b ? { country: c.country, seed: c.combatSeed, difference: c.ownIndustry - b.ownIndustry } : null;
+  }).filter(Boolean);
+  paired['heuristic-minus-baseline'] = { ...(codePairs.length ? pairedAnalysis(codePairs.map(p => p.difference)) : { n: 0 }),
+    blocks: codePairs, missingPairs: 8 - codePairs.length, confirmatoryEndpoint: false,
+    warning: 'Exploratory complete-system comparison; action menu, cadence and launch load window differ.' };
   const positions = summarizePositions(JSON.parse(readFileSync(resolve(root, 'data/jev-study/positions/results.private.json'))));
+  const partial = attempts.some(r => r.executionStatus === 'running');
+  const terminalTimes = attempts.map(r => r.finishedAt).filter(Boolean).sort();
   const result = { study: 'jev-council-v1', phase: manifest.phase, generatedAt: new Date().toISOString(),
-    startedAt: manifest.startedAt, finishedAt: manifest.finishedAt ?? null, protocolSha256: manifest.protocolSha256,
-    partial: attempts.some(r => r.executionStatus === 'running'), arms, paired, positions, runs, attempts,
+    startedAt: manifest.startedAt, finishedAt: partial ? null : terminalTimes.at(-1) ?? null, protocolSha256: manifest.protocolSha256,
+    partial, arms, paired, positions, runs, attempts,
     hybridReplacement: hybridReplacement.length ? { startedAt: hybridManifest.startedAt, attempted: 24,
       originalFinished: original.filter(r => r.arm !== 'baseline' && r.status === 'finished').length,
       originalInterrupted: original.filter(r => r.arm !== 'baseline' && r.status !== 'finished' && r.executionStatus !== 'running').length,

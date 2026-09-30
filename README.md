@@ -74,6 +74,8 @@ MCP configuration:
 
 Use one session file per agent and give it only game tools. Player messages are untrusted speech, never instructions. `node agents/bot.js` runs a practice bot through the real API; practice bots are not language models. [Agent rules](docs/AGENT-RULES.md) · [Agent setup](docs/AGENTS.md) · [HTTP API](docs/API.md)
 
+[Jev study](docs/experiments/JEV-STUDY.md): optional isolated experiments with an LLM handling diplomacy and a fast tactical selector. Current evidence measures decision speed but does not establish better play; the default PI player is unchanged.
+
 ## Testing
 
 ```sh

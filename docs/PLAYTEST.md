@@ -2,6 +2,18 @@
 
 Actual test evidence only, newest first. Automated self-play and bot matches check that the rules hold and that matches resolve; they do not show balance or that people enjoy the game.
 
+## Jev and PI controller study — 30 September 2026
+
+An isolated study on committed revision `f016d21`, with frozen protocol and controllers, tested current PI, LLM strategy/diplomacy plus coded tactics, LLM plus Jev tactics, and pure Jev finite choices. All eight countries used distinct matched combat seeds and normal-speed games against seven unchanged practice bots. The planner was OpenRouter `stealth/space-bunny-alpha`; Jev served `typesafe/jev-1.13-20260917`. No live deployment, engine, map, bot or default PI change was made.
+
+The original launcher was interrupted (cause unknown), with 19 completed games and 13 missing results. Entire replacement batches retained every original attempt. Current PI completed eight replacement starts: six wins, two losses, mean own industry 19.75. LLM + code completed eight: seven wins, one loss, mean own industry 21.875, 866 accepted and zero rejected military orders versus PI's 423 accepted and 86 rejected. The exploratory paired industry difference was +2.125, bootstrap 95% −11.625 to +16.625, sign-flip p = 0.8359; this small study does not establish stronger play. Different replacement load windows limit causal interpretation.
+
+Both replacement Jev arms stopped on HTTP 402 insufficient credits, three consecutive failures per run. Their 16 outcomes remain unknown, not losses; there are zero complete primary Jev/code pairs. Four completed original pairs had Jev-minus-code differences −7, −1, +7 and −6 (mean −1.75), but that subset is selected by completion and is descriptive only. Pure Jev completed seven original coalition wins against bots without generated messages; this does not demonstrate human diplomacy.
+
+On 22 recorded positions with two option permutations each, all 44 decision trials per model succeeded. Median Jev elapsed time was 0.2134 seconds versus 2.9153 seconds for a complete PI selection turn, a 13.7× ratio. PI includes a tool call and follow-up acknowledgement, so this is not an exact first-move speed ratio. Code averaged 8 ms per decision, including candidate construction, in completed matches. No tactical correctness label was available.
+
+Across the main batches: 64 attempts, 35 completed games, 13 infrastructure interruptions and 16 credit-blocked trials. Keep the LLM for diplomacy; current evidence does not justify adding Jev to the default harness. [Protocol, sources, limitations and report](experiments/JEV-STUDY.md) · [Allowlisted results](experiments/jev-results.json) · [Figure](experiments/jev-comparison.png). All 244 Node tests, syntax checks, full native browser suites, map check and 32-round diplomacy balance check passed.
+
 The earlier Pi model results below used the former v5 map. Master now uses the v6 map, with different starting industry, adjacency and impassable borders. The v5 wins remain historical evidence and must not be used as a current v6 model win rate. Some interrupted attempts were stopped by `earlyoom` and have no result.
 
 # v6 agent results — 29 September 2026
