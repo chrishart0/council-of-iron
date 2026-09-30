@@ -8558,6 +8558,738 @@
           "ownProvinces": null
         }
       ]
+    },
+    {
+      "id": "2026-09-30T19-14-09-194Z-f2dae3aa",
+      "match": "v7-germany-01",
+      "mapId": "imperial-1910-v7",
+      "combatSeed": "v7-germany-01",
+      "startedAt": "2026-09-30T19:14:09.197Z",
+      "modelGroup": "external",
+      "modelId": "stealth/space-bunny-alpha",
+      "client": "Pi",
+      "access": "MCP",
+      "harness": "Pi",
+      "arena": "seven practice bots",
+      "sourceRevision": "edebad5d9d46",
+      "country": "germany",
+      "interfaceVersion": "decision-turn-v9",
+      "turnView": "decision",
+      "strategy": "decision view in prompt",
+      "maxTurnSeconds": 120,
+      "decisionIntervalTicks": 30,
+      "sessionMode": "fresh",
+      "preset": "standard",
+      "status": "finished",
+      "resultReason": "domination",
+      "finalTick": 1551,
+      "result": "win",
+      "won": true,
+      "industry": 3,
+      "acceptedActions": 80,
+      "rejectedActions": 3,
+      "toolCalls": 122,
+      "failedToolCalls": 5,
+      "firstActionSeconds": 3.97,
+      "failureRatePct": 4.1,
+      "inputTokens": 1077140,
+      "outputTokens": 23007,
+      "cacheReadTokens": 703731,
+      "totalTokens": 1100147,
+      "uncachedTokens": 396416,
+      "tokensPerAction": 13751.84,
+      "tokenTurnsReported": 53,
+      "tokenTurns": 53,
+      "turns": 53,
+      "timedOutTurns": 0,
+      "meanTurnSeconds": 10.11,
+      "durationSeconds": 1556.29,
+      "progress": [
+        {
+          "tick": 0,
+          "ownIndustry": 10,
+          "sideIndustry": 10,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 30,
+          "ownIndustry": 11,
+          "sideIndustry": 11,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 60,
+          "ownIndustry": 11,
+          "sideIndustry": 23,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 80,
+          "ownIndustry": 11,
+          "sideIndustry": 24,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 110,
+          "ownIndustry": 11,
+          "sideIndustry": 26,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 140,
+          "ownIndustry": 7,
+          "sideIndustry": 23,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 170,
+          "ownIndustry": 9,
+          "sideIndustry": 25,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 200,
+          "ownIndustry": 8,
+          "sideIndustry": 24,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 230,
+          "ownIndustry": 9,
+          "sideIndustry": 25,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 260,
+          "ownIndustry": 9,
+          "sideIndustry": 25,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 290,
+          "ownIndustry": 7,
+          "sideIndustry": 23,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 320,
+          "ownIndustry": 9,
+          "sideIndustry": 26,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 350,
+          "ownIndustry": 9,
+          "sideIndustry": 24,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 380,
+          "ownIndustry": 9,
+          "sideIndustry": 26,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 410,
+          "ownIndustry": 9,
+          "sideIndustry": 24,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 440,
+          "ownIndustry": 9,
+          "sideIndustry": 24,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 470,
+          "ownIndustry": 8,
+          "sideIndustry": 23,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 500,
+          "ownIndustry": 7,
+          "sideIndustry": 22,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 530,
+          "ownIndustry": 5,
+          "sideIndustry": 22,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 560,
+          "ownIndustry": 5,
+          "sideIndustry": 20,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 590,
+          "ownIndustry": 5,
+          "sideIndustry": 19,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 620,
+          "ownIndustry": 6,
+          "sideIndustry": 19,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 650,
+          "ownIndustry": 5,
+          "sideIndustry": 19,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 680,
+          "ownIndustry": 5,
+          "sideIndustry": 43,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 710,
+          "ownIndustry": 5,
+          "sideIndustry": 44,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 740,
+          "ownIndustry": 2,
+          "sideIndustry": 40,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 770,
+          "ownIndustry": 5,
+          "sideIndustry": 44,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 800,
+          "ownIndustry": 2,
+          "sideIndustry": 43,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 830,
+          "ownIndustry": 2,
+          "sideIndustry": 43,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 860,
+          "ownIndustry": 2,
+          "sideIndustry": 47,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 890,
+          "ownIndustry": 2,
+          "sideIndustry": 51,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 920,
+          "ownIndustry": 2,
+          "sideIndustry": 52,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 950,
+          "ownIndustry": 3,
+          "sideIndustry": 47,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 980,
+          "ownIndustry": 3,
+          "sideIndustry": 50,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1010,
+          "ownIndustry": 3,
+          "sideIndustry": 46,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1040,
+          "ownIndustry": 3,
+          "sideIndustry": 47,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1070,
+          "ownIndustry": 3,
+          "sideIndustry": 46,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1100,
+          "ownIndustry": 3,
+          "sideIndustry": 45,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1130,
+          "ownIndustry": 3,
+          "sideIndustry": 47,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1160,
+          "ownIndustry": 3,
+          "sideIndustry": 47,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1190,
+          "ownIndustry": 3,
+          "sideIndustry": 50,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1220,
+          "ownIndustry": 3,
+          "sideIndustry": 49,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1250,
+          "ownIndustry": 3,
+          "sideIndustry": 50,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1280,
+          "ownIndustry": 3,
+          "sideIndustry": 51,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1310,
+          "ownIndustry": 3,
+          "sideIndustry": 51,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1340,
+          "ownIndustry": 3,
+          "sideIndustry": 51,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1370,
+          "ownIndustry": 3,
+          "sideIndustry": 50,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1400,
+          "ownIndustry": 3,
+          "sideIndustry": 60,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1430,
+          "ownIndustry": 3,
+          "sideIndustry": 62,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1460,
+          "ownIndustry": 3,
+          "sideIndustry": 60,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1490,
+          "ownIndustry": 3,
+          "sideIndustry": 63,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1520,
+          "ownIndustry": 3,
+          "sideIndustry": 62,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1550,
+          "ownIndustry": 3,
+          "sideIndustry": 63,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1551,
+          "ownIndustry": 3,
+          "sideIndustry": null,
+          "ownProvinces": null
+        }
+      ]
+    },
+    {
+      "id": "2026-09-30T19-14-09-194Z-00b91c1d",
+      "match": "v7-germany-01",
+      "mapId": "imperial-1910-v7",
+      "combatSeed": "v7-germany-01",
+      "startedAt": "2026-09-30T19:14:09.197Z",
+      "modelGroup": "qwen",
+      "modelId": "qwen3.8-27b-unsloth-q4-xl",
+      "client": "Pi",
+      "access": "MCP",
+      "harness": "Pi",
+      "arena": "seven practice bots",
+      "sourceRevision": "edebad5d9d46",
+      "country": "germany",
+      "interfaceVersion": "decision-turn-v9",
+      "turnView": "decision",
+      "strategy": "decision view in prompt",
+      "maxTurnSeconds": 90,
+      "decisionIntervalTicks": 30,
+      "sessionMode": "fresh",
+      "preset": "standard",
+      "status": "finished",
+      "resultReason": "deadline",
+      "finalTick": 1800,
+      "result": "loss",
+      "won": false,
+      "industry": 1,
+      "acceptedActions": 109,
+      "rejectedActions": 29,
+      "toolCalls": 409,
+      "failedToolCalls": 52,
+      "firstActionSeconds": 9.54,
+      "failureRatePct": 12.71,
+      "inputTokens": 4327869,
+      "outputTokens": 73644,
+      "cacheReadTokens": 3353540,
+      "totalTokens": 4401513,
+      "uncachedTokens": 1047973,
+      "tokensPerAction": 40380.85,
+      "tokenTurnsReported": 51,
+      "tokenTurns": 51,
+      "turns": 51,
+      "timedOutTurns": 3,
+      "meanTurnSeconds": 24.1,
+      "durationSeconds": 1823.01,
+      "progress": [
+        {
+          "tick": 0,
+          "ownIndustry": 10,
+          "sideIndustry": 10,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 30,
+          "ownIndustry": 10,
+          "sideIndustry": 10,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 45,
+          "ownIndustry": 11,
+          "sideIndustry": 23,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 58,
+          "ownIndustry": 11,
+          "sideIndustry": 23,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 88,
+          "ownIndustry": 14,
+          "sideIndustry": 28,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 124,
+          "ownIndustry": 15,
+          "sideIndustry": 30,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 154,
+          "ownIndustry": 15,
+          "sideIndustry": 31,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 184,
+          "ownIndustry": 16,
+          "sideIndustry": 30,
+          "ownProvinces": 10
+        },
+        {
+          "tick": 275,
+          "ownIndustry": 11,
+          "sideIndustry": 26,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 305,
+          "ownIndustry": 12,
+          "sideIndustry": 25,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 335,
+          "ownIndustry": 11,
+          "sideIndustry": 25,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 365,
+          "ownIndustry": 17,
+          "sideIndustry": 31,
+          "ownProvinces": 10
+        },
+        {
+          "tick": 395,
+          "ownIndustry": 17,
+          "sideIndustry": 28,
+          "ownProvinces": 10
+        },
+        {
+          "tick": 426,
+          "ownIndustry": 16,
+          "sideIndustry": 25,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 456,
+          "ownIndustry": 15,
+          "sideIndustry": 26,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 486,
+          "ownIndustry": 17,
+          "sideIndustry": 27,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 516,
+          "ownIndustry": 17,
+          "sideIndustry": 27,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 546,
+          "ownIndustry": 15,
+          "sideIndustry": 29,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 578,
+          "ownIndustry": 14,
+          "sideIndustry": 28,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 608,
+          "ownIndustry": 15,
+          "sideIndustry": 28,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 638,
+          "ownIndustry": 12,
+          "sideIndustry": 26,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 668,
+          "ownIndustry": 13,
+          "sideIndustry": 26,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 698,
+          "ownIndustry": 13,
+          "sideIndustry": 27,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 728,
+          "ownIndustry": 14,
+          "sideIndustry": 25,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 758,
+          "ownIndustry": 12,
+          "sideIndustry": 19,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 788,
+          "ownIndustry": 8,
+          "sideIndustry": 14,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 850,
+          "ownIndustry": 7,
+          "sideIndustry": 13,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 880,
+          "ownIndustry": 10,
+          "sideIndustry": 17,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 910,
+          "ownIndustry": 10,
+          "sideIndustry": 17,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 940,
+          "ownIndustry": 10,
+          "sideIndustry": 16,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 970,
+          "ownIndustry": 7,
+          "sideIndustry": 14,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 1000,
+          "ownIndustry": 7,
+          "sideIndustry": 14,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 1030,
+          "ownIndustry": 5,
+          "sideIndustry": 12,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 1060,
+          "ownIndustry": 5,
+          "sideIndustry": 13,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 1090,
+          "ownIndustry": 5,
+          "sideIndustry": 13,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 1120,
+          "ownIndustry": 3,
+          "sideIndustry": 11,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 1211,
+          "ownIndustry": 3,
+          "sideIndustry": 11,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 1241,
+          "ownIndustry": 3,
+          "sideIndustry": 12,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 1271,
+          "ownIndustry": 3,
+          "sideIndustry": 11,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 1301,
+          "ownIndustry": 3,
+          "sideIndustry": 11,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 1331,
+          "ownIndustry": 4,
+          "sideIndustry": 14,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 1361,
+          "ownIndustry": 4,
+          "sideIndustry": 14,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 1435,
+          "ownIndustry": 2,
+          "sideIndustry": 15,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 1495,
+          "ownIndustry": 1,
+          "sideIndustry": 13,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1586,
+          "ownIndustry": 1,
+          "sideIndustry": 37,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1616,
+          "ownIndustry": 1,
+          "sideIndustry": 35,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1646,
+          "ownIndustry": 1,
+          "sideIndustry": 35,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1676,
+          "ownIndustry": 1,
+          "sideIndustry": 37,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1723,
+          "ownIndustry": 1,
+          "sideIndustry": 37,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1753,
+          "ownIndustry": 1,
+          "sideIndustry": 35,
+          "ownProvinces": 1
+        },
+        {
+          "tick": 1787,
+          "ownIndustry": 0,
+          "sideIndustry": 32,
+          "ownProvinces": 0
+        },
+        {
+          "tick": 1800,
+          "ownIndustry": 1,
+          "sideIndustry": null,
+          "ownProvinces": null
+        }
+      ]
     }
   ]
 }

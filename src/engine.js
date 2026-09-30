@@ -64,7 +64,8 @@ function sideRoster(g, side) { return members(g, side).map(p => p.id); }
 export const maxAlliance = g => Math.min(3, Math.floor(g.players.length / 2));
 export function player(g, id) {
   const p = g.players.find(p => p.id === id);
-  requireRule(p, 'That country is not in this match.', 404); return p;
+  if (!p) requireRule(false, `That country is not in this match. Countries are named by id: ${g.players.map(p => p.id).join(', ')}.`, 404);
+  return p;
 }
 export function displayName(p) {
   return p.kind==='agent' && p.model && !p.name.toLowerCase().includes(p.model.toLowerCase())
@@ -694,6 +695,7 @@ function chat(g, p, a) {
     requireRule(!p.side.startsWith('solo:'), 'You are not in an alliance.');
     recipients = members(g, p.side).map(p => p.id);
   } else if (a.channel === 'dm') {
+    if (typeof a.to !== 'string' || !a.to) requireRule(false, `A direct message needs to: the recipient's country id (${g.players.filter(x => x.id !== p.id).map(x => x.id).join(', ')}).`);
     player(g, a.to); recipients = [...new Set([p.id, a.to])];
   }
   p.lastChat = g.tick;
