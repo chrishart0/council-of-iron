@@ -5,7 +5,8 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const output = fileURLToPath(new URL('./benchmarks.json', import.meta.url));
-export const CURRENT_MAP_ID = JSON.parse(readFileSync(fileURLToPath(new URL('../../public/imperial-map.json', import.meta.url)), 'utf8')).id;
+/** Every ledger row names the map it was played on; the report compares one map at a time. */
+export const recordsMap = mapId => /^imperial-[0-9a-z-]+$/.test(mapId || '');
 const number = value => Number.isFinite(value) ? value : null;
 const round = value => number(value) === null ? null : Math.round(value * 100) / 100;
 const finiteSum = (items, key) => items.every(item => number(item[key]) !== null)
@@ -63,8 +64,9 @@ export function summarizeRun(raw, modelGroup, { revision = raw.sourceRevision } 
   if (!raw.runId || !raw.startedAt || !raw.match || raw.status !== 'finished' ||
       !['win', 'loss', 'draw'].includes(raw.score?.result) || !Number.isFinite(raw.score.industry))
     throw new Error(`Run ${raw.runId || '(unknown)'} has no authoritative finished result.`);
-  if (raw.mapId !== CURRENT_MAP_ID)
-    throw new Error(`Run ${raw.runId} used map ${raw.mapId || '(unknown)'}; current map is ${CURRENT_MAP_ID}.`);
+  // Every row keeps its map: the report shows one map at a time, since games on different maps are not comparable.
+  if (!recordsMap(raw.mapId))
+    throw new Error(`Run ${raw.runId} does not record its map.`);
   if (raw.score.industry === 0 && raw.score.result !== 'loss')
     throw new Error(`Run ${raw.runId} has a result from rules that credited a country with no industry.`);
   const client = raw.client === 'codex' ? 'Codex' : 'Pi';
@@ -147,8 +149,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     process.exit(2);
   }
   const previous = JSON.parse(readFileSync(output, 'utf8'));
-  if (previous.schemaVersion !== 4 || previous.mapId !== CURRENT_MAP_ID || !Array.isArray(previous.runs))
-    throw new Error(`Benchmark ledger must use schema 4 and current map ${CURRENT_MAP_ID}.`);
+  if (previous.schemaVersion !== 5 || !Array.isArray(previous.runs))
+    throw new Error('Benchmark ledger must use schema 5.');
   const entries = new Map(previous.runs.map(run => [run.id, run]));
   for (const path of paths) {
     const run = summarizeRun(JSON.parse(readFileSync(path, 'utf8')), group, { revision });

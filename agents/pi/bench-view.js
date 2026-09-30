@@ -20,7 +20,8 @@ const harness = run => run.harness || run.client;
 let runs = [], tasks = [];
 
 export function selectRuns(items, filters) {
-  return items.filter(run => (filters.model === 'all' || run.modelId === filters.model) &&
+  return items.filter(run => (filters.map === 'all' || run.mapId === filters.map) &&
+    (filters.model === 'all' || run.modelId === filters.model) &&
     (filters.harness === 'all' || harness(run) === filters.harness) &&
     (filters.arena === 'all' || run.arena === filters.arena) &&
     (filters.country === 'all' || run.country === filters.country) &&
@@ -232,7 +233,8 @@ function drawTasks() {
 }
 
 function draw() {
-  const filters = Object.fromEntries(['model', 'harness', 'arena', 'country', 'preset', 'seed'].map(id => [id, $(id).value]));
+  const filters = Object.fromEntries(['map', 'model', 'harness', 'arena', 'country', 'preset', 'seed'].map(id => [id, $(id).value]));
+  $('map-id').textContent = filters.map === 'all' ? 'all maps' : filters.map;
   const selected = selectRuns(runs, filters);
   $('count').textContent = selected.length;
   $('record').textContent = selected.length ? record(selected) : '—';
@@ -247,16 +249,18 @@ function addOptions(id, values) {
     $(id).append(option);
   }
 }
-for (const id of ['model', 'harness', 'arena', 'country', 'preset', 'seed', 'measure', 'show-side'])
+for (const id of ['map', 'model', 'harness', 'arena', 'country', 'preset', 'seed', 'measure', 'show-side'])
   $(id).addEventListener('change', draw);
 try {
   const response = await fetch('./benchmarks.json', { cache: 'no-store' });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
-  if (data.schemaVersion !== 4 || !data.mapId || !Array.isArray(data.runs) || data.runs.some(run => run.mapId !== data.mapId))
+  if (data.schemaVersion !== 5 || !Array.isArray(data.runs) || data.runs.some(run => !run.mapId))
     throw new Error('Unsupported benchmark file');
-  $('map-id').textContent = data.mapId;
   runs = data.runs;
+  // Every map version stays in the record; games on different maps are not comparable, so the newest map is shown first.
+  addOptions('map', runs.map(run => run.mapId));
+  if (runs.length) $('map').value = [...runs].sort((a, b) => a.startedAt.localeCompare(b.startedAt)).at(-1).mapId;
   addOptions('model', runs.map(run => run.modelId));
   addOptions('harness', runs.map(harness));
   addOptions('arena', runs.map(run => run.arena));

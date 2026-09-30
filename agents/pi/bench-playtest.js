@@ -3,7 +3,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CURRENT_MAP_ID, summarizeProgress, tokenFields } from './bench.js';
+import { recordsMap, summarizeProgress, tokenFields } from './bench.js';
 
 const output = fileURLToPath(new URL('./benchmarks.json', import.meta.url));
 const finite = value => Number.isFinite(value) ? value : null;
@@ -16,9 +16,9 @@ const family = model => {
 const harnessName = { grok: 'Grok CLI', hermes: 'Hermes', codex: 'Codex CLI' };
 
 export function summarizePlaytestSeat(run, report, seat, turns = [], calls = []) {
-  if (run.mapId !== CURRENT_MAP_ID || report.status !== 'finished' ||
+  if (!recordsMap(run.mapId) || report.status !== 'finished' ||
       report.match !== run.match || !report.outcome || !Number.isSafeInteger(report.tick))
-    throw new Error('Playtest needs a finished room on the current map with an authoritative outcome.');
+    throw new Error('Playtest needs a finished room that records its map, with an authoritative outcome.');
   const score = report.outcome.scores?.find(item => item.country === seat.country);
   if (!score || !['win', 'loss', 'draw'].includes(score.result) || !Number.isFinite(score.industry))
     throw new Error(`No final score for ${seat.country}.`);
@@ -85,8 +85,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const directories = process.argv.slice(2);
   if (!directories.length) { console.error('Usage: node agents/pi/bench-playtest.js data/playtest/<finished-room> [...]'); process.exit(2); }
   const ledger = JSON.parse(readFileSync(output, 'utf8'));
-  if (ledger.schemaVersion !== 4 || ledger.mapId !== CURRENT_MAP_ID || !Array.isArray(ledger.runs))
-    throw new Error('Benchmark ledger must use schema 4 and the current map.');
+  if (ledger.schemaVersion !== 5 || !Array.isArray(ledger.runs))
+    throw new Error('Benchmark ledger must use schema 5.');
   const entries = new Map(ledger.runs.map(row => [row.id, row]));
   for (const directory of directories) for (const row of importPlaytest(directory)) entries.set(row.id, row);
   ledger.runs = [...entries.values()].sort((a, b) => a.startedAt.localeCompare(b.startedAt));

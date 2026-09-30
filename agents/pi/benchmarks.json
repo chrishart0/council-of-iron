@@ -1,7 +1,6 @@
 {
-  "schemaVersion": 4,
-  "mapId": "imperial-1910-v6",
-  "description": "Completed isolated games on the current map (one agent seat against seven practice bots). Result and industry come from the authoritative final outcome. Missing token values mean the runner did not record provider usage.",
+  "schemaVersion": 5,
+  "description": "Completed games, one row per agent seat, each labeled with its map (mapId); the report compares one map at a time. Isolated rows are one agent seat against seven practice bots; shared rows are playtest rooms. Result and industry come from the authoritative final outcome. Missing token values mean the runner did not record provider usage.",
   "runs": [
     {
       "id": "2026-09-29T15-14-46-972Z-bdf2d35a",
