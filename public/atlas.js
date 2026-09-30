@@ -384,11 +384,11 @@ export class Atlas {
     const covered = Math.min(rect.width * .6, (this.insets?.left || 0) + (this.insets?.right || 0));
     return [rect.width > 0 ? Math.min(WORLD, rect.width / MAX_PX_PER_UNIT) : 135, rect.width > 0 ? WORLD * rect.width / (rect.width - covered) : WORLD];
   }
-  /** Optional (v0.8.1, v0.9 adds top): screen px permanently covered by the host's panels ({left,right,top}). World view,
-   * the zoom-out limit and the copy chosen for counters and names use the uncovered part of the map. */
+  /** Optional (v0.8.1, v0.9 adds top, bottom): screen px permanently covered by the host's panels ({left,right,top,bottom}).
+   * World view, the zoom-out limit and the copy chosen for counters and names use the uncovered part of the map. */
   setInsets(insets) {
-    const next = { left: Math.max(0, insets?.left || 0), right: Math.max(0, insets?.right || 0), top: Math.max(0, insets?.top || 0) };
-    if (this.insets && next.left === this.insets.left && next.right === this.insets.right && next.top === this.insets.top) return;
+    const next = { left: Math.max(0, insets?.left || 0), right: Math.max(0, insets?.right || 0), top: Math.max(0, insets?.top || 0), bottom: Math.max(0, insets?.bottom || 0) };
+    if (this.insets && ['left', 'right', 'top', 'bottom'].every(k => next[k] === this.insets[k])) return;
     this.insets = next; this.applyView();
   }
   applyView() {
@@ -408,7 +408,9 @@ export class Atlas {
     const shift = WORLD * Math.floor((this.view.x + this.view.w / 2) / WORLD);
     if (shift) { this.view.x -= shift; if (this.gesture) this.gesture.vx -= shift; }
     const low = -this.view.h * .35, high = 680 - this.view.h * .65;
-    this.view.y = low > high ? 340 - this.view.h / 2 : clamp(this.view.y, low, high);
+    // Taller than the world (a portrait world view): centre the world in the band between the top and bottom insets.
+    const t = this.insets?.top || 0, b = this.insets?.bottom || 0, band = rect.height - t - b;
+    this.view.y = low > high ? 340 - (band > 0 ? (t + band / 2) * this.view.h / rect.height : this.view.h / 2) : clamp(this.view.y, low, high);
     setAttr(this.svg, 'viewBox', `${this.view.x} ${this.view.y} ${this.view.w} ${this.view.h}`);
     this.requestLayout();
   }

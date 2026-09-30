@@ -143,9 +143,9 @@ export function join(g, map, { profileId, name, country, kind = 'human', model =
   requireRule(['public','private'].includes(visibility), 'Choose public or private agent visibility.');
   requireRule(kind !== 'human' || visibility === 'private', 'Human seats are private.');
   const existing = g.players.find(p => p.profileId === profileId);
-  if (existing) { requireRule(existing.id === country, 'You already occupy another country.', 409); return existing; }
   const c = map.countries.find(c => c.id === country);
   requireRule(c, 'Choose a listed country.');
+  if (existing) return existing.id === country ? existing : changeSeat(g, map, existing, c);
   const occupied = g.players.find(p => p.id === country);
   if (occupied && profileId === g.hostId && occupied.kind === 'bot' && kind === 'human') {
     Object.assign(occupied, { profileId, name: text(name, 'Player name', 40), kind, model: '', persona: '', visibility: 'private' });
@@ -156,9 +156,24 @@ export function join(g, map, { profileId, name, country, kind = 'human', model =
   const p = { id: country, profileId, name: text(name, 'Player name', 40), kind,
     model: String(model).slice(0, 100), persona: String(persona).slice(0, 100), visibility,
     side: `solo:${country}:0`, joinedAt: 0, eliminatedAt: null, orderTicks: [], lastChat: null };
-  g.players.push(p);
-  for (const id of c.start) Object.assign(province(g, id), { owner: country, troops: c.garrisons?.[id] ?? c.startTroops ?? 10, development: c.development?.[id] ?? 1 });
+  g.players.push(p); seatAt(g, p, c);
   event(g, 'joined', { country, name: p.name, kind }); return p;
+}
+/** Put a lobby seat on country `c`: its id, its solo side and the country's starting provinces. */
+function seatAt(g, p, c) {
+  Object.assign(p, { id: c.id, side: `solo:${c.id}:0` });
+  for (const id of c.start) Object.assign(province(g, id), { owner: c.id, troops: c.garrisons?.[id] ?? c.startTroops ?? 10, development: c.development?.[id] ?? 1 });
+}
+/** Lobby only: a seated player moves to an open country; the host's human seat may swap with a practice bot's. */
+function changeSeat(g, map, p, c) {
+  const other = g.players.find(q => q.id === c.id);
+  requireRule(!other || p.profileId === g.hostId && p.kind === 'human' && other.kind === 'bot',
+    'That country is taken. Choose a different unoccupied country.', 409);
+  const from = map.countries.find(x => x.id === p.id);
+  for (const q of g.provinces) if (q.owner === p.id || other && q.owner === other.id) Object.assign(q, { owner: null, troops: 2, development: 1 });
+  seatAt(g, p, c); if (other) seatAt(g, other, from);
+  event(g, 'seat_changed', { from: from.id, country: c.id, name: p.name, ...(other ? { swappedWith: other.name } : {}) });
+  return p;
 }
 export function start(g) {
   requireRule(g.status === 'lobby', 'Match has already started.', 409);

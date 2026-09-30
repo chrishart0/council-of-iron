@@ -8,7 +8,7 @@ const help=`Council of Iron CLI (Node 22.13+)
 
   register NAME                      Save a local player identity (mode 0600)
   matches                            List rooms
-  create NAME [standard|quick]       Create a room; requires register
+  create [NAME] [standard|quick]     Create a room (random name if omitted); requires register
   join MATCH COUNTRY [NAME] [public|private]  Join as an agent; private by default
   start                              Host: start the match
   bots                               Host: fill empty seats with practice bots
@@ -74,7 +74,7 @@ try {
   switch(command){
     case 'register':result=await client.register(args[0]);break;
     case 'matches':result=await client.list();break;
-    case 'create':result=await client.create(args[0],args[1] || 'standard');break;
+    case 'create':{const [name,preset]=['standard','quick'].includes(args[0])?[undefined,args[0]]:args;result=await client.create(name,preset || 'standard');break;}
     case 'join':result=await client.join(args[0],args[1],args[2],'','',args[3] || 'private');break;
     case 'start':result=await client.start();break;
     case 'bots':result=await client.bots();break;

@@ -28,9 +28,16 @@ export class SoundBoard {
     this.ctx = null; this.assets = null; this.loading = null; this.room = null; this.threats = null; this.breakSeq = 0;
     this.tension = false; this.music = null; this.duckUntil = 0;
     this.render();
-    // Browsers block audio before a gesture; so do we, for everything (including the fetches).
-    const unlock = event => { if (event.isTrusted) { this.unlock(); for (const t of ['pointerdown', 'keydown']) removeEventListener(t, unlock, true); } };
-    for (const t of ['pointerdown', 'keydown']) addEventListener(t, unlock, true);
+    // Browsers block audio before a gesture; so do we, for everything (including the fetches). A touch's
+    // pointerdown is not a user activation (its pointerup, touchend and click are), so a context made there can
+    // stay suspended on a phone: every trusted gesture resumes it until it runs.
+    const gestures = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'];
+    const unlock = event => {
+      if (!event.isTrusted) return;
+      this.unlock(); this.syncRunning();
+      if (!this.ctx || this.ctx.state === 'running') for (const t of gestures) removeEventListener(t, unlock, true);
+    };
+    for (const t of gestures) addEventListener(t, unlock, true);
     document.addEventListener('keydown', event => this.shortcut(event));
     document.addEventListener('visibilitychange', () => this.syncRunning());
   }
@@ -107,8 +114,13 @@ export class SoundBoard {
     const decode = async (stem, ext) => this.ctx.decodeAudioData(await (await fetch(`/audio/${stem}.${ext}?v=${manifest.version}`)).arrayBuffer());
     for (const ext of order) {
       try {
-        const [effects, theme, tension] = await Promise.all(['effects', 'theme', 'tension'].map(stem => decode(stem, ext)));
-        this.assets = { manifest, effects, theme, tension, format: ext };
+        const [theme, tension, effects] = ['theme', 'tension', 'effects'].map(stem => decode(stem, ext));
+        effects.catch(() => {}); // awaited below
+        // The music starts as soon as its loops are decoded; the cues follow.
+        const [themeBuffer, tensionBuffer] = await Promise.all([theme, tension]);
+        this.assets = { manifest, theme: themeBuffer, tension: tensionBuffer, effects: null, format: ext };
+        this.startMusic();
+        this.assets.effects = await effects;
         if (this.root) this.root.dataset.loaded = ext;
         return;
       } catch (error) { if (ext === order.at(-1)) throw error; }
@@ -143,7 +155,7 @@ export class SoundBoard {
   }
   playCue(r) {
     const cue = this.assets?.manifest.cues[r.cue];
-    if (!cue || !this.ctx) return;
+    if (!cue || !this.ctx || !this.assets.effects) return;
     const source = this.ctx.createBufferSource(); source.buffer = this.assets.effects; source.connect(this.effectsBus);
     const at = this.ctx.currentTime + 0.01; source.start(at, cue.start, cue.duration);
     if (isStinger(r.cue)) { // duck the music under the stinger, then release
