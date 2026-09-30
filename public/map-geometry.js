@@ -18,6 +18,20 @@ export function insideRings(p, rings) {
   }
   return inside;
 }
+/** Repeated hit tests on an immutable map shape. Reject rings outside their bounds before walking the coast;
+ * keep the same even-odd fill (including holes and islands) as insideRings. */
+export function ringHitTest(rings) {
+  const bounded = rings.map(ring => {
+    let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
+    for (const [x, y] of ring) { left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y); }
+    return { ring, left, right, top, bottom };
+  });
+  return p => {
+    let inside = false;
+    for (const b of bounded) if (p[0] >= b.left && p[0] <= b.right && p[1] >= b.top && p[1] <= b.bottom && insideRings(p, [b.ring])) inside = !inside;
+    return inside;
+  };
+}
 const CELL = 4;
 /** Index every boundary segment on a coarse grid; query returns segments near a point. */
 export function segmentIndex(provinces) {

@@ -50,7 +50,7 @@ SNAPSHOT = r'''() => {
   const anims = document.getAnimations().filter(a => a.playState === 'running');
   return { polls: P.polls, pollBytes: P.pollBytes.slice(), wire: P.wire.slice(), added: P.added, addedTree: P.addedTree, removed: P.removed, attrs: P.attrs, text: P.text,
     longTasks: P.longTasks.slice(), raf: P.raf, intervals: [...P.intervals.values()],
-    nodes: all.length, svgNodes: document.querySelectorAll('#map *').length, uses: document.querySelectorAll('#map use').length,
+    nodes: all.length, svgNodes: document.querySelectorAll('#map *, #map-armies *').length, uses: document.querySelectorAll('#map use, #map-armies use').length,
     heavy, running: anims.length, infinite: anims.filter(a => a.effect?.getTiming().iterations === Infinity).length,
     tick: document.getElementById('clock')?.textContent };
 }'''

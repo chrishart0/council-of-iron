@@ -34,7 +34,7 @@ SEA_NEAR_TARGET = """() => {
   return null;
 }"""
 SMALL_TARGETS = """() => [...document.querySelectorAll('#stage button,#stage input,#stage [role=button]')]
-  .filter(e=>e.checkVisibility({visibilityProperty:true})&&!e.closest('#map')).map(e=>[e.id||String(e.className)||e.tagName,e.getBoundingClientRect()])
+  .filter(e=>e.checkVisibility({visibilityProperty:true})&&!e.closest('#map,#map-armies')).map(e=>[e.id||String(e.className)||e.tagName,e.getBoundingClientRect()])
   .filter(([,r])=>r.width>0&&(r.height<43.5||r.width<43.5)).map(([n,r])=>n+' '+Math.round(r.width)+'x'+Math.round(r.height))"""
 
 

@@ -76,6 +76,7 @@
 .legend-war i{height:4px;width:16px;background:repeating-linear-gradient(90deg,#e0372b 0 2px,transparent 2px 4px)!important;border:0}
 @media(max-width:520px){.atlas-legend{font-size:10px;padding:5px 7px}.atlas-mode-toggle{min-height:32px}}
 /* Moving armies: the top map layer; prominent, constant screen size, small hit area. */
+.atlas-armies{position:absolute;z-index:0;display:block;pointer-events:none;touch-action:none;user-select:none;-webkit-user-select:none;contain:strict}
 .map-armies .moving-army{pointer-events:none;cursor:pointer}
 .map-armies .army-hit{fill:transparent;pointer-events:all}
 .map-armies .moving-army.tap-blocked .army-hit{pointer-events:none}

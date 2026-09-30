@@ -234,7 +234,7 @@ def wrap_checks(page,report,capture):
     assert len(pacific)==3 and all(wd<640 for wd in pacific),widths
     assert all(wd<640 for _,wd in widths),widths
     ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
-    assert page.locator('#map use.world-copy').count()==6  # base, lines and effects, each repeated at ±1 world
+    assert page.locator('#map use.world-copy,#map-armies use.world-copy').count()==6  # base, lines and effects, each repeated at ±1 world
     page.set_viewport_size({'width':390,'height':844});page.wait_for_timeout(150)
     camera(page,'world');drag_map(page,-page.locator('#map').bounding_box()['width']*1.5);page.wait_for_timeout(100)
     x,y,w,h=view_box(page);assert 0<=x+w/2<1280 and w<=1280.5
@@ -267,16 +267,16 @@ RELATIONS_AUDIT='''async room => {
 }'''
 
 ARMY_AUDIT='''() => {
-  const svg=document.querySelector('#map'),kids=[...svg.children],index=e=>kids.indexOf(e);
-  const armies=svg.querySelector('.map-armies'),lastUse=Math.max(...[...svg.querySelectorAll(':scope>use')].map(index));
+  const svg=document.querySelector('#map');
+  const overlay=document.getElementById(`${svg.id}-armies`),armies=overlay.querySelector('.map-armies');
   const shown=e=>{for(let n=e;n&&n!==svg;n=n.parentElement)if(getComputedStyle(n).display==='none')return false;const r=e.getBoundingClientRect();return r.width>0&&r.height>0;};
   const inter=(a,b)=>a.left<b.right-1&&b.left<a.right-1&&a.top<b.bottom-1&&b.top<a.bottom-1;
   const box=svg.getBoundingClientRect(),on=r=>r.right>box.left&&r.left<box.right&&r.bottom>box.top&&r.top<box.bottom;
-  const marks=[...svg.querySelectorAll('.moving-army')].filter(g=>!g.classList.contains('engaged')).map(g=>g.querySelector('.army-arrow')).filter(shown).map(e=>e.getBoundingClientRect()).filter(on);
+  const marks=[...document.getElementById(`${svg.id}-armies`).querySelectorAll('.moving-army')].filter(g=>!g.classList.contains('engaged')).map(g=>g.querySelector('.army-arrow')).filter(shown).map(e=>e.getBoundingClientRect()).filter(on);
   const names=[...svg.querySelectorAll('.map-counter:not(.counter-merged) .province-name,.country-name,.alliance-label')].filter(shown).map(e=>[e.textContent,e.getBoundingClientRect()]);
-  return {last:svg.lastElementChild===armies,afterEverything:index(armies)>lastUse&&['.map-battles','.map-counters','.map-clusters','.country-names','.alliance-names','.map-effects']
-      .every(s=>{const e=svg.querySelector(s);return e&&(e.closest('[id$="world-fx"]')||e).compareDocumentPosition(armies)&Node.DOCUMENT_POSITION_FOLLOWING;}),
-    inCopies:svg.querySelectorAll('[id$="world-base"] .moving-army,[id$="world-lines"] .moving-army,[id$="world-fx"] .moving-army').length,
+  return {last:overlay.lastElementChild===armies,afterEverything:Boolean(svg.compareDocumentPosition(overlay)&Node.DOCUMENT_POSITION_FOLLOWING)&&['.map-battles','.map-counters','.map-clusters','.country-names','.alliance-names','.map-effects']
+      .every(s=>{const e=svg.querySelector(s)||overlay.querySelector(s);return e&&(e.closest('[id$="world-fx"]')||e).compareDocumentPosition(armies)&Node.DOCUMENT_POSITION_FOLLOWING;}),
+    inCopies:[svg,overlay].reduce((n,e)=>n+e.querySelectorAll('[id$="world-base"] .moving-army,[id$="world-lines"] .moving-army,[id$="world-fx"] .moving-army').length,0),
     visible:marks.length,covered:names.filter(([,r])=>marks.some(m=>inter(r,m))).map(([t])=>t)};
 }'''
 
@@ -346,7 +346,7 @@ def relations_checks(page,report,capture):
         assert not army['covered'],(view,steps,army)
         if view=='europe' and steps==0:assert army['visible']>=2,army
     camera(page,'europe');page.wait_for_timeout(150)
-    page.locator('#map .moving-army:not(.engaged)').first.focus()
+    page.locator('#map-armies .moving-army:not(.engaged)').first.focus()
     expect(page.locator('.atlas-tooltip').first).to_contain_text('→');expect(page.locator('.atlas-tooltip').first).to_contain_text('troops')
     capture('17-armies-on-top.png',900)
     ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
@@ -593,7 +593,7 @@ def relation_checks(page,server,report,capture):
     expect(dialog.locator('.war-confirm')).to_contain_text('Your allies join you');expect(dialog.locator('.war-confirm')).to_contain_text('Qing')
     page.keyboard.press('Escape');expect(dialog).to_be_hidden();page.keyboard.press('Escape')
     report['assertions'].append('As an alliance member, war on a neutral country is one Declare war with a confirmation that names the allies drawn in (Escape keeps the peace).')
-    expect(page.locator('#map .map-effect')).to_have_count(0,timeout=6000)  # the live alliance effect ends before the effect-scope check
+    expect(page.locator('#map .map-effect,#map-armies .map-effect')).to_have_count(0,timeout=6000)  # the live alliance effect ends before the effect-scope check
     report['assertions'].append('Alliances from the country card: Propose alliance → name → Send; the card then reads ALLIANCE OFFER PENDING, then ALLIANCE FORMING (dashed band in the leaderboard) during the notice, then active in the HUD, the leaderboard and the alliance card; bands use the same colour as the shared allianceColors helper and the World thread shows the alliance marker (relations.js, also used by the map blocs); a hostile alliance name renders only as text.')
 
 # iPhone Safari has no element Fullscreen API: simulate it, so only the CSS pseudo-fullscreen can work.
@@ -705,18 +705,18 @@ EFFECT_CHECK='''async () => {
   const accepted=good.map(([k,d])=>atlas.effect(k,d));
   let threw=false,rejected=[];
   try{rejected=bad.map(args=>atlas.effect(...args));}catch(e){threw=true;}
-  const effects=[...svg.querySelectorAll('.map-effect')];
+  const motion=document.getElementById(`${svg.id}-armies`),effects=[...svg.querySelectorAll('.map-effect'),...motion.querySelectorAll('.map-effect')];
   const result={kinds:[...MAP_EFFECTS],accepted,rejected,threw,count:effects.length,
     hidden:svg.querySelector('.map-effects').getAttribute('aria-hidden'),
-    ids:[...svg.querySelectorAll('.map-effects [id]')].length,
-    leaked:document.querySelectorAll('#map .map-effect').length,
+    ids:[...svg.querySelectorAll('.map-effects [id]'),...motion.querySelectorAll('.map-effects [id]')].length,
+    leaked:document.querySelectorAll('#map .map-effect,#map-armies .map-effect').length,
     still:effects.every(e=>e.classList.contains('still')),
-    animations:[...svg.querySelectorAll('.map-effect *')].map(e=>getComputedStyle(e).animationName).filter(n=>n!=='none').length};
+    animations:[...svg.querySelectorAll('.map-effect *'),...motion.querySelectorAll('.map-effect *')].map(e=>getComputedStyle(e).animationName).filter(n=>n!=='none').length};
   // A march across the Pacific: its trace and marker take the short way over the dateline.
   const t=state.tick,from=map.provinces.find(p=>p.id==='west-us'),to=map.provinces.find(p=>p.id==='japan');
   atlas.update({...state,you:'usa',armies:[...state.armies,{id:'wrap-test',country:'usa',from:'west-us',to:'japan',amount:30,departedAt:t-5,arrivesAt:t+5}]},null,'japan');
   const trail=[...svg.querySelectorAll('.army-trail')].map(p=>p.getBBox().width);
-  const marker=[...svg.querySelectorAll('.moving-army')].map(g=>Number(g.getAttribute('transform').slice('translate('.length).split(' ')[0]));
+  const marker=[...document.getElementById(`${svg.id}-armies`).querySelectorAll('.moving-army')].map(g=>Number(g.getAttribute('transform').slice('translate('.length).split(' ')[0]));
   const wrap=d=>Math.abs(d-1280*Math.round(d/1280));
   result.pacificTrail=Math.max(...trail);result.pacificMarkerFromOrigin=Math.min(...marker.map(x=>wrap(x-from.x)));
   result.shortWay=wrap(to.x-from.x);
@@ -827,7 +827,7 @@ def mobile_checks(browser,url,identity,report,out):
             for _ in range(5):page.keyboard.press('e')
             page.locator('#map').scroll_into_view_if_needed();page.wait_for_timeout(250)
             departing=page.evaluate('''()=>{const c=document.querySelector('#marker-england .counter-body').getBoundingClientRect();
-              return [...document.querySelectorAll('#map .moving-army:not(.engaged)')].map(g=>{const r=g.querySelector('.army-arrow').getBoundingClientRect();
+              return [...document.querySelectorAll('#map-armies .moving-army:not(.engaged)')].map(g=>{const r=g.querySelector('.army-arrow').getBoundingClientRect();
                 return {blocked:g.classList.contains('tap-blocked'),hit:g.querySelector('.army-hit').getBoundingClientRect().width,over:r.left<c.right+4&&c.left-4<r.right&&r.top<c.bottom+4&&c.top-4<r.bottom};}).filter(a=>a.over);}''')  # touching within 4 px
             assert departing and all(a['blocked'] for a in departing) and all(a['hit']<=18 for a in departing),departing
             body=page.locator('#marker-england .counter-body').bounding_box()
@@ -859,9 +859,9 @@ def replay_parity_checks(page,report,capture):
     expect(page.locator('#replay-feed .replay-row.current')).to_contain_text('Pacific Pact')
     capture('10b-replay-history.png')
     page.locator('#replay-slider').fill('130');page.locator('#replay-slider').fill('120');page.wait_for_timeout(200)
-    assert page.locator('#review-map .map-effect').count()==0,'scrubbing plays no effects'
+    assert page.locator('#review-map .map-effect,#review-map-armies .map-effect').count()==0,'scrubbing plays no effects'
     page.locator('#replay-speed [data-speed="4"]').click();page.locator('#replay-play').click()
-    expect(page.locator('#review-map .map-effect').first).to_be_attached(timeout=6000)  # the tick-125 capture while playing forward
+    expect(page.locator('#review-map .map-effect,#review-map-armies .map-effect').first).to_be_attached(timeout=6000)  # the tick-125 capture while playing forward
     page.locator('#replay-play').click()
     ids=page.locator('[id]').evaluate_all('(n)=>n.map(e=>e.id)');assert len(ids)==len(set(ids))
     report['assertions'].append('Replay parity (short recorded match whose room announced public alliance chat): the shared team leaderboard shows the board at the scrubbed tick (no alliance before activation, Pacific Pact after); the history lists public events and the revealed alliance chat only up to the scrubbed tick, as text; an Alliance chat chip filters; selecting a row seeks the scrubber and marks it current; scrubbing plays no map effects, playing forward does; IDs stay unique.')
@@ -896,7 +896,7 @@ def coach_and_drag_checks(browser,url,identity,report,out):
     before=page.locator('#map').get_attribute('viewBox')
     touch_drag('#marker-ireland .counter-body',target)
     assert page.locator('#map').get_attribute('viewBox')!=before,'an unselected drag should pan'
-    expect(page.locator('#card')).to_be_hidden();assert page.locator('#map .draft-arrow').count()==0
+    expect(page.locator('#card')).to_be_hidden();assert page.locator('#map-armies .draft-arrow').count()==0
     page.locator('#home-view').click();page.wait_for_timeout(250)
     # Tap Ireland (selected), then drag from its counter: now the drag marches.
     target='#marker-england .counter-body' if page.locator('#marker-england .counter-body').is_visible() else '#map .battle-counter[data-province="england"]'
@@ -905,13 +905,13 @@ def coach_and_drag_checks(browser,url,identity,report,out):
     cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':x0,'y':y0,'id':1}]})
     for i in range(1,13):cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':x0+(x1-x0)*i/12,'y':y0+(y1-y0)*i/12,'id':1}]})
     page.wait_for_timeout(80)
-    expect(page.locator('#map')).to_have_class(re.compile('command-drag'));expect(page.locator('#map .draft-arrow.snapped')).to_have_count(1)
-    assert re.fullmatch(r'\d+ · \d+s',page.locator('#map .draft-label text').text_content()),page.locator('#map .draft-label text').text_content()  # troops · ETA
+    expect(page.locator('#map')).to_have_class(re.compile('command-drag'));expect(page.locator('#map-armies .draft-arrow.snapped')).to_have_count(1)
+    assert re.fullmatch(r'\d+ · \d+s',page.locator('#map-armies .draft-label text').text_content()),page.locator('#map-armies .draft-label text').text_content()  # troops · ETA
     page.screenshot(path=str(out/'22-touch-drag.png'))
     cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
     expect(page.locator('#card')).to_have_attribute('data-kind','province');expect(page.locator('#card-title')).to_have_text('Great Britain')
     expect(page.locator('#card-sub')).to_contain_text('from Ireland');check_commit(page,'390 after drag')
-    assert page.locator('#map .draft-arrow').count()==1  # the order arrow stays while the card is open
+    assert page.locator('#map-armies .draft-arrow').count()==1  # the order arrow stays while the card is open
     page.screenshot(path=str(out/'23-after-drag.png'))
     assert not errors,errors
     context.close()

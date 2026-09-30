@@ -1,5 +1,5 @@
 import { journeyPoint, friendlyPath } from './movement.js';
-import { borderNetwork, insideRings, provinceRings, terrainMarks } from './map-geometry.js';
+import { borderNetwork, provinceRings, ringHitTest, terrainMarks } from './map-geometry.js';
 import { allianceColors, atWar, battleColors, coalitions, formingAlliances, relationsOf, teamColor, threatening, warKey } from './relations.js';
 import { faction } from './presentation.js';
 import { setAttr, setText } from './ui.js';
@@ -33,8 +33,7 @@ const FACTORY = 'M-8 7V-1l4.5 3V-1l4.5 3V-7h3.5V7Z';
 const ARROW = 'M-6.5-5.5L7.5 0-6.5 5.5-3 0Z';
 const counterWidth = troops => Math.max(32, String(troops).length * 7 + 15);
 const networks = new WeakMap();
-/** Army interpolation frame rate. Each frame repaints the whole map SVG, and armies cross a province in seconds:
- * 30 fps on desktop, 10 on touch screens (phones), where that repaint is what heats the device. */
+/** Army interpolation frame rate: 30 fps on desktop, 10 on touch screens. The moving layer paints separately. */
 const ARMY_FPS = matchMedia('(pointer: coarse)').matches ? 10 : 30;
 /** World width in map units: the map repeats horizontally at this period. */
 export const WORLD = 1280;
@@ -78,8 +77,10 @@ export class Atlas {
     this.positionsById = Object.fromEntries(map.provinces.map(p => [p.id, { x: p.x, y: p.y }]));
     this.places = new Map(map.provinces.map(p => [p.id, p]));
     this.rings = new Map(map.provinces.map(p => [p.id, provinceRings(p.path)]));
+    this.landHits = new Map([...this.rings].map(([id, rings]) => [id, ringHitTest(rings)]));
     // Impassable terrain (map.terrain): unowned land between provinces, never a province or a neighbour.
     this.wastes = new Map((map.terrain || []).map(t => [t.id, { ...t, rings: provinceRings(t.path) }]));
+    this.terrainHits = new Map([...this.wastes].map(([id, t]) => [id, ringHitTest(t.rings)]));
     this.countries = new Map(map.countries.map(c => [c.id, c]));
     this.landNeighbors = new Map(map.provinces.map(p => [p.id, []]));
     for (const e of map.edges) if (!e.sea) { this.landNeighbors.get(e.from)?.push(e.to); this.landNeighbors.get(e.to)?.push(e.from); }
@@ -194,8 +195,11 @@ export class Atlas {
     // Bottom to top: ocean → fills/borders/blocs/fronts (copied) → routes (copied) → names →
     // counters → battles → effects (copied) → moving armies, drawn once above every copy.
     const copies = layer => [-WORLD, WORLD].map(x => node('use', { href: `#${layer.id}`, x, class: 'world-copy', 'aria-hidden': 'true', ...(layer === this.base ? {} : { 'pointer-events': 'none' }) }));
-    svg.append(...copies(this.base), this.base, ...copies(this.lines), this.lines, this.allianceNames, this.countryNames, this.leaders, markers, this.clusterLayer, this.battleLayer,
-      ...copies(this.fx), this.fx, this.draftLayer = node('g', { class: 'order-draft', 'pointer-events': 'none', 'aria-hidden': 'true' }), this.marches);
+    svg.append(...copies(this.base), this.base, ...copies(this.lines), this.lines, this.allianceNames, this.countryNames, this.leaders, markers, this.clusterLayer, this.battleLayer);
+    // Moving markers, point effects and order arrows would repaint the entire world inside the terrain SVG.
+    // A separate transparent SVG confines their paint, with the same camera and the same input handlers.
+    this.armySvg = node('svg', { id: `${svg.id}-armies`, class: 'atlas atlas-armies', role: 'group', 'aria-label': 'Moving armies' });
+    this.armySvg.append(...copies(this.fx), this.fx, this.draftLayer = node('g', { class: 'order-draft', 'pointer-events': 'none', 'aria-hidden': 'true' }), this.marches); svg.after(this.armySvg);
     this.tooltip = document.createElement('div'); this.tooltip.className = 'atlas-tooltip'; this.tooltip.hidden = true; svg.parentElement.append(this.tooltip);
     // Map-mode toggle and legend: plain DOM, text only via textContent.
     const legendOptions = options?.legend || {};
@@ -210,32 +214,37 @@ export class Atlas {
     (this.chipDetached ? legendOptions.container : svg.parentElement).append(this.chip);
     this.setLegendPlacement(legendOptions.placement);
     this.setLegendCollapsed(legendOptions.collapsed ?? matchMedia('(max-width: 520px)').matches);
-    svg.addEventListener('focusin', event => {
-      const army = event.target.closest?.('[data-army]')?.dataset.army;
-      if (army) { this.showArmy(army, event.target.getBoundingClientRect()); return; }
-      const id = event.target.closest?.('[data-province]')?.dataset.province;
-      this.hoverCountry(this.byId?.get(id)?.owner || null);
-    });
-    svg.addEventListener('focusout', () => { this.hoverCountry(null); this.tooltip.hidden = true; });
-    svg.addEventListener('contextmenu', event => event.preventDefault());
-    svg.addEventListener('wheel', event => { event.preventDefault(); this.zoom(event.deltaY > 0 ? 1.12 : .89, event.clientX, event.clientY); }, { passive: false });
-    svg.addEventListener('pointerdown', event => this.down(event));
-    svg.addEventListener('pointermove', event => this.move(event));
-    svg.addEventListener('pointerup', event => this.up(event));
-    svg.addEventListener('pointercancel', event => { if (this.gesture?.command) this.endDraft(null); this.endLasso(); clearTimeout(this.pressTimer); this.pointers.delete(event.pointerId); this.gesture = null; this.dragged = true; });
-    // A lifted finger also "leaves": a tapped tooltip (terrain) stays until the next touch.
-    svg.addEventListener('pointerleave', event => { if (event.pointerType === 'touch') return; this.tooltip.hidden = true; this.hoverCountry(null); });
+    this.inputController = new AbortController();
+    for (const surface of [svg, this.armySvg]) {
+      const listen = (type, handler, options = {}) => surface.addEventListener(type, handler, { ...options, signal: this.inputController.signal });
+      listen('focusin', event => {
+        const army = event.target.closest?.('[data-army]')?.dataset.army;
+        if (army) { this.showArmy(army, event.target.getBoundingClientRect()); return; }
+        const id = event.target.closest?.('[data-province]')?.dataset.province;
+        this.hoverCountry(this.byId?.get(id)?.owner || null);
+      });
+      listen('focusout', () => { this.hoverCountry(null); this.tooltip.hidden = true; });
+      listen('contextmenu', event => event.preventDefault());
+      listen('wheel', event => { event.preventDefault(); this.zoom(event.deltaY > 0 ? 1.12 : .89, event.clientX, event.clientY); }, { passive: false });
+      listen('pointerdown', event => this.down(event));
+      listen('pointermove', event => this.move(event));
+      listen('pointerup', event => this.up(event));
+      listen('pointercancel', event => { if (this.gesture?.command) this.endDraft(null); this.endLasso(); clearTimeout(this.pressTimer); this.pointers.delete(event.pointerId); this.gesture = null; this.dragged = true; });
+      // A lifted finger also "leaves": a tapped tooltip (terrain) stays until the next touch.
+      listen('pointerleave', event => { if (event.pointerType === 'touch') return; this.tooltip.hidden = true; this.hoverCountry(null); });
+      listen('keydown', event => {
+        // Arrow keys pan (wrapping east–west); never while typing, since only map elements listen.
+        const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
+        if (step) { event.preventDefault(); this.pan(step[0] * this.view.w * .15, step[1] * this.view.h * .15); return; }
+        if (!['Enter', ' '].includes(event.key)) return;
+        const cluster = event.target.closest('[data-cluster]')?.dataset.cluster;
+        const id = event.target.closest('[data-province]')?.dataset.province;
+        if (cluster) { event.preventDefault(); this.fit(cluster.split(',')); }
+        else if (id) { event.preventDefault(); onSelect(id, { shiftKey: event.shiftKey, toggle: event.shiftKey || event.ctrlKey || event.metaKey, keyboard: true }); }
+        else { const army = event.target.closest('[data-army]')?.dataset.army; if (army && this.onArmy) { event.preventDefault(); this.onArmy(army); } }
+      });
+    }
     if (!svg.hasAttribute('tabindex')) setAttr(svg, 'tabindex', 0);
-    svg.addEventListener('keydown', event => {
-      // Arrow keys pan (wrapping east–west); never while typing, since only map elements listen.
-      const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
-      if (step) { event.preventDefault(); this.pan(step[0] * this.view.w * .15, step[1] * this.view.h * .15); return; }
-      if (!['Enter', ' '].includes(event.key)) return;
-      const cluster = event.target.closest('[data-cluster]')?.dataset.cluster;
-      const id = event.target.closest('[data-province]')?.dataset.province;
-      if (cluster) { event.preventDefault(); this.fit(cluster.split(',')); }
-      else if (id) { event.preventDefault(); onSelect(id, { shiftKey: event.shiftKey, toggle: event.shiftKey || event.ctrlKey || event.metaKey, keyboard: true }); }
-    });
     this.resize = new ResizeObserver(() => this.applyView()); this.resize.observe(svg);
     this.onVisibility = () => this.animateSoon(); document.addEventListener('visibilitychange', this.onVisibility);
     this.applyView();
@@ -248,11 +257,18 @@ export class Atlas {
     return `M${a.x},${a.y}L${a.x + wrapDelta(b.x - a.x)},${b.y}`;
   }
   coordinates(clientX, clientY) {
+    // The viewBox fills the element (applyView matches its aspect). During a gesture the viewport is fixed:
+    // use that rectangle and the current camera instead of forcing SVG layout after every viewBox write.
+    if (this.pointers.size && this.screenBox?.width > 0) {
+      const box = this.screenBox;
+      return { x: this.view.x + (clientX - box.left) * this.view.w / box.width, y: this.view.y + (clientY - box.top) * this.view.h / box.height };
+    }
     const transform = this.svg.getScreenCTM();
     return transform ? new DOMPoint(clientX, clientY).matrixTransform(transform.inverse()) : { x: 0, y: 0 };
   }
   down(event) {
     if (event.button !== 0 && event.button !== 2) return;
+    this.screenBox = this.svg.getBoundingClientRect();
     this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     this.svg.setPointerCapture(event.pointerId);
     if (this.pointers.size === 1) {
@@ -287,8 +303,8 @@ export class Atlas {
     if (this.gesture.lasso) { if (this.dragged) this.drawLasso(this.gesture.lasso, this.coordinates(event.clientX, event.clientY)); return; }
     if (this.gesture.command) { if (this.dragged) this.dragTo(event.clientX, event.clientY); return; }
     if (this.dragged) {
-      const scale = this.svg.getScreenCTM()?.a || 1;
-      this.view.x = this.gesture.vx - dx / scale; this.view.y = this.gesture.vy - dy / scale; this.applyView();
+      const scale = this.screenBox.width / this.view.w || 1;
+      this.view.x = this.gesture.vx - dx / scale; this.view.y = this.gesture.vy - dy / scale; this.applyView(this.screenBox);
     }
   }
   up(event) {
@@ -333,12 +349,12 @@ export class Atlas {
   }
   provinceAt(point) {
     const x = ((point.x % WORLD) + WORLD) % WORLD;
-    for (const [id, rings] of this.rings) if (insideRings([x, point.y], rings)) return id;
+    for (const [id, contains] of this.landHits) if (contains([x, point.y])) return id;
     return null;
   }
   terrainAt(point) {
     const x = ((point.x % WORLD) + WORLD) % WORLD;
-    for (const [id, t] of this.wastes) if (insideRings([x, point.y], t.rings)) return id;
+    for (const [id, contains] of this.terrainHits) if (contains([x, point.y])) return id;
     return null;
   }
   /** The x of the repeated copy nearest the view centre. */
@@ -406,8 +422,9 @@ export class Atlas {
     if (this.insets && ['left', 'right', 'top', 'bottom'].every(k => next[k] === this.insets[k])) return;
     this.insets = next; this.applyView();
   }
-  applyView() {
-    const rect = this.svg.getBoundingClientRect(), aspect = rect.width > 0 && rect.height > 0 ? rect.width / rect.height : 0;
+  applyView(rect = this.svg.getBoundingClientRect()) {
+    this.screenBox = rect;
+    const aspect = rect.width > 0 && rect.height > 0 ? rect.width / rect.height : 0;
     this.rectWidth = rect.width;
     const cx = this.view.x + this.view.w / 2, cy = this.view.y + this.view.h / 2;
     if (aspect) {
@@ -427,17 +444,18 @@ export class Atlas {
     const t = this.insets?.top || 0, b = this.insets?.bottom || 0, band = rect.height - t - b;
     this.view.y = low > high ? 340 - (band > 0 ? (t + band / 2) * this.view.h / rect.height : this.view.h / 2) : clamp(this.view.y, low, high);
     setAttr(this.svg, 'viewBox', `${this.view.x} ${this.view.y} ${this.view.w} ${this.view.h}`);
+    setAttr(this.armySvg, 'viewBox', this.svg.getAttribute('viewBox'));
     this.requestLayout();
   }
   requestLayout() {
     if (!this.layoutFrame) this.layoutFrame = requestAnimationFrame(() => { this.layoutFrame = null; this.layout(); });
   }
   zoom(factor, clientX, clientY) {
-    const rect = this.svg.getBoundingClientRect();
+    const rect = this.pointers.size && this.screenBox ? this.screenBox : this.svg.getBoundingClientRect();
     const anchor = this.coordinates(clientX ?? rect.left + rect.width / 2, clientY ?? rect.top + rect.height / 2);
     const [minW, maxW] = this.widthLimits(rect), w = clamp(this.view.w * factor, minW, maxW), ratio = w / this.view.w;
     this.view = { x: anchor.x - (anchor.x - this.view.x) * ratio, y: anchor.y - (anchor.y - this.view.y) * ratio, w, h: this.view.h * ratio };
-    this.applyView();
+    this.applyView(rect);
   }
   world() {
     const rect = this.svg.getBoundingClientRect(), [, maxW] = this.widthLimits(rect), l = this.insets?.left || 0, t = this.insets?.top || 0;
@@ -550,11 +568,17 @@ export class Atlas {
     const px = matrix.a, scale = 1 / px, level = this.level(px); this.px = px;
     setAttr(this.grain, 'patternTransform', `scale(${scale})`);
     setData(this.svg, { lod: level }); this.svg.classList.toggle('atlas-zoomed', level === 'near');
+    setData(this.armySvg, { lod: level });
     // Region names are drawn in map units: shown only between legible and crowded sizes.
     setData(this.svg, { world: px >= LOD.regionMin && px < LOD.world });
     // Keep the mode chip inside the visible map, whatever else shares the container.
     // Expose the visible map's insets so CSS can place the key inside it, whatever shares the container.
     const box = this.svg.getBoundingClientRect(), host = this.chip.parentElement?.getBoundingClientRect();
+    const parent = this.svg.parentElement, parentBox = parent.getBoundingClientRect();
+    for (const [key, value] of Object.entries({ left: box.left - parentBox.left - parent.clientLeft + parent.scrollLeft,
+      top: box.top - parentBox.top - parent.clientTop + parent.scrollTop, width: box.width, height: box.height })) {
+      const next = `${value}px`; if (this.armySvg.style[key] !== next) this.armySvg.style[key] = next;
+    }
     if (host && !this.chipDetached) for (const side of ['top', 'right', 'bottom', 'left'])
       this.chip.style.setProperty(`--atlas-map-${side}`, `${Math.max(0, side === 'top' || side === 'left' ? box[side] - host[side] : host[side] - box[side])}px`);
     for (const fx of this.pointEffects) setAttr(fx.g, 'transform', `translate(${fx.x} ${fx.y}) scale(${scale})`);
@@ -716,10 +740,10 @@ export class Atlas {
       const width = text.length * 10.8 + 14, height = 28;
       const mx = best.reduce((n, id) => n + this.places.get(id).x, 0) / best.length, my = best.reduce((n, id) => n + this.places.get(id).y, 0) / best.length;
       const anchors = [{ x: mx, y: my }, ...best.map(id => this.places.get(id)).sort((a, b) => Math.hypot(a.x - mx, a.y - my) - Math.hypot(b.x - mx, b.y - my) || a.id.localeCompare(b.id))];
-      const onLand = (x, y) => owned.some(id => insideRings([x, y], this.rings.get(id)));
+      const onLand = (x, y) => owned.some(id => this.landHits.get(id)([x, y]));
       search: for (const { x, y } of anchors) for (const dy of [0, 30, -30, 48, -48]) {
         const sx = this.near(x), r = { x: sx * px - width / 2, y: y * px + dy - 11, w: width, h: height };
-        if (!onLand(x, y + dy * scale) || overlaps(r)) continue;
+        if (overlaps(r) || !onLand(x, y + dy * scale)) continue;
         specs.push({ bloc: bloc.id, transform: `translate(${sx} ${y + dy * scale}) scale(${scale})`, text, color: bloc.color,
           pips: bloc.members.slice(0, 8).map(id => this.countries.get(id)?.color || NEUTRAL) });
         taken.push(r); break search;
@@ -750,10 +774,10 @@ export class Atlas {
       const mx = best.reduce((n, id) => n + this.places.get(id).x, 0) / best.length, my = best.reduce((n, id) => n + this.places.get(id).y, 0) / best.length;
       const anchors = [{ x: mx, y: my }, ...best.map(id => this.places.get(id)).sort((a, b) => Math.hypot(a.x - mx, a.y - my) - Math.hypot(b.x - mx, b.y - my) || a.id.localeCompare(b.id))];
       const text = c.name.toUpperCase(), width = text.length * 8.4 + 8, height = 15;
-      const onLand = (x, y) => best.some(id => insideRings([x, y], this.rings.get(id)));
+      const onLand = (x, y) => best.some(id => this.landHits.get(id)([x, y]));
       search: for (const { x, y } of anchors) for (const dy of [0, -24, 24, -36, 36]) {
         const sx = this.near(x), r = { x: sx * px - width / 2, y: y * px + dy - height / 2, w: width, h: height };
-        if (!onLand(x, y + dy * scale) || taken.some(q => r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.y + q.h && q.y < r.y + r.h)) continue;
+        if (taken.some(q => r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.y + q.h && q.y < r.y + r.h) || !onLand(x, y + dy * scale)) continue;
         specs.push({ country: c.id, transform: `translate(${sx} ${y + dy * scale}) scale(${scale})`, text }); taken.push(r); break search;
       }
     }
@@ -779,7 +803,8 @@ export class Atlas {
       const role = picked.has(p.id) ? 'selected' : p.id === destination ? 'destination' : (reach ? reach.has(p.id) : neighbors.includes(p.id)) ? 'neighbor' : '';
       const how = reach && role === 'neighbor' ? ` reach-${lit ? lit.get(p.id) : friendly(p.owner) ? 'friendly' : 'attack'}` : '';
       setAttr(shape, 'class', `province ${role}${how}${p.owner ? ' occupied' : ''}${threatened.has(p.id) ? ' threatened' : ''}`);
-      setAttr(marker.group, 'class', `map-counter ${role}${p.owner === state.you && state.you ? ' owned' : ''}${threatened.has(p.id) ? ' threatened' : ''}`);
+      setAttr(marker.group, 'class', ['map-counter', role, p.owner === state.you && state.you && 'owned',
+        threatened.has(p.id) && 'threatened', marker.group.classList.contains('counter-merged') && 'counter-merged'].filter(Boolean).join(' '));
       setAttr(marker.disc, 'stroke', this.countries.get(p.owner)?.color || NEUTRAL);
       setAttr(marker.stripe, 'fill', this.countries.get(p.owner)?.color || NEUTRAL);
       const width = counterWidth(p.troops); setAttr(marker.disc, 'width', width); setAttr(marker.disc, 'x', -width / 2); setAttr(marker.stripe, 'x', -width / 2);
@@ -1057,7 +1082,9 @@ export class Atlas {
   effect(kind, data) {
     try {
       if (!MAP_EFFECTS.includes(kind) || !data || typeof data !== 'object') return false;
-      const still = this.reducedMotion || matchMedia('(prefers-reduced-motion: reduce)').matches;
+      // On touch screens these are brief static highlights: fading a province or alliance outline animates
+      // inside the terrain layer and would repaint the whole world for seconds after each piece of news.
+      const still = this.reducedMotion || matchMedia('(prefers-reduced-motion: reduce), (pointer: coarse)').matches;
       const known = ids => Array.isArray(ids) ? [...new Set(ids.filter(id => typeof id === 'string' && this.countries.has(id)))] : [];
       const province = typeof data.province === 'string' && this.places.get(data.province);
       const g = node('g', { class: `map-effect fx-${kind.replace('_', '-')}${still ? ' still' : ''}` });
@@ -1172,7 +1199,7 @@ export class Atlas {
     const drag = this.dragging, draft = drag ? { sources: [drag.from], to: drag.to, point: drag.to ? null : drag.point, label: drag.label } : this.draftState;
     this.svg.classList.toggle('command-drag', Boolean(drag));
     if (!draft) return;
-    const px = this.svg.getScreenCTM()?.a || 1, target = draft.to ? this.places.get(draft.to) : draft.point;
+    const px = this.dragging ? this.screenBox.width / this.view.w || 1 : this.svg.getScreenCTM()?.a || 1, target = draft.to ? this.places.get(draft.to) : draft.point;
     if (!target) return;
     const first = this.places.get(draft.sources[0]); if (!first) return;
     const tx = draft.to ? this.near(target.x) : target.x, ty = target.y;
@@ -1200,7 +1227,7 @@ export class Atlas {
     const from = this.gesture?.command; if (!from) return;
     if (!this.dragging) this.dragHooks?.begin?.(from);
     // Legal targets: the optional drag hook (neighbours plus provinces reached through your own and allied land), else neighbours.
-    const neighbors = this.dragHooks?.targets?.(from) || this.places.get(from)?.neighbors || [], point = this.coordinates(clientX, clientY), px = this.svg.getScreenCTM()?.a || 1;
+    const neighbors = this.dragHooks?.targets?.(from) || this.places.get(from)?.neighbors || [], point = this.coordinates(clientX, clientY), px = this.screenBox.width / this.view.w || 1;
     const el = document.elementFromPoint(clientX, clientY);
     let to = el?.closest?.('[data-province]')?.dataset.province || null;
     const cluster = el?.closest?.('[data-cluster]')?.dataset.cluster;
@@ -1235,11 +1262,11 @@ export class Atlas {
       return q.y >= y0 && q.y <= y1 && [-WORLD, 0, WORLD, 2 * WORLD].some(k => q.x + k >= x0 && q.x + k <= x1); }).map(p => p.id);
   }
   destroy() {
-    this.destroyed = true; clearTimeout(this.frame); this.frame = null; document.removeEventListener('visibilitychange', this.onVisibility);
+    this.destroyed = true; this.inputController.abort(); clearTimeout(this.frame); this.frame = null; document.removeEventListener('visibilitychange', this.onVisibility);
     if (this.layoutFrame) cancelAnimationFrame(this.layoutFrame); this.layoutFrame = null;
     for (const t of this.timers) clearTimeout(t); this.timers.clear(); clearTimeout(this.pressTimer);
     clearTimeout(this.hoverTimer); if (this.relationsFrame) cancelAnimationFrame(this.relationsFrame);
-    this.resize.disconnect(); this.tooltip.remove(); this.chip.remove();
+    this.resize.disconnect(); this.tooltip.remove(); this.chip.remove(); this.armySvg.remove();
   }
   /** Army interpolation: a capped frame rate (ARMY_FPS, lower on touch devices), and no loop at all while nothing
    * marches, the match is not running, motion is reduced or the page is hidden. update() and visibility restart it. */

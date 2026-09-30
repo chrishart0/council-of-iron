@@ -18,11 +18,46 @@ THROTTLE = 4
 BUDGET = {'busy_pct': 60, 'long_task_ms': 200, 'infinite_anims': 0, 'poll_wire_kb': 15, 'node_growth': 1.25,
           'heap_growth_mb': 16}
 
-# Remember the World thread's rows (key, content, node); later, a row showing the same key and content must be the same node.
-TAG = """() => { window.__before = new Map([...document.querySelectorAll('#comms .cx-rows > li')].map(e => [e.__key, { html: e.__html, node: e }]));
-  return window.__before.size; }"""
-RECREATED = """() => [...document.querySelectorAll('#comms .cx-rows > li')].filter(e => { const b = window.__before.get(e.__key);
-  return b && b.html === e.__html && b.node !== e; }).length"""
+# Compare each list update: continuously present, unchanged rows retain their nodes. Temporary threat rows and
+# their minute separators may disappear and later return; an eight-second before/after snapshot mislabels that.
+TAG = """() => {
+  const list = document.querySelector('#comms .cx-rows');
+  const read = () => new Map([...list.children].map(e => [e.__key, { html: e.__html, node: e }]));
+  const watch = window.__threadWatch = { rows: read(), recreated: 0, keys: [] };
+  watch.observer = new MutationObserver(() => {
+    const next = read();
+    for (const [key, e] of next) { const b = watch.rows.get(key);
+      if (b && b.html === e.html && b.node !== e.node) { watch.recreated++; watch.keys.push(key); }
+    }
+    watch.rows = next;
+  });
+  watch.observer.observe(list, { childList: true }); return watch.rows.size;
+}"""
+RECREATED = """() => { const w = window.__threadWatch; w.observer.disconnect(); w.rows.clear(); return w.recreated; }"""
+
+def check_row_watch(browser):
+    """The probe catches an unchanged replacement and permits a temporary row to leave and return."""
+    page = browser.new_page()
+    try:
+        page.set_content('<div id="comms"><ul class="cx-rows"></ul></div>')
+        page.evaluate("""() => { window.__makeRow = key => {
+          const e = document.createElement('li'); e.__key = key; e.__html = key; e.textContent = key; return e;
+        }; document.querySelector('.cx-rows').append(__makeRow('message'), __makeRow('separator')); }""")
+        assert page.evaluate(TAG) == 2
+        page.evaluate("""async () => {
+          document.querySelector('.cx-rows').firstChild.replaceWith(__makeRow('message'));
+          await new Promise(r => setTimeout(r, 0));
+        }""")
+        assert page.evaluate(RECREATED) == 1, 'row probe missed an unchanged replacement'
+        assert page.evaluate(TAG) == 2
+        page.evaluate("""async () => {
+          const list = document.querySelector('.cx-rows'); list.lastChild.remove();
+          await new Promise(r => setTimeout(r, 0)); list.append(__makeRow('separator'));
+          await new Promise(r => setTimeout(r, 0));
+        }""")
+        assert page.evaluate(RECREATED) == 0, 'row probe confused a temporary separator with a retained row'
+    finally:
+        page.close()
 
 def main():
     parser = argparse.ArgumentParser(); parser.add_argument('--artifacts', default='artifacts/perf'); parser.add_argument('--executable')
@@ -42,6 +77,7 @@ def main():
         report['room'] = {'tick': start['tick'], 'armies': len(start['armies']), 'battles': len(start['battles']), 'wars': len(start['wars'])}
         with sync_playwright() as p:
             browser = p.chromium.launch(**({'executable_path': args.executable} if args.executable else {}))
+            check_row_watch(browser); report['rowWatchSelfTest'] = 'passed'
             context, page = open_match(browser, url, me, room, p.devices['Pixel 7'], INIT)
             cdp = context.new_cdp_session(page); cdp.send('Performance.enable')
             cdp.send('Emulation.setCPUThrottlingRate', {'rate': THROTTLE})
@@ -64,6 +100,8 @@ def main():
             tagged = page.evaluate(TAG)
             thread = window(page, cdp, 8); report['world_thread'] = thread
             recreated = page.evaluate(RECREATED); report['rows'] = {'tagged': tagged, 'recreated': recreated}
+            if recreated:
+                report['rows']['recreatedKeys'] = page.evaluate("() => window.__threadWatch.keys")
             assert tagged > 10 and recreated == 0, ('thread rows re-created by polling', report['rows'])
             timing(thread['busy_pct'] < BUDGET['busy_pct'], ('main thread busy with Messages open', thread))
             page.evaluate("() => document.querySelector('#comms .cx-close')?.click()")
@@ -97,8 +135,9 @@ def main():
                 if s['status'] != 'finished':
                     page.wait_for_function("() => document.body.dataset.status === 'finished'",timeout=120000)
                 review_heaps=[]
+                page.locator('#aar-back').click()
+                page.wait_for_selector(f'#rooms [data-room="{room}"]')
                 for _ in range(3):
-                    page.locator('#aar-back').click()
                     page.locator(f'#rooms [data-room="{room}"]').click()
                     page.wait_for_function("() => document.body.dataset.status === 'finished' && !document.getElementById('result').hidden")
                     page.wait_for_timeout(100)

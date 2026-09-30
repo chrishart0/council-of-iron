@@ -2,6 +2,28 @@
 
 Actual test evidence only, newest first. Automated self-play and bot matches check that the rules hold and that matches resolve; they do not show balance or that people enjoy the game.
 
+## Mobile rendering investigation — 30 September 2026
+
+A human reported whole-game lag after a mobile round on a Samsung S25 Ultra, despite the earlier performance
+changes. They could not identify one interaction or distinguish rendering cost from device or network delay.
+There was no physical-device trace or confirmed browser, so the cause of that particular round is not proven.
+
+Chromium phone emulation at 4× CPU throttle reproduced full-terrain repaints from army movement, repeated merged
+counter class changes on unchanged polls, coastline walks during name placement, and forced layout reads during
+pinch handling. In a paused recorded-position rendering probe, moving the armies into their own SVG reduced
+two seconds of paint slices from 22.1 to 3.3 ms. Native pinch move handling's 95th percentile fell from 29 to 1 ms;
+this is handler time, not full input-to-display latency. The new rendering regression observed moving-army paints
+with zero terrain paints at 390×844, 844×390 and 1366×768, and checked camera alignment, keyboard selection and
+disposal. Details and measurement limits are in `docs/PERFORMANCE.md`. These are recorded-position UI checks,
+not a new live match or evidence of phone enjoyment; the user has not yet retested the changes on the S25.
+
+Verification passed: 235 Node tests, JavaScript parsing, 32 diplomacy rounds with zero invariant failures, and the
+native live, review, UI, task, voice and rendering suites. After correcting the performance test's row-retention
+probe and report-reopening loop, its full run passed the unchanged CPU, payload, animation and memory budgets:
+41.0% map / 17.5% Messages main-thread load at 4× throttle, 1.3 MB post-GC growth through the 30:00 finish, and
+5.8/5.9/6.0 MB after three report reopenings. Touch map effects are brief static highlights. The live service was
+not restarted or deployed.
+
 The earlier Pi model results below used the former v5 map. Master now uses the v6 map, with different starting industry, adjacency and impassable borders. The v5 wins remain historical evidence and must not be used as a current v6 model win rate. Some interrupted attempts were stopped by `earlyoom` and have no result.
 
 # v6 agent results — 29 September 2026

@@ -38,8 +38,8 @@ flashing. This page records what was measured, what caused it, what changed, and
 | Long tasks per 12 s / longest | 16–18 / 177 ms | 8–12 / 167 ms |
 | DOM elements / JS listeners / heap over a whole 30-minute match (clock ×1) | – | 2 660 → 3 060 elements (following the armies on the map), 141 listeners throughout, 7.1 → 8.1 MB heap after GC |
 
-The remaining work is real: about 20 armies start or finish per second in an eight-bot match (each is created and
-removed once), counters and the leaderboard change numbers, and each army frame repaints the map SVG.
+At that point, remaining work included armies starting and finishing, counters and leaderboard numbers changing,
+and each army frame repainting the map SVG. The follow-up below separates that last cost from the terrain.
 
 ## Root causes
 
@@ -99,6 +99,53 @@ Pixel 7, 4× throttle, the live room above:
 - no World-thread row re-created by polling when its content did not change;
 - page hidden: no poll and no animation frame; a lobby (nothing moves): no animation frame;
 - DOM elements grow by < 25 % from 5:00 to 25:00 game time (sampled while the match runs; `--quick`, used by the default `python tests/browser.py`, samples 30 s of it).
+
+## Rendering follow-up (2026-09-30)
+
+A player reported whole-game lag after a mobile round on a Samsung S25 Ultra; the browser and the relative roles of
+rendering, device load and network delay were not established. This investigation used Chromium phone emulation
+with 4× CPU throttling, not the physical phone.
+
+Remaining rendering costs were reproduced:
+
+- Moving army transforms still repainted the entire terrain SVG. The army layer now lives in a separate,
+  transparent, paint-contained SVG, with the same camera, level of detail, input handlers and counter hit priority.
+  Point effects and draft order arrows share this layer. Territory fills remain beneath the counters; on touch
+  screens all decorative map effects are brief static highlights, so they no longer animate the terrain after
+  each capture or diplomatic headline. Desktop effects keep their animation. Live and replay instances own
+  separate layers, and disposal removes their layers and event handlers.
+- Polling reset merged counters' classes before layout hid them again. Their merged state is now preserved until
+  layout actually changes it. In an eight-second window on the paused tick-480 recorded position, attribute writes
+  fell from 103 to 1 per poll, layouts from 2/s to 0, and no long tasks remained (before: eight, 52–78 ms).
+- Country/alliance name placement and wrapped-shape hit tests repeatedly walked detailed coastlines for candidates
+  outside a shape or already covered by another label. Ring bounds are built once and occupied label candidates are
+  rejected first. Native pinch events also read the SVG screen matrix after changing the camera, forcing layout
+  during touch handling. Gestures now use their viewport rectangle and current viewBox; final layout still runs
+  once per requested rendering frame. In an eight-pinch probe of the recorded position, the 95th-percentile move
+  handler fell from 29 ms to 1 ms. This measures input handling, not time until the resulting frame is displayed.
+
+To isolate painting from bot activity and host load, I stepped only the army positions of a paused recorded board,
+holding the rest of the view constant. In two seconds at the Pixel 7 emulation's 412×839 CSS viewport, painting took
+22.1 ms with armies inside the terrain SVG and 3.3 ms with the separate layer. These are renderer paint slices,
+not total frame time or a claim about the S25's frame rate. Busy live-match CPU readings varied with host load and
+match activity, so this follow-up does not claim a new whole-match CPU percentage. The completed full performance
+check started with 44 armies, five battles and 16 wars: map busy share was 41.0%, Messages 17.5%, and the longest
+sampled tasks were 71/73 ms, below the unchanged 60%/200 ms budgets. An earlier isolated sample measured 18.7%/23.4%.
+Through the 30:00 finish, post-GC heap grew 1.3 MB; after three report open/close cycles it was 5.8/5.9/6.0 MB.
+
+The row-retention probe now compares each list update, with positive and negative controls: replacing an unchanged
+row is caught; a temporary attack/time-separator row leaving and returning is allowed. The old start/end-only
+comparison once misclassified a returning row. The long report-reopening loop also had an extra Back click while
+already on the rooms screen; its three cycles now start from the rooms screen. No performance budget was relaxed.
+
+`tests/render-browser.py` (`python tests/browser.py --only render`, also included in the default browser run)
+enforces the causal regression: advancing visible armies must paint their own SVG and produce **zero terrain SVG
+paints**. This passed at 390×844, 844×390 and 1366×768. It also checks camera alignment after a native pinch and
+keyboard pan, keyboard army selection, unchanged counter classes, static phone effects, and removal of layers and
+handlers on disposal.
+The geometry tests compare bounded hit tests against the original even-odd test at exact coast vertices, sampled
+points, holes and islands. The existing browser suites continue checking taps beneath armies, gestures, wraparound,
+replay isolation and panel layouts. A physical-phone retest is still needed to judge the reported lag.
 
 ## Memory profile (2026-09-29)
 

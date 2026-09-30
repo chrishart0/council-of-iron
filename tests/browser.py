@@ -641,6 +641,8 @@ SUITES = {
     'ui-tasks': suite('ui-browser.py', lambda a: ('--part', 'tasks'), native_only=True, folder='ui-tasks'),
     # Voice input: fake microphone through MediaRecorder, the /stt proxy and a fake sidecar.
     'voice': suite('voice-browser.py', native_only=True, bridge=False),
+    # Paused recorded armies: interpolation never repaints the terrain; cameras, input and disposal stay shared.
+    'render': suite('render-browser.py', native_only=True, bridge=False),
     # Mobile performance budgets (docs/PERFORMANCE.md): a throttled phone during a busy live match.
     # Without --full: a 30 s DOM sample, and the CPU-time budgets (load-dependent) are reported, not enforced.
     'perf': suite('perf-browser.py', lambda a: ('--quick', not a.full), native_only=True, bridge=False),
