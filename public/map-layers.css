@@ -16,23 +16,38 @@
 .country-borders path{fill:none;stroke:#0e1e25;stroke-opacity:.95;stroke-width:1.9;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
 .atlas[data-lod=far] .country-borders path{stroke-width:1.5}
 .atlas[data-lod=near] .country-borders path{stroke-width:2.6}
-/* Impassable terrain (map.barriers): the border is drawn as mountains or desert, not as a border line. */
+/* Impassable terrain (map.terrain): unowned land drawn as mountains, desert or ice, like Crusader Kings' wastelands.
+   Static art in map units at three glyph sizes; the atlas shows the one for its zoom (data-terrain-scale).
+   Strokes stay screen-constant. The ground fill takes taps (a tooltip, never a province). */
+.terrain{cursor:help}
 .terrain path{stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
-.terrain-edge,.terrain-ridge,.terrain-band,.terrain-dots,.terrain-hit{fill:none}
-.terrain-edge{stroke:#10232b;stroke-opacity:.6;stroke-width:.9}
-.terrain-ridge{stroke:#5a4128;stroke-opacity:.5;stroke-width:7}
-.terrain-peaks-casing{fill:none;stroke:#23180c;stroke-opacity:.8;stroke-width:3.2}
-.terrain-peaks{fill:#e8d4a2;stroke:#f7ecd0;stroke-width:.9}
-.terrain-band{stroke:#e3c27f;stroke-opacity:.62;stroke-width:12}
-.terrain-dots{stroke:#6e4b1d;stroke-opacity:.95;stroke-width:2.1;stroke-dasharray:0 4.2}
-.terrain-hit{stroke:transparent;stroke-width:12;pointer-events:stroke;cursor:help}
-.atlas[data-lod=far] .terrain-band{stroke-width:9}.atlas[data-lod=far] .terrain-ridge{stroke-width:5}
-.atlas[data-lod=near] .terrain{opacity:.7}
-.legend-mountains i{border:0!important;clip-path:polygon(0 100%,50% 0,100% 100%);background:#e8d4a2!important}
-.legend-desert i{background:radial-gradient(#6e4b1d 1px,transparent 1.3px) 0 0/4px 4px,#e3c27f!important}
+.terrain-art{display:none}
+.atlas:not([data-terrain-scale]) .terrain-art[data-scale=mid],.atlas[data-terrain-scale=far] .terrain-art[data-scale=far],
+.atlas[data-terrain-scale=mid] .terrain-art[data-scale=mid],.atlas[data-terrain-scale=close] .terrain-art[data-scale=close]{display:inline}
+.terrain-mountains .terrain-ground{fill:#6f665a}
+.terrain-mountains .terrain-art-a{fill:#a89c86;stroke:#2a241c;stroke-opacity:.55;stroke-width:.5}
+.terrain-mountains .terrain-art-b{fill:#4a4238;stroke:#2a241c;stroke-opacity:.55;stroke-width:.5}
+.terrain-mountains .terrain-art-c{fill:none;stroke:#f3ecdc;stroke-width:1;stroke-opacity:.85}
+.terrain-desert .terrain-ground{fill:#d6bd84}
+.terrain-desert .terrain-art-a{fill:none;stroke:#fbeac0;stroke-width:1.1;stroke-opacity:.9}
+.terrain-desert .terrain-art-b{fill:none;stroke:#9c7a3f;stroke-width:1;stroke-opacity:.75}
+.terrain-ice .terrain-ground{fill:#e4ecee}
+.terrain-ice .terrain-art-a{fill:none;stroke:#8fa9b3;stroke-width:.9;stroke-opacity:.9}
+.terrain-ice .terrain-art-b{fill:none;stroke:#b9cbd1;stroke-width:1.2;stroke-opacity:.8}
+.atlas[data-terrain-scale=far] .terrain-art-c{display:none}
+.terrain-edge{fill:none;stroke:#1a140d;stroke-opacity:.7;stroke-width:1.1;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.atlas[data-lod=near] .terrain-edge{stroke-width:1.5}
+.legend-mountains i{border:0!important;clip-path:polygon(0 100%,50% 0,100% 100%);background:#a89c86!important}
+.legend-desert i{background:radial-gradient(#9c7a3f 1px,transparent 1.3px) 0 0/4px 4px,#d6bd84!important}
+.legend-ice i{background:linear-gradient(160deg,transparent 45%,#8fa9b3 45% 55%,transparent 55%),#e4ecee!important}
 /* Region (continent) names at world zoom only: large, spaced, quiet; they sit in open sea or empty land. */
 .region-names text{display:none;font:italic 600 13px var(--map-serif);letter-spacing:5px;text-anchor:middle;fill:#efe2b9;fill-opacity:.5;paint-order:stroke;stroke:#0f2530;stroke-opacity:.55;stroke-width:2.5;stroke-linejoin:round}
-.atlas[data-world=true] .region-names text{display:inline}
+.atlas[data-world=true] .region-names text:not(.terrain-name){display:inline}
+/* Wasteland and sea names at the middle zoom only, in map units (they grow with the zoom until the close view hides them). */
+.region-names .terrain-name{font:italic 600 4px var(--map-serif);letter-spacing:1.1px;dominant-baseline:central;fill:#f7efd9;fill-opacity:.85;stroke:#2a2216;stroke-opacity:.7;stroke-width:.7}
+.terrain-name{text-transform:uppercase}
+.sea-names text{display:none;font:italic 3.6px var(--map-serif);letter-spacing:1.1px;text-anchor:middle;fill:#c3cba6;fill-opacity:.55}
+.atlas[data-terrain-scale=mid] :is(.sea-names text,.region-names .terrain-name){display:inline}
 /* Borders between members of one coalition: softer than a border between unrelated owners. */
 .allied-borders path{fill:none;stroke:#10232b;stroke-opacity:.45;stroke-width:.9;stroke-dasharray:5 2.5;vector-effect:non-scaling-stroke}
 /* Alliance blocs: an inner glow band (clipped to the bloc) plus a crisp outline in the alliance colour. */

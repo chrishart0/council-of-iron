@@ -13,6 +13,7 @@ import { replayReader } from '../public/replay-model.js';
 import { operationalInsights } from '../public/insights.js';
 import { choose } from '../agents/policy.js';
 import { makeStt } from './stt.js';
+import { roomName } from './room-name.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 /** The one published map (served at /map.json); rooms on any other map are not loaded (startupPlan). */
@@ -54,6 +55,7 @@ const describeRoom = g => `${g.id} ${JSON.stringify(String(g.name ?? ''))} (${g.
 export class StartupRefused extends Error {}
 const same = (a, b) => a.length === b.length && [...a].sort().every((key, i) => key === [...b].sort()[i]);
 export const ALLIANCE_CHAT_NOTICE = 'Alliance chat becomes public in the replay after the match ends.';
+const botName = c => `${c.name.split(' ')[0]} automaton`;
 const staticFiles = new Map([
   ...['app', 'atlas', 'presentation', 'feed', 'feed-model', 'leaderboard', 'leaderboard-panel', 'comms', 'comms-model', 'ui',
     'review', 'map-geometry', 'relations', 'replay-model', 'insights', 'movement', 'sound', 'sound-model', 'combat', 'expand', 'voice'].map(n => [`/${n}.js`, [`public/${n}.js`, 'text/javascript; charset=utf-8']]),
@@ -238,7 +240,8 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
         requireRule([...games.values()].filter(g=>g.status!=='finished').length<32,'This server is full: 32 rooms are already active.',429);
         const gameId=gameIdFactory();
         requireRule(typeof gameId==='string' && /^[a-zA-Z0-9-]{1,32}$/.test(gameId) && !games.has(gameId),'Invalid or duplicate room ID.');
-        const g=createGame({id:gameId,name:data.name || 'Council chamber',hostId:me.id,
+        const taken=new Set([...games.values()].filter(g=>g.status!=='finished').map(g=>g.name));
+        const g=createGame({id:gameId,name:data.name || roomName(taken),hostId:me.id,
           speed:PRESETS[data.preset || 'standard']},map);
         // New rooms only (never inside createGame): alliance chat is published in the finished replay.
         g.rules.revealAllianceChatAfterMatch=true;
@@ -298,7 +301,11 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
           const existing=g.players.find(p=>p.profileId===me.id);
           if(existing && g.status!=='lobby') {
             requireRule(existing.id===data.country,'You already control a different country.',409);
-          } else join(g,gameMap,{...data,profileId:me.id,name:me.name});
+          } else {
+            const was=new Map(g.players.map(p=>[p,p.id]));join(g,gameMap,{...data,profileId:me.id,name:me.name});
+            // A bot the host swapped seats with takes the name of its new country.
+            for(const p of g.players) if(p.kind==='bot' && was.get(p)!==p.id) p.name=botName(gameMap.countries.find(c=>c.id===p.id));
+          }
           save(g);touch(g);return json(res,200,{country:data.country,token:store.credential(me.id,g.id),match:g.id,
             notices:g.rules?.revealAllianceChatAfterMatch===true?[ALLIANCE_CHAT_NOTICE]:[]});
         }
@@ -312,7 +319,7 @@ export function makeServer({ dbPath = resolve(root,'data/council.db'), clockScal
           }
           const needed=Math.max(0,count-g.players.filter(p=>p.kind==='bot').length);
           for(const c of gameMap.countries.filter(c=>!g.players.some(p=>p.id===c.id)).slice(0,needed)) {
-            const profile=store.register(`${c.name.split(' ')[0]} automaton`);
+            const profile=store.register(botName(c));
             join(g,gameMap,{profileId:profile.id,name:profile.name,country:c.id,kind:'bot',model:'practice-bot',persona:'expansion-first'});
           }
           save(g);return json(res,200,{ok:true,players:g.players.length});

@@ -27,9 +27,9 @@ const marchAction=({opId,from,fromAllBordering,percent=100,...rest})=>({type:'ma
   ...(fromAllBordering ? {fromAllBordering, ...(from===undefined?{}:{from})} : Array.isArray(from) ? {sources:from.map(id=>({from:id,percent}))} : {from})});
 
 tool('list_matches','List rooms. Join a country before the host starts.',{},[],()=>client.list(),true);
-tool('map','Read province IDs, adjacency, coordinates, connections (sea links name their strait), impassable terrain (barriers: two provinces that share a border but are not neighbours, with the way around) and starting countries. Decorative SVG paths are omitted.',{},[],()=>client.mapData(),true);
-tool('create_match','Create a room. Registers a local identity if needed. Standard is 30 real minutes, quick is five.',
-  {name:string,playerName:string,preset:{type:'string',enum:['standard','quick']}},['name','playerName'],async a=>{
+tool('map','Read province IDs, adjacency, coordinates, connections (sea links name their strait), impassable terrain (terrain: mountains and deserts drawn as unowned land between provinces; not provinces and never neighbours, so provinces on either side do not border each other) and starting countries. Decorative SVG paths are omitted.',{},[],()=>client.mapData(),true);
+tool('create_match','Create a room. Registers a local identity if needed. Without a name the server picks a random one. Standard is 30 real minutes, quick is five.',
+  {name:string,playerName:string,preset:{type:'string',enum:['standard','quick']}},['playerName'],async a=>{
     if(!client.session.profileToken && !client.explicitToken)await client.register(a.playerName);return client.create(a.name,a.preset || 'standard');});
 tool('join_match','Join an open room as an agent. If the country is taken, choose another unoccupied country from list_matches and retry; changing your player name does not free a country. Public visibility makes qualifying messages available in the finished report; private is the default. Keep a separate COUNCIL_SESSION file per agent.',
   {match:string,country:string,name:string,model:string,persona:string,visibility:{type:'string',enum:['public','private']}},['match','country','name'],a=>client.join(a.match,a.country,a.name,a.model,a.persona,a.visibility));

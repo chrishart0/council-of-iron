@@ -216,7 +216,7 @@ def wrap_checks(page,report,capture):
     spot=page.evaluate('''() => {
       const svg=document.querySelector('#map'),m=svg.getScreenCTM(),box=svg.getBoundingClientRect();
       for(let dy=-20;dy<=30;dy+=5)for(let dx=-40;dx<=40;dx+=10){
-        const p=new DOMPoint(1105.6-1280+dx,506+dy).matrixTransform(m);
+        const p=new DOMPoint(1148-1280+dx,506+dy).matrixTransform(m);  // eastern Australasia, clear of the Great Sandy Desert
         if(p.x<box.left+4||p.x>box.right-4||p.y<box.top+4||p.y>box.bottom-4)continue;
         const e=document.elementFromPoint(p.x,p.y);if(e&&e.matches('use.world-copy'))return {x:p.x,y:p.y};}
       return null;}''')
@@ -767,11 +767,16 @@ def sound_settings_checks(page,context,url,report,bridge):
     if bridge:load_bridge(fresh,url,{})
     else:fresh.goto(url)
     expect(fresh.locator('#sound-control')).to_have_attribute('data-music','0.6')
-    fresh.locator('.sound-toggle').click()  # the home page keeps it in the masthead
+    # Home: name and sound live on the Settings page (inline, no popover to fall behind the rooms list).
+    fresh.locator('#settings-button').click();expect(fresh.locator('#settings')).to_be_visible();expect(fresh.locator('#rooms')).to_be_hidden()
+    expect(fresh.locator('#sound-panel')).to_be_visible()
     assert fresh.locator('#sound-music').input_value()=='60' and fresh.locator('#sound-effects').input_value()=='40'
     assert not fresh.locator('#sound-mute').is_checked()
+    for w,h in [(1366,768),(390,844),(844,390)]:
+        fresh.set_viewport_size({'width':w,'height':h});check_layout(fresh,f'settings {w}x{h}',match=False)
+    fresh.keyboard.press('Escape');expect(fresh.locator('#settings')).to_be_hidden();expect(fresh.locator('#rooms')).to_be_visible()
     fresh.close()
-    report['assertions'].append('Sound control: mute suspends audio, music/effects sliders and mute persist in localStorage across pages; Shift+M toggles mute but not while typing a message.')
+    report['assertions'].append('Sound control: mute suspends audio, music/effects sliders and mute persist in localStorage across pages; Shift+M toggles mute but not while typing a message. On the home page they sit inline on the Settings page, which fits 1366×768, 390×844 and 844×390 without overlap and closes with Escape.')
 def mobile_checks(browser,url,identity,report,out):
     # Real mobile emulation: the zoom limit is in screen px per map unit, so phones reach the same
     # maximum as desktop (the old fixed minimum view width gave a 390px phone ~2.9 px/unit).
@@ -1278,18 +1283,30 @@ def main():
             report['assertions'].append('Reopening the room rebuilt the World thread without replaying banners or toasts.')
             report['assertions'].append('Actual recorded losses and defense trigger factual, dismissible notices; reopening suppresses old battle popups.')
             page.set_viewport_size({'width':1500,'height':1150});go_back(page)
-            page.locator('#room-name').fill('Choose your standard');page.locator('#create-form button[type=submit]').click()
+            expect(page.locator('#create-form')).to_be_visible();page.locator('#create-form button[type=submit]').click()
             expect(page.locator('#faction-choices button')).to_have_count(8)
             page.locator('[data-country-seat="germany"]').click();expect(page.locator('#country-choice')).to_have_value('germany')
             expect(page.locator('[data-country-seat="germany"]')).to_have_attribute('aria-pressed','true')
             expect(page.locator('#dossier-head')).to_contain_text('German Empire')
             check_layout(page,'lobby 1500×1150');check_contrast(page,'lobby 1500x1150')
             capture('08-faction-selection.png')
-            page.locator('#join-form button').click();expect(page.locator('[data-country-seat="germany"]')).to_be_disabled()
+            page.locator('#join-form button').click();expect(page.locator('#lobby-note')).to_contain_text('You command German Empire')
+            expect(page.locator('#join-form')).to_be_hidden()
+            # A seated player changes country: another open standard offers the move; the old seat opens again.
+            page.locator('[data-country-seat="france"]').click();expect(page.locator('#join-form button')).to_have_text('Switch to French Republic')
+            page.locator('#join-form button').click();expect(page.locator('#lobby-note')).to_contain_text('You command French Republic')
+            expect(page.locator('[data-country-seat="germany"] small')).to_contain_text('holdings')
+            page.locator('[data-country-seat="germany"]').click();page.locator('#join-form button').click();expect(page.locator('#lobby-note')).to_contain_text('You command German Empire')
             for w,h in [(390,844),(844,390)]:
                 page.set_viewport_size({'width':w,'height':h});page.wait_for_timeout(150);check_layout(page,f'lobby {w}x{h}')
+                if w<h:
+                    # Opening the lobby on a phone shows the whole world between the bar and the standards, not under them.
+                    page.reload();expect(page.locator('#faction-choices')).to_be_visible();page.wait_for_timeout(300)
+                    band=page.evaluate("""()=>{const svg=document.querySelector('#map'),m=svg.getScreenCTM(),y=v=>new DOMPoint(0,v).matrixTransform(m).y;
+                      return {north:y(0),south:y(680),top:document.querySelector('.lobby-bar').getBoundingClientRect().bottom,bottom:document.querySelector('#faction-choices').getBoundingClientRect().top};}""")
+                    assert band['top']-2<=band['north'] and band['south']<=band['bottom']+2,f'phone lobby world view is covered: {band}'
             page.set_viewport_size({'width':1500,'height':1150})
-            report['assertions'].append('Responsive layouts pass at 1024px, 390px and short landscape; faction standards select real seats, show the country in the dossier and disable occupied countries; the lobby regions never overlap.')
+            report['assertions'].append('Responsive layouts pass at 1024px, 390px and short landscape; faction standards select real seats, show the country in the dossier, and a seated player can switch to another open country; the lobby regions never overlap.')
             # Start means start: no council phase between the lobby and play.
             page.locator('#fill-bots').click();expect(page.locator('#room-label')).to_contain_text('8/8')
             page.locator('#start-match').click();expect(page.locator('#phase')).to_have_text('In session')

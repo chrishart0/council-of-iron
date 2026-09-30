@@ -1,4 +1,4 @@
-/** Build the published map `imperial-1910-v6` (public/imperial-map.json) from the v5 source geometry.
+/** Build the published map `imperial-1910-v7` (public/imperial-map.json) from the v5 source geometry.
  *
  *   node scripts/build-imperial-v6.js           write public/imperial-map.json
  *   node scripts/build-imperial-v6.js --check   exit 1 unless the published file is exactly what this script builds
@@ -6,6 +6,8 @@
  * Deterministic and dependency-free. Steps (docs/MAP-V6.md explains the design):
  * 1. Dissolve: each v6 province is a union of whole v5 provinces (scripts/map-source/, Natural Earth
  *    admin-1 unions). A segment used by two members of the same v6 province is interior and removed.
+ *    Wastelands (impassable terrain, WASTELANDS below) are cut out of members first and join the topology
+ *    as groups of their own: land that no province owns, so the provinces beside it share no border.
  * 2. Topology: the remaining segments form arcs between junctions (a junction is where three or more
  *    lines meet or where the pair of provinces on the two sides changes). Each arc is stored once, so
  *    both neighbours of a border draw the very same line.
@@ -78,7 +80,7 @@ const PROVINCES = [
   ['maghreb', 'Maghreb', 'africa', ['maghreb']],
   ['egypt', 'Egypt', 'africa', ['egypt']],
   ['west-africa', 'West Africa', 'africa', ['west-africa']],
-  ['sahara', 'Sahara', 'africa', ['sahara', 'sahel']],
+  ['sahel', 'Sahel', 'africa', ['sahara', 'sahel']],
   ['congo', 'Congo', 'africa', ['congo', 'angola']],
   ['east-africa', 'East Africa', 'africa', ['east-africa']],
   ['tanganyika', 'Tanganyika', 'africa', ['tanganyika']],
@@ -100,15 +102,47 @@ const PROVINCES = [
   ['hawaii', 'Hawaii', 'oceania', ['hawaii']],
 ];
 
-/** Impassable terrain: two provinces that share a drawn border but are NOT neighbours. No new rule: the border
- * simply carries no link, and the map draws the terrain that explains why. [a, b, terrain, name, how to go around].
- * Each one creates a chokepoint (docs/MAP-V6.md, "Impassable terrain"). */
-const BARRIERS = [
-  ['india', 'tibet', 'mountains', 'Himalayas', 'India is reached through Afghanistan or Indochina, or by sea.'],
-  ['west-russia', 'siberia', 'mountains', 'Urals', 'European Russia and Siberia meet only through Central Asia.'],
-  ['italy', 'south-france', 'mountains', 'Alps', 'Italy is reached through the Danube lands (the eastern passes), or by sea from the Maghreb or the Balkans.'],
-  ['maghreb', 'sahara', 'desert', 'Sahara', 'The Maghreb is reached by sea; the Sahara from West Africa, the Congo or up the Nile from Egypt.'],
-  ['maghreb', 'west-africa', 'desert', 'Sahara', 'The Maghreb is reached by sea; West Africa by the Sahel or by sea.'],
+/** Impassable terrain, as Crusader Kings draws it: land that belongs to no province, cannot be owned or crossed,
+ * and is painted as mountains, desert or ice. No new rule: a wasteland simply sits between provinces, so they no
+ * longer share a border and are not neighbours. [id, name, terrain, { v5 member: cut line }].
+ * - An open cut line runs across one v5 member: its first and last points snap to the member's nearest boundary
+ *   vertex, the points between lie inside it, and the smaller side of the line becomes wasteland. These create
+ *   chokepoints (docs/MAP-V6.md, "Impassable terrain"); SEPARATED below proves it.
+ * - A hole `{ inset, region }` lies wholly inside the member: the land at least `inset` units from the member's edge
+ *   and inside the rough `region` outline (optional), traced as one smooth shape. So it follows the coast and the
+ *   borders around it. Holes are scenery only: they touch no other province, and the member's counter stays where
+ *   it was without the hole. */
+const WASTELANDS = [
+  ['himalayas', 'Himalayas', 'mountains', {
+    'north-india': [[901.9, 244.5], [912, 251], [924, 259], [936, 265], [948, 271], [957, 274], [966, 271], [972.6, 270]],
+    tibet: [[906.1, 225.1], [911, 226], [919, 230], [923, 241], [930, 248], [942, 254], [952, 259], [962, 255], [972, 251], [978, 253], [981.4, 260.5]] }],
+  ['urals', 'Urals', 'mountains', {
+    urals: [[810.7, 80.3], [824, 88], [830, 100], [834, 113], [840, 125], [842, 138], [840, 150], [842.2, 156.6]] }],
+  ['alps', 'Alps', 'mountains', {
+    'alpine-france': [[659.7, 193.1], [658.3, 188], [658.8, 183], [660.8, 179], [664, 176.5], [669, 175.2], [674.5, 175.5]],
+    italy: [[669.6, 188], [672, 183], [676, 181], [681.1, 175.7]] }],
+  ['sahara', 'Sahara', 'desert', {
+    sahara: [[640, 291.3], [650, 288.5], [657, 282], [667, 280], [676, 273.5], [688, 272], [697, 266], [704.7, 260.7]] }],
+  ['greenland', 'Greenland Ice Cap', 'ice', {
+    scandinavia: { inset: 3.5, region: [[400, 5], [610, 5], [610, 125], [400, 125]] } }],
+  ['empty-quarter', 'Empty Quarter', 'desert', {
+    arabia: { inset: 3, region: [[813, 291], [821, 285], [833, 285.5], [842, 292], [845, 304], [836, 315], [821, 318], [813, 310], [815.5, 300]] } }],
+  ['gobi', 'Gobi', 'desert', {
+    mongolia: { inset: 2.5, region: [[975, 189], [990, 186], [1005, 186.5], [1018, 185], [1030, 184.5], [1042, 188], [1036, 198], [1015, 204], [990, 206], [972, 200]] } }],
+  ['outback', 'Great Sandy Desert', 'desert', {
+    australia: { inset: 4, region: [[1050, 478], [1068, 470], [1090, 473], [1097, 484], [1093, 505], [1081, 519], [1062, 521], [1049, 506]] } }],
+  ['karakum', 'Karakum', 'desert', {
+    'central-asia': { inset: 2.5, region: [[828, 195], [851, 193], [866, 197], [876, 206], [872, 222], [850, 226], [832, 218]] } }],
+];
+/** Province pairs a wasteland must keep apart (the build fails if they still share a border). */
+const SEPARATED = [['india', 'tibet'], ['west-russia', 'siberia'], ['italy', 'south-france'], ['maghreb', 'sahel']];
+/** Borders redrawn by hand where the source line is a survey artefact (a staircase, a ruler-straight line):
+ * [v5 member, v5 member, [shared start vertex, …new points…, shared end vertex]]. Both members get the same line. */
+const REDRAWN = [
+  // The Western Sahara staircase between the Maghreb and West Africa.
+  ['maghreb', 'west-africa', [[580.6, 293.7], [585.5, 292.2], [590.5, 290.2], [595.5, 286.4], [599.6, 281.6], [604.5, 278.4], [611, 276.6], [616, 275.9], [620.2, 274.5]]],
+  // A ruler line between the Sahara and West Africa (now the desert's south-western edge).
+  ['sahara', 'west-africa', [[620.2, 274.5], [623.4, 278.6], [626.8, 280.3], [629.2, 283.9], [632.8, 285.3], [635.6, 288.9], [640, 291.3]]],
 ];
 
 /** Every connection that is not a shared land border. [a, b, why]. Travel time follows map distance. */
@@ -184,14 +218,138 @@ const K = 100, key = ([x, y]) => `${Math.round(x * K)},${Math.round(y * K)}`;
 const point = new Map(); // node key -> [x, y]
 const segments = new Map(); // "a|b" (sorted) -> { a, b, count: Map(group -> n) }
 const segKey = (a, b) => a < b ? `${a}|${b}` : `${b}|${a}`;
-for (const p of SOURCE.provinces) for (const ring of ringsOf(p.path)) {
+
+// Wastelands: cut each listed member along its line; the far side becomes a part of the wasteland.
+const wastelandIds = new Set(WASTELANDS.map(([id]) => id));
+for (const id of wastelandIds) if (members.has(id)) throw new Error(`wasteland ${id} shares an id with a province`);
+const properCross = (p, q, r, s) => {
+  const o = (a, b, c) => Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+  return o(p, q, r) * o(p, q, s) < 0 && o(r, s, p) * o(r, s, q) < 0;
+};
+const closed = line => line.length > 3 && line[0][0] === line[line.length - 1][0] && line[0][1] === line[line.length - 1][1];
+/** The land of `rings` at least `inset` from their edges and inside `region`, traced (marching squares on a 0.8-unit
+ * grid) as its largest outline, closed. Deterministic; distances past inset + 2 are capped (only the sign matters). */
+function insetOutline(rings, { inset, region }) {
+  const S = .8, CAP = inset + 2, CELL = 4, xs = (region || rings.flat()).map(p => p[0]), ys = (region || rings.flat()).map(p => p[1]);
+  const x0 = Math.min(...xs) - 2 * S, y0 = Math.min(...ys) - 2 * S, nx = Math.ceil((Math.max(...xs) - x0) / S) + 3, ny = Math.ceil((Math.max(...ys) - y0) / S) + 3;
+  const buckets = new Map(), edges = rings.flatMap(r => r.map((a, i) => [a, r[(i + 1) % r.length]]));
+  for (const e of edges) for (let cx = Math.floor((Math.min(e[0][0], e[1][0]) - CAP) / CELL); cx <= Math.floor((Math.max(e[0][0], e[1][0]) + CAP) / CELL); cx++)
+    for (let cy = Math.floor((Math.min(e[0][1], e[1][1]) - CAP) / CELL); cy <= Math.floor((Math.max(e[0][1], e[1][1]) + CAP) / CELL); cy++) {
+      const k = `${cx},${cy}`; if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(e);
+    }
+  const signed = (p, list, isIn) => { let d = CAP; for (const [a, b] of list) d = Math.min(d, segDist(p, a, b)); return isIn ? d : -d; };
+  const parity = p => { let c = false; for (const [[xi, yi], [xj, yj]] of edges) if ((yi > p[1]) !== (yj > p[1]) && p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi) c = !c; return c; };
+  const regionEdges = region && region.map((a, k) => [a, region[(k + 1) % region.length]]);
+  const f = new Float64Array(nx * ny);
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const p = [x0 + i * S, y0 + j * S], edge = i === 0 || j === 0 || i === nx - 1 || j === ny - 1;
+    const land = signed(p, buckets.get(`${Math.floor(p[0] / CELL)},${Math.floor(p[1] / CELL)}`) || [], parity(p)) - inset;
+    const inRegion = region ? signed(p, regionEdges, inside(p, region)) : Infinity;
+    f[j * nx + i] = edge ? -1 : Math.min(land, inRegion);
+  }
+  // Marching squares: crossing points on grid edges, joined cell by cell into closed loops.
+  const at = (i, j) => f[j * nx + i], links = new Map(), spot = new Map();
+  const cross = (i, j, horizontal) => {
+    const id = `${horizontal ? 'h' : 'v'}${i},${j}`;
+    if (!spot.has(id)) { const a = at(i, j), b = horizontal ? at(i + 1, j) : at(i, j + 1), t = a / (a - b); spot.set(id, horizontal ? [x0 + (i + t) * S, y0 + j * S] : [x0 + i * S, y0 + (j + t) * S]); }
+    return id;
+  };
+  const link = (a, b) => { for (const [p, q] of [[a, b], [b, a]]) { if (!links.has(p)) links.set(p, []); links.get(p).push(q); } };
+  for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+    const ins = [at(i, j) > 0, at(i + 1, j) > 0, at(i + 1, j + 1) > 0, at(i, j + 1) > 0], bits = ins.reduce((s, v, k) => s | (v << k), 0);
+    if (bits === 0 || bits === 15) continue;
+    const top = () => cross(i, j, true), right = () => cross(i + 1, j, false), bottom = () => cross(i, j + 1, true), left = () => cross(i, j, false);
+    const centre = (at(i, j) + at(i + 1, j) + at(i + 1, j + 1) + at(i, j + 1)) / 4 > 0;
+    if (bits === 5) { if (centre) { link(top(), right()); link(bottom(), left()); } else { link(left(), top()); link(right(), bottom()); } continue; }
+    if (bits === 10) { if (centre) { link(left(), top()); link(right(), bottom()); } else { link(top(), right()); link(bottom(), left()); } continue; }
+    const found = [];
+    if (ins[0] !== ins[1]) found.push(top()); if (ins[1] !== ins[2]) found.push(right()); if (ins[3] !== ins[2]) found.push(bottom()); if (ins[0] !== ins[3]) found.push(left());
+    link(found[0], found[1]);
+  }
+  const seen = new Set(), loops = [];
+  for (const start of [...links.keys()].sort()) {
+    if (seen.has(start)) continue;
+    const loop = [start]; seen.add(start);
+    for (let prev = null, cur = start; ;) { const next = links.get(cur).find(n => n !== prev && !seen.has(n)); if (!next) break; loop.push(next); seen.add(next); prev = cur; cur = next; }
+    loops.push(loop.map(id => spot.get(id)));
+  }
+  const area = r => Math.abs(r.reduce((s, a, i) => { const b = r[(i + 1) % r.length]; return s + a[0] * b[1] - b[0] * a[1]; }, 0) / 2);
+  const best = loops.sort((a, b) => area(b) - area(a))[0];
+  if (!best || area(best) < 20) throw new Error('an inset hole found no land');
+  const outline = douglasPeucker([...best, best[0]], .35).slice(0, -1).map(([x, y]) => [Math.round(x * K) / K, Math.round(y * K) / K]);
+  return [...outline, outline[0]];
+}
+function cut(member, rings, line, wasteland) {
+  if (!Array.isArray(line)) line = insetOutline(rings, line);
+  if (closed(line)) { // a hole: wholly inside one ring, clear of every edge
+    const hole = line.slice(0, -1);
+    if (!rings.some(r => hole.every(p => inside(p, r)))) throw new Error(`${wasteland}: the hole in ${member} is not inside it`);
+    for (const r of rings) for (let i = 0; i < r.length; i++) for (let c = 0; c < hole.length; c++) {
+      const a = hole[c], b = hole[(c + 1) % hole.length];
+      if (properCross(a, b, r[i], r[(i + 1) % r.length]) || segDist(r[i], a, b) < 1.5) throw new Error(`${wasteland}: the hole in ${member} comes within 1.5 of its edge at ${r[i]}`);
+    }
+    return { rings: [...rings, hole], carved: hole, hole: true };
+  }
+  const nearest = pt => {
+    let best = null;
+    rings.forEach((r, ri) => r.forEach((v, i) => { const d = Math.hypot(v[0] - pt[0], v[1] - pt[1]); if (!best || d < best.d) best = { ri, i, d }; }));
+    if (best.d > 1) throw new Error(`${wasteland}: cut end ${pt} is ${best.d.toFixed(2)} from ${member}'s boundary`);
+    return best;
+  };
+  const from = nearest(line[0]), to = nearest(line[line.length - 1]);
+  if (from.ri !== to.ri || from.i === to.i) throw new Error(`${wasteland}: the cut across ${member} must join two points of one ring`);
+  const ring = rings[from.ri], inner = line.slice(1, -1), n = ring.length;
+  const chord = [ring[from.i], ...inner, ring[to.i]];
+  for (const p of inner) if (!inside(p, ring)) throw new Error(`${wasteland}: cut point ${p} lies outside ${member}`);
+  for (let c = 0; c < chord.length - 1; c++) for (let i = 0; i < n; i++)
+    if (properCross(chord[c], chord[c + 1], ring[i], ring[(i + 1) % n])) throw new Error(`${wasteland}: the cut across ${member} crosses its boundary between ${chord[c]} and ${chord[c + 1]} (at ${ring[i]})`);
+  const walk = (a, b) => { const out = [ring[a]]; for (let i = a; i !== b;) { i = (i + 1) % n; out.push(ring[i]); } return out; };
+  const left = [...walk(from.i, to.i), ...[...inner].reverse()], right = [...walk(to.i, from.i), ...inner];
+  // A wasteland is a band along a border: the smaller side of the cut.
+  const area = r => Math.abs(r.reduce((s, a, i) => { const b = r[(i + 1) % r.length]; return s + a[0] * b[1] - b[0] * a[1]; }, 0));
+  const [keep, carved] = area(left) > area(right) ? [left, right] : [right, left];
+  return { rings: rings.map((r, i) => i === from.ri ? keep : r), carved, hole: false };
+}
+// Hand-drawn borders: the chain of vertices two members share between the two ends is replaced in both.
+const sourceRings = new Map(SOURCE.provinces.map(p => [p.id, ringsOf(p.path)]));
+for (const [a, b, line] of REDRAWN) {
+  const ends = [key(line[0]), key(line[line.length - 1])], inner = line.slice(1, -1);
+  const vertices = id => new Set(sourceRings.get(id).flat().map(key)), ofA = vertices(a), ofB = vertices(b);
+  for (const [member, other] of [[a, ofB], [b, ofA]]) {
+    const rings = sourceRings.get(member), ri = rings.findIndex(r => ends.every(e => r.some(v => key(v) === e)));
+    if (ri < 0) throw new Error(`redrawn ${a}–${b}: ${member} has no ring with both ends`);
+    const ring = rings[ri], n = ring.length, i = ring.findIndex(v => key(v) === ends[0]), j = ring.findIndex(v => key(v) === ends[1]);
+    const walk = (s, e) => { const out = [ring[s]]; for (let k = s; k !== e;) { k = (k + 1) % n; out.push(ring[k]); } return out; };
+    const onBorder = chain => chain.slice(1, -1).every(v => other.has(key(v)));
+    // The shared chain runs i→j or j→i along the ring; keep the other way round and put the new line in its place.
+    const next = onBorder(walk(i, j)) ? [...walk(j, i), ...inner] : onBorder(walk(j, i)) ? [...walk(i, j), ...[...inner].reverse()] : null;
+    if (!next) throw new Error(`redrawn ${a}–${b}: the ends are not joined by a shared border in ${member}`);
+    rings[ri] = next;
+  }
+}
+const cuts = new Map(), holesOf = new Map(); // province -> wasteland ids that are holes in it
+for (const [id, , , lines] of WASTELANDS) for (const [member, line] of Object.entries(lines)) {
+  if (!sourceById.has(member)) throw new Error(`wasteland ${id}: unknown v5 member ${member}`);
+  if (cuts.has(member)) throw new Error(`${member} is cut twice`);
+  cuts.set(member, { id, line });
+  if (!Array.isArray(line) || closed(line)) holesOf.set(groupOf.get(member), [...(holesOf.get(groupOf.get(member)) || []), id]);
+}
+// Shapes that enter the topology: every v5 member (minus what its cut removed) and every wasteland part.
+const parts = [];
+for (const p of SOURCE.provinces) {
+  const rings = sourceRings.get(p.id), c = cuts.get(p.id);
+  if (!c) { parts.push({ group: groupOf.get(p.id), rings }); continue; }
+  const done = cut(p.id, rings, c.line, c.id);
+  parts.push({ group: groupOf.get(p.id), rings: done.rings }, { group: c.id, rings: [done.carved] });
+}
+for (const part of parts) for (const ring of part.rings) {
   const keys = ring.map(v => { const k = key(v); if (!point.has(k)) point.set(k, v.map(n => Math.round(n * K) / K)); return k; });
   for (let i = 0; i < keys.length; i++) {
     const a = keys[i], b = keys[(i + 1) % keys.length];
     if (a === b) continue;
     const s = segKey(a, b);
     if (!segments.has(s)) segments.set(s, { a: a < b ? a : b, b: a < b ? b : a, count: new Map() });
-    const count = segments.get(s).count, g = groupOf.get(p.id);
+    const count = segments.get(s).count, g = part.group;
     count.set(g, (count.get(g) || 0) + 1);
   }
 }
@@ -319,9 +477,10 @@ const kept = arcs.filter(a => a.shared && a.tolerance < TOLERANCE);
 if (kept.length) console.log(`Borders kept closer to the source to stay clear of other lines: ${kept.map(a => `${a.label} (${a.tolerance})`).join(', ')}`);
 
 // ---------------------------------------------------------------------------------------------------
-// Province rings: walk each province's boundary segments, then substitute the generalised arcs.
-function provinceRingKeys(id) {
-  const mine = [...boundary].filter(([, seg]) => seg.label.split('|').includes(id)).map(([s]) => s).sort();
+// Rings of a group set: walk the boundary segments with exactly one side in the set, then substitute the generalised arcs.
+function provinceRingKeys(ids) {
+  const id = ids.join('+'), set = new Set(ids);
+  const mine = [...boundary].filter(([, seg]) => seg.label.split('|').filter(g => set.has(g)).length === 1).map(([s]) => s).sort();
   const at = new Map();
   for (const s of mine) for (const n of [boundary.get(s).a, boundary.get(s).b]) { if (!at.has(n)) at.set(n, []); at.get(n).push(s); }
   const done = new Set(), rings = [];
@@ -399,43 +558,73 @@ function polylabel(polygon, precision = .1) {
 }
 
 const f2 = n => (Math.round(n * K) / K).toFixed(2);
-const provinces = PROVINCES.map(([id, name, region, from]) => {
-  const rings = provinceRingKeys(id).map(substitute).filter(r => r.length >= 3);
+/** Oriented rings, path and label point of a group of shapes (one province, one wasteland, or a province with its
+ * holes filled back in). `anchor` picks the home landmass. */
+function shape(ids, anchor) {
+  const rings = provinceRingKeys(ids).map(substitute).filter(r => r.length >= 3);
   // Orientation: exteriors positive, holes (odd nesting depth) negative, so the default nonzero fill is right.
   const oriented = rings.map((r, i) => {
     const probe = r[0], depth = rings.filter((o, j) => j !== i && Math.abs(signedArea(o)) > Math.abs(signedArea(r)) && inside(probe, o)).length;
     const hole = depth % 2 === 1, area = signedArea(r);
     return (hole ? area > 0 : area < 0) ? [...r].reverse() : r;
   });
-  // Home landmass: the exterior containing the first member's published anchor (so Scandinavia's counter stays
-  // in Sweden, not Greenland), unless that is a minor island (under 60 units², e.g. Kyushu); then the largest landmass.
-  const primary = sourceById.get(from[0]), exteriors = oriented.filter(r => signedArea(r) > 0).sort((a, b) => signedArea(b) - signedArea(a));
-  const anchored = exteriors.find(r => inside([primary.x, primary.y], r));
+  // Home landmass: the exterior containing the anchor (so Scandinavia's counter stays in Sweden, not Greenland),
+  // unless that is a minor island (under 60 units², e.g. Kyushu); then the largest landmass.
+  const exteriors = oriented.filter(r => signedArea(r) > 0).sort((a, b) => signedArea(b) - signedArea(a));
+  const anchored = anchor && exteriors.find(r => inside(anchor, r));
   const home = anchored && signedArea(anchored) >= 60 ? anchored : exteriors[0];
   const holes = oriented.filter(r => signedArea(r) < 0 && inside(r[0], home));
   const [x, y, clearance] = polylabel([home, ...holes]);
   const path = oriented.map(r => 'M' + r.map(v => `${f2(v[0])},${f2(v[1])}`).join('L') + 'Z').join('');
-  return { id, name, region, x: +f2(x), y: +f2(y), clearance: +clearance.toFixed(1), path, neighbors: [] };
+  return { x: +f2(x), y: +f2(y), clearance: +clearance.toFixed(1), path, rings: oriented, home };
+}
+const provinces = PROVINCES.map(([id, name, region, from]) => {
+  const primary = sourceById.get(from[0]), own = shape([id], [primary.x, primary.y]);
+  // A hole is scenery: the counter (and so every travel time) is placed as if the hole were not there.
+  const { x, y, clearance } = holesOf.has(id) ? shape([id, ...holesOf.get(id)], [primary.x, primary.y]) : own;
+  return { id, name, region, x, y, clearance, path: own.path, neighbors: [] };
 });
+/** Direction of a shape's long axis in degrees (principal axis of its outline), for a label along it; 0 when the
+ * shape is not clearly elongated. */
+function axis(ring) {
+  const n = ring.length, mx = ring.reduce((s, p) => s + p[0], 0) / n, my = ring.reduce((s, p) => s + p[1], 0) / n;
+  let xx = 0, yy = 0, xy = 0;
+  for (const [x, y] of ring) { xx += (x - mx) ** 2; yy += (y - my) ** 2; xy += (x - mx) * (y - my); }
+  const spread = Math.sqrt((xx - yy) ** 2 + 4 * xy * xy), long = (xx + yy + spread) / 2, short = (xx + yy - spread) / 2;
+  if (long < 2.5 * short) return 0;
+  let angle = Math.atan2(2 * xy, xx - yy) / 2 * 180 / Math.PI;
+  if (angle > 90) angle -= 180; if (angle <= -90) angle += 180;
+  return Math.round(angle);
+}
+/** Room for a label: the length of the line through (x, y) at `angle` that stays inside the shape. */
+function span(ring, x, y, angle) {
+  const dx = Math.cos(angle * Math.PI / 180), dy = Math.sin(angle * Math.PI / 180);
+  const reach = sign => { let t = 0; while (t < 200 && inside([x + sign * (t + .25) * dx, y + sign * (t + .25) * dy], ring)) t += .25; return t; };
+  return +(reach(1) + reach(-1)).toFixed(1);
+}
+const terrain = WASTELANDS.map(([id, name, kind]) => {
+  if (!['mountains', 'desert', 'ice'].includes(kind)) throw new Error(`wasteland ${id}: unknown terrain ${kind}`);
+  const s = shape([id], null), angle = axis(s.home);
+  return { id, name, terrain: kind, x: s.x, y: s.y, angle, span: span(s.home, s.x, s.y, angle), path: s.path, rings: s.rings };
+});
+// Counters stay clear of every wasteland.
+for (const p of provinces) for (const t of terrain) {
+  const near = t.rings.some(r => inside([p.x, p.y], r) || r.some((a, i) => segDist([p.x, p.y], a, r[(i + 1) % r.length]) < 4));
+  if (near) throw new Error(`${p.id}'s counter lies on or within 4 units of the ${t.name}`);
+}
 
 // Adjacency.
 const byId = new Map(provinces.map(p => [p.id, p])), edges = new Map();
 const pair = (a, b) => a < b ? `${a}|${b}` : `${b}|${a}`;
 const borderLength = new Map();
-for (const arc of arcs) if (arc.shared) {
+for (const arc of arcs) if (arc.shared && !arc.label.split('|').some(g => wastelandIds.has(g))) {
   let length = 0; for (let i = 0; i < arc.points.length - 1; i++) length += Math.hypot(arc.points[i + 1][0] - arc.points[i][0], arc.points[i + 1][1] - arc.points[i][1]);
   borderLength.set(arc.label, (borderLength.get(arc.label) || 0) + length);
 }
 const short = [...borderLength].filter(([, l]) => l < MIN_BORDER);
 if (short.length) throw new Error(`Borders too short to read: ${short.map(([k, l]) => `${k} ${l.toFixed(2)}`)}`);
-const barriers = BARRIERS.map(([a, b, terrain, name, around]) => {
-  const k = pair(a, b);
-  if (!borderLength.has(k)) throw new Error(`barrier ${a}–${b} (${name}): the provinces share no border`);
-  if (!['mountains', 'desert'].includes(terrain)) throw new Error(`barrier ${k}: unknown terrain ${terrain}`);
-  const [from, to] = k.split('|'); return { a: from, b: to, terrain, name, around };
-});
-const blocked = new Set(barriers.map(x => pair(x.a, x.b)));
-for (const k of [...borderLength.keys()].sort()) if (!blocked.has(k)) { const [from, to] = k.split('|'); edges.set(k, { from, to, sea: false }); }
+for (const [a, b] of SEPARATED) if (borderLength.has(pair(a, b))) throw new Error(`${a} and ${b} still share a border: extend the wasteland between them`);
+for (const k of [...borderLength.keys()].sort()) { const [from, to] = k.split('|'); edges.set(k, { from, to, sea: false }); }
 for (const [a, b, why] of SEA_LINKS) {
   if (!byId.has(a) || !byId.has(b)) throw new Error(`sea link ${a}–${b}: unknown province`);
   const k = pair(a, b);
@@ -461,11 +650,12 @@ if (provinces.some(p => !regions.some(r => r.id === p.region))) throw new Error(
 
 const map = {
   name: 'Industry & Empire · 1910', width: 1280, height: 680,
-  notice: '1910-inspired holdings and colonial footholds. Province borders, industry and military strength are authored game abstractions, not a historical census. v6 merges the map into larger provinces with smoothed borders, grouped into eight regions, with Hawaii as the Pacific stepping stone.',
+  notice: '1910-inspired holdings and colonial footholds. Province borders, industry and military strength are authored game abstractions, not a historical census. Mountains, deserts and ice drawn as terrain are wasteland: no one can hold or cross them.',
   source: 'Natural Earth public-domain boundaries (via the v5 province geometry); Council of Iron authored provinces, generalised borders and connections.',
   regions, countries,
   provinces: provinces.map(({ id, name, region, x, y, path, neighbors }) => ({ id, name, region, x, y, path, neighbors })),
-  edges: [...edges.values()], barriers, id: 'imperial-1910-v6', rulesVersion: 3,
+  edges: [...edges.values()], terrain: terrain.map(({ id, name, terrain, x, y, angle, span, path }) => ({ id, name, terrain, x, y, angle, span, path })),
+  id: 'imperial-1910-v7', rulesVersion: 3,
 };
 const text = JSON.stringify(map) + '\n';
 if (process.argv.includes('--check')) {

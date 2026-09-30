@@ -12,7 +12,7 @@
 <svg class="emblem" viewBox="-50 -50 100 100" aria-hidden="true"><g class="em-teeth"><rect x="-3" y="-47" width="6" height="8" transform="rotate(0)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(15)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(30)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(45)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(60)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(75)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(90)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(105)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(120)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(135)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(150)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(165)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(180)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(195)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(210)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(225)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(240)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(255)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(270)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(285)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(300)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(315)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(330)"/><rect x="-3" y="-47" width="6" height="8" transform="rotate(345)"/></g><circle r="40" class="em-ring"/><circle r="33" class="em-inner"/><path class="em-star" d="M0-30 6-6 30 0 6 6 0 30-6 6-30 0-6-6z"/><path class="em-star2" d="M0-30 6-6 0 0zM30 0 6 6 0 0zM0 30-6 6 0 0zM-30 0-6-6 0 0z"/><circle r="4" class="em-hub"/></svg>
 <h1 id="home-title">Council <span>of</span> Iron</h1>
 <p class="tagline">Eight powers. Humans and agents at one table. No permanent friends.</p>
-<div class="identity-row"><span class="who"><small>Commander</small><b id="identity">Observer</b></span><button id="account-button" class="btn btn-ghost small" type="button">Change</button><span id="masthead-sound-slot"><div id="sound-control" class="sound-control"></div></span></div>
+<div class="identity-row"><span class="who"><small>Commander</small><b id="identity">Observer</b></span><button id="settings-button" class="btn btn-ghost small settings-open" type="button" aria-controls="settings"><span data-icon="gear"></span>Name &amp; sound</button></div>
 <p class="gate-foot"><span id="connection" class="connection">Connecting</span></p>
 </div>
 <section class="plate rooms" data-region="rooms" aria-labelledby="rooms-title">
@@ -24,11 +24,17 @@
 <header class="plaque"><h2 id="create-title">Open a council</h2></header>
 <div class="create-body">
 <label class="field">Your name<span class="slot"><input id="display-name" name="name" maxlength="40" placeholder="e.g. Chris" autocomplete="nickname" required></span></label>
-<label class="field">Room name<span class="slot"><input id="room-name" maxlength="80" value="The evening council" required></span></label>
 <div class="field"><span id="pace-label">Pace</span><div class="seg" role="radiogroup" aria-labelledby="pace-label"><button type="button" role="radio" aria-checked="true" data-preset="standard">Standard · 30 min</button><button type="button" role="radio" aria-checked="false" data-preset="quick">Quick · 5 min</button></div><input type="hidden" id="preset" value="standard"></div>
 </div>
 <footer class="card-foot"><button class="btn btn-primary wide" type="submit">Create a room</button><p class="foot-note">Invite by link, attach an agent, or fill seats with bots.</p></footer>
 </form>
+<div id="settings" class="plate settings" data-region="settings" role="region" aria-labelledby="settings-title" hidden>
+<header class="plaque"><button id="settings-back" class="bezel-btn mini" type="button" aria-label="Back to rooms" data-icon="back"></button><h2 id="settings-title">Settings</h2></header>
+<div class="settings-body">
+<form id="name-form" class="settings-group" aria-labelledby="settings-name-title"><h3 id="settings-name-title">Your name</h3><span class="slot"><input id="settings-name" maxlength="40" placeholder="e.g. Chris" autocomplete="nickname" aria-labelledby="settings-name-title" required></span><p class="menu-hint">Other players see this name. A new name starts a fresh record; past results stay with the old one.</p><button id="settings-save" class="btn btn-primary wide" type="submit">Save name</button><p id="settings-name-status" class="settings-status" role="status"></p></form>
+<section class="settings-group" aria-labelledby="settings-sound-title"><h3 id="settings-sound-title">Sound</h3><span id="settings-sound-slot" class="menu-sound"><div id="sound-control" class="sound-control"></div></span></section>
+</div>
+</div>
 </section>
 
 <section id="game" class="screen" hidden>

@@ -73,6 +73,13 @@ test('private server ID factory supports paired combat trials without a public s
   assert.equal(duplicate.status,400);
   assert.equal((await f.call('/api/games')).data.games.length,1);
 });
+test('a room created without a name gets two random words, never the name of another active room',async t=>{
+  const f=await fixture(t),host=await f.register('Host');
+  for(let i=0;i<5;i++)assert.equal((await f.call('/api/games','POST',{preset:'quick'},host.token)).status,201);
+  const names=(await f.call('/api/games')).data.games.map(g=>g.name);
+  assert.ok(names.every(name=>/^[A-Z][a-z]+ [A-Z][a-z]+$/.test(name)),names.join(', '));
+  assert.equal(new Set(names).size,names.length);
+});
 test('start begins the match at once; world speech of public agents enters the report, human speech does not',async t=>{
   const f=await fixture(t),host=await f.register('Host'),agent=await f.register('Public Agent'),id=await f.room(host);
   const humanSeat=await f.seat(id,host,'usa');
@@ -211,6 +218,26 @@ test('a host can fill practice seats before joining and reclaim a bot in a full 
   f.app.step(g,1800);
   assert.equal((await f.call(`/api/games/${older}/review`)).data.historyAvailable,true);
 });
+test('a seated player can change country in the lobby; the host can swap with a bot; seats close at the start',async t=>{
+  const f=await fixture(t),host=await f.register('Host'),visitor=await f.register('Visitor'),id=await f.room(host);
+  const join=(who,country)=>f.call(`/api/games/${id}/join`,'POST',{country,kind:'human'},who.token);
+  const owners=async()=>{const v=(await f.call(`/api/games/${id}`)).data;return Object.fromEntries(MAP.countries.map(c=>[c.id,[...new Set(c.start.map(s=>v.provinces.find(p=>p.id===s).owner))]]));};
+  assert.equal((await join(host,'britain')).status,200);
+  assert.equal((await join(visitor,'france')).status,200);
+  assert.equal((await join(visitor,'germany')).status,200);
+  let o=await owners();assert.deepEqual(o.france,[null]);assert.deepEqual(o.germany,['germany']);
+  assert.equal((await f.call(`/api/games/${id}`,'GET',undefined,visitor.token)).data.you,'germany');
+  assert.equal((await join(visitor,'britain')).status,409,'a human seat is never taken');
+  assert.equal((await f.call(`/api/games/${id}/bots`,'POST',{},host.token)).status,200);
+  assert.equal((await join(visitor,'russia')).status,409,'only the host swaps with a bot');
+  assert.equal((await join(host,'russia')).status,200);
+  const v=(await f.call(`/api/games/${id}`,'GET',undefined,host.token)).data;
+  assert.equal(v.you,'russia');assert.equal(v.players.length,8);
+  assert.deepEqual([v.players.find(p=>p.id==='britain').kind,v.players.find(p=>p.id==='britain').name],['bot','British automaton']);
+  o=await owners();assert.deepEqual(o.russia,['russia']);assert.deepEqual(o.britain,['britain']);
+  assert.equal((await f.call(`/api/games/${id}/start`,'POST',{},host.token)).status,200);
+  assert.equal((await join(host,'britain')).status,409);
+});
 test('real CLI subprocess joins, observes, sends orders, reconnects from a private session file',async t=>{
   const f=await fixture(t),host=await f.register('Host'),id=await f.room(host);const sa=await f.seat(id,host,'usa');
   const env={COUNCIL_URL:f.url,COUNCIL_SESSION:pathJoin(f.dir,'cli.session.json'),COUNCIL_TOKEN:'',COUNCIL_MATCH:''};
@@ -333,7 +360,7 @@ test('industrial HTTP plans are private, atomic, synchronized, recallable and pe
   assert.equal(new Set(receipt.orders.map(o=>o.arrivesAt)).size,1);
   f.app.step(f.app.games.get(id),1);await f.restart();
   const restored=(await f.call(`/api/games/${id}`,'GET',undefined,usa.token)).data;
-  assert.equal(restored.scenario,'imperial-1910-v6');assert.ok(restored.armies.some(a=>a.groupId===receipt.groupId));
+  assert.equal(restored.scenario,'imperial-1910-v7');assert.ok(restored.armies.some(a=>a.groupId===receipt.groupId));
   const recall={opId:'return',action:{type:'recall',id:receipt.groupId}};
   assert.equal((await f.call(`/api/games/${id}/actions`,'POST',recall,usa.token)).status,200);
   f.app.step(f.app.games.get(id),10);

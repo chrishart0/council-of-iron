@@ -148,6 +148,17 @@ body[data-screen=match] .toast{position:absolute}
 .create-body{padding:12px 16px 4px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .create-body>.field{grid-column:1/-1}
 .create-body .seg>button{flex:1}
+/* Settings (name and sound): its own page over the same landing map; the home plates step aside. */
+.settings-open{gap:6px}.settings-open .ui-icon{width:18px;height:18px}
+body[data-screen=settings] #home>.plate:not(.settings){display:none}
+body[data-screen=settings] .s-title{grid-template-columns:minmax(0,1fr) minmax(0,460px) minmax(0,1fr);grid-template-rows:auto;grid-template-areas:". settings ."}
+.settings{grid-area:settings;max-height:calc(100vh - 48px)}
+.settings .plaque{padding-left:6px}
+.settings-body{display:flex;flex-direction:column;gap:22px;padding:16px 18px 20px;overflow:auto;min-height:0}
+.settings-group{display:flex;flex-direction:column;gap:10px}
+.settings-group h3{margin:0;font:700 19px var(--title);color:var(--brass)}
+.settings-group+.settings-group{padding-top:18px;border-top:1px solid #c29a5233}
+.settings-status{margin:0;color:var(--ivory);font-size:15px}.settings-status:empty{display:none}
 .sound-control{display:inline-flex}
 
 /* ── The match: one grid of anchored regions over the full-bleed map ─────────── */
@@ -419,6 +430,7 @@ body[data-status=lobby] .war-room>:is(.topbar#hud,.strip,.left,.maparea,.powers,
   .identity-row{grid-column:1/-1;justify-content:flex-start;padding-top:6px}
   .gate-foot{display:none}
   .rooms{max-height:none;min-height:0}
+  body[data-screen=settings] .s-title{align-content:start}
   .room-card p{font-size:18px}
   .create-body{padding:8px 12px 2px;gap:6px}
   .create .field:nth-child(2){display:none}
@@ -566,7 +578,7 @@ body.keyboard-open .comms{--cx-safe-b:0px}
 @media (pointer:coarse){
   input,select,textarea{font-size:max(16px,1em)}
   .chip,.presets .chip,.source-chip,.card-owner,.card-members button,.march-row button,
-  .cx-quick button,.cx-propose,.cx-propose-list button,.cx-jump,.cx-more-btn,.card-wars .link,.link,.menu-body summary,.lb-front-button,.sound-toggle{min-height:44px}
+  .cx-quick button,.cx-propose,.cx-propose-list button,.cx-jump,.cx-more-btn,.card-wars .link,.link,.menu-body summary,.lb-front-button,.sound-toggle,.settings-open{min-height:44px}
   .cx-head button{min-width:44px;height:44px}
   .cx-switch button{width:44px;height:44px}
   .lb-row{min-height:44px}

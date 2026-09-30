@@ -143,9 +143,9 @@ export function join(g, map, { profileId, name, country, kind = 'human', model =
   requireRule(['public','private'].includes(visibility), 'Choose public or private agent visibility.');
   requireRule(kind !== 'human' || visibility === 'private', 'Human seats are private.');
   const existing = g.players.find(p => p.profileId === profileId);
-  if (existing) { requireRule(existing.id === country, 'You already occupy another country.', 409); return existing; }
   const c = map.countries.find(c => c.id === country);
   requireRule(c, 'Choose a listed country.');
+  if (existing) return existing.id === country ? existing : changeSeat(g, map, existing, c);
   const occupied = g.players.find(p => p.id === country);
   if (occupied && profileId === g.hostId && occupied.kind === 'bot' && kind === 'human') {
     Object.assign(occupied, { profileId, name: text(name, 'Player name', 40), kind, model: '', persona: '', visibility: 'private' });
@@ -156,9 +156,24 @@ export function join(g, map, { profileId, name, country, kind = 'human', model =
   const p = { id: country, profileId, name: text(name, 'Player name', 40), kind,
     model: String(model).slice(0, 100), persona: String(persona).slice(0, 100), visibility,
     side: `solo:${country}:0`, joinedAt: 0, eliminatedAt: null, orderTicks: [], lastChat: null };
-  g.players.push(p);
-  for (const id of c.start) Object.assign(province(g, id), { owner: country, troops: c.garrisons?.[id] ?? c.startTroops ?? 10, development: c.development?.[id] ?? 1 });
+  g.players.push(p); seatAt(g, p, c);
   event(g, 'joined', { country, name: p.name, kind }); return p;
+}
+/** Put a lobby seat on country `c`: its id, its solo side and the country's starting provinces. */
+function seatAt(g, p, c) {
+  Object.assign(p, { id: c.id, side: `solo:${c.id}:0` });
+  for (const id of c.start) Object.assign(province(g, id), { owner: c.id, troops: c.garrisons?.[id] ?? c.startTroops ?? 10, development: c.development?.[id] ?? 1 });
+}
+/** Lobby only: a seated player moves to an open country; the host's human seat may swap with a practice bot's. */
+function changeSeat(g, map, p, c) {
+  const other = g.players.find(q => q.id === c.id);
+  requireRule(!other || p.profileId === g.hostId && p.kind === 'human' && other.kind === 'bot',
+    'That country is taken. Choose a different unoccupied country.', 409);
+  const from = map.countries.find(x => x.id === p.id);
+  for (const q of g.provinces) if (q.owner === p.id || other && q.owner === other.id) Object.assign(q, { owner: null, troops: 2, development: 1 });
+  seatAt(g, p, c); if (other) seatAt(g, other, from);
+  event(g, 'seat_changed', { from: from.id, country: c.id, name: p.name, ...(other ? { swappedWith: other.name } : {}) });
+  return p;
 }
 export function start(g) {
   requireRule(g.status === 'lobby', 'Match has already started.', 409);
@@ -181,17 +196,6 @@ function checkBudget(g, p) {
 function useBudget(g, p) {
   p.orderTicks = p.orderTicks.filter(t => t > g.tick - gameRules(g).orderWindow);
   p.orderTicks.push(g.tick);
-}
-/** Why a border you can see is not a way through: the map's impassable terrain between the target and the source
- * (or any of your or your allies' provinces). Map data only; it adds words to an error, never a rule. */
-function barrierNote(g, map, country, from, to) {
-  const place = id => mapProvince(map, id)?.name ?? id;
-  const blocking = (map.barriers || []).filter(b => [b.a, b.b].includes(to)).find(b => {
-    const other = b.a === to ? b.b : b.a;
-    return other === from || allied(g, country, province(g, other).owner);
-  });
-  if (!blocking) return '';
-  return ` ${place(blocking.a)} and ${place(blocking.b)} share a border across the ${blocking.name} (${blocking.terrain}), which cannot be crossed. ${blocking.around}`;
 }
 const adjacent = (g, a, b) => g.travelTimes[a]?.[b] !== undefined;
 /** Troops a source sends: `amount` is an upper bound (at most what is free) and `percent` of the free troops
@@ -245,7 +249,7 @@ export function marchPlan(g, map, country, action, { assumeWar = false } = {}) {
   requireRule(assumeWar || !warRequired, truce === null ? 'Declare war before attacking another country.' : truceMessage(target.owner, truce), 409,
     truce === null ? null : { truceUntil: truce });
   // The border rule is checked first for fromAllBordering (it picks the sources), otherwise after the sources.
-  const border = () => { if (hostile) requireRule(ownsBorder(g, country, target.id), noBorder(g, country, target.id) + barrierNote(g, map, country, null, target.id), 409); };
+  const border = () => { if (hostile) requireRule(ownsBorder(g, country, target.id), noBorder(g, country, target.id), 409); };
   if (action.fromAllBordering) border();
   const inputs = action.fromAllBordering ? borderingSources(g, country, action, target) : marchSources(action);
   requireRule(Array.isArray(inputs) && inputs.length > 0 && inputs.length <= r.maxSources,
@@ -278,7 +282,7 @@ export function marchPlan(g, map, country, action, { assumeWar = false } = {}) {
     const route = adjacent(g, source.id, target.id)
       ? { path: [target.id], travel: journeyTicks(g, source.id, target.id, country) }
       : friendlyPath(g, country, source.id, target.id);
-    if (!route) return skip(source.id, 'no route through your or allied land', `No route from ${source.id} to ${target.id}: a march passes only through your own or allied provinces (not through battles) and may end one step beyond them. March to a nearer province, or ally with or conquer the land between.${barrierNote(g, map, country, source.id, target.id)}`);
+    if (!route) return skip(source.id, 'no route through your or allied land', `No route from ${source.id} to ${target.id}: a march passes only through your own or allied provinces (not through battles) and may end one step beyond them. March to a nearer province, or ally with or conquer the land between.`);
     const available = Math.max(0, source.troops - reservedTroops(g, country, source.id) - 1);
     // Percentages and amounts select currently uncommitted troops, never future recruitment.
     const amount = troopsFor(available, input);

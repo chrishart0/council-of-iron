@@ -111,7 +111,7 @@ def main():
                 assert page.locator('#'+kind+'-chart polyline').count()==1
                 page.locator(f'[data-chart="{kind}"][data-compare="all"]').click()
                 capture(page,'04-'+kind+'.png')
-            expect(page.locator('.aar-accounting')).to_contain_text('7,570')
+            expect(page.locator('.aar-accounting')).to_contain_text('7,511')
             page.locator('#aar-tab-military').click()
             page.locator('.aar-ledger [data-aar-seek]').first.click()
             assert int(page.locator('#replay-stage').get_attribute('data-tick')) <= 1800
@@ -153,9 +153,9 @@ def main():
             assert page.locator('#result img').count()==0
             assert not page.evaluate('Boolean(window.REVIEW_XSS)')
             page.locator('#aar-tab-replay').click();expect(page.locator('#replay-stage')).to_be_visible()
-            # The recorded fixture is replayed on the published board (imperial-1910-v6, 59 provinces incl. Hawaii).
+            # The recorded fixture is replayed on the published board (imperial-1910-v7, 59 provinces incl. Hawaii).
             assert page.locator('#review-map .province').count()==59 and page.locator('#review-map-province-hawaii').count()==1
-            assert api('/api/games/review-fixture/map')['id']=='imperial-1910-v6' and api('/api/games/review-fixture/replay')['map']['id']=='imperial-1910-v6'
+            assert api('/api/games/review-fixture/map')['id']=='imperial-1910-v7' and api('/api/games/review-fixture/replay')['map']['id']=='imperial-1910-v7'
             page.locator('#replay-exit').click();page.locator('#aar-back').click();page.locator('[data-room="old-fixture"]').click()
             expect(page.locator('#aar-standings tr[data-result-country]')).to_have_count(8)
             page.locator('#aar-tab-replay').click();expect(page.locator('#aar-replay')).to_contain_text('History unavailable')

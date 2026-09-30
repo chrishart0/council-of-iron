@@ -1,5 +1,5 @@
 import { journeyPoint, friendlyPath } from './movement.js';
-import { borderNetwork, insideRings, provinceRings } from './map-geometry.js';
+import { borderNetwork, insideRings, provinceRings, terrainMarks } from './map-geometry.js';
 import { allianceColors, atWar, battleColors, coalitions, formingAlliances, relationsOf, teamColor, threatening, warKey } from './relations.js';
 import { faction } from './presentation.js';
 import { setAttr, setText } from './ui.js';
@@ -41,26 +41,34 @@ export const WORLD = 1280;
 let instances = 0;
 /** Shortest horizontal offset from a to b across the wrap. */
 export const wrapDelta = dx => dx - WORLD * Math.round(dx / WORLD);
-/** 'M..L..' runs of a border path as point lists. */
-function polylines(d) {
-  return String(d).split('M').filter(Boolean).map(run => run.split('L').map(xy => xy.split(',').map(Number)));
-}
-/** Small upright mountain chevrons along border runs, spaced and sized in screen pixels at `px` per map unit. */
-function peaks(runs, px) {
-  const step = 11 / px, w = 4.4 / px, h = 6.4 / px, out = [];
-  for (const run of runs) {
-    let carry = step / 2, k = 0;
-    for (let i = 0; i < run.length - 1; i++) {
-      const [ax, ay] = run[i], [bx, by] = run[i + 1], len = Math.hypot(bx - ax, by - ay);
-      let t = carry;
-      for (; t < len; t += step, k++) {
-        const x = ax + (bx - ax) * t / len, y = ay + (by - ay) * t / len, s = k % 3 === 1 ? .78 : 1;
-        out.push(`M${(x - w * s).toFixed(2)},${(y + h * s / 2).toFixed(2)}L${x.toFixed(2)},${(y - h * s / 2).toFixed(2)}L${(x + w * s).toFixed(2)},${(y + h * s / 2).toFixed(2)}Z`);
-      }
-      carry = t - len;
+/** Terrain art is drawn in map units at three glyph sizes and the atlas shows the one that suits the zoom (by
+ * pixels per map unit), so peaks and dunes stay a readable screen size: [scale, glyph size factor, from px]. */
+const TERRAIN_SCALES = Object.freeze([['far', 1.9, 0], ['mid', 1, LOD.world], ['close', .5, 5]]);
+/** Impassable terrain art in map units, built once per map and zoom scale: shaded peaks for mountains, dune crests
+ * for desert, crevasses for ice. */
+function terrainArt(t, size) {
+  const f = v => v.toFixed(2), a = [], b = [], c = [];
+  if (t.terrain === 'mountains') {
+    for (const [x, y, k] of terrainMarks(t.path, 4.6 * size, 1.6 * size)) {
+      const s = (.85 + k * .4) * size, w = 2.5 * s, h = 3 * s, foot = y + h * .55, mid = x + w * .12;
+      a.push(`M${f(x - w)},${f(foot)}L${f(x)},${f(y - h)}L${f(mid)},${f(foot)}Z`); // lit face
+      b.push(`M${f(x)},${f(y - h)}L${f(x + w)},${f(foot)}L${f(mid)},${f(foot)}Z`); // shadow face
+      c.push(`M${f(x - w * .3)},${f(y - h * .45)}L${f(x)},${f(y - h)}L${f(x + w * .3)},${f(y - h * .45)}`); // snow line
+    }
+  } else if (t.terrain === 'ice') {
+    for (const [x, y, k] of terrainMarks(t.path, 5 * size, 1.4 * size)) {
+      const w = (1.4 + k * 1.2) * size, h = .5 * size;
+      a.push(`M${f(x - w)},${f(y)}L${f(x - w * .2)},${f(y - h)}L${f(x + w * .4)},${f(y + h * .4)}L${f(x + w)},${f(y - h * .3)}`); // crevasse
+      b.push(`M${f(x - w * .9)},${f(y + h * 1.1)}L${f(x + w * .7)},${f(y + h * 1.3)}`); // drift shadow
+    }
+  } else {
+    for (const [x, y, k] of terrainMarks(t.path, 3.6 * size, 1.2 * size)) {
+      const w = (1.5 + k * .8) * size, h = (.9 + k * .4) * size;
+      a.push(`M${f(x - w)},${f(y + h * .4)}Q${f(x - w * .25)},${f(y - h)} ${f(x + w)},${f(y + h * .1)}`); // dune crest
+      b.push(`M${f(x - w * .2)},${f(y - h * .45)}Q${f(x + w * .3)},${f(y + h * .1)} ${f(x + w)},${f(y + h * .1)}`); // lee shadow
     }
   }
-  return out.join('');
+  return { a: a.join(''), b: b.join(''), c: c.join('') };
 }
 export class Atlas {
   /** options.legend: { placement: one of LEGEND_PLACEMENTS (default 'bottom-left'),
@@ -80,6 +88,8 @@ export class Atlas {
     this.positionsById = Object.fromEntries(map.provinces.map(p => [p.id, { x: p.x, y: p.y }]));
     this.places = new Map(map.provinces.map(p => [p.id, p]));
     this.rings = new Map(map.provinces.map(p => [p.id, provinceRings(p.path)]));
+    // Impassable terrain (map.terrain): unowned land between provinces, never a province or a neighbour.
+    this.wastes = new Map((map.terrain || []).map(t => [t.id, { ...t, rings: provinceRings(t.path) }]));
     this.countries = new Map(map.countries.map(c => [c.id, c]));
     this.landNeighbors = new Map(map.provinces.map(p => [p.id, []]));
     for (const e of map.edges) if (!e.sea) { this.landNeighbors.get(e.from)?.push(e.to); this.landNeighbors.get(e.to)?.push(e.from); }
@@ -111,11 +121,27 @@ export class Atlas {
     for (const [label, x, y] of [['NORTH ATLANTIC', 435, 235], ['SOUTH ATLANTIC', 525, 485], ['PACIFIC OCEAN', 105, 380], ['INDIAN OCEAN', 830, 487]]) {
       const text = node('text', { x, y }); text.textContent = label; oceans.append(text);
     }
+    // Seas (map units, at x=(lon+180)*3.5+10, y=(83-lat)*4.6+10): shown only at the middle zoom (CSS keys on data-terrain-scale).
+    const seas = node('g', { class: 'sea-names', 'pointer-events': 'none', 'aria-hidden': 'true' });
+    for (const [label, x, y] of [['Mediterranean Sea', 703, 233], ['Black Sea', 759, 193], ['Caspian', 817, 199], ['Baltic', 710, 130],
+      ['North Sea', 652, 134], ['Caribbean Sea', 381, 323], ['Gulf of Mexico', 322, 277], ['Arabian Sea', 861, 323], ['Bay of Bengal', 952, 323],
+      ['South China Sea', 1039, 332], ['Sea of Japan', 1108, 206], ['Hudson Bay', 343, 120]]) {
+      const text = node('text', { x, y }); text.textContent = label; seas.append(text);
+    }
+    this.base.append(seas);
     // Region (continent) names: authored map data above the land, below counters; shown only at world zoom (CSS keys on data-world).
     const regions = node('g', { class: 'region-names', 'pointer-events': 'none', 'aria-hidden': 'true' });
     for (const r of map.regions || []) {
       // data-map-region, not data-region: data-region names the UI's layout panels.
       const text = node('text', { x: r.x, y: r.y, 'data-map-region': r.id }); text.textContent = r.name.toUpperCase(); regions.append(text);
+    }
+    // Wasteland names along each shape's long axis (authored map data), at the middle zoom like the seas; the type
+    // shrinks to fit the room the map gives (span) and never grows past the CSS size.
+    for (const t of this.wastes.values()) {
+      const size = Math.min(4, .85 * (t.span || 40) / (t.name.length * .9));
+      const text = node('text', { x: t.x, y: t.y, class: 'terrain-name', transform: `rotate(${t.angle || 0} ${t.x} ${t.y})`,
+        style: `font-size:${size.toFixed(2)}px;letter-spacing:${(size * .275).toFixed(2)}px` });
+      text.textContent = t.name; regions.append(text);
     }
     this.base.append(oceans); this.seas = node('g', { class: 'sea-connections', 'pointer-events': 'none' });
     for (const edge of map.edges.filter(e => e.sea)) this.seas.append(node('path', { d: this.path(edge.from, edge.to), 'data-edge': `${edge.from}|${edge.to}` }));
@@ -131,6 +157,19 @@ export class Atlas {
       this.territories.append(shape); this.shapes.set(p.id, shape);
     }
     this.base.append(this.territories);
+    // Impassable terrain: a ground fill in its own colour plus static map-unit art (built once, never animated).
+    this.terrain = node('g', { class: 'terrain-lands' });
+    for (const t of this.wastes.values()) {
+      const g = node('g', { class: `terrain terrain-${t.terrain}`, 'data-terrain': t.id });
+      g.append(node('path', { d: t.path, class: 'terrain-ground' }));
+      for (const [scale, size] of TERRAIN_SCALES) {
+        const art = terrainArt(t, size), set = node('g', { class: 'terrain-art', 'data-scale': scale, 'pointer-events': 'none' });
+        for (const k of ['a', 'b', 'c']) if (art[k]) set.append(node('path', { d: art[k], class: `terrain-art-${k}` }));
+        g.append(set);
+      }
+      this.terrain.append(g);
+    }
+    this.base.append(this.terrain);
     // Fine engraved land grain, authored once. No raster textures or per-frame filters.
     const hatch = node('pattern', { id: `${this.prefix}land-grain`, width: 5, height: 5, patternUnits: 'userSpaceOnUse' });
     hatch.append(node('circle', { cx: 1, cy: 1, r: .45, fill: '#132832', opacity: .22 })); defs.append(hatch); this.grain = hatch;
@@ -138,21 +177,16 @@ export class Atlas {
     this.provinceBorders = node('g', { class: 'province-borders', 'pointer-events': 'none' });
     this.countryBorders = node('g', { class: 'country-borders', 'pointer-events': 'none' });
     this.alliedBorders = node('g', { class: 'allied-borders', 'pointer-events': 'none' });
-    // Impassable terrain (map.barriers): a shared border without a link, drawn as mountains or desert instead of a border line.
-    const barrierOf = new Map((map.barriers || []).map(b => [[b.a, b.b].sort().join('|'), b]));
-    this.borders = []; this.barriers = [];
+    // A province's edge against impassable terrain is the edge of the land it can use: drawn as a terrain edge,
+    // never a province or country border (no war front runs along it; alliance outlines still close over it).
+    this.borders = []; this.terrainEdges = [];
+    const terrainEdges = [];
     for (const b of network.borders) {
-      const barrier = barrierOf.get(`${b.a}|${b.b}`);
-      if (barrier) { this.barriers.push({ ...b, barrier, runs: polylines(b.d) }); continue; }
+      const waste = this.wastes.has(b.a) ? b.a : this.wastes.has(b.b) ? b.b : null;
+      if (waste) { const province = waste === b.a ? b.b : b.a; this.terrainEdges.push({ a: province, b: waste, d: b.d }); terrainEdges.push(b.d); continue; }
       const el = node('path', { d: b.d, 'data-border': `${b.a}|${b.b}` }); this.provinceBorders.append(el); this.borders.push({ ...b, el, kind: 'province' });
     }
-    this.terrain = node('g', { class: 'terrain-barriers', 'aria-hidden': 'true' });
-    for (const b of this.barriers) {
-      const g = node('g', { class: `terrain terrain-${b.barrier.terrain}`, 'data-barrier': `${b.a}|${b.b}` });
-      if (b.barrier.terrain === 'desert') g.append(node('path', { d: b.d, class: 'terrain-band' }), node('path', { d: b.d, class: 'terrain-edge' }), node('path', { d: b.d, class: 'terrain-dots' }));
-      else { b.peaks = [node('path', { class: 'terrain-peaks-casing' }), node('path', { class: 'terrain-peaks' })]; g.append(node('path', { d: b.d, class: 'terrain-ridge' }), node('path', { d: b.d, class: 'terrain-edge' }), ...b.peaks); }
-      g.append(node('path', { d: b.d, class: 'terrain-hit' })); this.terrain.append(g);
-    }
+    const terrainEdge = node('path', { d: terrainEdges.join(''), class: 'terrain-edge', 'pointer-events': 'none' });
     // Alliance blocs, war fronts and hover relations sit above borders, below routes.
     this.blocs = node('g', { class: 'alliance-blocs', 'pointer-events': 'none', 'aria-hidden': 'true' });
     this.fronts = node('g', { class: 'war-fronts', 'pointer-events': 'none', 'aria-hidden': 'true' });
@@ -160,7 +194,7 @@ export class Atlas {
     this.relationPaths = Object.fromEntries(['ally', 'enemy', 'focus'].map(kind => [kind, node('path', { class: `relation-${kind}` })]));
     this.relationLines.append(...Object.values(this.relationPaths));
     // Coastline: a light casing under a dark line reads as an engraved double line at every zoom.
-    this.base.append(this.provinceBorders, this.alliedBorders, this.countryBorders, this.terrain,
+    this.base.append(this.provinceBorders, this.alliedBorders, this.countryBorders, terrainEdge,
       node('path', { d: coast, class: 'coastline-casing', 'pointer-events': 'none' }), node('path', { d: coast, class: 'coastline', 'pointer-events': 'none' }), regions);
     const compass = node('g', { 'aria-hidden': 'true', 'pointer-events': 'none', transform: 'translate(110 560)', opacity: .38, stroke: '#ddc591', fill: 'none' });
     compass.append(node('circle', { r: 27, 'stroke-width': .7 }), node('circle', { r: 22, 'stroke-width': .4 }), node('path', { d: 'M0-40L6-6 40 0 6 6 0 40-6 6-40 0-6-6Z', 'stroke-width': .8 }), node('path', { d: 'M0-40V0H-40L-6-6Z', fill: '#ddc591', 'stroke-width': .4 }));
@@ -170,7 +204,7 @@ export class Atlas {
     this.allianceNames = node('g', { class: 'alliance-names', 'pointer-events': 'none', 'aria-hidden': 'true' });
     this.connections = node('g', { 'pointer-events': 'none' }); this.routes = node('g', { 'pointer-events': 'none' });
     this.marches = node('g', { class: 'map-armies' }); this.seaFronts = node('g', { class: 'sea-fronts', 'aria-hidden': 'true' });
-    this.trails = node('g', { 'pointer-events': 'none' }); this.base.append(this.areaEffects, this.blocs, this.fronts, this.relationLines, this.terrain); // terrain reads above bloc glow
+    this.trails = node('g', { 'pointer-events': 'none' }); this.base.append(this.areaEffects, this.blocs, this.fronts, this.relationLines);
     this.lines.append(this.seaFronts, this.connections, this.routes, this.trails);
     this.leaders = node('g', { class: 'counter-leaders', 'pointer-events': 'none', 'aria-hidden': 'true' });
     const markers = node('g', { class: 'map-counters' });
@@ -218,7 +252,8 @@ export class Atlas {
     svg.addEventListener('pointermove', event => this.move(event));
     svg.addEventListener('pointerup', event => this.up(event));
     svg.addEventListener('pointercancel', event => { if (this.gesture?.command) this.endDraft(null); this.endLasso(); clearTimeout(this.pressTimer); this.pointers.delete(event.pointerId); this.gesture = null; this.dragged = true; });
-    svg.addEventListener('pointerleave', () => { this.tooltip.hidden = true; this.hoverCountry(null); });
+    // A lifted finger also "leaves": a tapped tooltip (terrain) stays until the next touch.
+    svg.addEventListener('pointerleave', event => { if (event.pointerType === 'touch') return; this.tooltip.hidden = true; this.hoverCountry(null); });
     if (!svg.hasAttribute('tabindex')) setAttr(svg, 'tabindex', 0);
     svg.addEventListener('keydown', event => {
       // Arrow keys pan (wrapping east–west); never while typing, since only map elements listen.
@@ -309,23 +344,30 @@ export class Atlas {
     if (!this.dragged && gesture?.army && this.onArmy?.(gesture.army)) { this.tooltip.hidden = true; }
     else if (!this.dragged && gesture?.army) this.showArmy(gesture.army, { left: event.clientX - 14, top: event.clientY + 65, width: 0 });
     else if (!this.dragged && gesture?.cluster) this.fit(gesture.cluster.split(','));
-    else if (!this.dragged && gesture?.barrier) this.showBarrier(gesture.barrier, event.clientX, event.clientY);
+    else if (!this.dragged && gesture?.terrain) this.showTerrain(gesture.terrain, event.clientX, event.clientY);
     else if (!this.dragged && gesture?.id) this.onSelect(gesture.id, { shiftKey: gesture.shiftKey, toggle: gesture.shiftKey || event.ctrlKey || event.metaKey, target: gesture.target, point: { x: event.clientX, y: event.clientY }, touch: event.pointerType === 'touch' });
     // Optional host hook: a tap on open map (sea, no counter) with its screen point, e.g. to snap to a nearby target.
     else if (!this.dragged && gesture) this.emptyTap?.(event.clientX, event.clientY, { touch: event.pointerType === 'touch' });
     if (!this.pointers.size) this.gesture = null;
   }
-  /** What a pointer event is on. A click on a repeated world copy resolves to the same province. */
+  /** What a pointer event is on. A click on a repeated world copy resolves to the same province or terrain. */
   hit(event) {
     const el = event.target, cluster = el.closest?.('[data-cluster]')?.dataset.cluster, army = el.closest?.('[data-army]')?.dataset.army;
-    const barrier = el.closest?.('[data-barrier]')?.dataset.barrier;
-    let id = el.closest?.('[data-province]')?.dataset.province;
-    if (!id && !cluster && !army && !barrier && el.closest?.('use.world-copy')) id = this.provinceAt(this.coordinates(event.clientX, event.clientY));
-    return { cluster, id, army, barrier };
+    let terrain = el.closest?.('[data-terrain]')?.dataset.terrain, id = el.closest?.('[data-province]')?.dataset.province;
+    if (!id && !cluster && !army && !terrain && el.closest?.('use.world-copy')) {
+      const point = this.coordinates(event.clientX, event.clientY);
+      id = this.provinceAt(point); if (!id) terrain = this.terrainAt(point);
+    }
+    return { cluster, id, army, terrain };
   }
   provinceAt(point) {
     const x = ((point.x % WORLD) + WORLD) % WORLD;
     for (const [id, rings] of this.rings) if (insideRings([x, point.y], rings)) return id;
+    return null;
+  }
+  terrainAt(point) {
+    const x = ((point.x % WORLD) + WORLD) % WORLD;
+    for (const [id, t] of this.wastes) if (insideRings([x, point.y], t.rings)) return id;
     return null;
   }
   /** The x of the repeated copy nearest the view centre. */
@@ -336,8 +378,8 @@ export class Atlas {
   }
   pan(dx, dy) { this.view.x += dx; this.view.y += dy; this.applyView(); }
   hover(event) {
-    const { cluster, id, army, barrier } = this.hit(event);
-    if (barrier) { this.showBarrier(barrier, event.clientX, event.clientY); return; }
+    const { cluster, id, army, terrain } = this.hit(event);
+    if (terrain) { this.hoverCountry(null); this.showTerrain(terrain, event.clientX, event.clientY); return; }
     const p = this.byId?.get(id);
     this.hoverCountry(cluster ? this.byId?.get(cluster.split(',')[0])?.owner || null : p?.owner || null);
     if (army) { this.showArmy(army, { left: event.clientX - 14, top: event.clientY + 65, width: 0 }); return; }
@@ -364,12 +406,14 @@ export class Atlas {
     this.tooltip.style.left = `${clamp(clientX - rect.left + 14, 8, rect.width - 260)}px`;
     this.tooltip.style.top = `${Math.max(8, clientY - rect.top - 65)}px`;
   }
-  /** Why a drawn border is not a way through (authored map text only). */
-  barrierText(key) {
-    const b = this.barriers.find(b => `${b.a}|${b.b}` === key)?.barrier;
-    return b ? { title: `The ${b.name}: impassable`, detail: `${b.terrain === 'desert' ? 'Desert' : 'Mountains'} between ${this.places.get(b.a)?.name} and ${this.places.get(b.b)?.name}. ${b.around}` } : null;
+  /** What impassable terrain is (authored map names only). */
+  terrainText(id) {
+    const t = this.wastes.get(id); if (!t) return null;
+    const around = [...new Set(this.terrainEdges.filter(e => e.b === id).map(e => this.places.get(e.a)?.name).filter(Boolean))];
+    const list = around.length > 1 ? ` between ${around.slice(0, -1).join(', ')} and ${around[around.length - 1]}` : around.length ? ` in ${around[0]}` : '';
+    return { title: t.name, detail: `Impassable ${t.terrain}${list}. No army can cross it or hold it.` };
   }
-  showBarrier(key, clientX, clientY) { const t = this.barrierText(key); if (t) this.tip(t.title, t.detail, clientX, clientY); }
+  showTerrain(id, clientX, clientY) { const t = this.terrainText(id); if (t) this.tip(t.title, t.detail, clientX, clientY); }
   showArmy(id, at) {
     const a = this.state?.armies.find(a => a.id === id);
     if (!a) return;
@@ -384,11 +428,11 @@ export class Atlas {
     const covered = Math.min(rect.width * .6, (this.insets?.left || 0) + (this.insets?.right || 0));
     return [rect.width > 0 ? Math.min(WORLD, rect.width / MAX_PX_PER_UNIT) : 135, rect.width > 0 ? WORLD * rect.width / (rect.width - covered) : WORLD];
   }
-  /** Optional (v0.8.1, v0.9 adds top): screen px permanently covered by the host's panels ({left,right,top}). World view,
-   * the zoom-out limit and the copy chosen for counters and names use the uncovered part of the map. */
+  /** Optional (v0.8.1, v0.9 adds top, bottom): screen px permanently covered by the host's panels ({left,right,top,bottom}).
+   * World view, the zoom-out limit and the copy chosen for counters and names use the uncovered part of the map. */
   setInsets(insets) {
-    const next = { left: Math.max(0, insets?.left || 0), right: Math.max(0, insets?.right || 0), top: Math.max(0, insets?.top || 0) };
-    if (this.insets && next.left === this.insets.left && next.right === this.insets.right && next.top === this.insets.top) return;
+    const next = { left: Math.max(0, insets?.left || 0), right: Math.max(0, insets?.right || 0), top: Math.max(0, insets?.top || 0), bottom: Math.max(0, insets?.bottom || 0) };
+    if (this.insets && ['left', 'right', 'top', 'bottom'].every(k => next[k] === this.insets[k])) return;
     this.insets = next; this.applyView();
   }
   applyView() {
@@ -408,7 +452,9 @@ export class Atlas {
     const shift = WORLD * Math.floor((this.view.x + this.view.w / 2) / WORLD);
     if (shift) { this.view.x -= shift; if (this.gesture) this.gesture.vx -= shift; }
     const low = -this.view.h * .35, high = 680 - this.view.h * .65;
-    this.view.y = low > high ? 340 - this.view.h / 2 : clamp(this.view.y, low, high);
+    // Taller than the world (a portrait world view): centre the world in the band between the top and bottom insets.
+    const t = this.insets?.top || 0, b = this.insets?.bottom || 0, band = rect.height - t - b;
+    this.view.y = low > high ? 340 - (band > 0 ? (t + band / 2) * this.view.h / rect.height : this.view.h / 2) : clamp(this.view.y, low, high);
     setAttr(this.svg, 'viewBox', `${this.view.x} ${this.view.y} ${this.view.w} ${this.view.h}`);
     this.requestLayout();
   }
@@ -535,9 +581,8 @@ export class Atlas {
     setData(this.svg, { lod: level }); this.svg.classList.toggle('atlas-zoomed', level === 'near');
     // Region names are drawn in map units: shown only between legible and crowded sizes.
     setData(this.svg, { world: px >= LOD.regionMin && px < LOD.world });
-    // Mountain peaks are drawn in screen pixels: regenerate them when the zoom changes by more than ~10%.
-    const bucket = Math.round(Math.log(px) * 10);
-    if (bucket !== this.peakBucket) { this.peakBucket = bucket; for (const b of this.barriers) if (b.peaks) { const d = peaks(b.runs, px); for (const el of b.peaks) el.setAttribute('d', d); } }
+    // Terrain art, wasteland and sea names follow the zoom scale (written only when it changes).
+    setData(this.svg, { terrainScale: TERRAIN_SCALES.reduce((at, [scale, , from]) => px >= from ? scale : at, 'far') });
     // Keep the mode chip inside the visible map, whatever else shares the container.
     // Expose the visible map's insets so CSS can place the key inside it, whatever shares the container.
     const box = this.svg.getBoundingClientRect(), host = this.chip.parentElement?.getBoundingClientRect();
@@ -946,10 +991,11 @@ export class Atlas {
       if (wars.length) heading('At war');
       for (const pair of wars.slice(0, 4)) item('#d8342a', pair.split(':').map(id => faction(id).short).join(' – '), 'war');
       if (wars.length > 4) heading(`+${wars.length - 4} more wars`);
-      // Impassable terrain, by kind: the names drawn on the map.
-      const names = kind => [...new Set(this.barriers.filter(b => b.barrier.terrain === kind).map(b => b.barrier.name))];
-      if (this.barriers.length) heading('Impassable');
-      for (const kind of ['mountains', 'desert']) if (names(kind).length) item(kind === 'desert' ? '#d9b777' : '#8a6a45', names(kind).join(' · '), kind);
+      // Impassable terrain, by kind (each area's name is on the map and in its tooltip).
+      const kinds = new Set([...this.wastes.values()].map(t => t.terrain));
+      if (kinds.size) heading('Impassable');
+      for (const [kind, label, color] of [['mountains', 'Mountains', '#7d7263'], ['desert', 'Desert', '#d6bd84'], ['ice', 'Ice', '#e4ecee']])
+        if (kinds.has(kind)) item(color, label, kind);
     }
     this.keyed(this.legend, JSON.stringify(specs), () => specs.map(([text, color, kind]) => {
       if (!kind) { const b = document.createElement('b'); b.textContent = text; return b; }
@@ -1115,7 +1161,7 @@ export class Atlas {
   outline(ids) {
     const network = networks.get(this.map), parts = [];
     for (const id of ids) parts.push(...(network.coast.get(id) || []));
-    for (const b of [...this.borders, ...this.barriers]) if (ids.has(b.a) !== ids.has(b.b)) parts.push(b.d);
+    for (const b of [...this.borders, ...this.terrainEdges]) if (ids.has(b.a) !== ids.has(b.b)) parts.push(b.d);
     return parts.join('');
   }
   /** The contact line between two groups of countries: land borders, else sea links, else capitals. */
@@ -1192,16 +1238,14 @@ export class Atlas {
     const cluster = el?.closest?.('[data-cluster]')?.dataset.cluster;
     if (!to && cluster) to = cluster.split(',').find(id => neighbors.includes(id)) || null;
     if (!to && this.svg.contains(el)) to = this.provinceAt(point);
-    const under = to;
     if (!neighbors.includes(to)) {
       to = null; let best = 28 / px;
       for (const id of neighbors) { const q = this.places.get(id), d = Math.hypot(point.x - (point.x + wrapDelta(q.x - point.x)), point.y - q.y); if (d < best) { best = d; to = id; } }
     }
-    // Over a province across impassable terrain from your land: say why instead of snapping.
-    const mine = id => id === from || (this.byId?.get(id)?.owner && this.byId.get(id).owner === this.state?.you);
-    const wall = !to && under ? this.barriers.find(b => (b.a === under && mine(b.b)) || (b.b === under && mine(b.a))) : null;
-    if (wall) this.showBarrier(`${wall.a}|${wall.b}`, clientX, clientY); else if (this.dragging?.wall) this.tooltip.hidden = true;
-    this.dragging = { from, to, point, wall: Boolean(wall), label: to ? this.dragHooks?.label?.(from, to) || '' : wall ? `${wall.barrier.name} · impassable` : '' };
+    // Over impassable terrain: say so instead of snapping.
+    const wall = !to ? this.terrainAt(point) : null;
+    if (wall) this.showTerrain(wall, clientX, clientY); else if (this.dragging?.wall) this.tooltip.hidden = true;
+    this.dragging = { from, to, point, wall: Boolean(wall), label: to ? this.dragHooks?.label?.(from, to) || '' : wall ? `${this.wastes.get(wall).name} · impassable` : '' };
     this.paintDraft();
   }
   endDraft(from, to = null) {

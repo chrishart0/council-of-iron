@@ -161,6 +161,12 @@ def live_match(args, artifacts):
                 for c in countries:
                     envoy=http('/api/players','POST',{'name':f'Idle {c}'})
                     http(f'/api/games/{room}/join','POST',{'country':c,'kind':'agent'},envoy['token'])
+            def create_room(page):
+                """Submit the create form; the server names the room, so the new room is the one not listed before."""
+                before={g['id'] for g in http('/api/games')['games']}
+                page.locator('#create-form button[type=submit]').click()
+                expect(page.locator('#lobby')).to_be_visible()
+                return next(g['id'] for g in http('/api/games')['games'] if g['id'] not in before)
             def cli(*arguments):
                 result = subprocess.run(['node','agents/cli.js',*arguments],cwd=ROOT,env={**os.environ,'COUNCIL_URL':url,'COUNCIL_SESSION':str(Path(tmp)/'agent.session.json'),'COUNCIL_TOKEN':'','COUNCIL_MATCH':''},capture_output=True,text=True,timeout=20)
                 assert result.returncode == 0, result.stderr
@@ -183,7 +189,6 @@ def live_match(args, artifacts):
                 page=context.new_page();load_page(page)
                 page.screenshot(path=str(artifacts/'01-lobby.png'),full_page=True)
                 page.locator('#display-name').fill('Browser Commander')
-                page.locator('#room-name').fill('The First Council')
                 page.locator('[data-preset="standard"]').click()
                 page.locator('#create-form button[type=submit]').click()
                 expect(page.locator('#lobby')).to_be_visible()
@@ -446,14 +451,11 @@ def live_match(args, artifacts):
                 def other_rooms():
                     # A second room with the same browser identity; the other seven seats are idle agents, so the USA keeps
                     # exactly its starting land and every province named below is deterministic.
-                    page.goto(url+'/');expect(page.locator('#room-name')).to_be_visible()
-                    page.locator('#room-name').fill('Second Council')
-                    page.locator('#create-form button[type=submit]').click()
-                    expect(page.locator('#lobby')).to_be_visible()
+                    page.goto(url+'/');expect(page.locator('#create-form')).to_be_visible()
+                    room2=create_room(page)
                     page.locator('[data-country-seat="usa"]').click()
                     page.locator('#join-form button').click()
                     expect(page.locator('#lobby-note')).to_contain_text('You command United States')
-                    room2=next(g['id'] for g in http('/api/games')['games'] if g['name']=='Second Council')
                     idle_seats(room2,['britain',*IDLE])
                     expect(page.locator('#room-label')).to_contain_text('8/8')
                     page.locator('#start-match').click()
@@ -563,27 +565,21 @@ def live_match(args, artifacts):
                     page.screenshot(path=str(artifacts/'09-mobile-orders.png'),full_page=True)
                     page.set_viewport_size({'width':1600,'height':1050})
                     # A host who filled every seat with bots before choosing a country takes one of them over.
-                    page.goto(url+'/');expect(page.locator('#room-name')).to_be_visible()
-                    page.locator('#room-name').fill('Practice council')
-                    page.locator('#create-form button[type=submit]').click()
-                    expect(page.locator('#lobby')).to_be_visible()
+                    page.goto(url+'/');expect(page.locator('#create-form')).to_be_visible()
+                    practice=create_room(page)
                     page.locator('[data-country-seat="japan"]').click()
                     expect(page.locator('#fill-bots')).to_contain_text('Take this seat')
                     page.locator('#fill-bots').click()
                     expect(page.locator('#room-label')).to_contain_text('8/8')
                     expect(page.locator('#lobby-note')).to_contain_text('You command Empire of Japan')
-                    practice=next(g['id'] for g in http('/api/games')['games'] if g['name']=='Practice council')
                     players=http(f'/api/games/{practice}')['players']
                     assert next(p for p in players if p['id']=='japan')['kind']=='human' and sum(p['kind']=='bot' for p in players)==7
                     page.locator('#start-match').click();expect(page.locator('#phase')).to_have_text('In session')
                     report['assertions'].append('A host who had not chosen a country took Japan and filled the other seven seats with bots in one step, then started the match.')
                     # A shared lobby run by a seatless host: live clients (here two agents via the join API) take seats,
                     # and the host starts the match without a seat and watches.
-                    page.goto(url+'/');expect(page.locator('#room-name')).to_be_visible()
-                    page.locator('#room-name').fill('Shared council')
-                    page.locator('#create-form button[type=submit]').click()
-                    expect(page.locator('#lobby')).to_be_visible()
-                    shared=next(g['id'] for g in http('/api/games')['games'] if g['name']=='Shared council')
+                    page.goto(url+'/');expect(page.locator('#create-form')).to_be_visible()
+                    shared=create_room(page)
                     expect(page.locator('#start-match')).to_be_disabled()
                     for c in ('britain','france'):
                         envoy=http('/api/players','POST',{'name':f'Envoy {c}'})

@@ -2,7 +2,7 @@
  * under the CURRENT rules and map. This does NOT generate new strategy: every submitted order is a
  * recorded one. The recording predates formal war, the single march order, rally points and the current
  * timings, and it was played on the 80-province v4 board, so a small, explicit adapter bridges it (see adapt()):
- *   - recorded province ids map onto the published v6 board (RECORDED_PROVINCE: merged provinces);
+ *   - recorded province ids map onto the published board (RECORDED_PROVINCE: merged provinces);
  *   - recorded move/attack orders become one march (a recorded arrival time is dropped); a march into a
  *     non-allied country declares war in the same action (declareWar), exactly what a player adds today;
  *   - a recorded recruitment arrow to one of the mover's own provinces becomes a rally point there;
@@ -21,7 +21,7 @@ import { resolve } from 'node:path';
 import { createGame, join, start, act, tick, sides, RuleError } from '../src/engine.js';
 
 export const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../tests/fixtures/handplay-20260927.json.gz', import.meta.url))));
-// The recording is replayed on the published map. It was played on the 80-province v4 board; v6 merged
+// The recording is replayed on the published map. It was played on the 80-province v4 board; the current map merged
 // provinces (scripts/build-imperial-v6.js), so every recorded province id goes through this table.
 export const map = JSON.parse(readFileSync(new URL('../public/imperial-map.json', import.meta.url)));
 const RECORDED_PROVINCE = Object.freeze({
@@ -29,7 +29,7 @@ const RECORDED_PROVINCE = Object.freeze({
   scotland:'england', midlands:'england', normandy:'north-france', occitania:'south-france', 'alpine-france':'south-france',
   belgium:'low-countries', rhineland:'ruhr', brandenburg:'prussia', saxony:'bavaria', 'south-italy':'italy',
   balkans:'danube', serbia:'balkans', bulgaria:'balkans', urals:'siberia', 'east-anatolia':'caucasus',
-  sahel:'sahara', angola:'congo', 'north-india':'india', 'south-india':'india',
+  sahara:'sahel', angola:'congo', 'north-india':'india', 'south-india':'india',
   'north-japan':'japan', 'south-japan':'japan', 'new-zealand':'australia' });
 const place = id => typeof id === 'string' ? RECORDED_PROVINCE[id] ?? id : id;
 const projection = g => ({ tick:g.tick, status:g.status, provinces:g.provinces, armies:g.armies, sides:sides(g), outcome:g.outcome });

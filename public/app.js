@@ -231,7 +231,7 @@ function startingSummary(c){
   return `${c.start.length} holdings · ${troops} troops · ${production} recruits a minute · ${c.colonies?.length || 0} colonies. ${c.start.map(id=>place(id).name).join(', ')}.`;
 }
 function setConnection(text){setText($('connection'),text);setText($('hud-connection'),text);}
-function showIdentity(){ $('identity').textContent=identity?.name || 'Observer';$('hud-identity').textContent=identity?.name || 'Observer';$('display-name').value=identity?.name || '';$('join-name').value=identity?.name || ''; }
+function showIdentity(){ $('identity').textContent=identity?.name || 'Observer';$('hud-identity').textContent=identity?.name || 'Observer';$('display-name').value=identity?.name || '';$('join-name').value=identity?.name || '';$('settings-name').value=identity?.name || ''; }
 async function rooms(){
   const data=await request('/api/games');
   const sections=[['running','In progress','Watch'],['lobby','Open rooms','Enter'],['finished','Concluded','Review']];
@@ -332,16 +332,18 @@ function view(){
   const hud=vis('#hud'),strip=vis('.strip'),panel=vis('#card'),dock=vis('.dock');
   const side=[vis('#leaderboard'),vis('#comms'),vis('#hud-menu'),vis('#war-journal')].filter(r=>r && r.height>stage.height*.3);
   const sheet=panel && panel.width>stage.width*.7,sideDock=dock && dock.height>dock.width;
-  const top=Math.max(0,...[hud,strip].filter(Boolean).map(r=>r.bottom-stage.top));
+  const top=Math.max(0,...[hud,strip,vis('.lobby-bar')].filter(Boolean).map(r=>r.bottom-stage.top));
   const right=Math.max(sideDock?stage.right-dock.left:0,...side.filter(r=>r.left>stage.left+stage.width/2).map(r=>stage.right-r.left));
   const left=Math.max(panel && !sheet?panel.right-stage.left:0,...side.filter(r=>r.right<stage.left+stage.width/2).map(r=>r.right-stage.left));
-  const bottom=Math.max(sheet?stage.bottom-panel.top:0,dock && !sideDock?stage.bottom-dock.top:0);
-  return {insets:{top,right,left,bottom}};
+  // The lobby's rack and dossier when they span the width (phones, the desktop rack): they cover the bottom for good.
+  const lobby=Math.max(0,...['#faction-choices','#lobby .dossier'].map(vis).filter(r=>r && r.width>stage.width*.7).map(r=>stage.bottom-r.top));
+  const bottom=Math.max(lobby,sheet?stage.bottom-panel.top:0,dock && !sideDock?stage.bottom-dock.top:0);
+  return {insets:{top,right,left,bottom},lobby};
 }
-/** Panels that stay beside the map (the right column, the phone bars): world view and zoom-out use the rest. */
+/** Panels that stay beside the map (the right column, the phone bars, the lobby): world view and zoom-out use the rest. */
 function syncInsets(){
-  if(!atlas)return;const {insets}=view();
-  atlas.setInsets({left:0,right:insets.right,top:insets.top});
+  if(!atlas)return;const {insets,lobby}=view();
+  atlas.setInsets({left:0,right:insets.right,top:insets.top,bottom:lobby});
 }
 function focusCountry(){if(state?.you)atlas.home(state.you,{...view(),width:compact.matches?Math.max(120,$('stage').clientWidth/2.8):undefined});}
 /** Phones: if the bottom sheet now covers the chosen province, pan (no zoom) so it sits above the sheet. */
@@ -893,6 +895,7 @@ function describe(e){
   switch(e.type){
     case 'joined':return`${e.name} takes ${c(e.country)}.`;
     case 'seat_claimed':return`${e.name} takes command of ${c(e.country)} from a bot.`;
+    case 'seat_changed':return e.swappedWith?`${e.name} takes ${c(e.country)}; ${c(e.from)} goes to a bot.`:`${e.name} moves from ${c(e.from)} to ${c(e.country)}.`;
     case 'started':return'The match begins. Armies may move.';
     case 'army_departed':return`${c(e.country)} commits ${e.amount} troops: ${place(e.from).name} → ${place(e.to).name}.`;
     case 'development_started':return`${c(e.country)} invests ${e.cost} manpower in ${place(e.province).name}; level ${e.level} completes at ${time(e.completesAt)}.`;
@@ -934,24 +937,27 @@ function leaveRoom(){
 /** The lobby: a dossier and a rack of standards. */
 function renderLobby(){
   const chosen=$('country-choice').value;
-  // The host of a room full of practice bots may take one of those seats (before the start).
-  const claimable=p=>state.isHost && !state.you && p?.kind==='bot';
+  // The host may take (or, seated, swap with) a practice bot's seat before the start.
+  const claimable=p=>state.isHost && p?.kind==='bot' && (!state.you || state.players.find(q=>q.id===state.you)?.kind==='human');
   for(const b of $('faction-choices').querySelectorAll('button')){
     const id=b.dataset.countrySeat,occupant=state.players.find(p=>p.id===id);
-    b.disabled=Boolean(occupant) && !claimable(occupant);b.setAttribute('aria-pressed',String(chosen===id || occupant?.id===state.you && Boolean(state.you)));
+    b.disabled=Boolean(occupant) && id!==state.you && !claimable(occupant);b.setAttribute('aria-pressed',String(id===(chosen || state.you)));
     const who=occupant?`${seatType(occupant)} · ${occupant.displayName || occupant.name}`:'';
-    const text=occupant?(claimable(occupant)?`${who} · take over`:who):`${country(id).start.length} holdings`;
+    const text=occupant?(claimable(occupant)?`${who} · ${state.you?'swap':'take over'}`:who):`${country(id).start.length} holdings`;
     b.title=occupant?text:startingSummary(country(id));b.querySelector('small').textContent=text;
   }
-  $('lobby').hidden=state.status!=='lobby';$('join-form').hidden=Boolean(state.you);
+  $('lobby').hidden=state.status!=='lobby';
   if(chosen && state.players.some(p=>p.id===chosen && !claimable(p)))$('country-choice').value='';
-  $('host-controls').hidden=!state.isHost;$('fill-bots').disabled=state.players.length===8 || !state.you && !$('country-choice').value;$('start-match').disabled=state.players.length<2;$('start-match').textContent=state.you?'Start match':'Start and watch';
+  // Seated: picking another open standard offers to move there (the name stays; a new name would be a new profile).
+  const choice=$('country-choice').value,moving=Boolean(state.you && choice);
+  $('join-form').hidden=Boolean(state.you) && !moving;$('join-name').closest('label').hidden=Boolean(state.you);$('join-name').required=!state.you;
+  $('host-controls').hidden=!state.isHost;$('fill-bots').disabled=state.players.length===8 || !state.you && !choice;$('start-match').disabled=state.players.length<2;$('start-match').textContent=state.you?'Start match':'Start and watch';
   $('fill-bots').textContent=state.you?'Fill empty seats with bots':'Take this seat and fill the rest with bots';
-  const selected=country(state.you || $('country-choice').value);
-  const head=selected?`${insignia(selected.id)}<div><h3>${esc(selected.name)}</h3><p>${state.you?'Your country':'Open seat'}</p></div>`:`${insignia(null)}<div><h3>Pick a standard</h3><p>Choose an open country from the rack.</p></div>`;
+  const selected=country(choice || state.you);
+  const head=selected?`${insignia(selected.id)}<div><h3>${esc(selected.name)}</h3><p>${selected.id===state.you?'Your country':moving?'Tap your standard to keep it':'Open seat'}</p></div>`:`${insignia(null)}<div><h3>Pick a standard</h3><p>Choose an open country from the rack.</p></div>`;
   if($('dossier-head').dataset.key!==head){$('dossier-head').dataset.key=head;setHTML($('dossier-head'),head);} // country names are authored map data
   $('starting-holdings').textContent=selected?startingSummary(selected):'Industrial homelands, colonial footholds. Unequal strengths, the same rules.';
-  $('join-form').querySelector('button').disabled=!country($('country-choice').value);
+  const submit=$('join-form').querySelector('button');submit.disabled=!country(choice);setText(submit,moving?`Switch to ${country(choice).name}`:'Take this seat');
   $('lobby-note').textContent=state.you?`You command ${country(state.you).name}. ${state.isHost?'Invite players, attach agents or add bots, then start.':'Waiting for the host to start.'}`:state.isHost && state.players.length===8 && state.players.some(p=>p.kind==='bot')?'Bots fill every seat. Choose one to take command, then start.':`${state.players.length}/8 seats taken. ${state.isHost?'Choose an open country to join, or start and watch.':'Choose an open country to join.'}`;
 }
 /** How to play (☰ menu): the whole rulebook on one screen, with this room's numbers. */
@@ -969,9 +975,9 @@ function renderRules(){
     ['Alliances',`Propose to a country; the alliance starts ${r.notice} s after everyone accepts. Leaving also takes ${r.notice} s. An alliance holds at most three countries, and never more than half the match. Promises in chat are not orders.`],
   ].map(([title,text])=>{const li=el('li');li.append(el('b','',`${title}. `),text);return li;}));
 }
-/** One sound control: in the ☰ menu during a live room, in the masthead on the home page and in review. */
+/** One sound control: in the ☰ menu during a live room, on the Settings page otherwise. */
 function placeSound(){
-  const slot=matchId && !document.body.classList.contains('reviewing')?$('hud-sound-slot'):$('masthead-sound-slot');
+  const slot=matchId && !document.body.classList.contains('reviewing')?$('hud-sound-slot'):$('settings-sound-slot');
   if($('sound-control').parentElement!==slot)slot.append($('sound-control'));
 }
 function render(){
@@ -1063,8 +1069,8 @@ document.addEventListener('click',event=>{
   if(!mapTap)return;const tap=mapTap;mapTap=null;
   if(performance.now()-tap.t<750 && Math.hypot(event.clientX-tap.x,event.clientY-tap.y)<30 && !event.target.closest?.('#map')){event.preventDefault();event.stopImmediatePropagation();}
 },true);
-$('create-form').addEventListener('submit',safely(once(async()=>{await ensureIdentity($('display-name').value);const g=await request('/api/games','POST',{name:$('room-name').value,preset:$('preset').value});await openRoom(g.id);})));
-$('join-form').addEventListener('submit',safely(once(async()=>{await ensureIdentity($('join-name').value);await request(`/api/games/${matchId}/join`,'POST',{country:$('country-choice').value,kind:'human'});await poll();toast('Your seat is reserved.');})));
+$('create-form').addEventListener('submit',safely(once(async()=>{await ensureIdentity($('display-name').value);const g=await request('/api/games','POST',{preset:$('preset').value});await openRoom(g.id);})));
+$('join-form').addEventListener('submit',safely(once(async()=>{const moving=Boolean(state?.you),to=$('country-choice').value;if(!moving)await ensureIdentity($('join-name').value);await request(`/api/games/${matchId}/join`,'POST',{country:to,kind:'human'});await poll();toast(moving?`You now command ${country(to).name}.`:'Your seat is reserved.');})));
 $('fill-bots').addEventListener('click',safely(once(async()=>{await request(`/api/games/${matchId}/bots`,'POST',state?.you?{}:{country:$('country-choice').value});await poll();})));
 $('start-match').addEventListener('click',safely(once(async()=>{await request(`/api/games/${matchId}/start`,'POST',{});await poll();toast('The match has begun.');})));
 /** The share of free troops to send (slider or 25/50/75/100%), remembered per browser. */
@@ -1078,7 +1084,23 @@ for(const b of document.querySelectorAll('[data-lb-mode]'))b.addEventListener('c
 $('back').addEventListener('click',safely(home));$('refresh-rooms').addEventListener('click',safely(rooms));
 for(const b of document.querySelectorAll('[data-share]'))b.addEventListener('click',safely(async()=>{closeMenu();try{await navigator.clipboard.writeText(location.href);toast('Room link copied.');}catch{prompt('Copy this room link:',location.href);}}));
 const changeIdentity=safely(async()=>{closeMenu();const name=prompt('Play under a new name? Your results stay with the old one. New display name:');if(name?.trim()){await ensureIdentity(name,true);if(matchId)await poll();}});
-$('account-button').addEventListener('click',changeIdentity);$('menu-identity').addEventListener('click',changeIdentity);
+$('menu-identity').addEventListener('click',changeIdentity);
+/* ── Settings (home): name and sound on their own page. Opening pushes a history entry so a phone's Back closes it. ── */
+function showSettings(open){
+  $('settings').hidden=!open;document.body.dataset.screen=open?'settings':'home';$('settings-button').setAttribute('aria-expanded',String(open));
+  if(open){$('settings-name').value=identity?.name || '';$('settings-name-status').textContent='';$('settings-back').focus();}else $('settings-button').focus();
+}
+const closeSettings=()=>{if(window.history.state?.settings)window.history.back();else showSettings(false);};
+$('settings-button').addEventListener('click',()=>{window.history.pushState({settings:true},'','#settings');showSettings(true);});
+$('settings-back').addEventListener('click',closeSettings);
+addEventListener('popstate',()=>{if(document.body.dataset.screen==='settings' && !window.history.state?.settings)showSettings(false);});
+document.addEventListener('keydown',event=>{if(event.key==='Escape' && document.body.dataset.screen==='settings' && !event.defaultPrevented)closeSettings();});
+$('name-form').addEventListener('submit',safely(once(async()=>{
+  const name=$('settings-name').value.trim();
+  if(name===identity?.name){$('settings-name-status').textContent=`You already play as ${name}.`;return;}
+  await ensureIdentity(name,true);$('settings-name-status').textContent=`Saved. You now play as ${identity.name}.`;
+})));
+if(location.hash==='#settings' && !new URL(location).searchParams.get('match'))showSettings(true); // a reload keeps the page
 $('zoom-in').onclick=()=>atlas.zoom(.7);$('zoom-out').onclick=()=>atlas.zoom(1.4);
 $('world-view').onclick=()=>{closeMenu();atlas.world();};$('europe-view').onclick=()=>{closeMenu();atlas.europe();};$('home-view').onclick=focusCountry;$('world-button').onclick=()=>atlas.world();
 // Expand map: real fullscreen where available, a CSS pseudo-fullscreen otherwise (iPhone Safari).
@@ -1174,7 +1196,7 @@ document.addEventListener('click',safely(async event=>{
   if(b.id==='journal-close'){toggleJournal(false);$('menu-button').focus();}
   if(b.dataset.homeTab){for(const t of document.querySelectorAll('[data-home-tab]'))t.setAttribute('aria-selected',String(t===b));$('rooms').hidden=b.dataset.homeTab!=='rooms';$('standings').hidden=b.dataset.homeTab!=='standings';}
   if(b.dataset.preset){$('preset').value=b.dataset.preset;for(const t of document.querySelectorAll('[data-preset]'))t.setAttribute('aria-checked',String(t===b));}
-  if(b.dataset.countrySeat){$('country-choice').value=b.dataset.countrySeat;if(state)renderLobby();atlas.home(b.dataset.countrySeat);}
+  if(b.dataset.countrySeat){$('country-choice').value=b.dataset.countrySeat;if(state)renderLobby();atlas.home(b.dataset.countrySeat,view());}
   if(b.dataset.room)await openRoom(b.dataset.room,b.dataset.spectate==='true');
   if(b.dataset.home)await home();
   if(b.dataset.fraction)setFraction(Number(b.dataset.fraction));
