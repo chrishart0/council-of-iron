@@ -40,7 +40,7 @@ The launcher refuses an uncommitted main controller/protocol and checks both end
 
 Initial stock FP32 CPU inference with verbose JSON options took 4.4–10.3 seconds over six opening-menu trials (7–16 choices, 1,714–2,897 input tokens). Jeff chose wait in all six. Shorter plain-language consequences and two-thread BF16 inference took 2.9–6.1 seconds over the same six opening situations/orderings (1,197–1,794 tokens); all six still chose wait under the generic default strategy. These are pilot measurements with different runtimes and prompt representations, not a controlled dtype comparison or proof of useful play.
 
-The integration pilot uses a distinct seed and the game's whole-clock 6× quick preset. Under DeepSeek's concrete persistent strategy, Jeff issued attacks, reinforcements, developments and a rally, and the hybrid completed a coalition win at tick 1003 with 13 personal industry. The baseline also completed a coalition win, with nine personal industry at tick 1626. Pilot LLM totals were 478,181 tokens for the baseline and 251,414 for the hybrid; this one accelerated match does not estimate normal-speed savings. A pre-main inspection corrected the hybrid diplomatic operation-ID handling to match the existing baseline: new IDs per model tool call, reused only for the same network retry. Full normal-speed results will be reported separately.
+The integration pilot uses a distinct seed and the game's whole-clock 6× quick preset. Under DeepSeek's concrete persistent strategy, Jeff issued attacks, reinforcements, developments and a rally, and the hybrid completed a coalition win at tick 1015 with 13 personal industry. The baseline also completed a coalition win, with nine personal industry at tick 1626. Pilot LLM totals were 478,181 tokens for the baseline and 251,414 for the hybrid; this one accelerated match does not estimate normal-speed savings. A pre-main inspection corrected the hybrid diplomatic operation-ID handling to match the existing baseline: new IDs per model tool call, reused only for the same network retry. Full normal-speed results will be reported separately.
 
 ## Matched opening-menu diagnostic
 
@@ -49,3 +49,11 @@ Eight countries × two independently shuffled option orders, alternating model-f
 ## Cost interpretation
 
 Local Jeff has no per-token API fee; input tokens still consume local CPU time. Goodwin's hosting bill is unknown. PI's zero-valued model-cost fields are SDK placeholders, not actual free inference. Compare recorded uncached input, cached input and output separately, then apply the same assumed LLM price to both arms. Total hybrid cost is that LLM spend plus amortized local compute/hosting. A token reduction is not automatically a cash saving on an already fixed-price or owned server.
+
+## Paused at the user’s request — 30 September 2026
+
+All sixteen normal-speed trials were attempted on frozen revision `ff5a112`. Seven finished and nine were stopped when the user requested a pause and local models off. The local Jeff and Qwen services were stopped; the existing Goodwin tunnel and live game service remain running. Private records and pause metadata are preserved. No testing continues.
+
+The [allowlisted partial results](goodwin-jeff-paused-results.json) retain every attempt and mark the nine interruptions as user-requested, not losses or provider failures. Three complete pairs are insufficient for the prespecified eight-pair primary analysis. The partial usage totals are not a fair completed-game cost comparison; the export suppresses the primary paired analysis and aggregate reduction percentages. Do not completion-select these games to claim improved strength or a cash saving. Resuming requires a new protocol for the interrupted attempts; the original evidence remains intact.
+
+Verification before the pause passed: 247 Node tests, JavaScript parsing, 32 diplomacy balance rounds with zero invariant failures, map-builder consistency, and all seven native browser suites (377 seconds). The analysis helpers were checked against known exact sign-flip and bootstrap cases. No rules, map, live UI or production dependencies were changed.

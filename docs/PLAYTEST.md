@@ -2,6 +2,21 @@
 
 Actual test evidence only, newest first. Automated self-play and bot matches check that the rules hold and that matches resolve; they do not show balance or that people enjoy the game.
 
+## Local Jeff research — 30 September 2026
+
+An isolated Goodwin DeepSeek / DeepSeek-plus-local-Jeff study was paused at the user's request after seven of
+sixteen normal-speed trials finished. Nine stopped trials remain incomplete and are not losses. The planned
+eight-pair primary strength/cost comparison has not been completed; partial usage does not establish savings.
+The separate 6× integration pilot completed both arms (coalition wins, personal industry 9 versus 13), and a
+matched 16-decision opening-menu diagnostic found median CPU Jeff response 3.08 s versus 1.98 s for a complete
+bounded DeepSeek PI selection turn. Jeff chose wait under the generic default strategy in all diagnostic trials,
+but issued military actions under concrete LLM strategy in the pilot. These are different questions and cannot
+be pooled into strength evidence. [Protocol, runtime and partial evidence](experiments/GOODWIN-JEFF.md).
+
+Verification passed 247 Node tests, parsing, map-builder consistency, 32 diplomacy rounds without invariant
+failures, and all seven native browser suites. Local inference models and research workers were stopped on
+request. The live game was not deployed or restarted. No human enjoyment or numerical balance claim follows.
+
 ## Mobile rendering investigation — 30 September 2026
 
 A human reported whole-game lag after a mobile round on a Samsung S25 Ultra, despite the earlier performance

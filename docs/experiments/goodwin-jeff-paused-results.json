@@ -1,0 +1,1602 @@
+{
+  "study": "goodwin-jeff-events-v1",
+  "phase": "main",
+  "completionState": "paused-by-user",
+  "sourceRevision": "ff5a1123885f62261e4cac5566bf6b69396700eb",
+  "protocolSha256": "695692c6f37888151263c74e8648e4a8c1e8108bf564cd10bdded1a0c4bdc99a",
+  "generatedAt": "2026-09-30T21:35:09.195Z",
+  "modelId": "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
+  "localRuntime": {
+    "vendorRevision": "f06788292874c21a5b5c41549ac220dd9e15da7f",
+    "checkpointRevision": "0f212b3e72acb4dde3f7da61e925d6ab7f819990",
+    "device": "CPU",
+    "cpuThreads": 2,
+    "dtype": "bfloat16",
+    "torch": "2.14.0+cpu",
+    "transformers": "5.17.0",
+    "endpoint": "loopback only",
+    "deployment": "one decision service, no GPU allocation",
+    "concurrency": "eight matched blocks concurrently, baseline/hybrid launch order alternates; shared model service load is part of these measurements",
+    "busyPolicy": "retry HTTP 529 with jitter until 120 second deadline; measure queue-inclusive and successful request server latency separately"
+  },
+  "runs": [
+    {
+      "country": "britain",
+      "seed": "gwjeff-britain-01",
+      "arm": "baseline",
+      "runId": "2026-09-30T21-04-01-532Z-3884b139",
+      "sourceRevision": "ff5a1123885f",
+      "interfaceVersion": "decision-turn-v9",
+      "status": "finished",
+      "processExitCode": 0,
+      "errorPresent": false,
+      "terminationReason": "finished",
+      "result": "win",
+      "ownIndustry": 5,
+      "finalTick": 1703,
+      "eliminatedAt": null,
+      "usage": {
+        "input": 371995,
+        "output": 55632,
+        "cacheRead": 771072,
+        "cacheWrite": 0,
+        "total": 1198699
+      },
+      "plannerTurns": 18,
+      "plannerTimeouts": 7,
+      "plannerWallSeconds": {
+        "n": 18,
+        "mean": 93.9368,
+        "median": 102.183,
+        "p90": 120.0155,
+        "p95": 120.0483,
+        "min": 33.454,
+        "max": 120.214
+      },
+      "wakeReasons": {
+        "first": 1,
+        "inbox": 1,
+        "interval": 16
+      },
+      "acceptedMilitary": 24,
+      "rejectedMilitary": 2,
+      "acceptedDiplomacy": 1,
+      "acceptedMessages": 9,
+      "firstMilitarySeconds": 104.774,
+      "selectorCalls": 0,
+      "selectorErrors": 0,
+      "selectorSkips": {
+        "only-wait": 0,
+        "unchanged-menu": 0
+      },
+      "selectorInputTokens": 0,
+      "selectorOutputTokens": 0,
+      "selectorBusyRetries": 0,
+      "selectorWallSeconds": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "p90": null,
+        "p95": null,
+        "min": null,
+        "max": null
+      },
+      "selectorServiceSeconds": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "p90": null,
+        "p95": null,
+        "min": null,
+        "max": null
+      },
+      "choiceCounts": {
+        "attack": 0,
+        "reinforce": 0,
+        "develop": 0,
+        "rally": 0,
+        "wait": 0
+      }
+    },
+    {
+      "country": "britain",
+      "seed": "gwjeff-britain-01",
+      "arm": "hybrid",
+      "runId": "2026-09-30T21-04-01-711Z-40a23671",
+      "sourceRevision": "ff5a1123885f62261e4cac5566bf6b69396700eb",
+      "interfaceVersion": "hybrid-events-v1",
+      "status": "finished",
+      "processExitCode": 0,
+      "errorPresent": false,
+      "terminationReason": "finished",
+      "result": "win",
+      "ownIndustry": 12,
+      "finalTick": 1244,
+      "eliminatedAt": null,
+      "usage": {
+        "input": 141679,
+        "output": 22198,
+        "cacheRead": 198912,
+        "cacheWrite": 0,
+        "total": 362789
+      },
+      "plannerTurns": 8,
+      "plannerTimeouts": 4,
+      "plannerWallSeconds": {
+        "n": 8,
+        "mean": 103.6263,
+        "median": 111.0525,
+        "p90": 120.0357,
+        "p95": 120.0386,
+        "min": 72.0467,
+        "max": 120.0415
+      },
+      "wakeReasons": {
+        "opening": 1,
+        "relations-changed": 3,
+        "strategy-review": 4
+      },
+      "acceptedMilitary": 33,
+      "rejectedMilitary": 1,
+      "acceptedDiplomacy": 1,
+      "acceptedMessages": 2,
+      "firstMilitarySeconds": 56.347,
+      "selectorCalls": 48,
+      "selectorErrors": 0,
+      "selectorSkips": {
+        "only-wait": 0,
+        "unchanged-menu": 2
+      },
+      "selectorInputTokens": 58845,
+      "selectorOutputTokens": 0,
+      "selectorBusyRetries": 1351,
+      "selectorWallSeconds": {
+        "n": 48,
+        "mean": 24.679,
+        "median": 20.1527,
+        "p90": 50.1561,
+        "p95": 57.8277,
+        "min": 2.1751,
+        "max": 88.8224
+      },
+      "selectorServiceSeconds": {
+        "n": 48,
+        "mean": 3.3632,
+        "median": 3.0576,
+        "p90": 4.8063,
+        "p95": 5.5145,
+        "min": 2.173,
+        "max": 6.3443
+      },
+      "choiceCounts": {
+        "attack": 14,
+        "reinforce": 16,
+        "develop": 4,
+        "rally": 0,
+        "wait": 14
+      }
+    },
+    {
+      "country": "france",
+      "seed": "gwjeff-france-02",
+      "arm": "hybrid",
+      "runId": "2026-09-30T21-04-01-688Z-d47a3bf9",
+      "sourceRevision": "ff5a1123885f62261e4cac5566bf6b69396700eb",
+      "interfaceVersion": "hybrid-events-v1",
+      "status": "finished",
+      "processExitCode": 0,
+      "errorPresent": false,
+      "terminationReason": "finished",
+      "result": "win",
+      "ownIndustry": 15,
+      "finalTick": 589,
+      "eliminatedAt": null,
+      "usage": {
+        "input": 30170,
+        "output": 6152,
+        "cacheRead": 82944,
+        "cacheWrite": 0,
+        "total": 119266
+      },
+      "plannerTurns": 4,
+      "plannerTimeouts": 0,
+      "plannerWallSeconds": {
+        "n": 4,
+        "mean": 62.2473,
+        "median": 71.9288,
+        "p90": 78.0957,
+        "p95": 78.4096,
+        "min": 26.4081,
+        "max": 78.7235
+      },
+      "wakeReasons": {
+        "opening": 1,
+        "relations-changed": 2,
+        "strategy-review": 1
+      },
+      "acceptedMilitary": 22,
+      "rejectedMilitary": 0,
+      "acceptedDiplomacy": 2,
+      "acceptedMessages": 4,
+      "firstMilitarySeconds": 43.835,
+      "selectorCalls": 25,
+      "selectorErrors": 0,
+      "selectorSkips": {
+        "only-wait": 1,
+        "unchanged-menu": 0
+      },
+      "selectorInputTokens": 30279,
+      "selectorOutputTokens": 0,
+      "selectorBusyRetries": 635,
+      "selectorWallSeconds": {
+        "n": 25,
+        "mean": 22.3886,
+        "median": 13.6793,
+        "p90": 53.2812,
+        "p95": 63.3522,
+        "min": 2.1916,
+        "max": 72.8312
+      },
+      "selectorServiceSeconds": {
+        "n": 25,
+        "mean": 3.2455,
+        "median": 3.216,
+        "p90": 4.2534,
+        "p95": 4.5084,
+        "min": 1.8369,
+        "max": 4.7855
+      },
+      "choiceCounts": {
+        "attack": 12,
+        "reinforce": 9,
+        "develop": 1,
+        "rally": 0,
+        "wait": 3
+      }
+    },
+    {
+      "country": "france",
+      "seed": "gwjeff-france-02",
+      "arm": "baseline",
+      "runId": "2026-09-30T21-04-01-689Z-2262ff46",
+      "sourceRevision": "ff5a1123885f",
+      "interfaceVersion": "decision-turn-v9",
+      "status": "finished",
+      "processExitCode": 0,
+      "errorPresent": false,
+      "terminationReason": "finished",
+      "result": "win",
+      "ownIndustry": 29,
+      "finalTick": 1066,
+      "eliminatedAt": null,
+      "usage": {
+        "input": 222882,
+        "output": 29794,
+        "cacheRead": 455680,
+        "cacheWrite": 0,
+        "total": 708356
+      },
+      "plannerTurns": 13,
+      "plannerTimeouts": 4,
+      "plannerWallSeconds": {
+        "n": 13,
+        "mean": 82.4505,
+        "median": 74.829,
+        "p90": 120.0104,
+        "p95": 120.0114,
+        "min": 36.844,
+        "max": 120.012
+      },
+      "wakeReasons": {
+        "first": 1,
+        "interval": 10,
+        "inbox": 2
+      },
+      "acceptedMilitary": 24,
+      "rejectedMilitary": 0,
+      "acceptedDiplomacy": 1,
+      "acceptedMessages": 7,
+      "firstMilitarySeconds": 23.84,
+      "selectorCalls": 0,
+      "selectorErrors": 0,
+      "selectorSkips": {
+        "only-wait": 0,
+        "unchanged-menu": 0
+      },
+      "selectorInputTokens": 0,
+      "selectorOutputTokens": 0,
+      "selectorBusyRetries": 0,
+      "selectorWallSeconds": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "p90": null,
+        "p95": null,
+        "min": null,
+        "max": null
+      },
+      "selectorServiceSeconds": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "p90": null,
+        "p95": null,
+        "min": null,
+        "max": null
+      },
+      "choiceCounts": {
+        "attack": 0,
+        "reinforce": 0,
+        "develop": 0,
+        "rally": 0,
+        "wait": 0
+      }
+    },
+    {
+      "country": "germany",
+      "seed": "gwjeff-germany-03",
+      "arm": "baseline",
+      "runId": "2026-09-30T21-04-01-687Z-9caa8a05",
+      "sourceRevision": "ff5a1123885f",
+      "interfaceVersion": "decision-turn-v9",
+      "status": "incomplete",
+      "processExitCode": null,
+      "errorPresent": false,
+      "terminationReason": "user-pause",
+      "result": null,
+      "ownIndustry": null,
+      "finalTick": null,
+      "eliminatedAt": null,
+      "usage": {
+        "input": 370383,
+        "output": 57016,
+        "cacheRead": 683520,
+        "cacheWrite": 0,
+        "total": 1110919
+      },
+      "plannerTurns": 18,
+      "plannerTimeouts": 8,
+      "plannerWallSeconds": {
+        "n": 18,
+        "mean": 95.4555,
+        "median": 107.679,
+        "p90": 120.0172,
+        "p95": 120.0215,
+        "min": 27.356,
+        "max": 120.03
+      },
+      "wakeReasons": {
+        "first": 1,
+        "interval": 15,
+        "inbox": 2
+      },
+      "acceptedMilitary": 19,
+      "rejectedMilitary": 3,
+      "acceptedDiplomacy": 1,
+      "acceptedMessages": 8,
+      "firstMilitarySeconds": 25.1,
+      "selectorCalls": 0,
+      "selectorErrors": 0,
+      "selectorSkips": {
+        "only-wait": 0,
+        "unchanged-menu": 0
+      },
+      "selectorInputTokens": 0,
+      "selectorOutputTokens": 0,
+      "selectorBusyRetries": 0,
+      "selectorWallSeconds": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "p90": null,
+        "p95": null,
+        "min": null,
+        "max": null
+      },
+      "selectorServiceSeconds": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "p90": null,
+        "p95": null,
+        "min": null,
+        "max": null
+      },
+      "choiceCounts": {
+        "attack": 0,
+        "reinforce": 0,
+        "develop": 0,
+        "rally": 0,
+        "wait": 0
+      }
+    },
+    {
+      "country": "germany",
+      "seed": "gwjeff-germany-03",
+      "arm": "hybrid",
+      "runId": "2026-09-30T21-04-01-585Z-ef6bd557",
+      "sourceRevision": "ff5a1123885f62261e4cac5566bf6b69396700eb",
+      "interfaceVersion": "hybrid-events-v1",
+      "status": "incomplete",
+      "processExitCode": null,
+      "errorPresent": false,
+      "terminationReason": "user-pause",
+      "result": null,
+      "ownIndustry": null,
+      "finalTick": null,
+      "eliminatedAt": null,
+      "usage": {
+        "input": 176643,
+        "output": 26525,
+        "cacheRead": 482048,
+        "cacheWrite": 0,
+        "total": 685216
+      },
+      "plannerTurns": 10,
+      "plannerTimeouts": 3,
+      "plannerWallSeconds": {
+        "n": 10,
+        "mean": 84.6654,
+        "median": 81.159,
+        "p90": 120.0223,
+        "p95": 120.0228,
+        "min": 43.1038,
+        "max": 120.0232
+      },
+      "wakeReasons": {
+        "opening": 1,
+        "relations-changed": 2,
+        "strategy-review": 6,
+        "territory-loss": 1
+      },
+      "acceptedMilitary": 55,
+      "rejectedMilitary": 1,
+      "acceptedDiplomacy": 1,
+      "acceptedMessages": 10,
+      "firstMilitarySeconds": 40.678,
+      "selectorCalls": 77,
+      "selectorErrors": 0,
+      "selectorSkips": {
+        "only-wait": 15,
+        "unchanged-menu": 1
+      },
+      "selectorInputTokens": 115299,
+      "selectorOutputTokens": 0,
+      "selectorBusyRetries": 1660,
+      "selectorWallSeconds": {
+        "n": 77,
+        "mean": 20.912,
+        "median": 14.9428,
+        "p90": 45.4606,
+        "p95": 59.3432,
+        "min": 2.708,
+        "max": 68.9602
+      },
+      "selectorServiceSeconds": {
+        "n": 77,
+        "mean": 4.55,
+        "median": 4.4793,
+        "p90": 6.3816,
+        "p95": 7.6905,
+        "min": 2.0827,
+        "max": 9.5124
+      },
+      "choiceCounts": {
+        "attack": 32,
+        "reinforce": 22,
+        "develop": 2,
+        "rally": 0,
+        "wait": 21
+      }
+    },
+    {
+      "country": "russia",
+      "seed": "gwjeff-russia-04",
+      "arm": "hybrid",
+      "runId": "2026-09-30T21-04-01-627Z-b8643ba6",
+      "sourceRevision": "ff5a1123885f62261e4cac5566bf6b69396700eb",
+      "interfaceVersion": "hybrid-events-v1",
+      "status": "incomplete",
+      "processExitCode": null,
+      "errorPresent": false,
+      "terminationReason": "user-pause",
+      "result": null,
+      "ownIndustry": null,
+      "finalTick": null,
+      "eliminatedAt": null,
+      "usage": {
+        "input": 122693,
+        "output": 26458,
+        "cacheRead": 342528,
+        "cacheWrite": 0,
+        "total": 491679
+      },
+      "plannerTurns": 11,
+      "plannerTimeouts": 2,
+      "plannerWallSeconds": {
+        "n": 11,
+        "mean": 78.6286,
+        "median": 64.6254,
+        "p90": 120.0216,
+        "p95": 120.0224,
+        "min": 39.3001,
+        "max": 120.0233
+      },
+      "wakeReasons": {
+        "opening": 1,
+        "relations-changed": 3,
+        "strategy-review": 7
+      },
+      "acceptedMilitary": 49,
+      "rejectedMilitary": 1,
+      "acceptedDiplomacy": 2,
+      "acceptedMessages": 11,
+      "firstMilitarySeconds": 28.016,
+      "selectorCalls": 63,
+      "selectorErrors": 1,
+      "selectorSkips": {
+        "only-wait": 8,
+        "unchanged-menu": 1
+      },
+      "selectorInputTokens": 87656,
+      "selectorOutputTokens": 0,
+      "selectorBusyRetries": 1687,
+      "selectorWallSeconds": {
+        "n": 63,
+        "mean": 24.3951,
+        "median": 17.8501,
+        "p90": 50.7897,
+        "p95": 63.1399,
+        "min": 2.1669,
+        "max": 83.2887
+      },
+      "selectorServiceSeconds": {
+        "n": 63,
+        "mean": 4.1396,
+        "median": 3.6435,
+        "p90": 6.6506,
+        "p95": 7.0274,
+        "min": 2.0759,
+        "max": 7.3878
+      },
+      "choiceCounts": {
+        "attack": 18,
+        "reinforce": 31,
+        "develop": 0,
+        "rally": 1,
+        "wait": 13
+      }
+    },
+    {
+      "country": "russia",
+      "seed": "gwjeff-russia-04",
+      "arm": "baseline",
+      "runId": "2026-09-30T21-04-01-685Z-6a763631",
+      "sourceRevision": "ff5a1123885f",
+      "interfaceVersion": "decision-turn-v9",
+      "status": "finished",
+      "processExitCode": 0,
+      "errorPresent": false,
+      "terminationReason": "finished",
+      "result": "win",
+      "ownIndustry": 8,
+      "finalTick": 1195,
+      "eliminatedAt": null,
+      "usage": {
+        "input": 208703,
+        "output": 32728,
+        "cacheRead": 492032,
+        "cacheWrite": 0,
+        "total": 733463
+      },
+      "plannerTurns": 13,
+      "plannerTimeouts": 4,
+      "plannerWallSeconds": {
+        "n": 13,
+        "mean": 90.0778,
+        "median": 91.771,
+        "p90": 120.0066,
+        "p95": 120.007,
+        "min": 31.076,
+        "max": 120.007
+      },
+      "wakeReasons": {
+        "first": 1,
+        "inbox": 2,
+        "interval": 10
+      },
+      "acceptedMilitary": 10,
+      "rejectedMilitary": 1,
+      "acceptedDiplomacy": 3,
+      "acceptedMessages": 11,
+      "firstMilitarySeconds": 290.664,
+      "selectorCalls": 0,
+      "selectorErrors": 0,
+      "selectorSkips": {
+        "only-wait": 0,
+        "unchanged-menu": 0
+      },
+      "selectorInputTokens": 0,
+      "selectorOutputTokens": 0,
+      "selectorBusyRetries": 0,
+      "selectorWallSeconds": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "p90": null,
+        "p95": null,
+        "min": null,
+        "max": null
+      },
+      "selectorServiceSeconds": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "p90": null,
+        "p95": null,
+        "min": null,
+        "max": null
+      },
+      "choiceCounts": {
+        "attack": 0,
+        "reinforce": 0,
+        "develop": 0,
+        "rally": 0,
+        "wait": 0
+      }
+    },
+    {
+      "country": "ottoman",
+      "seed": "gwjeff-ottoman-05",
+      "arm": "baseline",
+      "runId": "2026-09-30T21-04-01-746Z-637ea23a",
+      "sourceRevision": "ff5a1123885f",
+      "interfaceVersion": "decision-turn-v9",
+      "status": "incomplete",
+      "processExitCode": null,
+      "errorPresent": false,
+      "terminationReason": "user-pause",
+      "result": null,
+      "ownIndustry": null,
+      "finalTick": null,
+      "eliminatedAt": 1725,
+      "usage": {
+        "input": 363409,
+        "output": 55559,
+        "cacheRead": 690944,
+        "cacheWrite": 0,
+        "total": 1109912
+      },
+      "plannerTurns": 20,
+      "plannerTimeouts": 5,
+      "plannerWallSeconds": {
+        "n": 20,
+        "mean": 85.1928,
+        "median": 81.821,
+        "p90": 120.0052,
+        "p95": 120.0097,
+        "min": 20.623,
+        "max": 120.061
+      },
+      "wakeReasons": {
+        "first": 1,
+        "interval": 18,
+        "inbox": 1
+      },
+      "acceptedMilitary": 24,
+      "rejectedMilitary": 2,
+      "acceptedDiplomacy": 1,
+      "acceptedMessages": 9,
+      "firstMilitarySeconds": 31.002,
+      "selectorCalls": 0,
+      "selectorErrors": 0,
+      "selectorSkips": {
+        "only-wait": 0,
+        "unchanged-menu": 0
+      },
+      "selectorInputTokens": 0,
+      "selectorOutputTokens": 0,
+      "selectorBusyRetries": 0,
+      "selectorWallSeconds": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "p90": null,
+        "p95": null,
+        "min": null,
+        "max": null
+      },
+      "selectorServiceSeconds": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "p90": null,
+        "p95": null,
+        "min": null,
+        "max": null
+      },
+      "choiceCounts": {
+        "attack": 0,
+        "reinforce": 0,
+        "develop": 0,
+        "rally": 0,
+        "wait": 0
+      }
+    },
+    {
+      "country": "ottoman",
+      "seed": "gwjeff-ottoman-05",
+      "arm": "hybrid",
+      "runId": "2026-09-30T21-04-01-578Z-ba44f6a1",
+      "sourceRevision": "ff5a1123885f62261e4cac5566bf6b69396700eb",
+      "interfaceVersion": "hybrid-events-v1",
+      "status": "incomplete",
+      "processExitCode": null,
+      "errorPresent": false,
+      "terminationReason": "user-pause",
+      "result": null,
+      "ownIndustry": null,
+      "finalTick": null,
+      "eliminatedAt": null,
+      "usage": {
+        "input": 287731,
+        "output": 41564,
+        "cacheRead": 593408,
+        "cacheWrite": 0,
+        "total": 922703
+      },
+      "plannerTurns": 12,
+      "plannerTimeouts": 7,
+      "plannerWallSeconds": {
+        "n": 12,
+        "mean": 105.2208,
+        "median": 120.0193,
+        "p90": 120.0439,
+        "p95": 120.0698,
+        "min": 40.7081,
+        "max": 120.0999
+      },
+      "wakeReasons": {
+        "opening": 1,
+        "relations-changed": 4,
+        "strategy-review": 3,
+        "territory-loss": 4
+      },
+      "acceptedMilitary": 47,
+      "rejectedMilitary": 0,
+      "acceptedDiplomacy": 1,
+      "acceptedMessages": 12,
+      "firstMilitarySeconds": 46.584,
+      "selectorCalls": 56,
+      "selectorErrors": 1,
+      "selectorSkips": {
+        "only-wait": 63,
+        "unchanged-menu": 0
+      },
+      "selectorInputTokens": 70050,
+      "selectorOutputTokens": 0,
+      "selectorBusyRetries": 1398,
+      "selectorWallSeconds": {
+        "n": 56,
+        "mean": 22.5404,
+        "median": 14.24,
+        "p90": 44.1097,
+        "p95": 54.0529,
+        "min": 2.0186,
+        "max": 110.3278
+      },
+      "selectorServiceSeconds": {
+        "n": 56,
+        "mean": 3.6042,
+        "median": 3.2917,
+        "p90": 4.9947,
+        "p95": 6.7578,
+        "min": 1.9274,
+        "max": 7.2413
+      },
+      "choiceCounts": {
+        "attack": 20,
+        "reinforce": 24,
+        "develop": 3,
+        "rally": 0,
+        "wait": 9
+      }
+    },
+    {
+      "country": "qing",
+      "seed": "gwjeff-qing-06",
+      "arm": "hybrid",
+      "runId": "2026-09-30T21-04-01-696Z-a6782c4e",
+      "sourceRevision": "ff5a1123885f62261e4cac5566bf6b69396700eb",
+      "interfaceVersion": "hybrid-events-v1",
+      "status": "incomplete",
+      "processExitCode": null,
+      "errorPresent": false,
+      "terminationReason": "user-pause",
+      "result": null,
+      "ownIndustry": null,
+      "finalTick": null,
+      "eliminatedAt": null,
+      "usage": {
+        "input": 137565,
+        "output": 27499,
+        "cacheRead": 370944,
+        "cacheWrite": 0,
+        "total": 536008
+      },
+      "plannerTurns": 10,
+      "plannerTimeouts": 3,
+      "plannerWallSeconds": {
+        "n": 10,
+        "mean": 88.9549,
+        "median": 90.037,
+        "p90": 120.0238,
+        "p95": 120.0264,
+        "min": 42.6348,
+        "max": 120.0289
+      },
+      "wakeReasons": {
+        "opening": 1,
+        "relations-changed": 3,
+        "strategy-review": 6
+      },
+      "acceptedMilitary": 46,
+      "rejectedMilitary": 1,
+      "acceptedDiplomacy": 2,
+      "acceptedMessages": 11,
+      "firstMilitarySeconds": 220.011,
+      "selectorCalls": 86,
+      "selectorErrors": 0,
+      "selectorSkips": {
+        "only-wait": 10,
+        "unchanged-menu": 0
+      },
+      "selectorInputTokens": 119446,
+      "selectorOutputTokens": 0,
+      "selectorBusyRetries": 1606,
+      "selectorWallSeconds": {
+        "n": 86,
+        "mean": 18.2918,
+        "median": 14.33,
+        "p90": 35.9482,
+        "p95": 47.8367,
+        "min": 3.33,
+        "max": 75.8457
+      },
+      "selectorServiceSeconds": {
+        "n": 86,
+        "mean": 4.2251,
+        "median": 3.9253,
+        "p90": 5.8851,
+        "p95": 6.4483,
+        "min": 1.8648,
+        "max": 8.9687
+      },
+      "choiceCounts": {
+        "attack": 16,
+        "reinforce": 30,
+        "develop": 1,
+        "rally": 0,
+        "wait": 39
+      }
+    },
+    {
+      "country": "qing",
+      "seed": "gwjeff-qing-06",
+      "arm": "baseline",
+      "runId": "2026-09-30T21-04-01-744Z-d786789b",
+      "sourceRevision": "ff5a1123885f",
+      "interfaceVersion": "decision-turn-v9",
+      "status": "incomplete",
+      "processExitCode": null,
+      "errorPresent": false,
+      "terminationReason": "user-pause",
+      "result": null,
+      "ownIndustry": null,
+      "finalTick": null,
+      "eliminatedAt": null,
+      "usage": {
+        "input": 361012,
+        "output": 57213,
+        "cacheRead": 776192,
+        "cacheWrite": 0,
+        "total": 1194417
+      },
+      "plannerTurns": 18,
+      "plannerTimeouts": 6,
+      "plannerWallSeconds": {
+        "n": 18,
+        "mean": 95.1374,
+        "median": 99.604,
+        "p90": 120.0139,
+        "p95": 120.084,
+        "min": 45.129,
+        "max": 120.39
+      },
+      "wakeReasons": {
+        "first": 1,
+        "inbox": 2,
+        "interval": 15
+      },
+      "acceptedMilitary": 31,
+      "rejectedMilitary": 3,
+      "acceptedDiplomacy": 3,
+      "acceptedMessages": 7,
+      "firstMilitarySeconds": 35.586,
+      "selectorCalls": 0,
+      "selectorErrors": 0,
+      "selectorSkips": {
+        "only-wait": 0,
+        "unchanged-menu": 0
+      },
+      "selectorInputTokens": 0,
+      "selectorOutputTokens": 0,
+      "selectorBusyRetries": 0,
+      "selectorWallSeconds": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "p90": null,
+        "p95": null,
+        "min": null,
+        "max": null
+      },
+      "selectorServiceSeconds": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "p90": null,
+        "p95": null,
+        "min": null,
+        "max": null
+      },
+      "choiceCounts": {
+        "attack": 0,
+        "reinforce": 0,
+        "develop": 0,
+        "rally": 0,
+        "wait": 0
+      }
+    },
+    {
+      "country": "japan",
+      "seed": "gwjeff-japan-07",
+      "arm": "baseline",
+      "runId": "2026-09-30T21-04-01-632Z-6275e266",
+      "sourceRevision": "ff5a1123885f",
+      "interfaceVersion": "decision-turn-v9",
+      "status": "incomplete",
+      "processExitCode": null,
+      "errorPresent": false,
+      "terminationReason": "user-pause",
+      "result": null,
+      "ownIndustry": null,
+      "finalTick": null,
+      "eliminatedAt": null,
+      "usage": {
+        "input": 322580,
+        "output": 53612,
+        "cacheRead": 823552,
+        "cacheWrite": 0,
+        "total": 1199744
+      },
+      "plannerTurns": 22,
+      "plannerTimeouts": 5,
+      "plannerWallSeconds": {
+        "n": 22,
+        "mean": 74.3437,
+        "median": 68.692,
+        "p90": 120.0059,
+        "p95": 120.007,
+        "min": 31.923,
+        "max": 120.011
+      },
+      "wakeReasons": {
+        "first": 1,
+        "interval": 20,
+        "inbox": 1
+      },
+      "acceptedMilitary": 32,
+      "rejectedMilitary": 1,
+      "acceptedDiplomacy": 2,
+      "acceptedMessages": 6,
+      "firstMilitarySeconds": 132.166,
+      "selectorCalls": 0,
+      "selectorErrors": 0,
+      "selectorSkips": {
+        "only-wait": 0,
+        "unchanged-menu": 0
+      },
+      "selectorInputTokens": 0,
+      "selectorOutputTokens": 0,
+      "selectorBusyRetries": 0,
+      "selectorWallSeconds": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "p90": null,
+        "p95": null,
+        "min": null,
+        "max": null
+      },
+      "selectorServiceSeconds": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "p90": null,
+        "p95": null,
+        "min": null,
+        "max": null
+      },
+      "choiceCounts": {
+        "attack": 0,
+        "reinforce": 0,
+        "develop": 0,
+        "rally": 0,
+        "wait": 0
+      }
+    },
+    {
+      "country": "japan",
+      "seed": "gwjeff-japan-07",
+      "arm": "hybrid",
+      "runId": "2026-09-30T21-04-01-650Z-c94e9e0a",
+      "sourceRevision": "ff5a1123885f62261e4cac5566bf6b69396700eb",
+      "interfaceVersion": "hybrid-events-v1",
+      "status": "incomplete",
+      "processExitCode": null,
+      "errorPresent": false,
+      "terminationReason": "user-pause",
+      "result": null,
+      "ownIndustry": null,
+      "finalTick": null,
+      "eliminatedAt": null,
+      "usage": {
+        "input": 197745,
+        "output": 37677,
+        "cacheRead": 633856,
+        "cacheWrite": 0,
+        "total": 869278
+      },
+      "plannerTurns": 12,
+      "plannerTimeouts": 4,
+      "plannerWallSeconds": {
+        "n": 12,
+        "mean": 97.9386,
+        "median": 109.0875,
+        "p90": 120.0282,
+        "p95": 120.032,
+        "min": 31.1549,
+        "max": 120.0366
+      },
+      "wakeReasons": {
+        "opening": 1,
+        "relations-changed": 4,
+        "strategy-review": 4,
+        "territory-loss": 3
+      },
+      "acceptedMilitary": 32,
+      "rejectedMilitary": 0,
+      "acceptedDiplomacy": 4,
+      "acceptedMessages": 15,
+      "firstMilitarySeconds": 170.635,
+      "selectorCalls": 45,
+      "selectorErrors": 0,
+      "selectorSkips": {
+        "only-wait": 122,
+        "unchanged-menu": 0
+      },
+      "selectorInputTokens": 39983,
+      "selectorOutputTokens": 0,
+      "selectorBusyRetries": 1230,
+      "selectorWallSeconds": {
+        "n": 45,
+        "mean": 23.0626,
+        "median": 18.7536,
+        "p90": 44.9947,
+        "p95": 49.6063,
+        "min": 2.6058,
+        "max": 89.9502
+      },
+      "selectorServiceSeconds": {
+        "n": 45,
+        "mean": 2.4547,
+        "median": 2.3443,
+        "p90": 3.1398,
+        "p95": 3.2555,
+        "min": 1.8526,
+        "max": 3.8316
+      },
+      "choiceCounts": {
+        "attack": 11,
+        "reinforce": 20,
+        "develop": 1,
+        "rally": 0,
+        "wait": 13
+      }
+    },
+    {
+      "country": "usa",
+      "seed": "gwjeff-usa-08",
+      "arm": "hybrid",
+      "runId": "2026-09-30T21-04-01-761Z-8c615dc0",
+      "sourceRevision": "ff5a1123885f62261e4cac5566bf6b69396700eb",
+      "interfaceVersion": "hybrid-events-v1",
+      "status": "finished",
+      "processExitCode": 0,
+      "errorPresent": false,
+      "terminationReason": "finished",
+      "result": "win",
+      "ownIndustry": 15,
+      "finalTick": 1093,
+      "eliminatedAt": null,
+      "usage": {
+        "input": 128127,
+        "output": 15437,
+        "cacheRead": 278784,
+        "cacheWrite": 0,
+        "total": 422348
+      },
+      "plannerTurns": 6,
+      "plannerTimeouts": 4,
+      "plannerWallSeconds": {
+        "n": 6,
+        "mean": 94.8633,
+        "median": 120.018,
+        "p90": 120.0218,
+        "p95": 120.0224,
+        "min": 32.3541,
+        "max": 120.023
+      },
+      "wakeReasons": {
+        "opening": 1,
+        "relations-changed": 2,
+        "strategy-review": 3
+      },
+      "acceptedMilitary": 26,
+      "rejectedMilitary": 1,
+      "acceptedDiplomacy": 2,
+      "acceptedMessages": 5,
+      "firstMilitarySeconds": 51.7,
+      "selectorCalls": 38,
+      "selectorErrors": 1,
+      "selectorSkips": {
+        "only-wait": 6,
+        "unchanged-menu": 0
+      },
+      "selectorInputTokens": 49392,
+      "selectorOutputTokens": 0,
+      "selectorBusyRetries": 1018,
+      "selectorWallSeconds": {
+        "n": 38,
+        "mean": 24.0005,
+        "median": 23.7067,
+        "p90": 46.5456,
+        "p95": 50.4273,
+        "min": 5.4021,
+        "max": 56.6302
+      },
+      "selectorServiceSeconds": {
+        "n": 38,
+        "mean": 3.6989,
+        "median": 3.8233,
+        "p90": 4.5013,
+        "p95": 4.7338,
+        "min": 2.0863,
+        "max": 4.9967
+      },
+      "choiceCounts": {
+        "attack": 6,
+        "reinforce": 18,
+        "develop": 2,
+        "rally": 1,
+        "wait": 11
+      }
+    },
+    {
+      "country": "usa",
+      "seed": "gwjeff-usa-08",
+      "arm": "baseline",
+      "runId": "2026-09-30T21-04-01-682Z-6e975d9c",
+      "sourceRevision": "ff5a1123885f",
+      "interfaceVersion": "decision-turn-v9",
+      "status": "finished",
+      "processExitCode": 0,
+      "errorPresent": false,
+      "terminationReason": "finished",
+      "result": "win",
+      "ownIndustry": 15,
+      "finalTick": 1290,
+      "eliminatedAt": null,
+      "usage": {
+        "input": 239787,
+        "output": 38418,
+        "cacheRead": 558336,
+        "cacheWrite": 0,
+        "total": 836541
+      },
+      "plannerTurns": 16,
+      "plannerTimeouts": 4,
+      "plannerWallSeconds": {
+        "n": 16,
+        "mean": 83.07,
+        "median": 84.0745,
+        "p90": 120.0135,
+        "p95": 120.0185,
+        "min": 45.846,
+        "max": 120.026
+      },
+      "wakeReasons": {
+        "first": 1,
+        "inbox": 2,
+        "interval": 13
+      },
+      "acceptedMilitary": 25,
+      "rejectedMilitary": 1,
+      "acceptedDiplomacy": 3,
+      "acceptedMessages": 7,
+      "firstMilitarySeconds": 22.772,
+      "selectorCalls": 0,
+      "selectorErrors": 0,
+      "selectorSkips": {
+        "only-wait": 0,
+        "unchanged-menu": 0
+      },
+      "selectorInputTokens": 0,
+      "selectorOutputTokens": 0,
+      "selectorBusyRetries": 0,
+      "selectorWallSeconds": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "p90": null,
+        "p95": null,
+        "min": null,
+        "max": null
+      },
+      "selectorServiceSeconds": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "p90": null,
+        "p95": null,
+        "min": null,
+        "max": null
+      },
+      "choiceCounts": {
+        "attack": 0,
+        "reinforce": 0,
+        "develop": 0,
+        "rally": 0,
+        "wait": 0
+      }
+    }
+  ],
+  "arms": {
+    "baseline": {
+      "attempted": 8,
+      "finished": 4,
+      "incomplete": 4,
+      "wins": 4,
+      "draws": 0,
+      "losses": 0,
+      "industry": {
+        "n": 4,
+        "mean": 14.25,
+        "median": 11.5,
+        "p90": 24.8,
+        "p95": 26.9,
+        "min": 5,
+        "max": 29
+      },
+      "finalTicks": {
+        "n": 4,
+        "mean": 1313.5,
+        "median": 1242.5,
+        "p90": 1579.1,
+        "p95": 1641.05,
+        "min": 1066,
+        "max": 1703
+      },
+      "usage": {
+        "input": 2460751,
+        "output": 379972,
+        "cacheRead": 5251328,
+        "cacheWrite": 0,
+        "total": 8092051
+      },
+      "plannerTurns": 138,
+      "plannerTimeouts": 43,
+      "acceptedMilitary": 189,
+      "rejectedMilitary": 13,
+      "acceptedDiplomacy": 15,
+      "acceptedMessages": 64,
+      "selectorCalls": 0,
+      "selectorErrors": 0,
+      "selectorInputTokens": 0,
+      "selectorOutputTokens": 0,
+      "selectorWallSeconds": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "p90": null,
+        "p95": null,
+        "min": null,
+        "max": null
+      },
+      "selectorServiceSeconds": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "p90": null,
+        "p95": null,
+        "min": null,
+        "max": null
+      },
+      "plannerWallSeconds": {
+        "n": 138,
+        "mean": 87.1952,
+        "median": 87.7675,
+        "p90": 120.011,
+        "p95": 120.0192,
+        "min": 20.623,
+        "max": 120.39
+      },
+      "selectorChoices": {
+        "attack": 0,
+        "reinforce": 0,
+        "develop": 0,
+        "rally": 0,
+        "wait": 0
+      },
+      "illustrativeLunaAssumptionUsd": 0.48857438000000003,
+      "illustrativeLunaAssumptionMeanUsd": 0.061071797500000004
+    },
+    "hybrid": {
+      "attempted": 8,
+      "finished": 3,
+      "incomplete": 5,
+      "wins": 3,
+      "draws": 0,
+      "losses": 0,
+      "industry": {
+        "n": 3,
+        "mean": 14,
+        "median": 15,
+        "p90": 15,
+        "p95": 15,
+        "min": 12,
+        "max": 15
+      },
+      "finalTicks": {
+        "n": 3,
+        "mean": 975.3333,
+        "median": 1093,
+        "p90": 1213.8,
+        "p95": 1228.9,
+        "min": 589,
+        "max": 1244
+      },
+      "usage": {
+        "input": 1222353,
+        "output": 203510,
+        "cacheRead": 2983424,
+        "cacheWrite": 0,
+        "total": 4409287
+      },
+      "plannerTurns": 73,
+      "plannerTimeouts": 27,
+      "acceptedMilitary": 310,
+      "rejectedMilitary": 5,
+      "acceptedDiplomacy": 15,
+      "acceptedMessages": 70,
+      "selectorCalls": 438,
+      "selectorErrors": 3,
+      "selectorInputTokens": 570950,
+      "selectorOutputTokens": 0,
+      "selectorWallSeconds": {
+        "n": 438,
+        "mean": 22.0927,
+        "median": 16.4028,
+        "p90": 48.4544,
+        "p95": 58.3511,
+        "min": 2.0186,
+        "max": 110.3278
+      },
+      "selectorServiceSeconds": {
+        "n": 438,
+        "mean": 3.8126,
+        "median": 3.4519,
+        "p90": 5.7801,
+        "p95": 6.5278,
+        "min": 1.8369,
+        "max": 9.5124
+      },
+      "plannerWallSeconds": {
+        "n": 73,
+        "mean": 91.5919,
+        "median": 99.5186,
+        "p90": 120.0284,
+        "p95": 120.0347,
+        "min": 26.4081,
+        "max": 120.0999
+      },
+      "selectorChoices": {
+        "attack": 129,
+        "reinforce": 170,
+        "develop": 14,
+        "rally": 2,
+        "wait": 123
+      },
+      "illustrativeLunaAssumptionUsd": 0.25382454,
+      "illustrativeLunaAssumptionMeanUsd": 0.0317280675
+    }
+  },
+  "pairs": [
+    {
+      "country": "britain",
+      "seed": "gwjeff-britain-01",
+      "baselineStatus": "finished",
+      "hybridStatus": "finished",
+      "baselineIndustry": 5,
+      "hybridIndustry": 12,
+      "difference": 7
+    },
+    {
+      "country": "france",
+      "seed": "gwjeff-france-02",
+      "baselineStatus": "finished",
+      "hybridStatus": "finished",
+      "baselineIndustry": 29,
+      "hybridIndustry": 15,
+      "difference": -14
+    },
+    {
+      "country": "germany",
+      "seed": "gwjeff-germany-03",
+      "baselineStatus": "incomplete",
+      "hybridStatus": "incomplete",
+      "baselineIndustry": null,
+      "hybridIndustry": null,
+      "difference": null
+    },
+    {
+      "country": "russia",
+      "seed": "gwjeff-russia-04",
+      "baselineStatus": "finished",
+      "hybridStatus": "incomplete",
+      "baselineIndustry": 8,
+      "hybridIndustry": null,
+      "difference": null
+    },
+    {
+      "country": "ottoman",
+      "seed": "gwjeff-ottoman-05",
+      "baselineStatus": "incomplete",
+      "hybridStatus": "incomplete",
+      "baselineIndustry": null,
+      "hybridIndustry": null,
+      "difference": null
+    },
+    {
+      "country": "qing",
+      "seed": "gwjeff-qing-06",
+      "baselineStatus": "incomplete",
+      "hybridStatus": "incomplete",
+      "baselineIndustry": null,
+      "hybridIndustry": null,
+      "difference": null
+    },
+    {
+      "country": "japan",
+      "seed": "gwjeff-japan-07",
+      "baselineStatus": "incomplete",
+      "hybridStatus": "incomplete",
+      "baselineIndustry": null,
+      "hybridIndustry": null,
+      "difference": null
+    },
+    {
+      "country": "usa",
+      "seed": "gwjeff-usa-08",
+      "baselineStatus": "finished",
+      "hybridStatus": "finished",
+      "baselineIndustry": 15,
+      "hybridIndustry": 15,
+      "difference": 0
+    }
+  ],
+  "missingBounds": {
+    "maxIndustry": 177,
+    "lowerMean": -90.375,
+    "upperMean": 108.75,
+    "interpretation": "Logical bounds for missing outcomes, not a confidence interval."
+  },
+  "pairedIndustry": null,
+  "reportedTotalTokenReduction": null,
+  "illustrativeLunaAssumptionCostReduction": null,
+  "positions": {
+    "positions": 8,
+    "datasetSha256": "4ceb62faf2a33fc8794f0cceee1fc4416a13eb62857d0919e137420bfc51e72d",
+    "selectors": {
+      "jeff": {
+        "calls": 16,
+        "errors": 0,
+        "wallSeconds": {
+          "n": 16,
+          "mean": 3.1843,
+          "median": 3.0786,
+          "p90": 4.4646,
+          "p95": 4.5594,
+          "min": 1.6892,
+          "max": 4.796
+        },
+        "choices": {
+          "attack": 0,
+          "reinforce": 0,
+          "develop": 0,
+          "rally": 0,
+          "wait": 16
+        }
+      },
+      "llm": {
+        "calls": 16,
+        "errors": 0,
+        "wallSeconds": {
+          "n": 16,
+          "mean": 2.8851,
+          "median": 1.9821,
+          "p90": 5.2316,
+          "p95": 5.7774,
+          "min": 1.3173,
+          "max": 5.8026
+        },
+        "choices": {
+          "attack": 16,
+          "reinforce": 0,
+          "develop": 0,
+          "rally": 0,
+          "wait": 0
+        }
+      }
+    },
+    "pairedJeffMinusFullLlmSeconds": {
+      "n": 8,
+      "differences": [
+        0.8104151915000011,
+        -0.4133454865000008,
+        1.8420106940000005,
+        -0.005494022499999751,
+        1.136796204000002,
+        -0.7715353164999981,
+        0.3246479954999886,
+        -0.5298115905000014
+      ],
+      "meanDifference": 0.2992,
+      "medianDifference": 0.1596,
+      "tied": 0,
+      "bootstrap95": [
+        -0.266,
+        0.9176
+      ],
+      "exactSignFlipTwoSidedP": 0.4063,
+      "slower": 4,
+      "faster": 4
+    },
+    "latencyDefinition": "Jeff is one local API request. LLM is the full PI select_move turn, including acknowledgement; first-choice time was not recorded.",
+    "qualityWarning": "No optimality labels: agreement and order consistency are diagnostics only."
+  },
+  "costAssumptions": {
+    "llm": "Hypothetical Luna standard rates carried from the earlier cost question: uncached input 0.10, cached input 0.01, output 0.50, cache write 0.125 USD per million tokens. Not the actual Goodwin bill.",
+    "jeff": "No API fee; local CPU/hosting cost unknown and excluded from the illustrative dollar figures.",
+    "metering": "Provider-reported PI usage only; aborted requests without final usage can be undercounted. SDK cost zero placeholders are not billing."
+  },
+  "limitations": [
+    "Small exploratory eight-block comparison",
+    "Whole systems change: strategy scheduling, memory and restricted military interface",
+    "Shared inference services and concurrent rooms influence latency",
+    "Completion-selected analysis is invalid if main outcomes are missing",
+    "Bot diplomacy is not human diplomacy",
+    "Reply quality and response delays were not measured"
+  ]
+}
