@@ -40,19 +40,29 @@ export const WORLD = 1280;
 let instances = 0;
 /** Shortest horizontal offset from a to b across the wrap. */
 export const wrapDelta = dx => dx - WORLD * Math.round(dx / WORLD);
-/** Impassable terrain art in map units, built once per map: shaded peaks for mountains, dune crests for desert. */
-function terrainArt(t) {
+/** Terrain art is drawn in map units at three glyph sizes and the atlas shows the one that suits the zoom (by
+ * pixels per map unit), so peaks and dunes stay a readable screen size: [scale, glyph size factor, from px]. */
+const TERRAIN_SCALES = Object.freeze([['far', 1.9, 0], ['mid', 1, LOD.world], ['close', .5, 5]]);
+/** Impassable terrain art in map units, built once per map and zoom scale: shaded peaks for mountains, dune crests
+ * for desert, crevasses for ice. */
+function terrainArt(t, size) {
   const f = v => v.toFixed(2), a = [], b = [], c = [];
   if (t.terrain === 'mountains') {
-    for (const [x, y, k] of terrainMarks(t.path, 4.6, 1.6)) {
-      const s = .85 + k * .4, w = 2.5 * s, h = 3 * s, foot = y + h * .55, mid = x + w * .12;
+    for (const [x, y, k] of terrainMarks(t.path, 4.6 * size, 1.6 * size)) {
+      const s = (.85 + k * .4) * size, w = 2.5 * s, h = 3 * s, foot = y + h * .55, mid = x + w * .12;
       a.push(`M${f(x - w)},${f(foot)}L${f(x)},${f(y - h)}L${f(mid)},${f(foot)}Z`); // lit face
       b.push(`M${f(x)},${f(y - h)}L${f(x + w)},${f(foot)}L${f(mid)},${f(foot)}Z`); // shadow face
       c.push(`M${f(x - w * .3)},${f(y - h * .45)}L${f(x)},${f(y - h)}L${f(x + w * .3)},${f(y - h * .45)}`); // snow line
     }
+  } else if (t.terrain === 'ice') {
+    for (const [x, y, k] of terrainMarks(t.path, 5 * size, 1.4 * size)) {
+      const w = (1.4 + k * 1.2) * size, h = .5 * size;
+      a.push(`M${f(x - w)},${f(y)}L${f(x - w * .2)},${f(y - h)}L${f(x + w * .4)},${f(y + h * .4)}L${f(x + w)},${f(y - h * .3)}`); // crevasse
+      b.push(`M${f(x - w * .9)},${f(y + h * 1.1)}L${f(x + w * .7)},${f(y + h * 1.3)}`); // drift shadow
+    }
   } else {
-    for (const [x, y, k] of terrainMarks(t.path, 3.6, 1.2)) {
-      const w = 1.5 + k * .8, h = .9 + k * .4;
+    for (const [x, y, k] of terrainMarks(t.path, 3.6 * size, 1.2 * size)) {
+      const w = (1.5 + k * .8) * size, h = (.9 + k * .4) * size;
       a.push(`M${f(x - w)},${f(y + h * .4)}Q${f(x - w * .25)},${f(y - h)} ${f(x + w)},${f(y + h * .1)}`); // dune crest
       b.push(`M${f(x - w * .2)},${f(y - h * .45)}Q${f(x + w * .3)},${f(y + h * .1)} ${f(x + w)},${f(y + h * .1)}`); // lee shadow
     }
@@ -112,11 +122,27 @@ export class Atlas {
     for (const [label, x, y] of [['NORTH ATLANTIC', 435, 235], ['SOUTH ATLANTIC', 525, 485], ['PACIFIC OCEAN', 105, 380], ['INDIAN OCEAN', 830, 487]]) {
       const text = node('text', { x, y }); text.textContent = label; oceans.append(text);
     }
+    // Seas (map units, at x=(lon+180)*3.5+10, y=(83-lat)*4.6+10): shown only at the middle zoom (CSS keys on data-terrain-scale).
+    const seas = node('g', { class: 'sea-names', 'pointer-events': 'none', 'aria-hidden': 'true' });
+    for (const [label, x, y] of [['Mediterranean Sea', 703, 233], ['Black Sea', 759, 193], ['Caspian', 817, 199], ['Baltic', 710, 130],
+      ['North Sea', 652, 134], ['Caribbean Sea', 381, 323], ['Gulf of Mexico', 322, 277], ['Arabian Sea', 861, 323], ['Bay of Bengal', 952, 323],
+      ['South China Sea', 1039, 332], ['Sea of Japan', 1108, 206], ['Hudson Bay', 343, 120]]) {
+      const text = node('text', { x, y }); text.textContent = label; seas.append(text);
+    }
+    this.base.append(seas);
     // Region (continent) names: authored map data above the land, below counters; shown only at world zoom (CSS keys on data-world).
     const regions = node('g', { class: 'region-names', 'pointer-events': 'none', 'aria-hidden': 'true' });
     for (const r of map.regions || []) {
       // data-map-region, not data-region: data-region names the UI's layout panels.
       const text = node('text', { x: r.x, y: r.y, 'data-map-region': r.id }); text.textContent = r.name.toUpperCase(); regions.append(text);
+    }
+    // Wasteland names along each shape's long axis (authored map data), at the middle zoom like the seas; the type
+    // shrinks to fit the room the map gives (span) and never grows past the CSS size.
+    for (const t of this.wastes.values()) {
+      const size = Math.min(4, .85 * (t.span || 40) / (t.name.length * .9));
+      const text = node('text', { x: t.x, y: t.y, class: 'terrain-name', transform: `rotate(${t.angle || 0} ${t.x} ${t.y})`,
+        style: `font-size:${size.toFixed(2)}px;letter-spacing:${(size * .275).toFixed(2)}px` });
+      text.textContent = t.name; regions.append(text);
     }
     this.base.append(oceans); this.seas = node('g', { class: 'sea-connections', 'pointer-events': 'none' });
     for (const edge of map.edges.filter(e => e.sea)) this.seas.append(node('path', { d: this.path(edge.from, edge.to), 'data-edge': `${edge.from}|${edge.to}` }));
@@ -135,10 +161,13 @@ export class Atlas {
     // Impassable terrain: a ground fill in its own colour plus static map-unit art (built once, never animated).
     this.terrain = node('g', { class: 'terrain-lands' });
     for (const t of this.wastes.values()) {
-      const art = terrainArt(t), g = node('g', { class: `terrain terrain-${t.terrain}`, 'data-terrain': t.id });
-      g.append(node('path', { d: t.path, class: 'terrain-ground' }), node('path', { d: art.a, class: 'terrain-art-a', 'pointer-events': 'none' }),
-        node('path', { d: art.b, class: 'terrain-art-b', 'pointer-events': 'none' }));
-      if (art.c) g.append(node('path', { d: art.c, class: 'terrain-art-c', 'pointer-events': 'none' }));
+      const g = node('g', { class: `terrain terrain-${t.terrain}`, 'data-terrain': t.id });
+      g.append(node('path', { d: t.path, class: 'terrain-ground' }));
+      for (const [scale, size] of TERRAIN_SCALES) {
+        const art = terrainArt(t, size), set = node('g', { class: 'terrain-art', 'data-scale': scale, 'pointer-events': 'none' });
+        for (const k of ['a', 'b', 'c']) if (art[k]) set.append(node('path', { d: art[k], class: `terrain-art-${k}` }));
+        g.append(set);
+      }
       this.terrain.append(g);
     }
     this.base.append(this.terrain);
@@ -397,8 +426,8 @@ export class Atlas {
   terrainText(id) {
     const t = this.wastes.get(id); if (!t) return null;
     const around = [...new Set(this.terrainEdges.filter(e => e.b === id).map(e => this.places.get(e.a)?.name).filter(Boolean))];
-    const list = around.length > 1 ? `${around.slice(0, -1).join(', ')} and ${around[around.length - 1]}` : around[0] || '';
-    return { title: t.name, detail: `Impassable ${t.terrain}${list ? ` between ${list}` : ''}. No army can cross it or hold it.` };
+    const list = around.length > 1 ? ` between ${around.slice(0, -1).join(', ')} and ${around[around.length - 1]}` : around.length ? ` in ${around[0]}` : '';
+    return { title: t.name, detail: `Impassable ${t.terrain}${list}. No army can cross it or hold it.` };
   }
   showTerrain(id, clientX, clientY) { const t = this.terrainText(id); if (t) this.tip(t.title, t.detail, clientX, clientY); }
   showArmy(id, at) {
@@ -571,6 +600,8 @@ export class Atlas {
     setData(this.armySvg, { lod: level });
     // Region names are drawn in map units: shown only between legible and crowded sizes.
     setData(this.svg, { world: px >= LOD.regionMin && px < LOD.world });
+    // Terrain art, wasteland and sea names follow the zoom scale (written only when it changes).
+    setData(this.svg, { terrainScale: TERRAIN_SCALES.reduce((at, [scale, , from]) => px >= from ? scale : at, 'far') });
     // Keep the mode chip inside the visible map, whatever else shares the container.
     // Expose the visible map's insets so CSS can place the key inside it, whatever shares the container.
     const box = this.svg.getBoundingClientRect(), host = this.chip.parentElement?.getBoundingClientRect();
@@ -985,10 +1016,11 @@ export class Atlas {
       if (wars.length) heading('At war');
       for (const pair of wars.slice(0, 4)) item('#d8342a', pair.split(':').map(id => faction(id).short).join(' – '), 'war');
       if (wars.length > 4) heading(`+${wars.length - 4} more wars`);
-      // Impassable terrain, by kind: the names drawn on the map.
-      const names = kind => [...this.wastes.values()].filter(t => t.terrain === kind).map(t => t.name);
-      if (this.wastes.size) heading('Impassable');
-      for (const kind of ['mountains', 'desert']) if (names(kind).length) item(kind === 'desert' ? '#d6bd84' : '#7d7263', names(kind).join(' · '), kind);
+      // Impassable terrain, by kind (each area's name is on the map and in its tooltip).
+      const kinds = new Set([...this.wastes.values()].map(t => t.terrain));
+      if (kinds.size) heading('Impassable');
+      for (const [kind, label, color] of [['mountains', 'Mountains', '#7d7263'], ['desert', 'Desert', '#d6bd84'], ['ice', 'Ice', '#e4ecee']])
+        if (kinds.has(kind)) item(color, label, kind);
     }
     this.keyed(this.legend, JSON.stringify(specs), () => specs.map(([text, color, kind]) => {
       if (!kind) { const b = document.createElement('b'); b.textContent = text; return b; }

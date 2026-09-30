@@ -64,6 +64,7 @@
     <div class="seal" aria-hidden="true">IRON<br>COUNCIL<br>LAB</div>
   </header>
   <section class="controls" aria-label="Filter benchmark results">
+    <label>Map <select id="map"><option value="all">All maps</option></select></label>
     <label>Model <select id="model"><option value="all">All models</option></select></label>
     <label>Harness <select id="harness"><option value="all">All harnesses</option></select></label>
     <label>Room <select id="arena"><option value="all">All rooms</option></select></label>
@@ -107,7 +108,7 @@
     <div id="task-error" role="alert" hidden></div>
     <div class="table-wrap"><table><thead><tr><th>Started</th><th>Model</th><th>Client</th><th>Success</th><th>Correct steps</th><th>Accepted</th><th>Rejected</th><th>Failed / calls</th><th>First action (s)</th><th>Complete (s)</th><th>Total tokens</th><th>Uncached</th></tr></thead><tbody id="task-rows"></tbody></table></div>
   </section>
-  <div class="notes"><p><span class="note-label">Reading the score</span>Result is the seat's win, draw or loss: its alliance held 60% of the world's industry for 90 s, or had the most industry at the deadline. Industry is the seat's own final industry. An alliance win can come with little personal industry.</p><p><span class="note-label">Comparison boundary</span>Shared rooms can include humans and other model seats; isolated rooms use seven practice bots. Quick rooms run the clock 6× faster. Compare within the same room type, clock and rules revision. Failed-call counts cover each harness's recorded tool path; provider token counters can differ. Missing usage stays blank.</p></div>
+  <div class="notes"><p><span class="note-label">Reading the score</span>Result is the seat's win, draw or loss: its alliance held 60% of the world's industry for 90 s, or had the most industry at the deadline. Industry is the seat's own final industry. An alliance win can come with little personal industry.</p><p><span class="note-label">Comparison boundary</span>Shared rooms can include humans and other model seats; isolated rooms use seven practice bots. Quick rooms run the clock 6× faster. Compare within the same room type, clock and rules revision. Failed-call counts cover each harness's recorded tool path.</p><p><span class="note-label">Tokens</span>One definition for every harness: total = every prompt token (cache reads included) plus output; uncached = total minus cache reads. Counts are the providers' own. A turn killed at its deadline may report no usage: the total is then marked ≥ with the turns that reported. Missing usage stays blank.</p></div>
 </main>
 <script type="module" src="./bench-view.js"></script>
 </body>

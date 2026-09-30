@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CURRENT_MAP_ID, summarizeRun, summarizeProgress } from '../agents/pi/bench.js';
+import { summarizeRun, summarizeProgress } from '../agents/pi/bench.js';
 import { summarizePlaytestSeat } from '../agents/pi/bench-playtest.js';
 
 const score = { country: 'britain', result: 'win', industry: 14 };
+const MAP_ID = 'imperial-1910-v7';
 
 test('benchmark export keeps aggregate Pi metrics and excludes private run content', () => {
   const raw = { runId: 'run-1', startedAt: '2026-09-28T00:00:00Z', finishedAt: '2026-09-28T00:01:00Z', interfaceVersion:'board-turn-v2',
-    match: 'abcd1234', mapId: CURRENT_MAP_ID, country: 'britain', status: 'finished', preset: 'quick', finalTick: 1800, outcome: { reason: 'deadline' }, score,
+    match: 'abcd1234', mapId: MAP_ID, country: 'britain', status: 'finished', preset: 'quick', finalTick: 1800, outcome: { reason: 'deadline' }, score,
     endpoint: 'http://private-endpoint', apiKey: 'secret', lastResponse: 'private conversation',
     toolCalls: [{ ok: true }, { ok: false }], actions: [{ ok: true, at: '2026-09-28T00:00:12Z' }, { ok: false }],
     usage: { input: 1000, output: 300, cacheRead: 400 }, turnLog: [{ wallMs: 20000, timedOut: false }, { wallMs: 30000, timedOut: true }] };
@@ -22,15 +23,20 @@ test('benchmark export keeps aggregate Pi metrics and excludes private run conte
   assert.equal(run.acceptedActions, 1);
   assert.equal(run.rejectedActions, 1);
   assert.equal(run.failedToolCalls, 1);
-  assert.equal(run.totalTokens, 1300);
+  // One token definition across harnesses: Pi reports cache reads beside input, so they are added in.
+  assert.equal(run.inputTokens, 1400);
+  assert.equal(run.totalTokens, 1700);
+  assert.equal(run.uncachedTokens, 1300);
   assert.equal(run.meanTurnSeconds, 25);
   assert.equal(run.timedOutTurns, 1);
   assert.equal(run.firstActionSeconds, 12);
   assert.equal(run.country, 'britain');
-  assert.equal(run.mapId, CURRENT_MAP_ID);
+  assert.equal(run.mapId, MAP_ID);
   assert.equal(run.harness, 'Pi');
   assert.equal(run.arena, 'seven practice bots');
-  assert.throws(() => summarizeRun({ ...raw, mapId: 'imperial-1910-v5' }, 'luna'), /current map/);
+  // Every map stays in the record, labeled; a run that does not name its map is refused.
+  assert.equal(summarizeRun({ ...raw, mapId: 'imperial-1910-v6' }, 'luna').mapId, 'imperial-1910-v6');
+  assert.throws(() => summarizeRun({ ...raw, mapId: undefined }, 'luna'), /record its map/);
   assert.doesNotMatch(JSON.stringify(run), /private|secret|endpoint/);
   assert.equal(summarizeRun(raw, 'external').modelGroup, 'external');
   assert.equal(summarizeRun(raw, 'deepseek').modelGroup, 'deepseek');
@@ -61,15 +67,17 @@ test('position progress publishes only numeric facts and the authoritative final
 });
 
 test('finished Grok and Hermes seats become sanitized, comparable harness rows', () => {
-  const run = { match: 'match-1', mapId: CURRENT_MAP_ID, startedAt: '2026-09-29T00:00:00Z',
+  const run = { match: 'match-1', mapId: MAP_ID, startedAt: '2026-09-29T00:00:00Z',
     sourceRevision: 'abcdef123456', interval: 30, turnTimeoutMs: 120000, url: 'https://private' };
   const report = { match: 'match-1', status: 'finished', tick: 600, speed: 1,
     finishedAt: '2026-09-29T00:10:00Z', generatedAt: '2026-09-29T02:10:00Z', outcome: { reason: 'domination', scores: [
       { country: 'japan', result: 'win', industry: 25 }, { country: 'russia', result: 'loss', industry: 0 }] } };
   const grok = { slot: 'a', country: 'japan', client: 'grok', model: 'grok-4.7',
     ordersAccepted: 5, ordersRejected: 1, timedOut: 0, clientErrors: 1, privateChat: 'secret' };
+  // The second turn was killed at its deadline and reported no usage: the rest still counts, marked partial.
   const turns = [{ durationMs: 20000, tokens: { input: 100, cached: 40, output: 20 },
-    position: { tick: 0, ownIndustry: 8, sideIndustry: 8, ownProvinces: 4, privateChat: 'secret' } }];
+    position: { tick: 0, ownIndustry: 8, sideIndustry: 8, ownProvinces: 4, privateChat: 'secret' } },
+    { durationMs: 120000, tokens: null }];
   const calls = [{ ok: true, acceptedTick: 5, at: '2026-09-29T00:00:05Z', args: { text: 'secret' } }, { ok: false }];
   const row = summarizePlaytestSeat(run, report, grok, turns, calls);
   assert.equal(row.harness, 'Grok CLI');
@@ -77,7 +85,11 @@ test('finished Grok and Hermes seats become sanitized, comparable harness rows',
   assert.equal(row.combatSeed, null);
   assert.equal(row.modelGroup, 'grok');
   assert.equal(row.result, 'win');
-  assert.equal(row.totalTokens, 120);
+  // Grok and Hermes report cache reads beside input; Codex inside it.
+  assert.deepEqual([row.inputTokens, row.cacheReadTokens, row.totalTokens, row.uncachedTokens], [140, 40, 160, 120]);
+  assert.deepEqual([row.tokenTurnsReported, row.tokenTurns], [1, 2]);
+  const codex = summarizePlaytestSeat(run, report, { ...grok, client: 'codex', model: 'gpt-6-sol' }, turns, calls);
+  assert.deepEqual([codex.inputTokens, codex.totalTokens, codex.uncachedTokens], [100, 120, 80]);
   assert.equal(row.failedToolCalls, 1);
   assert.equal(row.durationSeconds, 600);
   assert.equal(row.progress.at(-1).ownIndustry, 25);
@@ -91,7 +103,7 @@ test('finished Grok and Hermes seats become sanitized, comparable harness rows',
   assert.equal(isolated.combatSeed, run.match);
   assert.throws(() => summarizePlaytestSeat({ ...run, arena: 'unverified' }, report, grok, turns, calls), /Unknown playtest arena/);
   assert.throws(() => summarizePlaytestSeat(run, { ...report, status: 'running' }, grok, turns, calls), /finished room/);
-  assert.throws(() => summarizePlaytestSeat({ ...run, mapId: 'old-map' }, report, grok, turns, calls), /current map/);
+  assert.throws(() => summarizePlaytestSeat({ ...run, mapId: undefined }, report, grok, turns, calls), /records its map/);
 });
 
 test('Codex benchmark export does not invent missing token or turn counts', () => {
@@ -103,7 +115,7 @@ test('Codex benchmark export does not invent missing token or turn counts', () =
   assert.equal(noOrders.meanTurnSeconds, null);
   assert.equal(noOrders.timedOutTurns, null);
   const partial = summarizeRun({ runId: 'partial', startedAt: '2026-09-28T00:00:00Z', match: 'abcd1234',
-    mapId: CURRENT_MAP_ID,
+    mapId: MAP_ID,
     status: 'finished', score, client: 'codex', access: 'mcp', events: [], httpActions: [],
     usage: { input: 100, output: 50, total: 150 }, usageIncomplete: true,
     turnLog: [{ wallMs: 1000 }] }, 'luna');
@@ -128,4 +140,4 @@ test('Codex benchmark export does not invent missing token or turn counts', () =
 });
 
 function rawForCodex() { return { runId: 'codex-mode', startedAt: '2026-09-28T00:00:00Z',
-  match: 'abcd1234', mapId: CURRENT_MAP_ID, country: 'britain', status: 'finished', score, client: 'codex', access: 'cli', events: [], httpActions: [] }; }
+  match: 'abcd1234', mapId: MAP_ID, country: 'britain', status: 'finished', score, client: 'codex', access: 'cli', events: [], httpActions: [] }; }

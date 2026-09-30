@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process';
 import { request as httpRequest } from 'node:http';
 import { makeServer, MAP } from '../src/server.js';
 import { join as joinEngine } from '../src/engine.js';
+import { CouncilClient } from '../agents/client.js';
 
 async function fixture(t,{disk=false,...options}={}) {
   const dir=mkdtempSync(pathJoin(tmpdir(),'council-test-'));
@@ -272,13 +273,14 @@ test('stdio MCP negotiates, validates schemas, joins an agent, calls real HTTP, 
     {jsonrpc:'2.0',id:2,method:'tools/list'},
     {jsonrpc:'2.0',id:3,method:'tools/call',params:{name:'join_match',arguments:{match:id,country:'britain',name:'MCP envoy',model:'test-harness',persona:'diplomat'}}},
     {jsonrpc:'2.0',id:4,method:'tools/call',params:{name:'observe',arguments:{after:0}}},
-    {jsonrpc:'2.0',id:5,method:'tools/call',params:{name:'march',arguments:{from:'england',to:'north-france',amount:-1}}},
+    // Agents give shares, never troop counts: a count is an unknown argument.
+    {jsonrpc:'2.0',id:5,method:'tools/call',params:{name:'march',arguments:{from:'england',to:'north-france',amount:5}}},
     {jsonrpc:'2.0',id:6,method:'tools/call',params:{name:'unknown',arguments:{}}},
     {jsonrpc:'2.0',id:7,method:'ping'},
     {jsonrpc:'2.0',id:8,method:'tools/call',params:{name:'board',arguments:{}}},
     {jsonrpc:'2.0',id:9,method:'tools/call',params:{name:'view_map',arguments:{}}},
     {jsonrpc:'2.0',id:10,method:'tools/call',params:{name:'news',arguments:{}}},
-    {jsonrpc:'2.0',id:11,method:'tools/call',params:{name:'march',arguments:{from:'england',to:'low-countries',amount:5}}},
+    {jsonrpc:'2.0',id:11,method:'tools/call',params:{name:'march',arguments:{from:'england',to:'low-countries',percent:50}}},
   ].map(x=>JSON.stringify(x)).join('\n')+'\n';
   const result=await subprocess('agents/mcp.js',[],env,input);assert.equal(result.code,0,result.stderr);
   const output=result.stdout.trim().split('\n').map(x=>JSON.parse(x));assert.equal(output.length,11);
@@ -377,11 +379,11 @@ test('MCP exposes multi-source march forecasts, validates nested schemas and ret
   const commands=[
     {jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-06-18'}},
     {jsonrpc:'2.0',method:'notifications/initialized'},
-    {jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'preview',arguments:{to:'mexico',sources:[{from:'west-us',percent:50},{from:'central-us',amount:4}]}}},
-    {jsonrpc:'2.0',id:3,method:'tools/call',params:{name:'march',arguments:{to:'mexico',opId:'stable-plan',sources:[{from:'west-us',percent:50},{from:'central-us',amount:4}]}}},
-    {jsonrpc:'2.0',id:4,method:'tools/call',params:{name:'march',arguments:{to:'mexico',opId:'stable-plan',sources:[{from:'west-us',percent:50},{from:'central-us',amount:4}]}}},
-    {jsonrpc:'2.0',id:5,method:'tools/call',params:{name:'preview',arguments:{to:'mexico',sources:[{from:'west-us',percent:101}]}}},
-    {jsonrpc:'2.0',id:6,method:'tools/call',params:{name:'preview',arguments:{to:'mexico',sources:[{from:'west-us',amount:4,unexpected:true}]}}},
+    {jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'preview',arguments:{to:'mexico',from:['west-us','central-us'],percent:50}}},
+    {jsonrpc:'2.0',id:3,method:'tools/call',params:{name:'march',arguments:{to:'mexico',opId:'stable-plan',from:['west-us','central-us'],percent:50}}},
+    {jsonrpc:'2.0',id:4,method:'tools/call',params:{name:'march',arguments:{to:'mexico',opId:'stable-plan',from:['west-us','central-us'],percent:50}}},
+    {jsonrpc:'2.0',id:5,method:'tools/call',params:{name:'preview',arguments:{to:'mexico',from:'west-us',percent:101}}},
+    {jsonrpc:'2.0',id:6,method:'tools/call',params:{name:'preview',arguments:{to:'mexico',from:'west-us',sources:[{from:'west-us',amount:4}]}}},
   ];
   const result=await subprocess('agents/mcp.js',[],{COUNCIL_URL:f.url,COUNCIL_SESSION:pathJoin(f.dir,'industrial.session.json'),COUNCIL_MATCH:id,COUNCIL_TOKEN:seat.token},commands.map(JSON.stringify).join('\n')+'\n');
   assert.equal(result.code,0,result.stderr);const responses=result.stdout.trim().split('\n').map(JSON.parse);
@@ -461,7 +463,7 @@ test('HTTP declare-and-march shares the engine path and retry receipt',async t=>
   const f=await fixture(t),{id,sa,sb}=await f.boot();await f.launch(id,sa.token);
   const g=f.app.games.get(id),mexico=g.provinces.find(p=>p.id==='mexico');mexico.owner='britain';mexico.troops=3;
   const action={type:'march',from:'west-us',to:'mexico',amount:5,declareWar:true};
-  const refused=await f.call(`/api/games/${id}/actions`,'POST',{opId:'dm-bad',action:{...action,amount:999}},sa.token);
+  const refused=await f.call(`/api/games/${id}/actions`,'POST',{opId:'dm-bad',action:{...action,amount:0}},sa.token);
   assert.equal(refused.status,400);assert.deepEqual(g.wars,[]);
   const first=await f.call(`/api/games/${id}/actions`,'POST',{opId:'dm-1',action},sa.token);
   assert.equal(first.status,200);assert.equal(first.data.warDeclared,true);assert.deepEqual(first.data.war.toRoster,['britain']);
@@ -469,6 +471,19 @@ test('HTTP declare-and-march shares the engine path and retry receipt',async t=>
   assert.deepEqual(retry.data,first.data);assert.equal(g.orders.length,1);
   const view=(await f.call(`/api/games/${id}`,'GET',undefined,sa.token)).data;
   assert.deepEqual(view.wars,['britain:usa']);assert.equal(view.orders.length,1);
+});
+
+test('agent client waits out a short anti-spam pause and resends the same operation; long waits still refuse',async t=>{
+  const f=await fixture(t),{id,sa}=await f.boot();await f.launch(id,sa.token);
+  const g=f.app.games.get(id),client=new CouncilClient({url:f.url,token:sa.token,match:id,sessionPath:pathJoin(f.dir,'spam.session.json')});
+  await client.action({type:'chat',channel:'world',text:'first'});
+  // The room clock is manual here: advance it while the client waits for the chat window to reopen.
+  setTimeout(()=>f.app.step(g,2),200);
+  await client.action({type:'chat',channel:'world',text:'second'});
+  assert.deepEqual(g.events.filter(e=>e.type==='message').map(e=>e.text),['first','second']);
+  for(let i=0;i<10;i++)await client.action({type:'march',from:'central-us',to:'east-us',percent:1});
+  // The order budget reopens only after 10 ticks: refused at once, with the facts to retry.
+  await assert.rejects(client.action({type:'march',from:'central-us',to:'east-us',percent:1}),e=>e.status===429 && e.details.retryAt-e.details.tick===10);
 });
 
 test('turn around over HTTP, CLI and MCP: bring a march home, march a returning army again, survive restart',async t=>{
@@ -517,7 +532,7 @@ test('a long march has the same path and arrival for the browser (HTTP /plan), M
   const env={COUNCIL_URL:f.url,COUNCIL_SESSION:pathJoin(f.dir,'long.session.json'),COUNCIL_TOKEN:usa.token,COUNCIL_MATCH:id};
   const mcp=await subprocess('agents/mcp.js',[],env,[
     {jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-06-18'}},{jsonrpc:'2.0',method:'notifications/initialized'},
-    {jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'preview',arguments:action}},
+    {jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'preview',arguments:{to:'alaska',from:'mexico',percent:50}}},
   ].map(x=>JSON.stringify(x)).join('\n')+'\n');
   const out=mcp.stdout.trim().split('\n').map(x=>JSON.parse(x)),viaMcp=JSON.parse(out[1].result.content[0].text);
   assert.deepEqual(viaMcp.sources.map(s=>[s.path,s.travel]),http.sources.map(s=>[s.path,s.travel]));assert.equal(viaMcp.arrivesAt,http.arrivesAt);
@@ -540,7 +555,7 @@ test('attack from every bordering province: HTTP, MCP and CLI agree; percent per
     {jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'preview',arguments:action}},
     {jsonrpc:'2.0',id:3,method:'tools/call',params:{name:'march',arguments:{to:'andes',fromAllBordering:true,percent:50}}},
     {jsonrpc:'2.0',id:4,method:'tools/call',params:{name:'march',arguments:{to:'mexico',fromAllBordering:false,percent:50}}},
-    {jsonrpc:'2.0',id:5,method:'tools/call',params:{name:'march',arguments:{to:'brazil',from:'east-us',amount:3}}},
+    {jsonrpc:'2.0',id:5,method:'tools/call',params:{name:'march',arguments:{to:'brazil',from:'east-us',percent:25}}},
   ].map(x=>JSON.stringify(x)).join('\n')+'\n');
   const out=mcp.stdout.trim().split('\n').map(x=>JSON.parse(x));
   assert.deepEqual(JSON.parse(out[1].result.content[0].text).sources,http.sources);

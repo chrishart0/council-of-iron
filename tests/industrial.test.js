@@ -101,7 +101,10 @@ test('multi-source plan validates atomically, reserves exact amounts, dispatches
   const g=game(),to='mexico';const sources=['west-us','central-us'];
   assert.ok(sources.every(from=>map.provinces.find(p=>p.id===from).neighbors.includes(to)));
   const before=JSON.stringify(g);
-  assert.throws(()=>action(g,'usa',{type:'march',to,sources:[{from:sources[0],amount:5},{from:'england',amount:5}]}),/not own/);
+  // A source that cannot take part is skipped and listed; a march with no usable source changes nothing.
+  const partial=marchPlan(g,map,'usa',{to,sources:[{from:sources[0],amount:5},{from:'england',amount:5}]});
+  assert.deepEqual(partial.skipped,[{from:'england',reason:'not yours'}]);assert.equal(partial.total,5);
+  assert.throws(()=>action(g,'usa',{type:'march',to,sources:[{from:'england',amount:5}]}),/not own/);
   assert.equal(JSON.stringify(g),before);
   const plan=marchPlan(g,map,'usa',{to,sources:sources.map(from=>({from,amount:5}))});
   assert.notEqual(plan.sources[0].executeAt,plan.sources[1].executeAt);
@@ -111,18 +114,23 @@ test('multi-source plan validates atomically, reserves exact amounts, dispatches
   tick(g);const battle=g.battles.find(b=>b.province===to);
   assert.equal(battle.arrivals.length,2);assert.equal(battle.engaged,10);
 });
-test('an invalid multi-source march names the depleted source and current free troops',()=>{
+test('a march sends at most what each source has free and skips a source with none',()=>{
   const g=game();province(g,'central-us').troops=2;
+  // Amounts are upper bounds: central-us has one free troop (one stays home), so it sends one.
+  const plan=marchPlan(g,map,'usa',{to:'mexico',sources:[{from:'west-us',amount:5},{from:'central-us',amount:2}]});
+  assert.deepEqual(plan.sources.map(s=>[s.from,s.amount,s.requested]),[['west-us',5,undefined],['central-us',1,2]]);
+  province(g,'central-us').troops=1;
+  const skipped=marchPlan(g,map,'usa',{to:'mexico',sources:[{from:'west-us',amount:5},{from:'central-us',amount:2}]});
+  assert.deepEqual(skipped.skipped,[{from:'central-us',reason:'no free troops'}]);assert.equal(skipped.total,5);
   const before=JSON.stringify(g);
-  assert.throws(()=>action(g,'usa',{type:'march',to:'mexico',sources:[
-    {from:'west-us',amount:5},{from:'central-us',amount:2},
-  ]}),error=>/central-us: 2 selected, 1 free/.test(error.message));
+  assert.throws(()=>action(g,'usa',{type:'march',to:'mexico',from:'central-us',amount:2}),/central-us: it has no free troops/);
   assert.equal(JSON.stringify(g),before);
 });
-test('duplicate sources, mixed units and impossible percentages are rejected',()=>{
+test('duplicate sources, mixed units and impossible percentages are rejected; a small percentage sends one troop',()=>{
   const g=game(),s={from:'west-us',amount:5};
-  for(const sources of [[s,s],[{...s,percent:50}],[{from:'west-us',percent:0}],[{from:'west-us',percent:101}],[{from:'west-us',percent:.001}]])
+  for(const sources of [[s,s],[{...s,percent:50}],[{from:'west-us',percent:0}],[{from:'west-us',percent:101}],[{from:'west-us',amount:2.5}]])
     assert.throws(()=>action(g,'usa',{type:'march',to:'mexico',sources}));
+  assert.equal(marchPlan(g,map,'usa',{to:'mexico',sources:[{from:'west-us',percent:.001}]}).total,1);
 });
 test('recalling an outbound army reverses at its actual position and returns no troops instantly',()=>{
   const g=game();const r=action(g,'usa',{type:'march',from:'west-us',to:'mexico',amount:8});advance(g,11);

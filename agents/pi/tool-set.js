@@ -14,3 +14,9 @@ export function gameToolNames({ taskMode, turnView, vision }) {
   const names = matchTools.filter(name => taskMode !== 'match' || turnView !== 'decision' || !redundantDuringDecisionMatch.has(name));
   return new Set(vision ? [...names, 'view_map'] : names);
 }
+
+/** An MCP input schema without its `opId` property: the Pi harness assigns operation IDs itself. */
+export function withoutOpId(schema) {
+  const { opId: _opId, ...properties } = schema.properties || {};
+  return { ...schema, properties, ...(schema.required ? { required: schema.required.filter(name => name !== 'opId') } : {}) };
+}

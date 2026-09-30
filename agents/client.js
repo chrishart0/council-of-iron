@@ -60,8 +60,19 @@ export class CouncilClient {
   feed(after=0,limit=100) { return this.request(this.gamePath(`/feed?${new URLSearchParams({after,limit})}`)); }
   review() {return this.request(this.gamePath('/review'));}
   replay(tick) {return this.request(this.gamePath(`/replay?tick=${encodeURIComponent(tick)}`));}
-  /** Any action object is sent as-is; a march accepts optional declareWar:true (atomic declare-and-march). */
-  action(action,opId=randomUUID()) { return this.request(this.gamePath('/actions'),'POST',{action,opId}); }
+  /** Any action object is sent as-is; a march accepts optional declareWar:true (atomic declare-and-march).
+   * A short anti-spam pause (a 429 whose retryAt is at most 3 ticks away) is waited out and the same operation
+   * resent, so a second message or order in quick succession is delivered instead of refused. */
+  async action(action,opId=randomUUID()) {
+    for(let attempt=0;;attempt++){
+      try { return await this.request(this.gamePath('/actions'),'POST',{action,opId}); }
+      catch(error) {
+        const {retryAt,tick}=error.details || {},ticks=error.status===429 && Number.isFinite(retryAt) && Number.isFinite(tick) ? retryAt-tick : 0;
+        if(attempt>=2 || !(ticks>0 && ticks<=3))throw error;
+        await new Promise(resolveWait=>setTimeout(resolveWait,ticks*1000));
+      }
+    }
+  }
   /** Read-only forecast of a march ({to, from, amount|percent} or {to, sources}) or a rally ({type:'rally', from, to}). */
   plan(action) {return this.request(this.gamePath('/plan'),'POST',action);}
   /** Turn one of your armies or march groups around: a returning army marches again, anything else is recalled. */

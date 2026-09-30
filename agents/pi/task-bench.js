@@ -3,7 +3,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { codexToolFailure } from './bench.js';
+import { codexToolFailure, tokenFields } from './bench.js';
 import { FIXED_TASK_ID } from './fixed-task.js';
 
 const output = fileURLToPath(new URL('./task-benchmarks.json', import.meta.url));
@@ -27,9 +27,11 @@ export function summarizeTaskRun(raw, modelGroup) {
     : (raw.httpActions || []).filter(action => action.status === 200 && action.at);
   const rejected = client === 'Pi' ? (raw.actions || []).filter(action => action.ok === false).length
     : (raw.httpActions || []).filter(action => action.status !== 200).length;
+  // Same token definition as the match ledger: Pi reports cache reads beside input, Codex inside it.
   const usage = raw.usage || {};
-  const inputTokens = finite(usage.input), outputTokens = finite(usage.output), cacheReadTokens = finite(usage.cacheRead);
-  const totalTokens = finite(usage.total) ?? (inputTokens === null || outputTokens === null ? null : inputTokens + outputTokens);
+  const tokens = tokenFields({ input: client === 'Pi' && finite(usage.input) !== null
+    ? usage.input + (finite(usage.cacheRead) || 0) + (finite(usage.cacheWrite) || 0) : usage.input,
+  cacheRead: usage.cacheRead, output: usage.output }, accepted.length);
   return {
     id: raw.runId, taskId: FIXED_TASK_ID, startedAt: raw.startedAt, modelGroup, client,
     access: client === 'Pi' ? 'MCP' : raw.access === 'mcp' && !usedCouncilMcp && usedShell ? 'shell fallback' : raw.access,
@@ -41,9 +43,7 @@ export function summarizeTaskRun(raw, modelGroup) {
     completionSeconds: raw.taskResult.success && accepted.length >= 3
       ? round((Date.parse(accepted[2].at) - Date.parse(raw.startedAt)) / 1000) : null,
     durationSeconds: round((Date.parse(raw.finishedAt) - Date.parse(raw.startedAt)) / 1000),
-    inputTokens, outputTokens, cacheReadTokens, totalTokens,
-    uncachedTokens: inputTokens === null || outputTokens === null ? null
-      : Math.max(0, inputTokens - (client === 'Codex' ? cacheReadTokens || 0 : 0)) + outputTokens,
+    ...tokens,
   };
 }
 

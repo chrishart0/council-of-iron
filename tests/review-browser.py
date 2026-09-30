@@ -111,7 +111,7 @@ def main():
                 assert page.locator('#'+kind+'-chart polyline').count()==1
                 page.locator(f'[data-chart="{kind}"][data-compare="all"]').click()
                 capture(page,'04-'+kind+'.png')
-            expect(page.locator('.aar-accounting')).to_contain_text('7,511')
+            expect(page.locator('.aar-accounting')).to_contain_text('7,242')  # the handplay replay's remaining troops (tests/handplay.test.js)
             page.locator('#aar-tab-military').click()
             page.locator('.aar-ledger [data-aar-seek]').first.click()
             assert int(page.locator('#replay-stage').get_attribute('data-tick')) <= 1800

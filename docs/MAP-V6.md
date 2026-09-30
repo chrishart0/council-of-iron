@@ -9,6 +9,12 @@ The user asked to "simplify the map and make the borders look better. Think abou
 
 Nothing else changed: every other adjacency, holding and garrison is the v6 one. The Part 3 evidence was measured on v6; the v7 gate run is at the end of "Impassable terrain".
 
+A second v7 pass (same day, "map improvements, character, quality … do it") changed only presentation; adjacency, travel times and the golden replay hashes are identical before and after:
+- five **scenery wastelands** inside a single province (Greenland Ice Cap, Empty Quarter, Gobi, Great Sandy Desert, Karakum);
+- **hand-drawn borders** for two survey artefacts: the Western Sahara staircase (Maghreb–West Africa) and the ruler line between the Sahara and West Africa; the Alps' French side is curved;
+- terrain art at three **zoom scales**, **names** on the wastelands and **sea names** at the middle zoom;
+- a map notice without the v6 version stamp.
+
 Reproduce everything:
 
 ```
@@ -181,7 +187,19 @@ v5's direct Pacific States–Japan and Pacific States–Philippines lanes are go
 
 CK3 does not mark impassable ground with a special border. The Himalayas and the deep Sahara are **wasteland**: land that belongs to no county, cannot be held or crossed, and is painted as terrain. Counties simply stop at its edge, so two realms on either side have no border. v7 does the same (v6 drew a "barrier" border between the two provinces instead). There is still no rule for it: a wasteland is not a province and has no links, so the provinces on either side do not share a border and are not neighbours, exactly like any other two provinces that do not touch.
 
-The builder cuts each wasteland out of the v5 members beside it. `WASTELANDS` in `scripts/build-imperial-v6.js` gives, per member, a cut line whose ends snap to the member's boundary; the smaller side becomes wasteland, and the pieces cut from two neighbours merge into one area (their old shared border dissolves). The new edges are generalised like any land border. The build fails if a cut line leaves its member, and `SEPARATED` fails it if a separated pair still shares a border. The map publishes `terrain[]` (`id`, `name`, `terrain`: `mountains` or `desert`, label `x`/`y`, `path`); it is never in `edges`, and the geometry test checks that a shared border between two provinces is always a land link.
+The builder cuts each wasteland out of the v5 members beside it. `WASTELANDS` in `scripts/build-imperial-v6.js` gives, per member, a cut line whose ends snap to the member's boundary; the smaller side becomes wasteland, and the pieces cut from two neighbours merge into one area (their old shared border dissolves). The new edges are generalised like any land border. The build fails if a cut line leaves its member, and `SEPARATED` fails it if a separated pair still shares a border. The map publishes `terrain[]` (`id`, `name`, `terrain`: `mountains`, `desert` or `ice`, label `x`/`y`, label `angle` and `span`, `path`); it is never in `edges`, and the geometry test checks that a shared border between two provinces is always a land link.
+
+**Scenery wastelands** are holes inside one province, so they separate nothing. A hole is given as `{ inset, region }`: the builder traces (marching squares) the land at least `inset` units from the member's edge and inside a rough `region`, so the Greenland ice keeps a coastal rim and the Empty Quarter follows the Arabian coast. The province's counter is placed as if the hole were not there (its anchor is computed on the province with its holes filled), and the build fails if any counter comes within 4 units of a wasteland; so travel times, which follow counter distance, do not change.
+
+| Scenery | In | Kind |
+|---|---|---|
+| Greenland Ice Cap | Scandinavia (Greenland) | ice |
+| Empty Quarter | Arabia | desert |
+| Gobi | Mongolia | desert |
+| Great Sandy Desert | Australasia | desert |
+| Karakum | Central Asia | desert |
+
+`REDRAWN` replaces a shared source border by a hand-drawn line in both members: the Western Sahara staircase and the ruler-straight Sahara–West Africa line. West Africa's counter moved 0.2 units as a result (the pole search depends on the outline's extent); its travel times are unchanged.
 
 | Wasteland | Cut from | Keeps apart | Chokepoint it creates |
 |---|---|---|---|
@@ -199,11 +217,12 @@ Tried and dropped (v6, as barriers):
 - **Gobi**. It would leave Qing a single neutral neighbour.
 
 In the UI (`public/atlas.js`, `public/map-layers.css`):
-- A wasteland is filled with its own ground colour (grey rock, sand) under static art drawn once in map units: shaded peaks with snow lines for mountains, dune crests for desert (`terrainMarks` in `public/map-geometry.js` spreads them evenly inside the shape). Nothing animates, so it adds no per-frame repaint.
+- A wasteland is filled with its own ground colour (grey rock, sand, ice) under static art drawn in map units: shaded peaks with snow lines for mountains, dune crests for desert, crevasses for ice (`terrainMarks` in `public/map-geometry.js` spreads them evenly inside the shape). The art is built once at three glyph sizes, and the atlas shows the one for its zoom (`data-terrain-scale`: far, mid, close), so peaks never become gravel far out or boulders close in. Nothing animates, so it adds no per-frame repaint.
+- At the middle zoom each wasteland carries its name along its long axis, sized to fit the shape (`span`), and the seas are named (Mediterranean, Black Sea, Caspian, Baltic, North Sea, Caribbean, Gulf of Mexico, Arabian Sea, Bay of Bengal, South China Sea, Sea of Japan, Hudson Bay).
 - Its edge against a province is a dark terrain edge, neither a province nor a country border: war fronts never run along it, and alliance outlines close over it like a coast.
-- Hovering or tapping it names it and its neighbours, for example "Himalayas. Impassable mountains between Afghanistan, Tibet, Indochina and India. No army can cross it or hold it." A tapped tooltip stays until the next touch on phones.
+- Hovering or tapping it names it and its neighbours, for example "Himalayas. Impassable mountains between Afghanistan, Tibet, Indochina and India. No army can cross it or hold it." (a scenery hole says "in Arabia"). A tapped tooltip stays until the next touch on phones.
 - Dragging a march over it shows "Himalayas · impassable".
-- The map key lists the wastelands by terrain.
+- The map key lists the impassable kinds: mountains, desert, ice.
 - **Agents** see only the ordinary adjacency (`neighbors`, `edges`); `map.terrain` names the wastelands. A march to a province across one is refused like any other non-bordering target.
 
 The v7 gate run (`npm run test:balance -- --rounds 32 --mode diplomacy`, seeds 1000–1031, 0 invariant failures): Germany 13, Qing 12, USA 12, France 11, Ottoman 11, Britain 7, Russia 6, Japan 4; 22 decisive, 10 deadline wins, no draws. At 32 rounds this is noise-level (v6: max/min 16 / 5); no 256-round run was made for v7.
@@ -212,8 +231,11 @@ Screenshots (local bot match, Britain seat, not a live match):
 
 | | |
 |---|---|
-| ![Himalayas](media/map-v6-himalayas.png) | ![Urals](media/map-v6-urals.png) |
-| ![Alps](media/map-v6-alps.png) | ![Sahara](media/map-v6-sahara.png) |
+| ![World, 1920×1080](media/map-v7-world-1920.png) | ![World, 390×844](media/map-v7-world-390.png) |
+| ![Himalayas](media/map-v7-himalayas.png) | ![Urals and Karakum](media/map-v7-urals.png) |
+| ![Alps and Sahara](media/map-v7-alps.png) | ![Greenland](media/map-v7-greenland.png) |
+| ![Arabia](media/map-v7-arabia.png) | ![Gobi](media/map-v7-gobi.png) |
+| ![Australasia](media/map-v7-outback.png) | ![Himalayas, close zoom](media/map-v7-himalayas-close.png) |
 
 ### Starting setups
 
@@ -325,13 +347,11 @@ Readings (not claims):
 
 ### Screenshots
 
-These are from a bot-played local preview position at 04:00, not a live match, taken on v6. They show the Britain seat's view, an Entente alliance and several wars; the impassable terrain in them is v6's barrier borders (current close-ups are under "Impassable terrain").
+From a local bot match on v7 (Britain seat, first minute), not a live match. The world views and terrain close-ups are under "Impassable terrain".
 
 | | |
 |---|---|
-| ![World, 1920×1080](media/map-v6-world-1920.png) | ![Europe mid zoom, 1920×1080](media/map-v6-mid-1920.png) |
-| ![Europe near zoom, 1920×1080](media/map-v6-near-1920.png) | ![World, 390×844](media/map-v6-world-390.png) |
-| ![Europe and Africa, 390×844](media/map-v6-near-390.png) | |
+| ![Mid zoom, Europe, Africa and the Near East, 1920×1080](media/map-v7-europe-1920.png) | ![Opening view, 390×844](media/map-v7-europe-390.png) |
 
 ## Optional, not implemented: region bonuses
 

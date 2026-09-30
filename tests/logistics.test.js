@@ -163,6 +163,12 @@ test('rally clear, bulk sources and idempotent retries', () => {
   send(g, 'usa', { type: 'rally', from: 'east-us', to: 'west-us' });
   tick(g); assert.deepEqual(g.rallies.map(x => x.from), ['canada', 'east-us']);
   assert.ok(g.events.some(e => e.type === 'rally_cleared' && e.reason === 'order'));
+  // Sources that cannot rally there are skipped and listed (the rally point keeps its own recruits);
+  // a rally with no source left changes nothing.
+  const partial = send(g, 'usa', { type: 'rally', from: ['east-us', 'west-us', 'england'], to: 'west-us' });
+  assert.deepEqual(partial.sources.map(s => s.from), ['east-us']);
+  assert.deepEqual(partial.skipped, [{ from: 'west-us', reason: 'it is the rally point' }, { from: 'england', reason: 'not yours' }]);
+  assert.throws(() => send(g, 'usa', { type: 'rally', from: ['west-us'], to: 'west-us' }), /cannot rally to itself/);
 });
 
 test('rally matches are deterministic and survive a snapshot round trip', () => {

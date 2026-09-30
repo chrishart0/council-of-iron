@@ -12,7 +12,7 @@ test('benchmark server serves the report and aggregate ledger but refuses privat
     assert.match(await page.text(), /Campaign ledger/);
     const ledger = await fetch(`${url}/benchmarks.json`);
     assert.equal(ledger.status, 200);
-    assert.equal((await ledger.json()).schemaVersion, 4);
+    assert.equal((await ledger.json()).schemaVersion, 5);
     for (const path of ['/play.js', '/workspace/qwen/strategy.md', '/.env', '/../bench.js']) {
       const response = await fetch(`${url}${path}`);
       assert.equal(response.status, 404, path);

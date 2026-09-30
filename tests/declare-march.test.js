@@ -33,8 +33,8 @@ test('declare-and-march: one action declares the war and reserves the march unde
 test('declare-and-march: an invalid march leaves no war, no events and no receipt',()=>{
   const g=game();
   const snapshot=JSON.stringify(g);
-  for(const bad of [{...strike,amount:500},{...strike,from:'england'},{...strike,percent:50},{...strike,declareWar:'yes'},
-    {type:'march',to:'mexico',sources:[{from:'west-us',amount:999}],declareWar:true}])
+  for(const bad of [{...strike,amount:0},{...strike,from:'england'},{...strike,percent:50},{...strike,declareWar:'yes'},
+    {type:'march',to:'mexico',sources:[{from:'west-us',amount:1.5}],declareWar:true}])
     assert.throws(()=>send(g,'usa',bad));
   assert.equal(JSON.stringify(g),snapshot,'no half state: wars, events, serials, orders and receipts are untouched');
   // An exhausted anti-spam limit also rejects the declaration.

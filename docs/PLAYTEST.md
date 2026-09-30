@@ -26,6 +26,21 @@ not restarted or deployed.
 
 The earlier Pi model results below used the former v5 map. Master now uses the v6 map, with different starting industry, adjacency and impassable borders. The v5 wins remain historical evidence and must not be used as a current v6 model win rate. Some interrupted attempts were stopped by `earlyoom` and have no result.
 
+# Failed-call reduction — 30 September 2026
+
+Across every recorded agent run so far (Pi raw runs and playtest MCP logs), 757 of 10,168 tool calls failed (7.4%). The largest groups were troop counts that no longer fitted the source (about 280: "N selected, M free", or the older "Not enough uncommitted troops"), orders naming a source that could not take part (the target or rally point itself, a province no longer owned, one cut off: about 180, single- and multi-source), a second message inside the 2 s chat window (16), and reused model-invented operation IDs in fresh-context Pi turns (17). Each change below targets one of these and was measured with OpenRouter Space Bunny through Pi on the same combat seeds, at normal speed against seven practice bots (v6 map).
+
+| Pi interface (revision) | France `v6-bunny-france-01` | Japan `v6-bunny-japan-02` | Germany `v6-current-germany-05` |
+| --- | --- | --- | --- |
+| `decision-turn-v4` (before) | Win t757, 29 own industry, 9 failed of 91 calls | Loss at deadline, 24, 15 of 177 | — |
+| `decision-turn-v7` (`e0032a2`: carried MEMORY, inbox delivered once, inbox wake, harness operation IDs) | Win t1257, 29, 17 of 159 (10 were rallies out of reach) | Loss at deadline, 21, 7 of 151 | — |
+| `decision-turn-v8` (`0375c1c`: `connectedGroups`, deadline leader) | Win t485, 12, 2 of 43 | Eliminated t1189, 0, 11 of 113 | — |
+| `decision-turn-v9` (`bd881a9`: percent-only MCP march, skipped sources, anti-spam wait) | Win t523, 8, 3 of 50 | **Win** t925, 6, 3 of 67 | Win t706, 12, **0 of 65** |
+
+DeepSeek V4 Flash through Pi on `decision-turn-v9` (revision `352c255`, same Germany seed) won by domination at tick 571 with 25 own industry and **0 failed calls of 115**; on `decision-turn-v6` it had won the same start at tick 1625 with 9 own industry and 17 failed of 337. The v9 Space Bunny rows total 6 failed of 182 calls (3.3%, against 8–11% per Pi game before). All v9 remaining failures were single-source orders with no free troops, a develop that was not ready, a march to the source itself, a preview without a border and a develop on a fully developed province. One run per start: the wins show the interface no longer gets in the way; they do not rank the models, and the lower own industry in several coalition wins is a strategy question, not a tool one.
+
+Verification after merging master's map v7 (`791beb2`): `npm test` passed 235 tests, `npm run check` passed, the 32-round diplomacy balance run had zero invariant failures (22 decisive, 10 deadline wins, no draws), and the native `python tests/browser.py` suites passed (live, review, UI, UI tasks, voice, performance). The engine change moves the handplay replay (43 more recorded marches go through, 204 → 247 accepted actions), which moved the UI fixture: at 390×844 a tall peek card let the camera column cover its fold button, so the zoom buttons now leave the camera beside an open card on phones, and the recorded "line held" check moved from India at tick 600 to India at tick 610.
+
 # v6 agent results — 29 September 2026
 
 ## Current Pi baselines — 29 September 2026

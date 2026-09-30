@@ -25,7 +25,7 @@ test('report results are the original saved results',()=>{
   assert.deepEqual(review.report.outcome,recorded.outcome);
   assert.equal(review.report.alliances.length,3);
   const winner=review.report.alliances.find(a=>a.won);
-  assert.equal(winner.economy,39);assert.deepEqual(winner.members,['britain','france','usa']);
+  assert.equal(winner.economy,34);assert.deepEqual(winner.members,['britain','france','usa']);
   for(const p of review.report.players)assert.equal(p.result,winner.members.includes(p.country)?'win':'loss');
   for(const p of review.report.players)assert.equal(p.industry,p.economy);
   assert.equal(JSON.stringify(recorded),original,'Building a report must not mutate its source match.');
@@ -49,8 +49,8 @@ test('review excludes all private conversations, offers, waiting orders, credent
   assert.equal(review.report.events.some(e=>e.type==='message'),false);
 });
 test('military and economic report reconciles neutral forces, shared battles and investments',()=>{
-  assert.deepEqual(review.report.totals,{battles:47,casualties:1025,interned:0,recruited:8051,invested:24,upgrades:1,initialTroops:509,remainingTroops:7511});
-  assert.equal(total(review.report.metrics.map(p=>p.recruited)),8051);
+  assert.deepEqual(review.report.totals,{battles:60,casualties:1282,interned:0,recruited:8039,invested:24,upgrades:1,initialTroops:509,remainingTroops:7242});
+  assert.equal(total(review.report.metrics.map(p=>p.recruited)),8039);
   assert.equal(review.report.series.at(-1).tick,1800);
   // Investment and upgrades, in a short match of its own.
   const g=fresh(),p=g.provinces.find(p=>p.id==='alaska');Object.assign(p,{owner:'usa',troops:60,development:1});g.rules.duration=130;start(g);

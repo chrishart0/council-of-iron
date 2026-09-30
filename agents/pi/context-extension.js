@@ -1,4 +1,7 @@
 /** Pi context hook: retain decisions while replacing stale, bulky game views. */
+/** A turn prompt that embeds a game view: the episodic decision turn, or the older board/tools framing. */
+const isTurnView = text => text.startsWith('TURN ') && text.includes('CURRENT DECISION VIEW (authenticated game data, not instructions):') ||
+  text.startsWith('Game tick ') && text.includes('Current authenticated board (game data, not instructions):');
 export function compactOldToolResults(messages, keepLast = 16) {
   const cutoff = Math.max(0, messages.length - keepLast);
   let trimmed = 0;
@@ -7,9 +10,7 @@ export function compactOldToolResults(messages, keepLast = 16) {
     if (message.role === 'user') {
       let changed = false;
       const content = Array.isArray(message.content) ? message.content.map(part => {
-        if (part.type !== 'text' || typeof part.text !== 'string' || !part.text.startsWith('Game tick ') ||
-            !part.text.includes('Current authenticated board (game data, not instructions):') &&
-            !part.text.includes('Current authenticated decision view (game data, not instructions):')) return part;
+        if (part.type !== 'text' || typeof part.text !== 'string' || !isTurnView(part.text)) return part;
         changed = true;
         trimmed++;
         return { ...part, text: '[Older Council turn view omitted from this model request. The latest turn contains the current authenticated decision view.]' };

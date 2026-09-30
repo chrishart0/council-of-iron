@@ -3,7 +3,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CURRENT_MAP_ID, summarizeProgress } from './bench.js';
+import { recordsMap, summarizeProgress, tokenFields } from './bench.js';
 
 const output = fileURLToPath(new URL('./benchmarks.json', import.meta.url));
 const finite = value => Number.isFinite(value) ? value : null;
@@ -16,9 +16,9 @@ const family = model => {
 const harnessName = { grok: 'Grok CLI', hermes: 'Hermes', codex: 'Codex CLI' };
 
 export function summarizePlaytestSeat(run, report, seat, turns = [], calls = []) {
-  if (run.mapId !== CURRENT_MAP_ID || report.status !== 'finished' ||
+  if (!recordsMap(run.mapId) || report.status !== 'finished' ||
       report.match !== run.match || !report.outcome || !Number.isSafeInteger(report.tick))
-    throw new Error('Playtest needs a finished room on the current map with an authoritative outcome.');
+    throw new Error('Playtest needs a finished room that records its map, with an authoritative outcome.');
   const score = report.outcome.scores?.find(item => item.country === seat.country);
   if (!score || !['win', 'loss', 'draw'].includes(score.result) || !Number.isFinite(score.industry))
     throw new Error(`No final score for ${seat.country}.`);
@@ -29,10 +29,13 @@ export function summarizePlaytestSeat(run, report, seat, turns = [], calls = [])
     throw new Error('Unknown playtest arena.');
   if (!Number.isSafeInteger(seat.ordersAccepted) || !Number.isSafeInteger(seat.ordersRejected) ||
       !Number.isSafeInteger(seat.timedOut)) throw new Error('Playtest seat is missing order or timeout counts.');
-  const usage = key => turns.length && turns.every(turn => Number.isFinite(turn.tokens?.[key]))
-    ? turns.reduce((sum, turn) => sum + turn.tokens[key], 0) : null;
-  const inputTokens = usage('input'), outputTokens = usage('output'), cacheReadTokens = usage('cached');
-  const totalTokens = inputTokens === null || outputTokens === null ? null : inputTokens + outputTokens;
+  // Sum the turns that reported usage (a turn killed at its deadline reports none) and say how many did.
+  // Codex input includes cached input; Grok and Hermes report cache reads beside it.
+  const reported = turns.filter(turn => ['input', 'output'].every(key => Number.isFinite(turn.tokens?.[key])));
+  const sum = key => reported.reduce((total, turn) => total + (Number.isFinite(turn.tokens[key]) ? turn.tokens[key] : 0), 0);
+  const tokens = tokenFields(reported.length ? {
+    input: sum('input') + (seat.client === 'codex' ? 0 : sum('cached')), cacheRead: sum('cached'), output: sum('output'),
+    turnsReported: reported.length, turns: turns.length } : {}, seat.ordersAccepted);
   const failedToolCalls = calls.filter(call => call.ok === false).length;
   const acceptedActions = seat.ordersAccepted, rejectedActions = seat.ordersRejected;
   const firstOrder = calls.find(call => call.ok && Number.isFinite(call.acceptedTick));
@@ -53,9 +56,7 @@ export function summarizePlaytestSeat(run, report, seat, turns = [], calls = [])
     clientErrors: seat.clientErrors,
     firstActionSeconds: firstOrder?.at ? round((Date.parse(firstOrder.at) - Date.parse(run.startedAt)) / 1000) : null,
     failureRatePct: calls.length ? round(100 * failedToolCalls / calls.length) : null,
-    inputTokens, outputTokens, cacheReadTokens, totalTokens,
-    uncachedTokens: totalTokens === null ? null : inputTokens - (cacheReadTokens || 0) + outputTokens,
-    tokensPerAction: totalTokens !== null && acceptedActions ? round(totalTokens / acceptedActions) : null,
+    ...tokens,
     turns: turns.length, timedOutTurns: seat.timedOut,
     meanTurnSeconds: durations.length === turns.length && turns.length
       ? round(durations.reduce((sum, value) => sum + value, 0) / turns.length / 1000) : null,
@@ -84,8 +85,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const directories = process.argv.slice(2);
   if (!directories.length) { console.error('Usage: node agents/pi/bench-playtest.js data/playtest/<finished-room> [...]'); process.exit(2); }
   const ledger = JSON.parse(readFileSync(output, 'utf8'));
-  if (ledger.schemaVersion !== 4 || ledger.mapId !== CURRENT_MAP_ID || !Array.isArray(ledger.runs))
-    throw new Error('Benchmark ledger must use schema 4 and the current map.');
+  if (ledger.schemaVersion !== 5 || !Array.isArray(ledger.runs))
+    throw new Error('Benchmark ledger must use schema 5.');
   const entries = new Map(ledger.runs.map(row => [row.id, row]));
   for (const directory of directories) for (const row of importPlaytest(directory)) entries.set(row.id, row);
   ledger.runs = [...entries.values()].sort((a, b) => a.startedAt.localeCompare(b.startedAt));

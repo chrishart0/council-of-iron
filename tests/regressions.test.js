@@ -48,7 +48,8 @@ test('declining an offer is private and does not change allegiance or create a n
 });
 test('a preview accounts for the owner’s own reservations; queued orders are visible only to their owner',()=>{
   const g=game();action(g,'usa',{type:'march',from:'west-us',to:'mexico',amount:6});
-  assert.throws(()=>preview(g,map,'usa',{from:'west-us',to:'mexico',amount:6}),/uncommitted/);
+  // The queued 6 are not free: a second 6 sends the 5 left, and says it was asked for 6.
+  assert.deepEqual(preview(g,map,'usa',{from:'west-us',to:'mexico',amount:6}).sources.map(s=>[s.amount,s.requested]),[[5,6]]);
   assert.equal(preview(g,map,'usa',{from:'west-us',to:'mexico',amount:5}).sources[0].available,5);
   assert.equal(observe(g,'usa').orders.length,1);assert.deepEqual(observe(g).orders,[]);assert.deepEqual(observe(g,'britain').orders,[]);
 });

@@ -6,6 +6,7 @@ import { boardView } from '../agents/board.js';
 import { mapViewSvg } from '../agents/map-view.js';
 import { developmentForecast } from '../public/insights.js';
 import { decisionView } from '../agents/decision-view.js';
+import { friendlyPath } from '../public/movement.js';
 
 test('compact board shows only observed state and legal direct connections', () => {
   const game = createGame({ id: 'board-test', name: 'Board', hostId: 'britain' }, MAP);
@@ -99,6 +100,28 @@ test('decision view separates country industry from alliance industry', () => {
   assert.equal(view.position.sideIndustry, industryOf('britain') + industryOf('france'));
   assert.equal(view.position.allianceSize, 2);
   assert.ok(!view.possiblePartners.some(p => p.country === 'france'));
+  // The side ahead is the deadline winner: named to a trailing side, never to itself.
+  assert.equal(view.position.leader, undefined);
+  assert.equal(view.position.ticksLeft, game.rules.duration - game.tick);
+  const japan = decisionView(observe(game, 'japan'), MAP);
+  assert.deepEqual(japan.position.leader, { members: ['britain', 'france'], industry: industryOf('britain') + industryOf('france') });
+});
+
+test('decision view groups your provinces exactly as marches and rallies can route between them', () => {
+  const game = createGame({ id: 'decision-groups', name: 'Groups', hostId: 'britain' }, MAP);
+  const countries = MAP.countries.map(c => c.id);
+  for (const country of countries) join(game, MAP, { profileId: country, name: country, country });
+  start(game);
+  let split = 0;
+  for (const country of countries) {
+    const seen = observe(game, country), view = decisionView(seen, MAP);
+    const groups = view.connectedGroups ?? [seen.provinces.filter(p => p.owner === country).map(p => p.id).sort()];
+    if (view.connectedGroups) split++;
+    const groupOf = new Map(groups.flatMap((group, i) => group.map(id => [id, i])));
+    for (const a of groupOf.keys()) for (const b of groupOf.keys()) if (a !== b)
+      assert.equal(friendlyPath(seen, country, a, b) !== null, groupOf.get(a) === groupOf.get(b), `${country}: ${a} → ${b}`);
+  }
+  assert.ok(split > 0, 'some starting country has land in more than one group');
 });
 test('map image uses public geometry and never inserts player text', () => {
   const game = createGame({ id: 'map-test', name: 'Map', hostId: 'britain' }, MAP);
