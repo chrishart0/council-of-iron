@@ -22,7 +22,10 @@ test('benchmark export keeps aggregate Pi metrics and excludes private run conte
   assert.equal(run.acceptedActions, 1);
   assert.equal(run.rejectedActions, 1);
   assert.equal(run.failedToolCalls, 1);
-  assert.equal(run.totalTokens, 1300);
+  // One token definition across harnesses: Pi reports cache reads beside input, so they are added in.
+  assert.equal(run.inputTokens, 1400);
+  assert.equal(run.totalTokens, 1700);
+  assert.equal(run.uncachedTokens, 1300);
   assert.equal(run.meanTurnSeconds, 25);
   assert.equal(run.timedOutTurns, 1);
   assert.equal(run.firstActionSeconds, 12);
@@ -68,8 +71,10 @@ test('finished Grok and Hermes seats become sanitized, comparable harness rows',
       { country: 'japan', result: 'win', industry: 25 }, { country: 'russia', result: 'loss', industry: 0 }] } };
   const grok = { slot: 'a', country: 'japan', client: 'grok', model: 'grok-4.7',
     ordersAccepted: 5, ordersRejected: 1, timedOut: 0, clientErrors: 1, privateChat: 'secret' };
+  // The second turn was killed at its deadline and reported no usage: the rest still counts, marked partial.
   const turns = [{ durationMs: 20000, tokens: { input: 100, cached: 40, output: 20 },
-    position: { tick: 0, ownIndustry: 8, sideIndustry: 8, ownProvinces: 4, privateChat: 'secret' } }];
+    position: { tick: 0, ownIndustry: 8, sideIndustry: 8, ownProvinces: 4, privateChat: 'secret' } },
+    { durationMs: 120000, tokens: null }];
   const calls = [{ ok: true, acceptedTick: 5, at: '2026-09-29T00:00:05Z', args: { text: 'secret' } }, { ok: false }];
   const row = summarizePlaytestSeat(run, report, grok, turns, calls);
   assert.equal(row.harness, 'Grok CLI');
@@ -77,7 +82,11 @@ test('finished Grok and Hermes seats become sanitized, comparable harness rows',
   assert.equal(row.combatSeed, null);
   assert.equal(row.modelGroup, 'grok');
   assert.equal(row.result, 'win');
-  assert.equal(row.totalTokens, 120);
+  // Grok and Hermes report cache reads beside input; Codex inside it.
+  assert.deepEqual([row.inputTokens, row.cacheReadTokens, row.totalTokens, row.uncachedTokens], [140, 40, 160, 120]);
+  assert.deepEqual([row.tokenTurnsReported, row.tokenTurns], [1, 2]);
+  const codex = summarizePlaytestSeat(run, report, { ...grok, client: 'codex', model: 'gpt-6-sol' }, turns, calls);
+  assert.deepEqual([codex.inputTokens, codex.totalTokens, codex.uncachedTokens], [100, 120, 80]);
   assert.equal(row.failedToolCalls, 1);
   assert.equal(row.durationSeconds, 600);
   assert.equal(row.progress.at(-1).ownIndustry, 25);

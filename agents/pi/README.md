@@ -53,6 +53,8 @@ An OpenRouter profile uses the same local `.env` mechanism. For Space Bunny, set
 
 After a completed run, publish only its aggregate metrics to the tracked ledger. The importer refuses unfinished games and never copies endpoints, credentials, model messages or raw tool payloads. Each match row records the seat's `result` (win, draw or loss) and final `industry`, accepted and rejected orders, failed tool calls, tokens and turn timing:
 
+Tokens use one definition in every row (`tokenFields` in `bench.js`): `inputTokens` counts every prompt token including cache reads (Pi, Grok and Hermes report cache reads beside their input, Codex inside it, and the importers normalise), `totalTokens` is input plus output, `uncachedTokens` is total minus cache reads, and `tokensPerAction` divides the total by accepted orders. `tokenTurnsReported` of `tokenTurns` turns reported usage; a turn killed at its deadline may report none, so the total is then a lower bound (the page shows `≥ N (k/n turns)`) instead of dropping the run's usage.
+
 ```bash
 node agents/pi/bench.js qwen|luna|deepseek|external [--revision GIT_HASH] data/pi/<completed-run>.json
 node agents/pi/bench-playtest.js data/playtest/<finished-room>

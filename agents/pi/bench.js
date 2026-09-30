@@ -11,6 +11,21 @@ const round = value => number(value) === null ? null : Math.round(value * 100) /
 const finiteSum = (items, key) => items.every(item => number(item[key]) !== null)
   ? items.reduce((sum, item) => sum + item[key], 0) : null;
 
+/** One token definition for every harness. `input` counts every prompt token, cache reads included (Pi, Grok and
+ * Hermes report cache reads beside a non-cached input, Codex inside it; callers normalise before calling).
+ * `turnsReported` of `turns` model turns reported usage: a turn killed at its deadline reports none, so the sums
+ * are then a lower bound, and the ledger says so instead of dropping the whole run's usage. */
+export function tokenFields({ input = null, cacheRead = null, output = null, turnsReported = null, turns = null }, acceptedActions = 0) {
+  const inputTokens = number(input), outputTokens = number(output), cacheReadTokens = number(cacheRead);
+  const totalTokens = inputTokens === null || outputTokens === null ? null : inputTokens + outputTokens;
+  return {
+    inputTokens, outputTokens, cacheReadTokens, totalTokens,
+    uncachedTokens: totalTokens === null ? null : Math.max(0, inputTokens - (cacheReadTokens || 0)) + outputTokens,
+    tokensPerAction: totalTokens !== null && acceptedActions ? round(totalTokens / acceptedActions) : null,
+    tokenTurnsReported: totalTokens === null ? null : number(turnsReported), tokenTurns: totalTokens === null ? null : number(turns),
+  };
+}
+
 /** Publish only numeric, public-position facts; raw turn views and conversations stay private. */
 export function summarizeProgress(positions = [], finalTick = null, finalIndustry = null) {
   const byTick = new Map();
@@ -77,15 +92,20 @@ export function summarizeRun(raw, modelGroup, { revision = raw.sourceRevision } 
     : completed.some(event => event.name === 'board' || event.name?.endsWith('__board'));
   const usedView = client === 'Pi' ? calls.some(call => call.name === 'view_map')
     : completed.some(event => event.name === 'view_map' || event.name?.endsWith('__view_map'));
-  // Resumed Codex turns report cumulative thread usage, so use the last completed snapshot.
+  // Resumed Codex turns report cumulative thread usage, so use the last completed snapshot. Codex input already
+  // includes cached input; Pi reports cache reads and writes beside it.
   const lastTurn = turns.at(-1);
   const tokenUsage = raw.usageIncomplete ? null : client === 'Codex' && lastTurn
     ? { input: lastTurn.inputTokens, output: lastTurn.outputTokens,
       cacheRead: lastTurn.cacheReadTokens } : raw.usage;
-  const inputTokens = number(tokenUsage?.input);
-  const outputTokens = number(tokenUsage?.output);
-  const cacheReadTokens = number(tokenUsage?.cacheRead);
-  const totalTokens = number(tokenUsage?.total) ?? (inputTokens === null || outputTokens === null ? null : inputTokens + outputTokens);
+  const tokens = tokenFields({
+    input: client === 'Pi' && number(tokenUsage?.input) !== null
+      ? tokenUsage.input + (number(tokenUsage.cacheRead) || 0) + (number(tokenUsage.cacheWrite) || 0) : tokenUsage?.input,
+    cacheRead: tokenUsage?.cacheRead, output: tokenUsage?.output, turns: turns.length || null,
+    turnsReported: client === 'Pi'
+      ? turns.filter(turn => (turn.inputTokens || 0) + (turn.outputTokens || 0) + (turn.cacheReadTokens || 0) > 0).length
+      : turns.length || null,
+  }, acceptedActions);
   const totalTurnMs = turns.length && !raw.usageIncomplete ? finiteSum(turns, 'wallMs') : null;
   const durationSeconds = raw.finishedAt ? (Date.parse(raw.finishedAt) - Date.parse(raw.startedAt)) / 1000 : null;
   const won = raw.score.result === 'win';
@@ -108,10 +128,7 @@ export function summarizeRun(raw, modelGroup, { revision = raw.sourceRevision } 
     acceptedActions, rejectedActions, toolCalls: calls.length, failedToolCalls: failed,
     firstActionSeconds: firstAcceptedAt ? round((Date.parse(firstAcceptedAt) - Date.parse(raw.startedAt)) / 1000) : null,
     failureRatePct: calls.length ? round(100 * failed / calls.length) : null,
-    inputTokens, outputTokens, cacheReadTokens, totalTokens,
-    uncachedTokens: inputTokens === null || outputTokens === null ? null
-      : Math.max(0, inputTokens - (client === 'Codex' ? cacheReadTokens || 0 : 0)) + outputTokens,
-    tokensPerAction: totalTokens !== null && acceptedActions ? round(totalTokens / acceptedActions) : null,
+    ...tokens,
     turns: turns.length || null,
     timedOutTurns,
     meanTurnSeconds: totalTurnMs !== null ? round(totalTurnMs / turns.length / 1000) : null,

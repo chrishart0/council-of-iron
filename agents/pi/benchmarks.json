@@ -36,7 +36,7 @@
       "failedToolCalls": 6,
       "firstActionSeconds": 4.69,
       "failureRatePct": 4,
-      "inputTokens": 362303,
+      "inputTokens": 1539903,
       "outputTokens": 74910,
       "cacheReadTokens": 1177600,
       "totalTokens": 1614813,
@@ -185,7 +185,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 22,
+      "tokenTurns": 22
     },
     {
       "id": "2026-09-29T16-03-49-039Z-f5e536b5",
@@ -220,7 +222,7 @@
       "failedToolCalls": 19,
       "firstActionSeconds": 4.62,
       "failureRatePct": 8.84,
-      "inputTokens": 609139,
+      "inputTokens": 2339443,
       "outputTokens": 111347,
       "cacheReadTokens": 1730304,
       "totalTokens": 2450790,
@@ -399,7 +401,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 27,
+      "tokenTurns": 27
     },
     {
       "id": "2026-09-29T16-51-45-843Z-199792e4",
@@ -434,7 +438,7 @@
       "failedToolCalls": 7,
       "firstActionSeconds": 2.29,
       "failureRatePct": 4.27,
-      "inputTokens": 472684,
+      "inputTokens": 1818476,
       "outputTokens": 75419,
       "cacheReadTokens": 1345792,
       "totalTokens": 1893895,
@@ -565,7 +569,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 19,
+      "tokenTurns": 19
     },
     {
       "id": "2026-09-29T17-06-19-687Z-6e117b3e",
@@ -600,7 +606,7 @@
       "failedToolCalls": 19,
       "firstActionSeconds": 6.12,
       "failureRatePct": 4.85,
-      "inputTokens": 948044,
+      "inputTokens": 4188236,
       "outputTokens": 211338,
       "cacheReadTokens": 3240192,
       "totalTokens": 4399574,
@@ -905,7 +911,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 48,
+      "tokenTurns": 48
     },
     {
       "id": "2026-09-29T17-49-06-891Z-e81939e6",
@@ -940,7 +948,7 @@
       "failedToolCalls": 19,
       "firstActionSeconds": 10.11,
       "failureRatePct": 11.66,
-      "inputTokens": 303907,
+      "inputTokens": 1678773,
       "outputTokens": 20466,
       "cacheReadTokens": 1374866,
       "totalTokens": 1699239,
@@ -1095,7 +1103,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 23,
+      "tokenTurns": 23
     },
     {
       "id": "v6-cli-grok-hermes-04:g",
@@ -1131,12 +1141,12 @@
       "clientErrors": 0,
       "firstActionSeconds": 39.93,
       "failureRatePct": 6.41,
-      "inputTokens": null,
-      "outputTokens": null,
-      "cacheReadTokens": null,
-      "totalTokens": null,
-      "uncachedTokens": null,
-      "tokensPerAction": null,
+      "inputTokens": 2970519,
+      "outputTokens": 79663,
+      "cacheReadTokens": 2140800,
+      "totalTokens": 3050182,
+      "uncachedTokens": 909382,
+      "tokensPerAction": 43574.03,
       "turns": 23,
       "timedOutTurns": 2,
       "meanTurnSeconds": 75.34,
@@ -1286,7 +1296,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 20,
+      "tokenTurns": 23
     },
     {
       "id": "v6-cli-grok-hermes-04:h",
@@ -1322,12 +1334,12 @@
       "clientErrors": 0,
       "firstActionSeconds": 22.56,
       "failureRatePct": 15.17,
-      "inputTokens": null,
-      "outputTokens": null,
-      "cacheReadTokens": null,
-      "totalTokens": null,
-      "uncachedTokens": null,
-      "tokensPerAction": null,
+      "inputTokens": 4992934,
+      "outputTokens": 23004,
+      "cacheReadTokens": 4284416,
+      "totalTokens": 5015938,
+      "uncachedTokens": 731522,
+      "tokensPerAction": 58324.86,
       "turns": 34,
       "timedOutTurns": 1,
       "meanTurnSeconds": 36.26,
@@ -1543,7 +1555,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 33,
+      "tokenTurns": 34
     },
     {
       "id": "v6-cli-hermes-sol-france-01:s",
@@ -1579,12 +1593,12 @@
       "clientErrors": 0,
       "firstActionSeconds": 11.08,
       "failureRatePct": 3.17,
-      "inputTokens": 678156,
+      "inputTokens": 3650828,
       "outputTokens": 18741,
       "cacheReadTokens": 2972672,
-      "totalTokens": 696897,
-      "uncachedTokens": -2275775,
-      "tokensPerAction": 6968.97,
+      "totalTokens": 3669569,
+      "uncachedTokens": 696897,
+      "tokensPerAction": 36695.69,
       "turns": 41,
       "timedOutTurns": 0,
       "meanTurnSeconds": 28.26,
@@ -1842,7 +1856,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 41,
+      "tokenTurns": 41
     },
     {
       "id": "2026-09-29T20-41-57-786Z-060bb7a0",
@@ -1877,7 +1893,7 @@
       "failedToolCalls": 9,
       "firstActionSeconds": 3.65,
       "failureRatePct": 9.89,
-      "inputTokens": 179502,
+      "inputTokens": 938822,
       "outputTokens": 12510,
       "cacheReadTokens": 759320,
       "totalTokens": 951332,
@@ -2050,7 +2066,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 26,
+      "tokenTurns": 26
     },
     {
       "id": "v6-bunny-france-01:b",
@@ -2086,12 +2104,12 @@
       "clientErrors": 0,
       "firstActionSeconds": 35.64,
       "failureRatePct": 7.25,
-      "inputTokens": null,
-      "outputTokens": null,
-      "cacheReadTokens": null,
-      "totalTokens": null,
-      "uncachedTokens": null,
-      "tokensPerAction": null,
+      "inputTokens": 2401395,
+      "outputTokens": 44865,
+      "cacheReadTokens": 2221234,
+      "totalTokens": 2446260,
+      "uncachedTokens": 225026,
+      "tokensPerAction": 40771,
       "turns": 16,
       "timedOutTurns": 0,
       "meanTurnSeconds": 52.82,
@@ -2199,7 +2217,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 15,
+      "tokenTurns": 16
     },
     {
       "id": "2026-09-29T20-42-41-806Z-b94b3d15",
@@ -2234,7 +2254,7 @@
       "failedToolCalls": 1,
       "firstActionSeconds": 2.7,
       "failureRatePct": 1.85,
-      "inputTokens": 177669,
+      "inputTokens": 531845,
       "outputTokens": 2779,
       "cacheReadTokens": 354176,
       "totalTokens": 534624,
@@ -2335,7 +2355,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 14,
+      "tokenTurns": 14
     },
     {
       "id": "v6-sol-france-01:c",
@@ -2371,12 +2393,12 @@
       "clientErrors": 0,
       "firstActionSeconds": 14.17,
       "failureRatePct": 5.95,
-      "inputTokens": null,
-      "outputTokens": null,
-      "cacheReadTokens": null,
-      "totalTokens": null,
-      "uncachedTokens": null,
-      "tokensPerAction": null,
+      "inputTokens": 2744785,
+      "outputTokens": 13727,
+      "cacheReadTokens": 2304896,
+      "totalTokens": 2758512,
+      "uncachedTokens": 453616,
+      "tokensPerAction": 52047.4,
       "turns": 17,
       "timedOutTurns": 0,
       "meanTurnSeconds": 28.12,
@@ -2490,7 +2512,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 16,
+      "tokenTurns": 17
     },
     {
       "id": "v6-bunny-japan-02:b",
@@ -2526,12 +2550,12 @@
       "clientErrors": 0,
       "firstActionSeconds": 16.1,
       "failureRatePct": 4.04,
-      "inputTokens": null,
-      "outputTokens": null,
-      "cacheReadTokens": null,
-      "totalTokens": null,
-      "uncachedTokens": null,
-      "tokensPerAction": null,
+      "inputTokens": 3212777,
+      "outputTokens": 95806,
+      "cacheReadTokens": 3006776,
+      "totalTokens": 3308583,
+      "uncachedTokens": 301807,
+      "tokensPerAction": 44114.44,
       "turns": 33,
       "timedOutTurns": 0,
       "meanTurnSeconds": 50.92,
@@ -2741,7 +2765,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 32,
+      "tokenTurns": 33
     },
     {
       "id": "2026-09-29T20-58-05-327Z-c6a9e12d",
@@ -2776,7 +2802,7 @@
       "failedToolCalls": 7,
       "firstActionSeconds": 2.75,
       "failureRatePct": 5.88,
-      "inputTokens": 308886,
+      "inputTokens": 1185430,
       "outputTokens": 5966,
       "cacheReadTokens": 876544,
       "totalTokens": 1191396,
@@ -3009,7 +3035,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 36,
+      "tokenTurns": 36
     },
     {
       "id": "v6-sol-japan-02:c",
@@ -3356,7 +3384,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 49,
+      "tokenTurns": 49
     },
     {
       "id": "2026-09-29T21-15-33-580Z-17197dfa",
@@ -3391,7 +3421,7 @@
       "failedToolCalls": 15,
       "firstActionSeconds": 3.42,
       "failureRatePct": 8.47,
-      "inputTokens": 299464,
+      "inputTokens": 1518828,
       "outputTokens": 24916,
       "cacheReadTokens": 1219364,
       "totalTokens": 1543744,
@@ -3768,7 +3798,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 60,
+      "tokenTurns": 60
     },
     {
       "id": "2026-09-29T22-25-05-819Z-647e7cfd",
@@ -3803,7 +3835,7 @@
       "failedToolCalls": 4,
       "firstActionSeconds": 5.63,
       "failureRatePct": 3.23,
-      "inputTokens": 295308,
+      "inputTokens": 1286284,
       "outputTokens": 58249,
       "cacheReadTokens": 990976,
       "totalTokens": 1344533,
@@ -3916,7 +3948,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 16,
+      "tokenTurns": 16
     },
     {
       "id": "2026-09-29T22-26-30-640Z-49a0020d",
@@ -3951,7 +3985,7 @@
       "failedToolCalls": 7,
       "firstActionSeconds": 14.17,
       "failureRatePct": 6.19,
-      "inputTokens": 171853,
+      "inputTokens": 1243932,
       "outputTokens": 15040,
       "cacheReadTokens": 1072079,
       "totalTokens": 1258972,
@@ -4082,7 +4116,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 19,
+      "tokenTurns": 19
     },
     {
       "id": "2026-09-29T22-36-49-547Z-5afdf35d",
@@ -4117,7 +4153,7 @@
       "failedToolCalls": 27,
       "firstActionSeconds": 4.68,
       "failureRatePct": 8.06,
-      "inputTokens": 979144,
+      "inputTokens": 3674056,
       "outputTokens": 204450,
       "cacheReadTokens": 2694912,
       "totalTokens": 3878506,
@@ -4368,7 +4404,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 39,
+      "tokenTurns": 39
     },
     {
       "id": "2026-09-29T22-36-49-547Z-cf98dbaa",
@@ -4403,7 +4441,7 @@
       "failedToolCalls": 29,
       "firstActionSeconds": 4.75,
       "failureRatePct": 7.82,
-      "inputTokens": 825443,
+      "inputTokens": 4139734,
       "outputTokens": 49695,
       "cacheReadTokens": 3314291,
       "totalTokens": 4189429,
@@ -4702,7 +4740,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 47,
+      "tokenTurns": 47
     },
     {
       "id": "2026-09-29T23-05-49-668Z-2b2e54b7",
@@ -4737,7 +4777,7 @@
       "failedToolCalls": 36,
       "firstActionSeconds": 2.78,
       "failureRatePct": 9.11,
-      "inputTokens": 980633,
+      "inputTokens": 4984801,
       "outputTokens": 49904,
       "cacheReadTokens": 4004168,
       "totalTokens": 5034705,
@@ -5078,7 +5118,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 54,
+      "tokenTurns": 54
     },
     {
       "id": "2026-09-29T23-08-15-603Z-72f54933",
@@ -5113,7 +5155,7 @@
       "failedToolCalls": 14,
       "firstActionSeconds": 9.9,
       "failureRatePct": 3.53,
-      "inputTokens": 950401,
+      "inputTokens": 4200065,
       "outputTokens": 214426,
       "cacheReadTokens": 3249664,
       "totalTokens": 4414491,
@@ -5436,7 +5478,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 51,
+      "tokenTurns": 51
     },
     {
       "id": "2026-09-29T23-36-49-076Z-b96f7734",
@@ -5471,7 +5515,7 @@
       "failedToolCalls": 17,
       "firstActionSeconds": 6.31,
       "failureRatePct": 8.29,
-      "inputTokens": 262423,
+      "inputTokens": 1996270,
       "outputTokens": 26273,
       "cacheReadTokens": 1733847,
       "totalTokens": 2022543,
@@ -5746,7 +5790,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 43,
+      "tokenTurns": 43
     },
     {
       "id": "2026-09-29T23-37-57-842Z-0f6a7e4f",
@@ -5781,7 +5827,7 @@
       "failedToolCalls": 10,
       "firstActionSeconds": 6.24,
       "failureRatePct": 5.49,
-      "inputTokens": 598206,
+      "inputTokens": 2089662,
       "outputTokens": 90100,
       "cacheReadTokens": 1491456,
       "totalTokens": 2179762,
@@ -5912,7 +5958,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 19,
+      "tokenTurns": 19
     },
     {
       "id": "2026-09-29T23-52-08-402Z-f4108973",
@@ -5947,7 +5995,7 @@
       "failedToolCalls": 17,
       "firstActionSeconds": 3.83,
       "failureRatePct": 5.04,
-      "inputTokens": 923119,
+      "inputTokens": 3624687,
       "outputTokens": 210504,
       "cacheReadTokens": 2701568,
       "totalTokens": 3835191,
@@ -6228,7 +6276,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 44,
+      "tokenTurns": 44
     },
     {
       "id": "2026-09-29T23-58-54-060Z-49bb30d1",
@@ -6263,7 +6313,7 @@
       "failedToolCalls": 25,
       "firstActionSeconds": 4.61,
       "failureRatePct": 7.08,
-      "inputTokens": 891415,
+      "inputTokens": 4310570,
       "outputTokens": 42490,
       "cacheReadTokens": 3419155,
       "totalTokens": 4353060,
@@ -6616,7 +6666,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 56,
+      "tokenTurns": 56
     },
     {
       "id": "2026-09-30T16-56-52-222Z-3fe8fdaa",
@@ -6651,7 +6703,7 @@
       "failedToolCalls": 17,
       "firstActionSeconds": 5.51,
       "failureRatePct": 10.69,
-      "inputTokens": 329848,
+      "inputTokens": 1475525,
       "outputTokens": 24398,
       "cacheReadTokens": 1145677,
       "totalTokens": 1499923,
@@ -6914,7 +6966,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 41,
+      "tokenTurns": 41
     },
     {
       "id": "2026-09-30T16-56-52-223Z-326b4d9a",
@@ -6949,7 +7003,7 @@
       "failedToolCalls": 7,
       "firstActionSeconds": 2.04,
       "failureRatePct": 4.64,
-      "inputTokens": 405637,
+      "inputTokens": 1438613,
       "outputTokens": 30555,
       "cacheReadTokens": 1032976,
       "totalTokens": 1469168,
@@ -7302,7 +7356,9 @@
           "sideIndustry": null,
           "ownProvinces": null
         }
-      ]
+      ],
+      "tokenTurnsReported": 56,
+      "tokenTurns": 56
     }
   ]
 }

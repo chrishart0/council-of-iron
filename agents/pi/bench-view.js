@@ -167,6 +167,12 @@ function drawScorecard(selected) {
   if (!groups.size) emptyRow(body, 8, 'No completed runs in this selection.');
 }
 
+/** Total tokens, marked when some turns (killed at their deadline) reported no usage: the sum is then a lower bound. */
+function tokensCell(run) {
+  const partial = Number.isFinite(run.tokenTurnsReported) && Number.isFinite(run.tokenTurns) && run.tokenTurnsReported < run.tokenTurns;
+  return partial ? `≥ ${fmt(run.totalTokens)} (${run.tokenTurnsReported}/${run.tokenTurns} turns)` : fmt(run.totalTokens);
+}
+
 function drawLedger(selected) {
   const body = $('rows'); body.replaceChildren();
   for (const run of [...selected].reverse()) {
@@ -174,7 +180,7 @@ function drawLedger(selected) {
     const cells = [date(run.startedAt), run.modelId, harness(run), run.arena, run.country, run.preset,
       run.combatSeed || '—', run.sourceRevision?.slice(0, 8) || '—', run.result,
       fmt(run.industry), fmt(run.acceptedActions), fmt(run.rejectedActions),
-      `${fmt(run.failedToolCalls)} / ${fmt(run.toolCalls)}`, fmt(run.totalTokens),
+      `${fmt(run.failedToolCalls)} / ${fmt(run.toolCalls)}`, tokensCell(run),
       fmt(run.firstActionSeconds), fmt(run.meanTurnSeconds), fmt(run.timedOutTurns)];
     for (const [index, value] of cells.entries()) appendCell(row, value,
       index === 8 ? run.result === 'win' ? 'positive' : run.result === 'loss' ? 'negative' : ''
