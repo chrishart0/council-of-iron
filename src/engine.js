@@ -73,7 +73,9 @@ export function displayName(p) {
 }
 function province(g, id) {
   const p = g.provinces.find(p => p.id === id);
-  requireRule(p, 'Unknown province.', 404); return p;
+  if (!p) requireRule(false, `Unknown province: ${JSON.stringify(String(id ?? '')).slice(0, 60)}.`
+    + (/^(army|march|order)-/.test(String(id)) ? ' That is an army or order ID; orders take province IDs (turn_around takes army IDs).' : ''), 404);
+  return p;
 }
 function event(g, type, data = {}, recipients = null) {
   const e = { id: ++g.sequence, tick: g.tick, type, ...data };
