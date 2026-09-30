@@ -55,7 +55,7 @@ const sourceRevision = (() => { try { return execFileSync('git', ['rev-parse', '
 const record = { runId, client: 'codex', access, model: modelId, country, preset, combatSeed: combatSeed || null,
   sourceRevision,
   turnMode, turnView, embeddedBoard: turnMode === 'episodic' && taskMode === 'match' && turnView !== 'tools',
-  interfaceVersion: taskMode === 'fixed' ? 'fixed-v2' : turnMode === 'episodic'
+  interfaceVersion: taskMode === 'fixed' ? 'fixed-v3' : turnMode === 'episodic'
     ? turnView === 'board' ? 'board-turn-v8' : turnView === 'decision' ? 'decision-turn-v3' : `${turnView}-turn-v2` : 'continuous-v3',
   ...(turnMode === 'episodic' ? { maxTurnSeconds, decisionIntervalTicks, maxTurns } : {}),
   taskId: taskMode === 'fixed' ? FIXED_TASK_ID : null,

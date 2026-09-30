@@ -8,7 +8,7 @@ export function repairHint(observation, map, toolName, args) {
   const available = troopAvailability(observation);
   const provinces = new Map(observation.provinces.map(p => [p.id, p]));
   const geometry = new Map(map.provinces.map(p => [p.id, p]));
-  const sourceIds = args.sources ? args.sources.map(s => s.from) : args.from ? [args.from] : [];
+  const sourceIds = args.from === undefined ? [] : [args.from].flat();
   const sources = [...new Set(sourceIds)].slice(0, 16).map(id => {
     const province = provinces.get(id), place = geometry.get(id);
     if (!province || !place) return null;

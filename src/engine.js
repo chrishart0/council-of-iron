@@ -173,9 +173,10 @@ function running(g) { requireRule(g.status === 'running', 'The match is not runn
 function mapProvince(map, id) { return map.provinces.find(p => p.id === id); }
 /** Anti-spam only (10 orders per 10 s); humans never meet it in normal play. */
 function checkBudget(g, p) {
-  const r = gameRules(g);
-  requireRule(p.orderTicks.filter(t => t > g.tick - r.orderWindow).length < r.orderLimit,
-    'Too many orders at once; wait a moment.', 429);
+  const r = gameRules(g), recent = p.orderTicks.filter(t => t > g.tick - r.orderWindow);
+  // retryAt/tick let a client wait out a short anti-spam pause and resend the same operation.
+  if (recent.length >= r.orderLimit) requireRule(false, 'Too many orders at once; wait a moment.', 429,
+    { retryAt: Math.min(...recent) + r.orderWindow, tick: g.tick });
 }
 function useBudget(g, p) {
   p.orderTicks = p.orderTicks.filter(t => t > g.tick - gameRules(g).orderWindow);
@@ -193,6 +194,10 @@ function barrierNote(g, map, country, from, to) {
   return ` ${place(blocking.a)} and ${place(blocking.b)} share a border across the ${blocking.name} (${blocking.terrain}), which cannot be crossed. ${blocking.around}`;
 }
 const adjacent = (g, a, b) => g.travelTimes[a]?.[b] !== undefined;
+/** Troops a source sends: `amount` is an upper bound (at most what is free) and `percent` of the free troops
+ * rounds down but selects at least one. A source with no free troops sends none. */
+const troopsFor = (free, { amount, percent }) => free <= 0 ? 0
+  : amount !== undefined ? Math.min(amount, free) : Math.max(1, Math.floor(free * percent / 100));
 /** `fromAllBordering: true`: every one of your provinces bordering the target that has free troops, each
  * sending its own `amount` (at most what it has free) or `percent` of its free troops; deterministic order. */
 function borderingSources(g, country, action, target) {
@@ -202,12 +207,12 @@ function borderingSources(g, country, action, target) {
   else requireRule(Number.isFinite(action.percent) && action.percent > 0 && action.percent <= 100, 'Percentage must be greater than zero and at most 100.');
   const list = g.provinces.filter(p => p.owner === country && p.id !== target.id && adjacent(g, p.id, target.id)).map(p => {
     const free = Math.max(0, p.troops - reservedTroops(g, country, p.id) - 1);
-    const amount = action.amount !== undefined ? Math.min(action.amount, free) : Math.floor(free * action.percent / 100);
-    return { from: p.id, amount, free };
-  }).filter(s => s.amount > 0 && Number.isSafeInteger(s.amount));
+    return { from: p.id, free };
+  }).filter(s => s.free > 0);
   requireRule(list.length, `None of your provinces bordering ${target.id} has free troops to send.`, 409);
   return list.sort((a, b) => b.free - a.free || a.from.localeCompare(b.from)).slice(0, r.maxSources)
-    .sort((a, b) => a.from.localeCompare(b.from)).map(({ from, amount }) => ({ from, amount }));
+    .sort((a, b) => a.from.localeCompare(b.from))
+    .map(({ from }) => ({ from, ...(action.amount !== undefined ? { amount: action.amount } : { percent: action.percent }) }));
 }
 const marchSources = action => action.sources ?? [{ from: action.from,
   ...(action.amount !== undefined ? { amount: action.amount } : {}), ...(action.percent !== undefined ? { percent: action.percent } : {}) }];
@@ -248,35 +253,47 @@ export function marchPlan(g, map, country, action, { assumeWar = false } = {}) {
   const unique = new Set();
   for (const input of inputs) {
     requireRule(input && typeof input === 'object' && !Array.isArray(input), 'Invalid march source.');
-    const source = province(g, input.from);
-    requireRule(source.owner === country, 'You do not own the source province.', 403);
-    requireRule(source.id !== target.id, 'Choose a different destination.');
-    requireRule(!unique.has(source.id), 'Each source may appear only once.'); unique.add(source.id);
+    province(g, input.from);
+    requireRule(!unique.has(input.from), 'Each source may appear only once.'); unique.add(input.from);
+    requireRule((input.amount !== undefined) !== (input.percent !== undefined), 'Supply exactly one of amount or percent per source.');
+    if (input.amount !== undefined) requireRule(Number.isSafeInteger(input.amount) && input.amount > 0, 'Amount must be a whole number of troops.');
+    else requireRule(Number.isFinite(input.percent) && input.percent > 0 && input.percent <= 100,
+      'Percentage must be greater than zero and at most 100.');
   }
+  // A source that cannot take part (lost since you looked, the destination itself, cut off, or with no free troops)
+  // is skipped and listed; the march is refused only when no source can go, with the first source's reason.
+  // Ownership comes before the border rule, as for a single source.
+  const skipped = [], refusals = [];
+  const skip = (from, reason, message, status = 400) => { skipped.push({ from, reason }); refusals.push([message, status]); return []; };
+  const owned = inputs.filter(input => {
+    const source = province(g, input.from);
+    if (source.owner !== country) { skip(source.id, 'not yours', 'You do not own the source province.', 403); return false; }
+    if (source.id === target.id) { skip(source.id, 'it is the destination', 'Choose a different destination.'); return false; }
+    return true;
+  });
+  if (!owned.length) requireRule(false, ...refusals[0]);
   if (!action.fromAllBordering) border();
-  const sources = inputs.map(input => {
+  const sources = owned.flatMap(input => {
     const source = province(g, input.from);
     const route = adjacent(g, source.id, target.id)
       ? { path: [target.id], travel: journeyTicks(g, source.id, target.id, country) }
       : friendlyPath(g, country, source.id, target.id);
-    requireRule(route, `No route from ${source.id} to ${target.id}: a march passes only through your own or allied provinces (not through battles) and may end one step beyond them. March to a nearer province, or ally with or conquer the land between.${barrierNote(g, map, country, source.id, target.id)}`);
+    if (!route) return skip(source.id, 'no route through your or allied land', `No route from ${source.id} to ${target.id}: a march passes only through your own or allied provinces (not through battles) and may end one step beyond them. March to a nearer province, or ally with or conquer the land between.${barrierNote(g, map, country, source.id, target.id)}`);
     const available = Math.max(0, source.troops - reservedTroops(g, country, source.id) - 1);
-    requireRule((input.amount !== undefined) !== (input.percent !== undefined), 'Supply exactly one of amount or percent per source.');
-    if (input.percent !== undefined) requireRule(Number.isFinite(input.percent) && input.percent > 0 && input.percent <= 100,
-      'Percentage must be greater than zero and at most 100.');
-    // Percentages select currently uncommitted troops, never future recruitment.
-    const amount = input.amount ?? Math.floor(available * input.percent / 100);
-    requireRule(Number.isSafeInteger(amount) && amount > 0 && amount <= available,
-      `Cannot march from ${source.id}: ${amount} selected, ${available} free. This uncommitted count excludes queued orders and one troop kept home; percentages round down.`);
-    return { from: source.id, amount, available, travel: route.travel, path: route.path };
+    // Percentages and amounts select currently uncommitted troops, never future recruitment.
+    const amount = troopsFor(available, input);
+    if (!amount) return skip(source.id, 'no free troops', `Cannot march from ${source.id}: it has no free troops (queued orders and one troop kept home are not free).`);
+    return [{ from: source.id, amount, available, ...(input.amount > amount ? { requested: input.amount } : {}),
+      travel: route.travel, path: route.path }];
   });
+  if (!sources.length) requireRule(false, ...refusals[0]);
   const arrivesAt = g.tick + 1 + Math.max(...sources.map(s => s.travel));
   const total = sources.reduce((n, s) => n + s.amount, 0);
   const defenseAtArrival = arrivalDefense(g, target, arrivesAt);
   return { to: target.id, owner: target.owner, warRequired, ...(truce === null ? {} : { truceUntil: truce }), reinforcement: !hostile, arrivesAt, total,
     ...(hostile ? { combat: combatForecast(total, target.troops, target.development), defenseAtArrival,
       combatAtArrival: combatForecast(total, defenseAtArrival.total, target.development) } : {}),
-    sources: sources.map(s => ({ ...s, executeAt: arrivesAt - s.travel })),
+    sources: sources.map(s => ({ ...s, executeAt: arrivesAt - s.travel })), ...(skipped.length ? { skipped } : {}),
     warning: 'Checked again at departure. Waiting troops stay in their provinces and can be attacked; new orders, battles and diplomacy can change the forecast.' };
 }
 function march(g, map, p, action) {
@@ -288,7 +305,8 @@ function march(g, map, p, action) {
   event(g, 'order_accepted', { country: p.id, groupId, orderId: orders[0].id, executeAt: orders[0].executeAt,
     arrivesAt: plan.arrivesAt, orders }, [p.id]);
   return { groupId, orderId: orders[0].id, executeAt: orders[0].executeAt, arrivesAt: plan.arrivesAt, total: plan.total,
-    sources: plan.sources.map(s => ({ from: s.from, amount: s.amount, departsAt: s.executeAt })), orders };
+    sources: plan.sources.map(s => ({ from: s.from, amount: s.amount, ...(s.requested ? { requested: s.requested } : {}), departsAt: s.executeAt })),
+    ...(plan.skipped ? { skipped: plan.skipped } : {}), orders };
 }
 /** Optional `declareWar: true` on a march: one atomic "declare war and march". The march is validated
  * as if the war already existed, then the ordinary declaration runs, then the ordinary reservation.
@@ -330,19 +348,28 @@ export function rallyPlan(g, country, action) {
   requireRule(sources.length > 0 && sources.length <= r.maxSources && sources.every(id => typeof id === 'string'),
     `Choose 1–${r.maxSources} source provinces.`);
   requireRule(new Set(sources).size === sources.length, 'Each source may appear only once.');
-  for (const id of sources) requireRule(province(g, id).owner === country, 'You do not own the source province.', 403);
   if (action.to === null) {
+    for (const id of sources) requireRule(province(g, id).owner === country, 'You do not own the source province.', 403);
     for (const id of sources) requireRule(g.rallies.some(x => x.from === id), `No rally point is set in ${id}.`, 409);
     return { to: null, sources: sources.map(from => ({ from })) };
   }
+  for (const id of sources) province(g, id);
   requireRule(typeof action.to === 'string', 'Choose a rally province, or null to clear.');
   requireRule(province(g, action.to).owner === country, 'A rally point must be one of your own provinces.', 403);
-  return { to: action.to, sources: sources.map(from => {
-    requireRule(from !== action.to, 'A province cannot rally to itself.');
+  // Like a march: a source that cannot take part (not yours, the rally point itself, which keeps its own recruits
+  // anyway, or cut off) is skipped and listed; the rally is refused only when no source remains.
+  const skipped = [], refusals = [];
+  const plans = sources.flatMap(from => {
+    const skip = (reason, message, status) => { skipped.push({ from, reason }); refusals.push([message, status]); return []; };
+    if (province(g, from).owner !== country) return skip('not yours', 'You do not own the source province.', 403);
+    if (from === action.to) return skip('it is the rally point', 'A province cannot rally to itself: it keeps its own recruits already.', 400);
     const route = friendlyPath(g, country, from, action.to);
-    requireRule(route, `No path from ${from} to ${action.to} through your or allied land.`, 409);
-    return { from, ...route, arrivesAt: g.tick + 1 + route.travel };
-  }), warning: 'New troops march at each recruitment. Troops already there stay.' };
+    if (!route) return skip('no path through your or allied land', `No path from ${from} to ${action.to} through your or allied land.`, 409);
+    return [{ from, ...route, arrivesAt: g.tick + 1 + route.travel }];
+  });
+  if (!plans.length) requireRule(false, ...refusals[0]);
+  return { to: action.to, sources: plans, ...(skipped.length ? { skipped } : {}),
+    warning: 'New troops march at each recruitment. Troops already there stay.' };
 }
 function rally(g, p, action) {
   const plan = rallyPlan(g, p.id, action); checkBudget(g, p); useBudget(g, p);
@@ -655,7 +682,8 @@ function acceptPeace(g, p, a) {
 }
 function chat(g, p, a) {
   const message = text(a.text, 'Message', gameRules(g).messageLength);
-  requireRule(p.lastChat === null || g.tick - p.lastChat >= gameRules(g).chatWindow, 'Too many messages at once; wait a moment.', 429);
+  if (p.lastChat !== null && g.tick - p.lastChat < gameRules(g).chatWindow) requireRule(false, 'Too many messages at once; wait a moment.', 429,
+    { retryAt: p.lastChat + gameRules(g).chatWindow, tick: g.tick });
   requireRule(['world', 'alliance', 'dm'].includes(a.channel), 'Choose world, alliance, or dm.');
   let recipients = null;
   if (a.channel === 'alliance') {

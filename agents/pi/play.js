@@ -111,7 +111,7 @@ const sourceRevision = (() => { try { return execFileSync('git', ['rev-parse', '
 const record = { runId, country, preset, playerModel, modelId, provider: config.provider, sourceRevision,
   embeddedBoard: taskMode === 'match' && turnView !== 'tools', turnView,
   interfaceVersion: taskMode === 'match' ? turnView === 'board' ? 'board-turn-v8' :
-    turnView === 'decision' ? 'decision-turn-v8' : `${turnView}-turn-v2` : 'fixed-v2',
+    turnView === 'decision' ? 'decision-turn-v9' : `${turnView}-turn-v2` : 'fixed-v3',
   live: Boolean(liveUrl),
   ...(config.provider !== 'openai-codex' ? { endpoint, contextWindow } : {}),
   startedAt: new Date().toISOString(), maxTurnSeconds, decisionIntervalTicks, sessionMode, combatSeed: combatSeed || null,

@@ -20,7 +20,7 @@ try {
     const reply = await mcp.call('send_message', { channel: 'dm', to: from, text: 'Received; holding to our plan.' });
     done.push(`${reply.isError ? 'failed to answer' : 'answered'} ${from}`);
   }
-  if (/^TURN 1 /m.test(prompt)) await mcp.call('march', { to: 'atlantis', from: view.own[0]?.id ?? 'nowhere', amount: 1 });
+  if (/^TURN 1 /m.test(prompt)) await mcp.call('march', { to: 'atlantis', from: view.own[0]?.id ?? 'nowhere', percent: 10 });
   const target = view.frontier.find(t => !t.requiresWar && t.sources.some(s => s.available >= 2));
   if (target) {
     // Every bordering province at once (fromAllBordering passes through the proxy like any argument).
