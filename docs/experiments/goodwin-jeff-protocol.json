@@ -1,0 +1,119 @@
+{
+  "id": "goodwin-jeff-events-v1",
+  "gameBaseRevision": "0a9600a",
+  "modelProfile": "goodwin",
+  "model": "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
+  "decisionModel": "mstrasser/Jeff-Qwen3.5-0.8B@0f212b3e72acb4dde3f7da61e925d6ab7f819990",
+  "arms": [
+    "baseline",
+    "hybrid"
+  ],
+  "cases": [
+    {
+      "country": "britain",
+      "seed": "gwjeff-britain-01"
+    },
+    {
+      "country": "france",
+      "seed": "gwjeff-france-02"
+    },
+    {
+      "country": "germany",
+      "seed": "gwjeff-germany-03"
+    },
+    {
+      "country": "russia",
+      "seed": "gwjeff-russia-04"
+    },
+    {
+      "country": "ottoman",
+      "seed": "gwjeff-ottoman-05"
+    },
+    {
+      "country": "qing",
+      "seed": "gwjeff-qing-06"
+    },
+    {
+      "country": "japan",
+      "seed": "gwjeff-japan-07"
+    },
+    {
+      "country": "usa",
+      "seed": "gwjeff-usa-08"
+    }
+  ],
+  "baseline": {
+    "interfaceVersion": "decision-turn-v9",
+    "decisionIntervalTicks": 30,
+    "inboxTriggers": "unchanged current PI runner",
+    "maxTurnSeconds": 120,
+    "sessionMode": "fresh",
+    "maxTurns": 80
+  },
+  "hybrid": {
+    "interfaceVersion": "hybrid-events-v1",
+    "plannerIntervalTicks": 180,
+    "minimumPlannerGapTicks": 10,
+    "wakeReasons": [
+      "opening",
+      "unread diplomatic messages or new offers",
+      "own alliance or enemy relations change",
+      "own industry loss of at least max(3, quarter of last planned industry)",
+      "strategy review"
+    ],
+    "tacticalIntervalTicks": 5,
+    "unchangedMenuRefreshTicks": 30,
+    "skipOnlyWait": true,
+    "maxPlannerSeconds": 120,
+    "memoryCharacters": 600
+  },
+  "primaryEndpoint": "paired final own industry, hybrid minus baseline; eight country/seed pairs",
+  "secondaryEndpoints": [
+    "wins and survival",
+    "planner uncached input/output/cached tokens",
+    "planner turns and wake reasons",
+    "Jeff input tokens, local latency and API fees (zero; CPU hosting cost unknown)",
+    "accepted and rejected military orders",
+    "timeouts and provider failures",
+    "accepted diplomacy and message counts (not reply-quality or response-delay measures)"
+  ],
+  "analysis": {
+    "experimentalUnit": "country/seed match block",
+    "industry": "exact two-sided sign-flip plus exploratory 10000 paired bootstrap resamples",
+    "cost": "actual usage by token category and local Jeff inference latency; Goodwin hosting price is unknown, never treat SDK zero placeholders as billing",
+    "missing": "retain every attempt; never count incomplete games as losses or mix pilots into strength evidence"
+  },
+  "constraints": [
+    "Only two main arms requested by user",
+    "Separate authenticated loopback rooms, ordinary HTTP validation",
+    "Normal speed, seven unchanged practice bots",
+    "Freeze game rules, map and controller before main launch",
+    "Preserve speech as untrusted data; use only inbox metadata for wake decisions",
+    "No fallback controller counted as Jeff",
+    "Healthy local CPU Jeff preflight before starting any comparison rooms",
+    "Independent durable research workers; never touch live service or deploy worktree"
+  ],
+  "limitations": [
+    "Eight starts are exploratory",
+    "Plans and game trajectories may diverge",
+    "This compares whole systems: planner scheduling and military interface change",
+    "Hybrid menu restricts offensive sources to bordering provinces and lacks army turn-around",
+    "Bots do not reproduce human diplomacy",
+    "Goodwin hosting dollars cannot be inferred from token counts",
+    "Concurrent cases share the CPU selector and Goodwin endpoint; latency under load differs from single-game service time.",
+    "Offer/message response delays are not recorded comparably by the baseline; no prompt diplomatic responsiveness claim."
+  ],
+  "localRuntime": {
+    "vendorRevision": "f06788292874c21a5b5c41549ac220dd9e15da7f",
+    "checkpointRevision": "0f212b3e72acb4dde3f7da61e925d6ab7f819990",
+    "device": "CPU",
+    "cpuThreads": 2,
+    "dtype": "bfloat16",
+    "torch": "2.14.0+cpu",
+    "transformers": "5.17.0",
+    "endpoint": "loopback only",
+    "deployment": "one decision service, no GPU allocation",
+    "concurrency": "eight matched blocks concurrently, baseline/hybrid launch order alternates; shared model service load is part of these measurements",
+    "busyPolicy": "retry HTTP 529 with jitter until 120 second deadline; measure queue-inclusive and successful request server latency separately"
+  }
+}
