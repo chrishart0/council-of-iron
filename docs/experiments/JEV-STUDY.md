@@ -1,6 +1,6 @@
 # Jev Council study
 
-The question is whether a fast decision model improves Council play enough to justify a second model. This is an isolated experiment in the optional PI package, not a live-game feature. The committed engine and map at `f016d21` are held fixed. No deployment or service restart is involved.
+The question is whether a fast decision model improves Council play enough to justify a second model. The current evidence supports faster bounded decisions, but does not establish better play. Keep an LLM for strategy and diplomacy; do not add Jev to the default PI harness on this evidence. This is an isolated experiment in the optional PI package. The committed engine and map at `f016d21` are held fixed. No deployment or live-service restart is involved.
 
 ## Prior work
 
@@ -8,6 +8,7 @@ The question is whether a fast decision model improves Council play enough to ju
 - [Jev × Civilization II](https://github.com/phyous/tsai-civ2) covers economy, diplomacy and warfare through named choices over player-observable state. Its README reports no verified complete-game win. A comparable game and a working harness are not evidence of superior play.
 - [Craftax Jev experiments](https://github.com/mansicer/jev-plays) compare raw actions, macro actions, an LLM planner, an LLM choosing every action, and random choice over three seeds. The authors found that plan wording could worsen immediate danger handling. Their final planner improvement was small and within seed noise. This motivates concrete candidate descriptions, shuffled option order, a simple-code control and separating latency from strength.
 - [OpenRouter's Decisions API example](https://openrouter.ai/blog/insights/what-is-jev/) provides Jev through the existing OpenRouter key, without a new provider account. [TypeSafe's limitations](https://docs.typesafe.ai/model-jaggedness/jev-1.13) recommend keeping numeric logic in code. [Confidence](https://docs.typesafe.ai/confidence) measures concentration among candidate probabilities; it is not combat win probability.
+- [Jeff](https://github.com/firelex/jeff) offers local 0.8B/2B decision models with the same request shape. Its own results distinguish strong classification performance from weaker reasoning and inconsistent game performance. Its published millisecond timings are on different hardware and cannot be substituted for Council measurements. [Laya](https://github.com/NandhaKishorM/laya) is another local typed-decision model; its authors describe the base as a starting point to specialize, with weak general zero-shot decision results. Neither was tested in Council here: introducing model serving or task-specific training before establishing a Jev advantage would add substantial work without current game evidence.
 
 ## Protocol
 
@@ -32,6 +33,8 @@ Baseline versus hybrid is a complete-system comparison: both the action interfac
 
 `position-bench.js` records naturally reached positions at ticks 0, 60, 180 and 300 from an unchanged bot simulation. It keeps only living seats with at least two candidate choices; the initial dataset has 22 such positions. Each position is tested under two option permutations. The PI LLM and Jev receive the same state, strategy and candidate descriptions. Which model runs first alternates. Report latency, failures, option-order consistency and choice agreement. Agreement with the heuristic is a diagnostic, **not** an optimality label or playing-strength score. These positions are held fixed during calls, so their timing is not a real-time match reaction measurement.
 
+There is one request per permutation, without repeated identical-order controls. Changed choices therefore combine model variability and possible order effects; these diagnostics cannot isolate option-order bias.
+
 ## Reproduce
 
 Keep credentials in an ignored env file. These commands create only isolated test rooms:
@@ -55,7 +58,18 @@ node --env-file=/path/to/private.env agents/pi/jev-study.js --phase main --out d
 
 An authenticated Jev smoke test returned in 328 ms and reported cost $0.00001449. Initial hybrid pilots rejected the LLM request because the experiment omitted the existing profile's `offReasoningEffort=low` compatibility mapping; they are retained as incomplete pilot attempts. The mapping was corrected before the main study. Four replacement pilot arms exercised the candidate builder and ordinary HTTP order validation. Quick games verify integration and are not used for playing-strength comparisons.
 
-Main results will be recorded after completion, with no claim of human enjoyment, human-opponent strength or game balance.
+## Measured decision speed
+
+There were 44 valid calls per model on the 22 positions, with zero failures:
+
+| Model | Median request | Mean request | 95th percentile | Same choice across permutations |
+| --- | ---: | ---: | ---: | ---: |
+| Jev `1.13-20260917` | 0.2134 s | 0.2516 s | 0.3825 s | 17/22 |
+| PI Space Bunny | 2.9153 s | 3.3067 s | 5.8689 s | 12/22 |
+
+The ratio of median request times was **13.7×**. Models chose the same option in 23/44 matched calls; each agreed with the heuristic in 18/44. This establishes latency for this bounded-choice interface, not tactical correctness. Jev reported approximately $0.0034 for these calls. The recorded dataset hash is `a5e54100982f2198bab4e8441d45986beeb476dc37f251e2d6259c524df55842`.
+
+The deterministic selector in real matches takes milliseconds, including the same candidate construction. Jev is useful only if its choices improve outcomes enough to offset extra inference, failure handling and coupling to the planner. A faster cadence and forecasts do not intrinsically require another model. The experiment executes tactics every five seconds; a 0.21-second response alone does not imply a 0.21-second reaction time.
 
 ## Original-batch interruption and complete replacement
 
@@ -63,7 +77,32 @@ The original launcher exited with signal 15, observed through the execution tool
 
 All eight baseline cases were repeated in one durable batch, including the one original baseline that finished. All 24 hybrid cases were also repeated in one durable batch, including earlier completed cases, to avoid selecting only the fast-finish survivors. The model settings, seeds and controller files were unchanged (`git diff fbaf56c -- agents/pi/hybrid-play.js agents/pi/tactical-candidates.js agents/pi/decision-api.js agents/pi/play.js src/engine.js public/imperial-map.json` was empty before replacement launch). Changes concern only launch durability and analysis bookkeeping.
 
-The primary paired Jev-versus-code comparison uses only the complete replacement hybrid batch. Baselines started earlier in a separate replacement window, so baseline comparisons are exploratory and cannot attribute differences solely to architecture or model latency. The complete original records are retained as descriptive attempts, not pooled into the final eight-per-arm summary. The published exporter includes every attempt and its status. Durable workers keep exit status independently of the launcher; saved finished results also remain usable when a launcher disappears.
+The planned primary paired Jev-versus-code comparison uses the replacement hybrid batch. Baselines started earlier in a separate replacement window, so baseline comparisons are exploratory and cannot attribute differences solely to architecture or model latency. The original completed records are retained as descriptive attempts, not pooled into the replacement summary. The published exporter includes every attempt and its status. Durable workers keep exit status independently of the launcher; saved finished results also remain usable when a launcher disappears.
+
+## Paid endpoint stopped: no complete primary comparison
+
+At approximately 18:26 UTC, OpenRouter returned HTTP 402, "Insufficient credits," for both Jev arms. All 16 replacement Jev trials exited after three consecutive provider failures, as specified by the frozen controller. They had each reached about tick 120–125. There was no substituted military controller, and their final industry and win/loss remain unknown. The free Space Bunny profile continued to work. This is an account-credit failure, not evidence of Jev choosing losing moves. The replacement Jev arms reported about $0.0259 before stopping; that is reported study usage, not a measurement of the account's initial balance or all other account activity.
+
+The replacement primary comparison has **zero complete pairs**. There is no valid confirmatory p-value or effect confidence interval. The exporter supplies logical worst/best missing-outcome bounds from the 59-province map and its maximum development of three: personal industry lies between 0 and 177. These bounds are deliberately loose and are not estimated scores or confidence limits.
+
+The original batch has 19 authoritative finished records and 13 interrupted attempts. All completed original records were coalition wins, but reporting their completion-conditioned win rate as a general success rate would select on early finishes. The four country/seed blocks with both original coded and Jev results were:
+
+| Country | LLM + code own industry | LLM + Jev own industry | Jev minus code |
+| --- | ---: | ---: | ---: |
+| Britain | 25 | 18 | −7 |
+| Germany | 29 | 28 | −1 |
+| Ottoman | 14 | 21 | +7 |
+| Qing | 30 | 24 | −6 |
+
+Their descriptive mean difference is **−1.75 industry**. Jev is higher in one pair and lower in three. Do not apply the preregistered eight-block inference to this selected subset, or claim proof that Jev is worse. It gives no affirmative evidence of improvement.
+
+Pure Jev completed seven original bot games, all coalition wins, with own industry ranging from 11 to 24. It sent no generated messages. Repeated rejected alliance proposals during a pending membership change exposed a defect in its finite candidate filter. That filter was left unchanged after the protocol freeze, rather than tuned on results. Bot alliances and coalition wins are insufficient evidence for human negotiation; retain an LLM for the part of the game the user cares about.
+
+## Recommendation
+
+Keep the default PI player unchanged. If faster military reactions are worth a follow-up, first compare LLM strategy/diplomacy plus the small coded selector against the current PI system over a complete matched batch. Only add Jev if a replenished-account study shows a useful improvement over that same coded selector. Do not start with local model serving, fine-tuning, multiple planners or a larger game system.
+
+The remaining uncertainties are playing strength over complete pairs, response to human negotiation, planner-model dependence, and the restricted candidate menu. The normal PI baseline retains long-range attacks and turn-around, which this experimental tactical menu lacks. The study does not establish human enjoyment, human-opponent strength or game balance.
 
 Replacement analysis command:
 

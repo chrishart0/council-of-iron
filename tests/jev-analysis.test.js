@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { pairedAnalysis, wilson, summarizeStudyRun, summarizePositions } from '../agents/pi/study-analysis.js';
+import { pairedAnalysis, missingPairBounds, wilson, summarizeStudyRun, summarizePositions } from '../agents/pi/study-analysis.js';
 
 test('paired sign-flip calculation counts both tails and zero differences', () => {
   assert.equal(pairedAnalysis(Array(8).fill(1)).exactSignFlipTwoSidedP, .0078);
@@ -13,6 +13,11 @@ test('paired sign-flip calculation counts both tails and zero differences', () =
 test('win intervals remain wide for eight games, including eight wins', () => {
   const [lo, hi] = wilson(8, 8); assert.ok(lo > .67 && lo < .68); assert.equal(hi, 1);
 });
+test('missing pair bounds retain observed endpoints without fabricating a failure score', () => {
+  assert.deepEqual(missingPairBounds([[null, 20], [30, null], [15, 10]], 100).allBlockMeanDifferenceBounds,
+    [-28.3333, 38.3333]);
+  assert.deepEqual(missingPairBounds([[15, 10]], 100).allBlockMeanDifferenceBounds, [5, 5]);
+});
 test('study exporter excludes private content and preserves incompletes as unknown outcomes', () => {
   const raw = { runId: 'test', country: 'britain', status: 'incomplete', error: 'PRIVATE ERROR',
     apiKey: 'SECRET KEY', lastResponse: 'PRIVATE CHAT', strategies: [{ objective: 'PRIVATE PLAN' }],
@@ -22,6 +27,9 @@ test('study exporter excludes private content and preserves incompletes as unkno
   assert.equal(row.result, null); assert.equal(row.ownIndustry, null); assert.equal(row.errorPresent, true);
   assert.equal(row.decisionErrors, 1); assert.equal(row.acceptedMessages, 1);
   for (const privateText of ['PRIVATE', 'SECRET']) assert.ok(!text.includes(privateText));
+  const provider = summarizeStudyRun({ decisions: [{ error: 'Decision provider HTTP 402: PRIVATE ACCOUNT' }] }, 'jev');
+  assert.deepEqual(provider.providerFailureCategories, { 'insufficient-credits': 1 });
+  assert.ok(!JSON.stringify(provider).includes('PRIVATE ACCOUNT'));
 });
 test('position consistency uses complete shuffled-position pairs without hiding failed calls', () => {
   const rows = [

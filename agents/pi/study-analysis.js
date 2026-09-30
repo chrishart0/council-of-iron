@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { createGame, gameRules } from '../../src/engine.js';
 
 export const mean = values => values.length ? values.reduce((n, x) => n + x, 0) / values.length : null;
 export function quantile(values, p) {
@@ -45,6 +46,15 @@ export function pairedAnalysis(differences) {
     exactSignFlipTwoSidedP: round(extreme / 2 ** n) };
 }
 
+/** Logical bounds, not a confidence interval: absent outcomes range from zero to the map cap. */
+export function missingPairBounds(pairs, maxIndustry) {
+  if (!pairs.length || !Number.isFinite(maxIndustry) || maxIndustry < 0) throw new Error('Need pairs and an industry cap.');
+  const lower = pairs.map(([j, c]) => (j ?? 0) - (c ?? maxIndustry));
+  const upper = pairs.map(([j, c]) => (j ?? maxIndustry) - (c ?? 0));
+  return { minOwnIndustry: 0, maxOwnIndustry: maxIndustry, allBlockMeanDifferenceBounds: [round(mean(lower)), round(mean(upper))],
+    warning: 'Logical worst/best bounds for missing outcomes, not confidence limits or observed scores.' };
+}
+
 /** One narrow row per attempted match, including failed trials but excluding their private error strings. */
 export function summarizeStudyRun(raw, arm) {
   const complete = raw.status === 'finished' && ['win', 'draw', 'loss'].includes(raw.score?.result) && Number.isFinite(raw.score.industry);
@@ -75,6 +85,13 @@ export function summarizeStudyRun(raw, arm) {
   for (const a of actions.filter(a => a.ok === false)) {
     const category = rejectionCategory(a.error); rejectionCounts[category] = (rejectionCounts[category] || 0) + 1;
   }
+  const providerFailureCategories = {};
+  for (const d of decisions.filter(d => d.error)) {
+    const category = /HTTP 402/.test(d.error) ? 'insufficient-credits'
+      : /timeout|timed out|aborted/i.test(d.error) ? 'timeout-or-abort'
+      : /invalid choice or distribution/.test(d.error) ? 'invalid-response' : 'other';
+    providerFailureCategories[category] = (providerFailureCategories[category] || 0) + 1;
+  }
   return { runId: raw.runId, country: raw.country, combatSeed: raw.combatSeed, arm,
     model: arm === 'pure-jev' ? decisions.find(d => d.model)?.model || 'typesafe/jev-1.13' : raw.modelId,
     plannerModel: arm === 'pure-jev' ? null : raw.modelId,
@@ -92,7 +109,7 @@ export function summarizeStudyRun(raw, arm) {
     firstAcceptedOrderSeconds: round(elapsed(first?.at)), firstAcceptedMilitarySeconds: round(elapsed(firstMilitary?.at)),
     plannerTurns: turns.length, plannerTurnSeconds: distribution(turns.map(t => t.wallMs / 1000).filter(Number.isFinite)),
     plannerTimeouts: turns.filter(t => t.timedOut).length, reportedPlannerTokens: usage,
-    tacticalDecisions: decisions.length, decisionErrors: decisions.filter(d => d.error).length,
+    tacticalDecisions: decisions.length, decisionErrors: decisions.filter(d => d.error).length, providerFailureCategories,
     rejectedPreviews: decisions.reduce((n, d) => n + (d.rejectedPreviews || 0), 0),
     decisionRequestSeconds: distribution(decisions.map(d => d.wallMs / 1000).filter(Number.isFinite)),
     decisionIncludingMenuSeconds: distribution(decisions.map(d => d.totalMs / 1000).filter(Number.isFinite)),
@@ -189,6 +206,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       decisionReportedCost: round(group.reduce((n, r) => n + r.decisionReportedCost, 0)) };
   }
   const paired = {};
+  const map = JSON.parse(readFileSync(resolve(root, 'public/imperial-map.json')));
+  const maxIndustry = map.provinces.length * gameRules(createGame({ id: 'analysis', name: 'Study bounds', hostId: 'analysis' }, map)).maxDevelopment;
   for (const other of ['heuristic', 'baseline', 'pure-jev']) {
     const complete = runs.filter(r => r.arm === 'jev' && r.status === 'finished').map(j => {
       const o = runs.find(r => r.arm === other && r.country === j.country && r.combatSeed === j.combatSeed && r.status === 'finished');
@@ -196,6 +215,11 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     }).filter(Boolean);
     paired[`jev-minus-${other}`] = complete.length ? { ...pairedAnalysis(complete.map(r => r.difference)), blocks: complete,
       missingPairs: 8 - complete.length, confirmatoryEndpoint: other === 'heuristic' } : { n: 0, missingPairs: 8 };
+    const pairs = runs.filter(r => r.arm === 'jev').map(j => {
+      const o = runs.find(r => r.arm === other && r.country === j.country && r.combatSeed === j.combatSeed);
+      return [j.ownIndustry, o?.ownIndustry ?? null];
+    });
+    paired[`jev-minus-${other}`].missingOutcomeBounds = missingPairBounds(pairs, maxIndustry);
   }
   const positions = summarizePositions(JSON.parse(readFileSync(resolve(root, 'data/jev-study/positions/results.private.json'))));
   const result = { study: 'jev-council-v1', phase: manifest.phase, generatedAt: new Date().toISOString(),
@@ -204,7 +228,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     hybridReplacement: hybridReplacement.length ? { startedAt: hybridManifest.startedAt, attempted: 24,
       originalFinished: original.filter(r => r.arm !== 'baseline' && r.status === 'finished').length,
       originalInterrupted: original.filter(r => r.arm !== 'baseline' && r.status !== 'finished' && r.executionStatus !== 'running').length,
-      reason: 'Six unfinished original hybrid workers disappeared after the launcher interruption. All 24 hybrid cases repeated durably, using unchanged controller files, to avoid selecting only early finishes. Final hybrid comparisons use only this complete replacement batch.' } : null,
+      reason: 'Six unfinished original hybrid workers disappeared after the launcher interruption. All 24 hybrid cases repeated durably, using unchanged controller files, to avoid selecting only early finishes. Comparisons use the replacement batch; provider-failed trials remain missing outcomes.' } : null,
     baselineReplacement: replacement.length ? { startedAt: replacementManifest.startedAt, attempted: replacement.length,
       originalFinished: original.filter(r => r.arm === 'baseline' && r.status === 'finished').length,
       originalInterrupted: original.filter(r => r.arm === 'baseline' && r.status !== 'finished' && r.executionStatus !== 'running').length,

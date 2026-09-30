@@ -28,10 +28,14 @@ for i, (arm, label, color) in enumerate(zip(arms, labels, colors)):
         run = next(r for r in data['runs'] if r['arm'] == arm and r['country'] == country)
         values.append(run['ownIndustry'] if run['status'] == 'finished' else np.nan)
     axes[0].bar(x + (i - 1.5) * .19, values, .18, label=label, color=color)
+    missing = [k for k, value in enumerate(values) if np.isnan(value)]
+    axes[0].scatter(x[missing] + (i - 1.5) * .19, [.6] * len(missing), marker='x', color=color, s=25)
 axes[0].set_xticks(x, ['Britain', 'France', 'Germany', 'Russia', 'Ottoman', 'Qing', 'Japan', 'USA'], rotation=25)
 axes[0].set_ylabel('Final personal industry')
-axes[0].set_title('Complete games: matched country and combat seed', loc='left', fontweight='bold')
+axes[0].set_title('Replacement batch: final industry when completed', loc='left', fontweight='bold')
 axes[0].legend(frameon=False, ncol=2, loc='upper left')
+axes[0].text(.03, .72, '× = missing result, never a loss\nJev trials stopped: OpenRouter HTTP 402',
+             transform=axes[0].transAxes, va='top', fontsize=10)
 positions = data['positions']['pairedPositionMeanSeconds']
 for i, (field, label, color) in enumerate([('llmSeconds', 'PI LLM', colors[0]), ('jevSeconds', 'Jev', colors[2])]):
     values = [p[field] for p in positions]
@@ -47,8 +51,9 @@ axes[1].text(.04, .95, '22 recorded positions\nTwo option permutations each\nDot
              transform=axes[1].transAxes, va='top', fontsize=10)
 fig.suptitle('Jev in Council of Iron: speed and playing results are separate measurements',
              x=.055, ha='left', fontsize=16, fontweight='bold')
-fig.text(.055, .025, '32 isolated normal-speed games against seven practice bots. One seed per country; one LLM profile. '
-         'These data do not measure human diplomacy or establish game balance.', fontsize=10, color='#555555')
+finished = sum(r['status'] == 'finished' for r in data['runs'])
+fig.text(.055, .025, f'Replacement batch: {finished}/32 completed games. Original interrupted batch retained separately. '
+         'Bot opponents; no human diplomacy or balance inference.', fontsize=10, color='#555555')
 fig.subplots_adjust(left=.06, right=.975, top=.84, bottom=.2, wspace=.25)
 out = ROOT / 'docs/experiments/jev-comparison.png'
 fig.savefig(out, dpi=160, facecolor=fig.get_facecolor())
