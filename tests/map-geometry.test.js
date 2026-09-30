@@ -73,7 +73,7 @@ for (const name of ['imperial-map.json']) {
     assert.equal(terrain.size, map.terrain.length, 'one entry per terrain id');
     assert.deepEqual([...terrain].filter(id => ids.has(id)), [], 'terrain ids are not province ids');
     for (const t of map.terrain) {
-      assert.ok(['mountains', 'desert'].includes(t.terrain), t.id);
+      assert.ok(['mountains', 'desert', 'ice'].includes(t.terrain), t.id);
       assert.ok(typeof t.name === 'string' && t.name.length > 2, `${t.id} has a name`);
       assert.ok(provinceRings(t.path).length > 0 && Number.isFinite(t.x) && Number.isFinite(t.y), `${t.id} has a drawable shape`);
     }

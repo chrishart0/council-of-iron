@@ -216,7 +216,7 @@ def wrap_checks(page,report,capture):
     spot=page.evaluate('''() => {
       const svg=document.querySelector('#map'),m=svg.getScreenCTM(),box=svg.getBoundingClientRect();
       for(let dy=-20;dy<=30;dy+=5)for(let dx=-40;dx<=40;dx+=10){
-        const p=new DOMPoint(1105.6-1280+dx,506+dy).matrixTransform(m);
+        const p=new DOMPoint(1148-1280+dx,506+dy).matrixTransform(m);  // eastern Australasia, clear of the Great Sandy Desert
         if(p.x<box.left+4||p.x>box.right-4||p.y<box.top+4||p.y>box.bottom-4)continue;
         const e=document.elementFromPoint(p.x,p.y);if(e&&e.matches('use.world-copy'))return {x:p.x,y:p.y};}
       return null;}''')
