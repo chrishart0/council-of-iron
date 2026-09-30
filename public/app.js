@@ -1238,3 +1238,5 @@ window.visualViewport?.addEventListener('resize',syncViewport);window.visualView
 // Poll the room; not while the page is hidden (a phone in a pocket), and a little less often on touch devices.
 setInterval(()=>{if(matchId && !document.hidden)poll();},matchMedia('(pointer: coarse)').matches?1000:750);
 document.addEventListener('visibilitychange',()=>{if(matchId && !document.hidden)poll();});
+// The installed app's service worker (public/sw.js). Needs a secure context: https with a trusted certificate, or localhost.
+navigator.serviceWorker?.register('/sw.js').catch(()=>{});

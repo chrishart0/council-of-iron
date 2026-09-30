@@ -655,6 +655,13 @@ def expand_checks(browser,url,identity,report,out):
         assert manifest['type']=='application/manifest+json' and manifest['body']['display']=='fullscreen' and 'standalone' in manifest['body']['display_override'],manifest
         for icon in manifest['body']['icons']:assert page.evaluate(f"fetch('{icon['src']}').then(r=>r.ok)"),icon
         assert page.locator('link[rel=manifest]').count()==1 and page.locator('meta[name=apple-mobile-web-app-capable][content=yes]').count()==1
+        # The service worker caches nothing; offline, opening the app shows its "no connection" page, which retries the same address.
+        assert page.evaluate("navigator.serviceWorker.ready.then(r=>r.active.scriptURL)").endswith('/sw.js')
+        if not page.evaluate('!!navigator.serviceWorker.controller'):page.reload()
+        assert page.evaluate("caches.keys()")==[]
+        context.set_offline(True);page.goto(url+'/?match=ui-fixture')
+        expect(page.locator('h1')).to_have_text('No connection to the council');assert page.locator('a',has_text='Try again').get_attribute('href')==''
+        context.set_offline(False);page.locator('a',has_text='Try again').click();expect(page.locator('#commander-title')).to_have_text('Britain')
         assert not errors,errors
         context.close()
     report['assertions'].append('Popups on phones (390×844, 844×390): the one toast lane holds a compact toast ≤72 px and a banner ≤80 px (each ≤22% of the viewport height), clear of the order sheet and its commit button.')

@@ -67,6 +67,8 @@ const staticFiles = new Map([
   ['/map.json', ['public/imperial-map.json', 'application/json']],
   // Installable web app: "Add to Home Screen" opens a chrome-free full-screen game (manifest-src falls under default-src 'self').
   ['/manifest.webmanifest', ['public/manifest.webmanifest', 'application/manifest+json']],
+  // Its service worker caches nothing; it only shows a "no connection" page when the app cannot reach the server.
+  ['/sw.js', ['public/sw.js', 'text/javascript; charset=utf-8']],
   ['/icon.svg', ['public/icon.svg', 'image/svg+xml']],
   ['/icon-192.png', ['public/icon-192.png', 'image/png']],
   ['/icon-512.png', ['public/icon-512.png', 'image/png']],
