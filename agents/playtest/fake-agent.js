@@ -17,7 +17,7 @@ try {
   const view = text(await mcp.call('decision_view', {}));
   const senders = [...prompt.matchAll(/(?:DM|ALLIANCE CHAT) from ([a-z-]+)/g)].map(m => m[1]);
   for (const from of [...new Set(senders)]) {
-    const reply = await mcp.call('send_message', { channel: 'dm', to: from, text: 'Received; holding to our plan.' });
+    const reply = await mcp.call('send_message', { to: from, text: 'Received; holding to our plan.' });
     done.push(`${reply.isError ? 'failed to answer' : 'answered'} ${from}`);
   }
   if (/^TURN 1 /m.test(prompt)) await mcp.call('march', { to: 'atlantis', from: view.own[0]?.id ?? 'nowhere', percent: 10 });
