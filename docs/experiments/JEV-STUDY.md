@@ -119,7 +119,32 @@ Keep the default PI player unchanged. If faster military reactions are worth a f
 
 The remaining uncertainties are playing strength over complete pairs, response to human negotiation, planner-model dependence, and the restricted candidate menu. The normal PI baseline retains long-range attacks and turn-around, which this experimental tactical menu lacks. The study does not establish human enjoyment, human-opponent strength or game balance.
 
-## Verification
+## Token usage and API cost
+
+The planner was [Space Bunny Alpha](https://openrouter.ai/stealth/space-bunny-alpha), whose published input and output prices were zero, checked again on 30 September. Actual planner token usage therefore does not imply a paid bill in this experiment. [Jev 1.13](https://openrouter.ai/typesafe/jev-1.13) lists $0.042 per million input tokens and no output-token charge. Jev costs below come from provider `usage.cost`, not from the PI client's model-cost placeholders. These are gameplay model API costs, excluding local compute and the coding assistant.
+
+| Eight completed replacement matches | Uncached LLM input | LLM output | Cached LLM input | Total LLM tokens |
+| --- | ---: | ---: | ---: | ---: |
+| Current PI | 2,550,023 | 134,444 | 6,361,319 | 9,045,786 |
+| LLM + code | 2,268,452 | 102,498 | 3,569,691 | 5,940,641 |
+
+LLM + code used **34.3% fewer total planner tokens**: 0.743 million per match versus 1.131 million. Uncached input fell 11.0%, output fell 23.8%, and cached reads fell 43.9%. A paid planner's bill would depend on its separate input, output and cached-input rates; 34.3% fewer total tokens is not necessarily 34.3% less money. Both planner bills here were zero at published pricing. Different match durations, independent plans and load windows limit causal interpretation.
+
+For the four completed original code/Jev pairs, code used 1,903,364 planner tokens and Jev used 2,105,458 (**10.6% more**), plus 912,517 Jev input tokens costing approximately $0.0383 total, or $0.0096 per match. This completion-selected subset does not establish a general savings estimate; it shows that a second decision model does not automatically reduce planner consumption. Across all six completed original LLM + Jev games, Jev cost approximately $0.0096 per game; across seven completed pure-Jev games, approximately $0.0083 per game. The latter lacks LLM negotiation.
+
+The whole recorded experiment used approximately **$0.206 in Jev API charges**:
+
+| Phase | Jev input tokens | Provider-reported cost |
+| --- | ---: | ---: |
+| All 64 main attempts, including interruptions and credit failures | 4,260,664 | $0.178947888 |
+| Eight pilot attempts | 554,757 | $0.023299794 |
+| 44 recorded-position Jev trials | 82,054 | $0.003446268 |
+| Initial smoke request | 345 | $0.000014490 |
+| Total | 4,897,820 | $0.205708440 |
+
+Recorded LLM usage across main attempts, pilots and position trials was **29,663,938 total tokens**: 9,954,786 uncached input, 481,340 output and 19,227,812 cached input. The OpenRouter credit failure does not establish the initial account balance or attribute other account activity to this study.
+
+## Verification results
 
 `npm test` passed all 244 tests; `npm run check` passed. The full native `python tests/browser.py` run passed live, recorded review, voice, phone performance, UI tasks and UI suites. `node scripts/build-imperial-v6.js --check` passed. `npm run test:balance -- --rounds 32 --mode diplomacy` completed with zero invariant failures. No runtime dependency was added. Engine, map, practice bots and default PI player are unchanged. Research units were collected after completion; the live deployment was never touched.
 
