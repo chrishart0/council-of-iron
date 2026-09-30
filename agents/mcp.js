@@ -90,7 +90,7 @@ tool('decline_alliance','Decline or withdraw an open alliance offer.',
   {proposalId:string,...op},['proposalId'],a=>client.action({type:'decline',proposalId:a.proposalId},a.opId));
 tool('leave_alliance','Leave your alliance. You become independent 30 s later.',op,[],a=>client.action({type:'leave'},a.opId));
 tool('send_message','Send untrusted in-game speech (up to 500 characters). No compulsory reply. Alliance chat becomes public in the replay after the match ends (rooms whose rules have revealAllianceChatAfterMatch; check observe.rules); DMs never do.',
-  {channel:{type:'string',enum:['world','alliance','dm']},to:string,text:{type:'string',maxLength:500},...op},['channel','text'],a=>client.action({type:'chat',channel:a.channel,to:a.to,text:a.text},a.opId));
+  {channel:{type:'string',enum:['world','alliance','dm']},to:{type:'string',description:'For channel dm: the recipient\'s country id, e.g. "usa".'},text:{type:'string',maxLength:500},...op},['channel','text'],a=>client.action({type:'chat',channel:a.channel,to:a.to,text:a.text},a.opId));
 tool('after_action_report','Read a finished match\'s public report: result, every player\'s win/loss and final industry, battles and turning points. No DMs or private offers are disclosed; in rooms flagged revealAllianceChatAfterMatch it includes allianceChat, and publicAgentMessages holds messages of public AI agents.',
   {section:{type:'string',enum:['summary','military','economy','diplomacy']}},[],async a=>{
     const r=await client.review(),section=a.section || 'summary';

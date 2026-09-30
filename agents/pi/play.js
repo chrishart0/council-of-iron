@@ -237,9 +237,10 @@ try {
       record.toolCalls.push(call); save();
       try { const response = await execute(...args); const payload = JSON.parse(response.content?.[0]?.text || '{}');
         call.ok = response.details?.isError !== true && payload.ok !== false && !payload.error;
-        if (!call.ok) call.error = payload.error || 'Tool returned an error.';
+        // The private raw run keeps a failed call's arguments (bounded) so its cause can be read later.
+        if (!call.ok) { call.error = payload.error || 'Tool returned an error.'; call.args = JSON.stringify(args[1] ?? {}).slice(0, 300); }
         save(); return response; }
-      catch (error) { call.ok = false; call.error = error.message; save(); throw error; }
+      catch (error) { call.ok = false; call.error = error.message; call.args = JSON.stringify(args[1] ?? {}).slice(0, 300); save(); throw error; }
     };
   }
   const modelRuntime = await ModelRuntime.create({ credentials, modelsPath: null, allowModelNetwork: false, refreshOnCreate: false });
