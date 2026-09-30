@@ -1,0 +1,28 @@
+{
+  "id": "jev-council-v1",
+  "gameBaseRevision": "f016d21",
+  "modelProfile": "space_bunny",
+  "model": "stealth/space-bunny-alpha",
+  "decisionModel": "typesafe/jev-1.13",
+  "arms": ["baseline", "heuristic", "jev", "pure-jev"],
+  "cases": [
+    {"country": "britain", "seed": "jev-main-britain-01"},
+    {"country": "france", "seed": "jev-main-france-02"},
+    {"country": "germany", "seed": "jev-main-germany-03"},
+    {"country": "russia", "seed": "jev-main-russia-04"},
+    {"country": "ottoman", "seed": "jev-main-ottoman-05"},
+    {"country": "qing", "seed": "jev-main-qing-06"},
+    {"country": "japan", "seed": "jev-main-japan-07"},
+    {"country": "usa", "seed": "jev-main-usa-08"}
+  ],
+  "preset": "standard",
+  "opponents": "seven unchanged practice bots",
+  "baseline": {"interfaceVersion": "decision-turn-v6", "decisionIntervalTicks": 30, "maxTurnSeconds": 120, "sessionMode": "fresh", "maxTurns": 80},
+  "hybrid": {"interfaceVersion": "hybrid-candidates-v1", "plannerIntervalTicks": 30, "tacticalIntervalTicks": 5, "maxPlannerTurnSeconds": 120, "diplomacy": "PI LLM", "military": "same public-observation candidate builder for heuristic and Jev"},
+  "pureJev": {"strategy": "fixed conservative strategy", "diplomacy": "finite proposal/accept/decline/peace/war choices; no generated messages", "tacticalIntervalTicks": 5},
+  "primaryEndpoint": "authoritative final own industry; paired Jev-minus-heuristic difference by country/seed",
+  "secondaryEndpoints": ["win/draw/loss", "survival", "Jev-minus-baseline final industry", "mean own industry over played time", "accepted and rejected military orders", "decision latency including candidate construction", "planner turns and reported tokens", "provider failures", "reported decision-model cost"],
+  "analysis": {"pairedPermutation": "two-sided exact sign-flip on eight paired industry differences; no claim that other metrics are confirmatory", "bootstrap": "10000 paired resamples with fixed seed 20260930; exploratory percentile interval", "winIntervals": "Wilson 95%", "experimentalUnit": "country/seed match block; model calls are not independent strength observations", "missingResults": "report all failures; do not count incomplete trials as losses; primary complete-pair analysis also reports worst/best missing-pair bounds when possible"},
+  "constraints": ["No changes to engine, map, bots, normal game clock or live deployment", "Separate isolated HTTP servers and SQLite files", "New per-run model aliases/workspaces", "Same model and reasoning setting for baseline and hybrid planners", "Shuffled option order independent of heuristic score", "No hidden state in model inputs", "No synthetic provider fallback counted as Jev", "Pilot uses another seed and quick preset and is excluded from main results", "Freeze implementation and this protocol before main trials; no outcome-based tuning", "Publish only allowlisted aggregate evidence; raw sessions and chats remain ignored"],
+  "limitations": ["Eight blocks are a pilot-scale estimate, not a robust general win rate", "One planner model and one seed per country", "Concurrent API requests may affect latency", "Baseline-to-hybrid changes strategy interface and action cadence; heuristic-to-Jev isolates the selector within the hybrid architecture", "Plans are independently model-generated, so matched starts do not ensure identical plans", "Bots do not reproduce human diplomacy", "Pure Jev lacks free-form diplomacy", "Candidate menu excludes long-distance offensive marches and army turn-around; baseline retains them", "No human enjoyment or game balance claims"]
+}
