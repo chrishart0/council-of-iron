@@ -22,7 +22,13 @@ native live, review, UI, task, voice and rendering suites. After correcting the 
 probe and report-reopening loop, its full run passed the unchanged CPU, payload, animation and memory budgets:
 41.0% map / 17.5% Messages main-thread load at 4× throttle, 1.3 MB post-GC growth through the 30:00 finish, and
 5.8/5.9/6.0 MB after three report reopenings. Touch map effects are brief static highlights. The live service was
-not restarted or deployed.
+not restarted or deployed during the initial investigation.
+
+After integrating the current map polish and march rules from master, all 237 Node tests, parsing, 32 diplomacy
+rounds, and all seven native browser suites passed. The separate enforced full performance run also passed:
+30.0% map / 17.9% Messages main-thread load at 4× throttle, longest sampled task 77 ms, 1.3 MB post-GC growth
+through 30:00, and 5.8/6.1/6.1 MB after three report reopenings. Moving armies still produced zero terrain paints
+at both phone orientations and desktop size. The deployment dry run found no live rooms with players.
 
 The earlier Pi model results below used the former v5 map. Master now uses the v6 map, with different starting industry, adjacency and impassable borders. The v5 wins remain historical evidence and must not be used as a current v6 model win rate. Some interrupted attempts were stopped by `earlyoom` and have no result.
 

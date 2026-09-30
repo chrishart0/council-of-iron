@@ -143,6 +143,9 @@ enforces the causal regression: advancing visible armies must paint their own SV
 paints**. This passed at 390×844, 844×390 and 1366×768. It also checks camera alignment after a native pinch and
 keyboard pan, keyboard army selection, unchanged counter classes, static phone effects, and removal of layers and
 handlers on disposal.
+After merging master's current map polish and march rules, all seven native browser suites passed again. The
+separate full performance run enforced every unchanged budget: 30.0% map and 17.9% Messages busy share, longest
+sampled task 77 ms, 1.3 MB post-GC growth through 30:00, and 5.8/6.1/6.1 MB after three report reopenings.
 The geometry tests compare bounded hit tests against the original even-odd test at exact coast vertices, sampled
 points, holes and islands. The existing browser suites continue checking taps beneath armies, gestures, wraparound,
 replay isolation and panel layouts. A physical-phone retest is still needed to judge the reported lag.
