@@ -53,14 +53,14 @@ An OpenRouter profile uses the same local `.env` mechanism. For Space Bunny, set
 
 After a completed run, publish only its aggregate metrics to the tracked ledger. The importer refuses unfinished games and never copies endpoints, credentials, model messages or raw tool payloads. Each match row records the seat's `result` (win, draw or loss) and final `industry`, accepted and rejected orders, failed tool calls, tokens and turn timing:
 
-Tokens use one definition in every row (`tokenFields` in `bench.js`): `inputTokens` counts every prompt token including cache reads (Pi, Grok and Hermes report cache reads beside their input, Codex inside it, and the importers normalise), `totalTokens` is input plus output, `uncachedTokens` is total minus cache reads, and `tokensPerAction` divides the total by accepted orders. `tokenTurnsReported` of `tokenTurns` turns reported usage; a turn killed at its deadline may report none, so the total is then a lower bound (the page shows `≥ N (k/n turns)`) instead of dropping the run's usage.
-
 ```bash
 node agents/pi/bench.js qwen|luna|deepseek|external [--revision GIT_HASH] data/pi/<completed-run>.json
 node agents/pi/bench-playtest.js data/playtest/<finished-room>
 node agents/pi/task-bench.js qwen|luna data/pi/<completed-task>.json
 node agents/pi/serve-bench.js   # open http://127.0.0.1:8001/
 ```
+
+Tokens use one definition in every row (`tokenFields` in `bench.js`): `inputTokens` counts every prompt token including cache reads (Pi, Grok and Hermes report cache reads beside their input, Codex inside it, and the importers normalise), `totalTokens` is input plus output, `uncachedTokens` is total minus cache reads, and `tokensPerAction` divides the total by accepted orders. `tokenTurnsReported` of `tokenTurns` turns reported usage; a turn killed at its deadline may report none, so the total is then a lower bound (the page shows `≥ N (k/n turns)`) instead of dropping the run's usage.
 
 [bench.html](bench.html) reads [benchmarks.json](benchmarks.json) and [task-benchmarks.json](task-benchmarks.json). It plots outcomes and metrics by run date and each seat's own industry by game tick, with model, harness, room type, country and seed filters. The match ledger contains only the current v6 map. The Pi/Codex and Grok/Hermes/Codex CLI importers refuse unfinished games and another map; the latter imports a finished `agents/playtest` room's private `run.json`, `report.json`, per-seat `turns.jsonl` and `mcp.jsonl`, then publishes only allowlisted aggregate fields. Future CLI playtests record the map ID and a position sample before each model turn. Pre-v6 rows remain in git history and their observations remain in `docs/PLAYTEST.md`; they are not comparable with v6 games. The fixed-order task ledger is separate.
 
