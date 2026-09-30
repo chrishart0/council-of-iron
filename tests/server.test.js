@@ -328,7 +328,7 @@ test('new rooms use the current rules; rally plans and orders go over HTTP',asyn
   const usa=await f.seat(id,host,'usa'),germany=await f.seat(id,agent,'germany','agent');
   await f.launch(id,usa.token);
   const view=(await f.call(`/api/games/${id}`,'GET',undefined,usa.token)).data;
-  assert.equal(view.rules.moveSpeedPercent,120);assert.equal(view.internalTravelTimes['west-us']['central-us'],26);
+  assert.equal(view.rules.moveSpeedPercent,120);assert.equal(view.internalTravelTimes['west-us']['central-us'],28);
   assert.deepEqual(view.rallies,[]);
   const rally={type:'rally',from:['central-us','east-us'],to:'west-us'};
   const plan=await f.call(`/api/games/${id}/plan`,'POST',rally,usa.token);

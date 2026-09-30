@@ -67,6 +67,8 @@ const staticFiles = new Map([
   ...['theme', 'tension', 'effects'].flatMap(stem => [['ogg', 'audio/ogg'], ['mp3', 'audio/mpeg']]
     .map(([ext, type]) => [`/audio/${stem}.${ext}`, [`public/audio/${stem}.${ext}`, type]])),
   ['/map.json', ['public/imperial-map.json', 'application/json']],
+  // Impassable-terrain relief textures (scripts/map-source/terrain-textures.py), one per wasteland of the map.
+  ...(MAP.terrain || []).map(t => [`/terrain/${t.id}.webp`, [`public/terrain/${t.id}.webp`, 'image/webp']]),
   // Installable web app: "Add to Home Screen" opens a chrome-free full-screen game (manifest-src falls under default-src 'self').
   ['/manifest.webmanifest', ['public/manifest.webmanifest', 'application/manifest+json']],
   // Its service worker caches nothing; it only shows a "no connection" page when the app cannot reach the server.

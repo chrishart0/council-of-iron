@@ -1,5 +1,5 @@
 import { journeyPoint, friendlyPath } from './movement.js';
-import { borderNetwork, provinceRings, ringHitTest, terrainMarks } from './map-geometry.js';
+import { borderNetwork, provinceRings, ringHitTest, terrainBox } from './map-geometry.js';
 import { allianceColors, atWar, battleColors, coalitions, formingAlliances, relationsOf, teamColor, threatening, warKey } from './relations.js';
 import { faction } from './presentation.js';
 import { setAttr, setText } from './ui.js';
@@ -40,35 +40,8 @@ export const WORLD = 1280;
 let instances = 0;
 /** Shortest horizontal offset from a to b across the wrap. */
 export const wrapDelta = dx => dx - WORLD * Math.round(dx / WORLD);
-/** Terrain art is drawn in map units at three glyph sizes and the atlas shows the one that suits the zoom (by
- * pixels per map unit), so peaks and dunes stay a readable screen size: [scale, glyph size factor, from px]. */
-const TERRAIN_SCALES = Object.freeze([['far', 1.9, 0], ['mid', 1, LOD.world], ['close', .5, 5]]);
-/** Impassable terrain art in map units, built once per map and zoom scale: shaded peaks for mountains, dune crests
- * for desert, crevasses for ice. */
-function terrainArt(t, size) {
-  const f = v => v.toFixed(2), a = [], b = [], c = [];
-  if (t.terrain === 'mountains') {
-    for (const [x, y, k] of terrainMarks(t.path, 4.6 * size, 1.6 * size)) {
-      const s = (.85 + k * .4) * size, w = 2.5 * s, h = 3 * s, foot = y + h * .55, mid = x + w * .12;
-      a.push(`M${f(x - w)},${f(foot)}L${f(x)},${f(y - h)}L${f(mid)},${f(foot)}Z`); // lit face
-      b.push(`M${f(x)},${f(y - h)}L${f(x + w)},${f(foot)}L${f(mid)},${f(foot)}Z`); // shadow face
-      c.push(`M${f(x - w * .3)},${f(y - h * .45)}L${f(x)},${f(y - h)}L${f(x + w * .3)},${f(y - h * .45)}`); // snow line
-    }
-  } else if (t.terrain === 'ice') {
-    for (const [x, y, k] of terrainMarks(t.path, 5 * size, 1.4 * size)) {
-      const w = (1.4 + k * 1.2) * size, h = .5 * size;
-      a.push(`M${f(x - w)},${f(y)}L${f(x - w * .2)},${f(y - h)}L${f(x + w * .4)},${f(y + h * .4)}L${f(x + w)},${f(y - h * .3)}`); // crevasse
-      b.push(`M${f(x - w * .9)},${f(y + h * 1.1)}L${f(x + w * .7)},${f(y + h * 1.3)}`); // drift shadow
-    }
-  } else {
-    for (const [x, y, k] of terrainMarks(t.path, 3.6 * size, 1.2 * size)) {
-      const w = (1.5 + k * .8) * size, h = (.9 + k * .4) * size;
-      a.push(`M${f(x - w)},${f(y + h * .4)}Q${f(x - w * .25)},${f(y - h)} ${f(x + w)},${f(y + h * .1)}`); // dune crest
-      b.push(`M${f(x - w * .2)},${f(y - h * .45)}Q${f(x + w * .3)},${f(y + h * .1)} ${f(x + w)},${f(y + h * .1)}`); // lee shadow
-    }
-  }
-  return { a: a.join(''), b: b.join(''), c: c.join('') };
-}
+/** Wasteland and sea names follow the zoom: [scale, from px per map unit] (CSS keys on data-terrain-scale). */
+const TERRAIN_SCALES = Object.freeze([['far', 0], ['mid', LOD.world], ['close', 5]]);
 export class Atlas {
   /** options.legend: { placement: one of LEGEND_PLACEMENTS (default 'bottom-left'),
    *  container: element to mount the key in instead of the map container, collapsed: boolean }. */
@@ -158,20 +131,19 @@ export class Atlas {
       this.territories.append(shape); this.shapes.set(p.id, shape);
     }
     this.base.append(this.territories);
-    // Impassable terrain: a ground fill in its own colour plus static map-unit art (built once, never animated).
+    // Impassable terrain: a ground fill in its own colour under a static painted relief texture (public/terrain/<id>.webp,
+    // painted from real elevation over terrainBox), clipped to the shape. Built once, never animated.
     this.terrain = node('g', { class: 'terrain-lands' });
     for (const t of this.wastes.values()) {
-      const g = node('g', { class: `terrain terrain-${t.terrain}`, 'data-terrain': t.id });
-      g.append(node('path', { d: t.path, class: 'terrain-ground' }));
-      for (const [scale, size] of TERRAIN_SCALES) {
-        const art = terrainArt(t, size), set = node('g', { class: 'terrain-art', 'data-scale': scale, 'pointer-events': 'none' });
-        for (const k of ['a', 'b', 'c']) if (art[k]) set.append(node('path', { d: art[k], class: `terrain-art-${k}` }));
-        g.append(set);
-      }
+      const g = node('g', { class: `terrain terrain-${t.terrain}`, 'data-terrain': t.id }), clip = node('clipPath', { id: `${this.prefix}terrain-clip-${t.id}` });
+      clip.append(node('path', { d: t.path })); defs.append(clip);
+      const [x, y, width, height] = terrainBox(t.path);
+      g.append(node('path', { d: t.path, class: 'terrain-ground' }), node('image', { href: `/terrain/${encodeURIComponent(t.id)}.webp`, x, y, width, height,
+        preserveAspectRatio: 'none', 'clip-path': `url(#${this.prefix}terrain-clip-${t.id})`, class: 'terrain-relief', 'pointer-events': 'none' }));
       this.terrain.append(g);
     }
     this.base.append(this.terrain);
-    // Fine engraved land grain, authored once. No raster textures or per-frame filters.
+    // Fine engraved land grain, authored once. No per-frame filters.
     const hatch = node('pattern', { id: `${this.prefix}land-grain`, width: 5, height: 5, patternUnits: 'userSpaceOnUse' });
     hatch.append(node('circle', { cx: 1, cy: 1, r: .45, fill: '#132832', opacity: .22 })); defs.append(hatch); this.grain = hatch;
     this.base.append(node('path', { d: map.provinces.map(p => p.path).join(' '), fill: `url(#${this.prefix}land-grain)`, 'pointer-events': 'none' }));
@@ -600,8 +572,8 @@ export class Atlas {
     setData(this.armySvg, { lod: level });
     // Region names are drawn in map units: shown only between legible and crowded sizes.
     setData(this.svg, { world: px >= LOD.regionMin && px < LOD.world });
-    // Terrain art, wasteland and sea names follow the zoom scale (written only when it changes).
-    setData(this.svg, { terrainScale: TERRAIN_SCALES.reduce((at, [scale, , from]) => px >= from ? scale : at, 'far') });
+    // Wasteland and sea names follow the zoom scale (written only when it changes).
+    setData(this.svg, { terrainScale: TERRAIN_SCALES.reduce((at, [scale, from]) => px >= from ? scale : at, 'far') });
     // Keep the mode chip inside the visible map, whatever else shares the container.
     // Expose the visible map's insets so CSS can place the key inside it, whatever shares the container.
     const box = this.svg.getBoundingClientRect(), host = this.chip.parentElement?.getBoundingClientRect();

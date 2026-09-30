@@ -40,10 +40,10 @@ test('internal speed is charged speed only when both ends are friendly at depart
   const outside = send(g, 'usa', { type:'march', from: 'west-us', to: 'mexico', amount: 10 });
   assert.equal(inside.arrivesAt, g.tick + 1 + g.internalTravelTimes['west-us']['central-us']);
   assert.equal(outside.arrivesAt, g.tick + 1 + g.travelTimes['west-us'].mexico);
-  assert.equal(g.provinces.length > 0 && observe(g, 'usa').internalTravelTimes['west-us']['central-us'], 26);
+  assert.equal(g.provinces.length > 0 && observe(g, 'usa').internalTravelTimes['west-us']['central-us'], 28);
   tick(g);
   const fast = g.armies.find(a => a.to === 'central-us');
-  assert.equal(fast.arrivesAt - fast.departedAt, 26);
+  assert.equal(fast.arrivesAt - fast.departedAt, 28);
   // A recall takes as long as the army has been out.
   advance(g, 5); send(g, 'usa', { type: 'recall', id: fast.id }); tick(g);
   assert.equal(fast.returning, true); assert.equal(fast.arrivesAt, g.tick + 6);

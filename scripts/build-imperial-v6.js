@@ -104,36 +104,13 @@ const PROVINCES = [
 
 /** Impassable terrain, as Crusader Kings draws it: land that belongs to no province, cannot be owned or crossed,
  * and is painted as mountains, desert or ice. No new rule: a wasteland simply sits between provinces, so they no
- * longer share a border and are not neighbours. [id, name, terrain, { v5 member: cut line }].
- * - An open cut line runs across one v5 member: its first and last points snap to the member's nearest boundary
- *   vertex, the points between lie inside it, and the smaller side of the line becomes wasteland. These create
- *   chokepoints (docs/MAP-V6.md, "Impassable terrain"); SEPARATED below proves it.
- * - A hole `{ inset, region }` lies wholly inside the member: the land at least `inset` units from the member's edge
- *   and inside the rough `region` outline (optional), traced as one smooth shape. So it follows the coast and the
- *   borders around it. Holes are scenery only: they touch no other province, and the member's counter stays where
- *   it was without the hole. */
-const WASTELANDS = [
-  ['himalayas', 'Himalayas', 'mountains', {
-    'north-india': [[901.9, 244.5], [912, 251], [924, 259], [936, 265], [948, 271], [957, 274], [966, 271], [972.6, 270]],
-    tibet: [[906.1, 225.1], [911, 226], [919, 230], [923, 241], [930, 248], [942, 254], [952, 259], [962, 255], [972, 251], [978, 253], [981.4, 260.5]] }],
-  ['urals', 'Urals', 'mountains', {
-    urals: [[810.7, 80.3], [824, 88], [830, 100], [834, 113], [840, 125], [842, 138], [840, 150], [842.2, 156.6]] }],
-  ['alps', 'Alps', 'mountains', {
-    'alpine-france': [[659.7, 193.1], [658.3, 188], [658.8, 183], [660.8, 179], [664, 176.5], [669, 175.2], [674.5, 175.5]],
-    italy: [[669.6, 188], [672, 183], [676, 181], [681.1, 175.7]] }],
-  ['sahara', 'Sahara', 'desert', {
-    sahara: [[640, 291.3], [650, 288.5], [657, 282], [667, 280], [676, 273.5], [688, 272], [697, 266], [704.7, 260.7]] }],
-  ['greenland', 'Greenland Ice Cap', 'ice', {
-    scandinavia: { inset: 3.5, region: [[400, 5], [610, 5], [610, 125], [400, 125]] } }],
-  ['empty-quarter', 'Empty Quarter', 'desert', {
-    arabia: { inset: 3, region: [[813, 291], [821, 285], [833, 285.5], [842, 292], [845, 304], [836, 315], [821, 318], [813, 310], [815.5, 300]] } }],
-  ['gobi', 'Gobi', 'desert', {
-    mongolia: { inset: 2.5, region: [[975, 189], [990, 186], [1005, 186.5], [1018, 185], [1030, 184.5], [1042, 188], [1036, 198], [1015, 204], [990, 206], [972, 200]] } }],
-  ['outback', 'Great Sandy Desert', 'desert', {
-    australia: { inset: 4, region: [[1050, 478], [1068, 470], [1090, 473], [1097, 484], [1093, 505], [1081, 519], [1062, 521], [1049, 506]] } }],
-  ['karakum', 'Karakum', 'desert', {
-    'central-asia': { inset: 2.5, region: [[828, 195], [851, 193], [866, 197], [876, 206], [872, 222], [850, 226], [832, 218]] } }],
-];
+ * longer share a border and are not neighbours. Each is a set of polygons in map units, traced from the Natural
+ * Earth physical regions by scripts/map-source/trace-wastelands.py (scripts/map-source/wastelands.json), and cut out
+ * of every v5 member it overlaps. Most are scenery inside or across provinces; the Himalayas, Urals, Alps and Sahara
+ * also create chokepoints (docs/MAP-V6.md, "Impassable terrain"); SEPARATED below proves it. `reassign` moves the
+ * pieces of a member left inside its polygons to another province (the Russian land west of the Urals joins Moscow). */
+const TERRAIN_SOURCE = JSON.parse(readFileSync(new URL('scripts/map-source/wastelands.json', ROOT), 'utf8'));
+const WASTELANDS = TERRAIN_SOURCE.wastelands;
 /** Province pairs a wasteland must keep apart (the build fails if they still share a border). */
 const SEPARATED = [['india', 'tibet'], ['west-russia', 'siberia'], ['italy', 'south-france'], ['maghreb', 'sahel']];
 /** Borders redrawn by hand where the source line is a survey artefact (a staircase, a ruler-straight line):
@@ -141,9 +118,10 @@ const SEPARATED = [['india', 'tibet'], ['west-russia', 'siberia'], ['italy', 'so
 const REDRAWN = [
   // The Western Sahara staircase between the Maghreb and West Africa.
   ['maghreb', 'west-africa', [[580.6, 293.7], [585.5, 292.2], [590.5, 290.2], [595.5, 286.4], [599.6, 281.6], [604.5, 278.4], [611, 276.6], [616, 275.9], [620.2, 274.5]]],
-  // A ruler line between the Sahara and West Africa (now the desert's south-western edge).
-  ['sahara', 'west-africa', [[620.2, 274.5], [623.4, 278.6], [626.8, 280.3], [629.2, 283.9], [632.8, 285.3], [635.6, 288.9], [640, 291.3]]],
 ];
+/** Counters placed by hand where the pole of inaccessibility would put them somewhere unrepresentative (Egypt's
+ * widest land is the Sudan; its counter stays in the Nile delta). The build checks each one's clearance. */
+const ANCHORS = { egypt: [749.3, 252.6] };
 
 /** Every connection that is not a shared land border. [a, b, why]. Travel time follows map distance. */
 const SEA_LINKS = [
@@ -219,97 +197,72 @@ const point = new Map(); // node key -> [x, y]
 const segments = new Map(); // "a|b" (sorted) -> { a, b, count: Map(group -> n) }
 const segKey = (a, b) => a < b ? `${a}|${b}` : `${b}|${a}`;
 
-// Wastelands: cut each listed member along its line; the far side becomes a part of the wasteland.
-const wastelandIds = new Set(WASTELANDS.map(([id]) => id));
+// Wastelands: every v5 member is clipped by each wasteland polygon it overlaps; the parts inside join the wasteland.
+const wastelandIds = new Set(WASTELANDS.map(w => w.id));
 for (const id of wastelandIds) if (members.has(id)) throw new Error(`wasteland ${id} shares an id with a province`);
-const properCross = (p, q, r, s) => {
-  const o = (a, b, c) => Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
-  return o(p, q, r) * o(p, q, s) < 0 && o(r, s, p) * o(r, s, q) < 0;
-};
-const closed = line => line.length > 3 && line[0][0] === line[line.length - 1][0] && line[0][1] === line[line.length - 1][1];
-/** The land of `rings` at least `inset` from their edges and inside `region`, traced (marching squares on a 0.8-unit
- * grid) as its largest outline, closed. Deterministic; distances past inset + 2 are capped (only the sign matters). */
-function insetOutline(rings, { inset, region }) {
-  const S = .8, CAP = inset + 2, CELL = 4, xs = (region || rings.flat()).map(p => p[0]), ys = (region || rings.flat()).map(p => p[1]);
-  const x0 = Math.min(...xs) - 2 * S, y0 = Math.min(...ys) - 2 * S, nx = Math.ceil((Math.max(...xs) - x0) / S) + 3, ny = Math.ceil((Math.max(...ys) - y0) / S) + 3;
-  const buckets = new Map(), edges = rings.flatMap(r => r.map((a, i) => [a, r[(i + 1) % r.length]]));
-  for (const e of edges) for (let cx = Math.floor((Math.min(e[0][0], e[1][0]) - CAP) / CELL); cx <= Math.floor((Math.max(e[0][0], e[1][0]) + CAP) / CELL); cx++)
-    for (let cy = Math.floor((Math.min(e[0][1], e[1][1]) - CAP) / CELL); cy <= Math.floor((Math.max(e[0][1], e[1][1]) + CAP) / CELL); cy++) {
-      const k = `${cx},${cy}`; if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(e);
+const ringArea = r => r.reduce((s, a, i) => { const b = r[(i + 1) % r.length]; return s + a[0] * b[1] - b[0] * a[1]; }, 0) / 2;
+const bbox = r => r.reduce(([x0, y0, x1, y1], [x, y]) => [Math.min(x0, x), Math.min(y0, y), Math.max(x1, x), Math.max(y1, y)], [Infinity, Infinity, -Infinity, -Infinity]);
+const overlaps = (a, b) => a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
+/** Greiner–Hormann clipping of a simple ring by a simple polygon: the rings of its parts inside and outside it.
+ * A crossing is computed from the subject edge in a canonical direction and rounded to the key grid, so two
+ * neighbouring members, which share their border vertices, get the very same crossing point. Touching (a vertex
+ * on the other outline) is not handled: the build fails and the polygon is nudged at its source. */
+function clipRing(subject, clip, what) {
+  const E = 1e-9, sAt = subject.map(() => []), cAt = clip.map(() => []);
+  for (let i = 0; i < subject.length; i++) {
+    let a = subject[i], b = subject[(i + 1) % subject.length];
+    const flip = key(a) > key(b); if (flip) [a, b] = [b, a];
+    for (let j = 0; j < clip.length; j++) {
+      const c = clip[j], d = clip[(j + 1) % clip.length];
+      const den = (b[0] - a[0]) * (d[1] - c[1]) - (b[1] - a[1]) * (d[0] - c[0]);
+      if (Math.abs(den) < E) { if (segDist(c, a, b) < 1e-6 || segDist(d, a, b) < 1e-6) throw new Error(`${what}: an edge runs along the outline at ${c}`); continue; }
+      const t = ((c[0] - a[0]) * (d[1] - c[1]) - (c[1] - a[1]) * (d[0] - c[0])) / den;
+      const u = ((c[0] - a[0]) * (b[1] - a[1]) - (c[1] - a[1]) * (b[0] - a[0])) / den;
+      if (t < -E || t > 1 + E || u < -E || u > 1 + E) continue;
+      if (t < E || t > 1 - E || u < E || u > 1 - E) throw new Error(`${what}: the outlines touch at ${c} / ${a}`);
+      const p = [Math.round((a[0] + t * (b[0] - a[0])) * K) / K, Math.round((a[1] + t * (b[1] - a[1])) * K) / K];
+      const s = { p, alpha: flip ? 1 - t : t, inter: true }, o = { p, alpha: u, inter: true };
+      s.other = o; o.other = s; sAt[i].push(s); cAt[j].push(o);
     }
-  const signed = (p, list, isIn) => { let d = CAP; for (const [a, b] of list) d = Math.min(d, segDist(p, a, b)); return isIn ? d : -d; };
-  const parity = p => { let c = false; for (const [[xi, yi], [xj, yj]] of edges) if ((yi > p[1]) !== (yj > p[1]) && p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi) c = !c; return c; };
-  const regionEdges = region && region.map((a, k) => [a, region[(k + 1) % region.length]]);
-  const f = new Float64Array(nx * ny);
-  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
-    const p = [x0 + i * S, y0 + j * S], edge = i === 0 || j === 0 || i === nx - 1 || j === ny - 1;
-    const land = signed(p, buckets.get(`${Math.floor(p[0] / CELL)},${Math.floor(p[1] / CELL)}`) || [], parity(p)) - inset;
-    const inRegion = region ? signed(p, regionEdges, inside(p, region)) : Infinity;
-    f[j * nx + i] = edge ? -1 : Math.min(land, inRegion);
   }
-  // Marching squares: crossing points on grid edges, joined cell by cell into closed loops.
-  const at = (i, j) => f[j * nx + i], links = new Map(), spot = new Map();
-  const cross = (i, j, horizontal) => {
-    const id = `${horizontal ? 'h' : 'v'}${i},${j}`;
-    if (!spot.has(id)) { const a = at(i, j), b = horizontal ? at(i + 1, j) : at(i, j + 1), t = a / (a - b); spot.set(id, horizontal ? [x0 + (i + t) * S, y0 + j * S] : [x0 + i * S, y0 + (j + t) * S]); }
-    return id;
-  };
-  const link = (a, b) => { for (const [p, q] of [[a, b], [b, a]]) { if (!links.has(p)) links.set(p, []); links.get(p).push(q); } };
-  for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
-    const ins = [at(i, j) > 0, at(i + 1, j) > 0, at(i + 1, j + 1) > 0, at(i, j + 1) > 0], bits = ins.reduce((s, v, k) => s | (v << k), 0);
-    if (bits === 0 || bits === 15) continue;
-    const top = () => cross(i, j, true), right = () => cross(i + 1, j, false), bottom = () => cross(i, j + 1, true), left = () => cross(i, j, false);
-    const centre = (at(i, j) + at(i + 1, j) + at(i + 1, j + 1) + at(i, j + 1)) / 4 > 0;
-    if (bits === 5) { if (centre) { link(top(), right()); link(bottom(), left()); } else { link(left(), top()); link(right(), bottom()); } continue; }
-    if (bits === 10) { if (centre) { link(left(), top()); link(right(), bottom()); } else { link(top(), right()); link(bottom(), left()); } continue; }
-    const found = [];
-    if (ins[0] !== ins[1]) found.push(top()); if (ins[1] !== ins[2]) found.push(right()); if (ins[3] !== ins[2]) found.push(bottom()); if (ins[0] !== ins[3]) found.push(left());
-    link(found[0], found[1]);
+  const list = (ring, at) => ring.flatMap((p, i) => [{ p, inter: false }, ...at[i].sort((x, y) => x.alpha - y.alpha)]);
+  const S = list(subject, sAt), C = list(clip, cAt);
+  if (S.length === subject.length) { // no crossing: one contains the other, or they are apart
+    if (inside(subject[0], clip)) return { inside: [subject], outside: [] };
+    if (inside(clip[0], subject)) return { inside: [clip], outside: [subject], hole: clip };
+    return { inside: [], outside: [subject] };
   }
-  const seen = new Set(), loops = [];
-  for (const start of [...links.keys()].sort()) {
-    if (seen.has(start)) continue;
-    const loop = [start]; seen.add(start);
-    for (let prev = null, cur = start; ;) { const next = links.get(cur).find(n => n !== prev && !seen.has(n)); if (!next) break; loop.push(next); seen.add(next); prev = cur; cur = next; }
-    loops.push(loop.map(id => spot.get(id)));
+  for (const [nodes, other] of [[S, clip], [C, subject]]) {
+    let within = inside(nodes[0].p, other);
+    nodes.forEach((n, i) => { n.list = nodes; n.i = i; if (n.inter) { n.entry = !within; within = !within; } });
   }
-  const area = r => Math.abs(r.reduce((s, a, i) => { const b = r[(i + 1) % r.length]; return s + a[0] * b[1] - b[0] * a[1]; }, 0) / 2);
-  const best = loops.sort((a, b) => area(b) - area(a))[0];
-  if (!best || area(best) < 20) throw new Error('an inset hole found no land');
-  const outline = douglasPeucker([...best, best[0]], .35).slice(0, -1).map(([x, y]) => [Math.round(x * K) / K, Math.round(y * K) / K]);
-  return [...outline, outline[0]];
-}
-function cut(member, rings, line, wasteland) {
-  if (!Array.isArray(line)) line = insetOutline(rings, line);
-  if (closed(line)) { // a hole: wholly inside one ring, clear of every edge
-    const hole = line.slice(0, -1);
-    if (!rings.some(r => hole.every(p => inside(p, r)))) throw new Error(`${wasteland}: the hole in ${member} is not inside it`);
-    for (const r of rings) for (let i = 0; i < r.length; i++) for (let c = 0; c < hole.length; c++) {
-      const a = hole[c], b = hole[(c + 1) % hole.length];
-      if (properCross(a, b, r[i], r[(i + 1) % r.length]) || segDist(r[i], a, b) < 1.5) throw new Error(`${wasteland}: the hole in ${member} comes within 1.5 of its edge at ${r[i]}`);
+  const trace = away => { // away: walk the subject outside the clip (the difference) instead of inside it
+    for (const n of [...S, ...C]) n.seen = false;
+    const rings = [];
+    for (const start of S) {
+      if (!start.inter || start.seen) continue;
+      const ring = []; let n = start;
+      do {
+        n.seen = n.other.seen = true;
+        const forward = n.list === S ? n.entry !== away : n.entry, step = forward ? 1 : -1, nodes = n.list;
+        ring.push(n.p);
+        for (let k = n.i; ;) {
+          k = (k + step + nodes.length) % nodes.length;
+          if (nodes[k].inter) { n = nodes[k].other; break; }
+          ring.push(nodes[k].p);
+        }
+      } while (!n.seen);
+      rings.push(ring);
     }
-    return { rings: [...rings, hole], carved: hole, hole: true };
-  }
-  const nearest = pt => {
-    let best = null;
-    rings.forEach((r, ri) => r.forEach((v, i) => { const d = Math.hypot(v[0] - pt[0], v[1] - pt[1]); if (!best || d < best.d) best = { ri, i, d }; }));
-    if (best.d > 1) throw new Error(`${wasteland}: cut end ${pt} is ${best.d.toFixed(2)} from ${member}'s boundary`);
-    return best;
+    return rings;
   };
-  const from = nearest(line[0]), to = nearest(line[line.length - 1]);
-  if (from.ri !== to.ri || from.i === to.i) throw new Error(`${wasteland}: the cut across ${member} must join two points of one ring`);
-  const ring = rings[from.ri], inner = line.slice(1, -1), n = ring.length;
-  const chord = [ring[from.i], ...inner, ring[to.i]];
-  for (const p of inner) if (!inside(p, ring)) throw new Error(`${wasteland}: cut point ${p} lies outside ${member}`);
-  for (let c = 0; c < chord.length - 1; c++) for (let i = 0; i < n; i++)
-    if (properCross(chord[c], chord[c + 1], ring[i], ring[(i + 1) % n])) throw new Error(`${wasteland}: the cut across ${member} crosses its boundary between ${chord[c]} and ${chord[c + 1]} (at ${ring[i]})`);
-  const walk = (a, b) => { const out = [ring[a]]; for (let i = a; i !== b;) { i = (i + 1) % n; out.push(ring[i]); } return out; };
-  const left = [...walk(from.i, to.i), ...[...inner].reverse()], right = [...walk(to.i, from.i), ...inner];
-  // A wasteland is a band along a border: the smaller side of the cut.
-  const area = r => Math.abs(r.reduce((s, a, i) => { const b = r[(i + 1) % r.length]; return s + a[0] * b[1] - b[0] * a[1]; }, 0));
-  const [keep, carved] = area(left) > area(right) ? [left, right] : [right, left];
-  return { rings: rings.map((r, i) => i === from.ri ? keep : r), carved, hole: false };
+  const result = { inside: trace(false), outside: trace(true) };
+  const total = r => r.reduce((s, x) => s + Math.abs(ringArea(x)), 0), whole = Math.abs(ringArea(subject));
+  if (Math.abs(total(result.inside) + total(result.outside) - whole) > .05 + whole * 1e-4) throw new Error(`${what}: clipping lost area`);
+  return result;
 }
+/** Pieces smaller than this (map units²) are slivers: they stay with, or go to, the shape around them. */
+const SLIVER = 4;
 // Hand-drawn borders: the chain of vertices two members share between the two ends is replaced in both.
 const sourceRings = new Map(SOURCE.provinces.map(p => [p.id, ringsOf(p.path)]));
 for (const [a, b, line] of REDRAWN) {
@@ -327,20 +280,46 @@ for (const [a, b, line] of REDRAWN) {
     rings[ri] = next;
   }
 }
-const cuts = new Map(), holesOf = new Map(); // province -> wasteland ids that are holes in it
-for (const [id, , , lines] of WASTELANDS) for (const [member, line] of Object.entries(lines)) {
-  if (!sourceById.has(member)) throw new Error(`wasteland ${id}: unknown v5 member ${member}`);
-  if (cuts.has(member)) throw new Error(`${member} is cut twice`);
-  cuts.set(member, { id, line });
-  if (!Array.isArray(line) || closed(line)) holesOf.set(groupOf.get(member), [...(holesOf.get(groupOf.get(member)) || []), id]);
-}
-// Shapes that enter the topology: every v5 member (minus what its cut removed) and every wasteland part.
+// Shapes that enter the topology: every v5 member (less the wastelands) and every wasteland part.
+const reassignOf = new Map(TERRAIN_SOURCE.reassign.map(r => [r.member, r]));
+for (const r of TERRAIN_SOURCE.reassign) if (!sourceById.has(r.member) || !members.has(r.province)) throw new Error(`reassign ${r.member} → ${r.province}: unknown`);
 const parts = [];
 for (const p of SOURCE.provinces) {
-  const rings = sourceRings.get(p.id), c = cuts.get(p.id);
-  if (!c) { parts.push({ group: groupOf.get(p.id), rings }); continue; }
-  const done = cut(p.id, rings, c.line, c.id);
-  parts.push({ group: groupOf.get(p.id), rings: done.rings }, { group: c.id, rings: [done.carved] });
+  const own = groupOf.get(p.id), rings = sourceRings.get(p.id);
+  // Enclaves (a ring inside another ring of the member) and holes are left alone; no wasteland may cross them.
+  let land = rings.map((ring, i) => ({ ring, fixed: rings.some((o, j) => j !== i && Math.abs(ringArea(o)) > Math.abs(ringArea(ring)) && inside(ring[0], o)), by: null }));
+  let carved = [];
+  for (const w of WASTELANDS) for (const polygon of w.polygons) {
+    const box = bbox(polygon), next = [];
+    for (const piece of land) {
+      if (!overlaps(bbox(piece.ring), box)) { next.push(piece); continue; }
+      if (piece.fixed) {
+        if (piece.ring.some(v => inside(v, polygon)) || polygon.some(v => inside(v, piece.ring))) throw new Error(`${w.id} reaches an enclave or hole of ${p.id}`);
+        next.push(piece); continue;
+      }
+      const cut = clipRing(piece.ring, polygon, `${w.id} in ${p.id}`);
+      for (const ring of cut.inside) carved.push({ ring, group: w.id, hole: Boolean(cut.hole) });
+      for (const ring of cut.outside) next.push({ ring, by: cut.inside.length ? w.id : piece.by });
+      if (cut.hole) next.push({ ring: cut.hole, fixed: true });
+    }
+    land = next;
+  }
+  // Slivers: a scrap of land cut off by a wasteland joins it; a scrap of wasteland (not a hole) stays land.
+  const scrap = piece => !piece.fixed && !piece.hole && Math.abs(ringArea(piece.ring)) < SLIVER;
+  const kept = land.filter(piece => !(piece.by && scrap(piece))).concat(carved.filter(scrap));
+  carved = carved.filter(c => !scrap(c)).concat(land.filter(piece => piece.by && scrap(piece)).map(piece => ({ ring: piece.ring, group: piece.by })));
+  const move = reassignOf.get(p.id), moved = [];
+  for (const piece of move ? [...kept] : []) {
+    if (piece.fixed) continue;
+    if (!move.polygons.some(poly => piece.ring.every(v => inside(v, poly)))) {
+      if (move.polygons.some(poly => piece.ring.some(v => inside(v, poly)))) throw new Error(`reassign ${p.id}: a piece crosses the outline`);
+      continue;
+    }
+    kept.splice(kept.indexOf(piece), 1); moved.push(piece.ring);
+  }
+  parts.push({ group: own, rings: kept.map(k => k.ring) });
+  if (moved.length) parts.push({ group: move.province, rings: moved });
+  for (const c of carved) parts.push({ group: c.group, rings: [c.ring] });
 }
 for (const part of parts) for (const ring of part.rings) {
   const keys = ring.map(v => { const k = key(v); if (!point.has(k)) point.set(k, v.map(n => Math.round(n * K) / K)); return k; });
@@ -580,8 +559,13 @@ function shape(ids, anchor) {
 }
 const provinces = PROVINCES.map(([id, name, region, from]) => {
   const primary = sourceById.get(from[0]), own = shape([id], [primary.x, primary.y]);
-  // A hole is scenery: the counter (and so every travel time) is placed as if the hole were not there.
-  const { x, y, clearance } = holesOf.has(id) ? shape([id, ...holesOf.get(id)], [primary.x, primary.y]) : own;
+  let { x, y, clearance } = own;
+  if (ANCHORS[id]) {
+    [x, y] = ANCHORS[id];
+    const holes = own.rings.filter(r => signedArea(r) < 0), home = own.rings.find(r => signedArea(r) > 0 && inside([x, y], r));
+    if (!home || holes.some(h => inside([x, y], h))) throw new Error(`${id}: its authored counter lies outside the province`);
+    clearance = +Math.min(...own.rings.flatMap(r => r.map((a, i) => segDist([x, y], a, r[(i + 1) % r.length])))).toFixed(1);
+  }
   return { id, name, region, x, y, clearance, path: own.path, neighbors: [] };
 });
 /** Direction of a shape's long axis in degrees (principal axis of its outline), for a label along it; 0 when the
@@ -602,7 +586,7 @@ function span(ring, x, y, angle) {
   const reach = sign => { let t = 0; while (t < 200 && inside([x + sign * (t + .25) * dx, y + sign * (t + .25) * dy], ring)) t += .25; return t; };
   return +(reach(1) + reach(-1)).toFixed(1);
 }
-const terrain = WASTELANDS.map(([id, name, kind]) => {
+const terrain = WASTELANDS.map(({ id, name, terrain: kind }) => {
   if (!['mountains', 'desert', 'ice'].includes(kind)) throw new Error(`wasteland ${id}: unknown terrain ${kind}`);
   const s = shape([id], null), angle = axis(s.home);
   return { id, name, terrain: kind, x: s.x, y: s.y, angle, span: span(s.home, s.x, s.y, angle), path: s.path, rings: s.rings };

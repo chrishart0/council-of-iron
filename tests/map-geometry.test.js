@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { borderNetwork, insideRings, provinceRings, segmentDistance } from '../public/map-geometry.js';
+import { borderNetwork, insideRings, provinceRings, segmentDistance, terrainBox } from '../public/map-geometry.js';
 
 const load = name => JSON.parse(readFileSync(new URL(`../public/${name}`, import.meta.url)));
 const signedArea = ring => ring.reduce((s, a, i) => { const b = ring[(i + 1) % ring.length]; return s + a[0] * b[1] - b[0] * a[1]; }, 0) / 2;
@@ -132,4 +132,19 @@ for (const name of ['imperial-map.json']) {
 test('the published map is exactly the output of the deterministic builder', () => {
   const run = spawnSync(process.execPath, [new URL('../scripts/build-imperial-v6.js', import.meta.url).pathname, '--check'], { encoding: 'utf8' });
   assert.equal(run.status, 0, run.stderr || run.stdout);
+});
+
+/** Pixel size of a WebP (lossy VP8, lossless VP8L or extended VP8X). */
+function webpSize(bytes) {
+  const chunk = bytes.toString('latin1', 12, 16);
+  if (chunk === 'VP8X') return [1 + bytes.readUIntLE(24, 3), 1 + bytes.readUIntLE(27, 3)];
+  if (chunk === 'VP8L') { const b = bytes.readUInt32LE(21); return [1 + (b & 0x3fff), 1 + ((b >> 14) & 0x3fff)]; }
+  return [bytes.readUInt16LE(26) & 0x3fff, bytes.readUInt16LE(28) & 0x3fff];
+}
+test('every terrain texture covers exactly the box the atlas places it on (regenerate them after a terrain change)', () => {
+  const PX = 8; // pixels per map unit, as scripts/map-source/terrain-textures.py paints them
+  for (const t of load('imperial-map.json').terrain) {
+    const [, , width, height] = terrainBox(t.path);
+    assert.deepEqual(webpSize(readFileSync(new URL(`../public/terrain/${t.id}.webp`, import.meta.url))), [width * PX, height * PX], t.id);
+  }
 });

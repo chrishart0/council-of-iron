@@ -7,15 +7,15 @@ import { map, fixture, replay, replayHttp } from '../scripts/replay-handplay.js'
 // The golden hashes are the current rules' result; they change whenever a rule changes, and are re-baselined then.
 const { game, report } = replay();
 test('recorded decisions conserve manpower, end exactly once and reproduce the golden log',()=>{
-  // 247 since march amounts became upper bounds: recorded marches that asked for more than was free now send it.
-  assert.equal(report.acceptedActions,247);
+  // 249 since the terrain was traced from Natural Earth: counters moved, so travel times and the recorded marches' timing changed.
+  assert.equal(report.acceptedActions,249);
   assert.equal(report.simulatedTicks,1800);
-  assert.equal(report.eventLogSha256,'a62db9afed890304b9f99245936b9b823afbdbbdf6e653a524fbe93bd11b5f1b');
-  assert.equal(report.finalStateSha256,'ac12e030fb9f1801365fb3c54927a6a57969197f695341dcff59c21ed48ad2e6');
-  assert.deepEqual(report.ledger,{initial:509,recruited:8039,invested:24,casualties:1282,interned:0,remaining:7242,tickChecks:1801});
+  assert.equal(report.eventLogSha256,'d117b5cdcdfce11d4d68b001c38e141907ee92b07928255875a87f78d4f1675d');
+  assert.equal(report.finalStateSha256,'06b1e076a088feb24e21844709b8fedd8b259c661de470e6fefcb9d7942ec0b5');
+  assert.deepEqual(report.ledger,{initial:509,recruited:8035,invested:24,casualties:1288,interned:0,remaining:7232,tickChecks:1801});
   assert.equal(game.events.filter(e=>e.type==='finished').length,1);
   assert.equal(game.outcome.reason,'deadline');
-  assert.equal(game.outcome.winningSide,'coalition-72');
+  assert.equal(game.outcome.winningSide,'coalition-71');
 });
 test('the replay is deterministic: same recording, same log',()=>{
   const again=replay().report;

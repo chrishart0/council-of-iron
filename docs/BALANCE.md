@@ -11,6 +11,8 @@ The published map became `imperial-1910-v7`, the v6 board with three changes:
 
 A 32-match diplomacy check (seeds 1000–1031) ran with no invariant failures and 22 decisive matches; winning-side appearances: Britain 7, France 11, Germany 13, Russia 6, Ottoman 11, Qing 12, Japan 4, USA 12. The v6 tables below were not re-run on v7.
 
+After the terrain was traced from Natural Earth (same day; adjacency unchanged, counters and so travel times moved, docs/MAP-V6.md), the same 32-match check ran with no invariant failures and 21 decisive matches; winning-side appearances: Britain 7, France 10, Germany 7, Russia 4, Ottoman 15, Qing 9, Japan 6, USA 19. The USA rose from 12 to 19 and Germany fell from 13 to 7; 32 heuristic matches cannot say whether that is more than noise, and no longer run was made.
+
 ## Map v6 (2026-09-28)
 
 The published map became `imperial-1910-v6`:

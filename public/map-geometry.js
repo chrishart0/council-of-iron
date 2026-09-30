@@ -88,19 +88,11 @@ export function borderNetwork(map, tolerance = .05) {
   const borders = [...pairs].map(([key, parts]) => { const [a, b] = key.split('|'); return { a, b, d: parts.join('') }; });
   return { borders, coast, shared };
 }
-/** Evenly spread glyph positions inside a shape (impassable terrain art): a staggered grid `spacing` apart,
- * deterministically jittered, keeping `margin` from every edge. Returns [x, y, k] with k a stable 0..1 value. */
-export function terrainMarks(path, spacing, margin = spacing / 2) {
-  const rings = provinceRings(path), xs = rings.flat().map(p => p[0]), ys = rings.flat().map(p => p[1]);
-  const out = [], jitter = (i, j, s) => { const v = Math.sin(i * 127.1 + j * 311.7 + s * 74.7) * 43758.5453; return v - Math.floor(v); };
-  const rowStep = spacing * .8;
-  for (let j = 0, y = Math.min(...ys) + rowStep / 2; y < Math.max(...ys); j++, y += rowStep) {
-    for (let i = 0, x = Math.min(...xs) + (j % 2 ? spacing / 2 : 0); x < Math.max(...xs); i++, x += spacing) {
-      const p = [x + (jitter(i, j, 1) - .5) * spacing * .5, y + (jitter(i, j, 2) - .5) * rowStep * .5];
-      if (!insideRings(p, rings)) continue;
-      if (rings.some(r => r.some((a, k) => segmentDistance(p, a, r[(k + 1) % r.length]) < margin))) continue;
-      out.push([+p[0].toFixed(2), +p[1].toFixed(2), jitter(i, j, 3)]);
-    }
-  }
-  return out;
+/** Where an impassable-terrain texture (public/terrain/<id>.webp) sits, in map units: the shape's bounding box
+ * grown by `margin` and rounded out to whole units, [x, y, width, height]. scripts/map-source/terrain-textures.py
+ * paints each texture over exactly this box. */
+export function terrainBox(path, margin = 2) {
+  const points = provinceRings(path).flat(), xs = points.map(p => p[0]), ys = points.map(p => p[1]);
+  const x = Math.floor(Math.min(...xs)) - margin, y = Math.floor(Math.min(...ys)) - margin;
+  return [x, y, Math.ceil(Math.max(...xs)) + margin - x, Math.ceil(Math.max(...ys)) + margin - y];
 }

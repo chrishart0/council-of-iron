@@ -1247,7 +1247,7 @@ def main():
             check_layout(page,'1600x1000 action toast')
             threat.locator('[data-do="dismiss"]').click()
             capture('11-incoming-attack.png')
-            # Tick 610: Russia's attack breaks on India in a major battle: a PERSONAL notice with the troops left, a banner
+            # Tick 614: Russia's attack breaks on India in a major battle: a PERSONAL notice with the troops left, a banner
             # (it is Britain's battle) and exactly one audible cue. Step to 596 first and dismiss the warnings of the armies
             # due on British provinces (ACTION toasts own the lane until dismissed; they stay in Messages).
             server.stdin.write('596\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==596
@@ -1255,21 +1255,21 @@ def main():
             for _ in range(6):
                 if not threat.count() or not threat.is_visible():break
                 threat.locator('[data-do="dismiss"]').dispatch_event('click');page.wait_for_timeout(600)  # a banner may sit over it
-            # Ticks 599–600: Egypt is retaken and the Levant falls; those notices are dismissed before the India check.
+            # Notices due before the India battle (the Levant and Egypt change hands) are dismissed before the India check.
             server.stdin.write('601\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==601
             page.wait_for_timeout(1500)
             for _ in range(3):
                 if not personal.count() or not personal.is_visible():break
                 personal.locator('[data-do="dismiss"]').dispatch_event('click');page.wait_for_timeout(600)
             page.wait_for_timeout(20500);before=len(spy(page,'cues'))  # past the 20 s stinger budget window, as in real time
-            server.stdin.write('611\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==611
+            server.stdin.write('615\n');server.stdin.flush();assert json.loads(server.stdout.readline())['tick']==615  # England falls at 619
             expect(personal).to_contain_text('Line held · India',timeout=8000)
             expect(personal).to_contain_text(re.compile(r'\d+ troops remain'))
             expect(page.locator('#declaration')).to_contain_text('Major battle at India',timeout=5000)
             page.wait_for_timeout(1600);fresh_cues=spy(page,'cues')[before:]
             assert len([c for c in fresh_cues if c['audible']])==1,fresh_cues
-            report['sound']={'tick610':fresh_cues}
-            report['assertions'].append(f'The live tick-610 headline (a major battle on your own province) chose exactly one audible cue ({[c["cue"] for c in fresh_cues if c["audible"]][0]}).')
+            report['sound']={'tick614':fresh_cues}
+            report['assertions'].append(f'The live tick-614 headline (a major battle on your own province) chose exactly one audible cue ({[c["cue"] for c in fresh_cues if c["audible"]][0]}).')
             camera(page,'world');capture('12-line-held.png')
             page.screenshot(path=str(out/'13-battle-banner.png'))
             check_layout(page,'1600x1000 banner')

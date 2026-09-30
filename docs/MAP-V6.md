@@ -15,6 +15,12 @@ A second v7 pass (same day, "map improvements, character, quality … do it") ch
 - terrain art at three **zoom scales**, **names** on the wastelands and **sea names** at the middle zoom;
 - a map notice without the v6 version stamp.
 
+A third v7 pass (same day: "the new mountains and desert are ugly … make better textures … apply them more accurately on the map. The Alps need to be placed more accurately, the Sahara needs to be far far larger … fix the Himalaya and Rockies placement"; "stylization for the sake of play is acceptable") changed geometry and presentation, not adjacency:
+- every wasteland except the Karakum and the Greenland ice is now **traced from the Natural Earth physical regions** (`scripts/map-source/trace-wastelands.py`): the Sahara covers the desert from the Atlantic to the Red Sea, the Alps arc from Nice to Vienna, the Himalayas and Karakoram follow the range, the Urals run from the Kara Sea to the steppe, and the **Rocky Mountains** are new scenery through Canada and the United States; the Great Sandy Desert became the **Western Desert** (Great Sandy, Gibson and Great Victoria);
+- the Russian land west of the Urals, which v5 gave to Siberia, joins Moscow;
+- the terrain is painted with **relief textures from real elevation** (`public/terrain/<id>.webp`, see "In the UI" below) instead of drawn glyphs;
+- adjacency is exactly as before: every land link and sea link is the same (the builder output was compared pair by pair). Counters moved where the land under them became desert or mountain, so travel times changed and the handplay golden hashes were re-baselined.
+
 Reproduce everything:
 
 ```
@@ -187,26 +193,33 @@ v5's direct Pacific States–Japan and Pacific States–Philippines lanes are go
 
 CK3 does not mark impassable ground with a special border. The Himalayas and the deep Sahara are **wasteland**: land that belongs to no county, cannot be held or crossed, and is painted as terrain. Counties simply stop at its edge, so two realms on either side have no border. v7 does the same (v6 drew a "barrier" border between the two provinces instead). There is still no rule for it: a wasteland is not a province and has no links, so the provinces on either side do not share a border and are not neighbours, exactly like any other two provinces that do not touch.
 
-The builder cuts each wasteland out of the v5 members beside it. `WASTELANDS` in `scripts/build-imperial-v6.js` gives, per member, a cut line whose ends snap to the member's boundary; the smaller side becomes wasteland, and the pieces cut from two neighbours merge into one area (their old shared border dissolves). The new edges are generalised like any land border. The build fails if a cut line leaves its member, and `SEPARATED` fails it if a separated pair still shares a border. The map publishes `terrain[]` (`id`, `name`, `terrain`: `mountains`, `desert` or `ice`, label `x`/`y`, label `angle` and `span`, `path`); it is never in `edges`, and the geometry test checks that a shared border between two provinces is always a land link.
+The builder cuts each wasteland out of the provinces it overlaps. `scripts/map-source/wastelands.json` (written by `scripts/map-source/trace-wastelands.py` from the Natural Earth geography regions and rivers, public domain) gives each wasteland as polygons in map units; the builder clips every v5 member by every polygon it overlaps (Greiner–Hormann, crossings computed once per shared border so neighbours get the same point), and the pieces inside join the wasteland. Pieces cut from neighbouring members merge into one area (their old shared border dissolves); scraps under 4 units² join the shape around them. The new edges are generalised like any land border. `SEPARATED` fails the build if a separated pair still shares a border. The map publishes `terrain[]` (`id`, `name`, `terrain`: `mountains`, `desert` or `ice`, label `x`/`y`, label `angle` and `span`, `path`); it is never in `edges`, and the geometry test checks that a shared border between two provinces is always a land link.
 
-**Scenery wastelands** are holes inside one province, so they separate nothing. A hole is given as `{ inset, region }`: the builder traces (marching squares) the land at least `inset` units from the member's edge and inside a rough `region`, so the Greenland ice keeps a coastal rim and the Empty Quarter follows the Arabian coast. The province's counter is placed as if the hole were not there (its anchor is computed on the province with its holes filled), and the build fails if any counter comes within 4 units of a wasteland; so travel times, which follow counter distance, do not change.
+The traced regions are stylised for play, not survey-exact: buffered a little, carried out to sea where they meet a coast (so no sliver of province is left along the shore), and edited where they would otherwise change who borders whom:
+- the Alps reach the sea at Menton (Italy–Southern France stays shut) and leave the Rhine valley open (Southern France keeps its border with the Danube);
+- the Himalayas cover the whole India–Tibet border and leave the Wakhan open (Afghanistan–Tibet);
+- the Urals run from the Kara Sea to the Kazakh steppe; the pieces of the v5 `urals` member west of them move to Moscow (`reassign`);
+- the Sahara leaves Egypt the Nile valley and delta, leaves the Atlantic coastal road between the Maghreb and West Africa, reaches the sea on the Libyan coast (Maghreb–Sahel stays shut) and stops at the Sudanese Sahel (Egypt–Sahel still meet there).
 
-| Scenery | In | Kind |
+Every province's counter sits on the pole of inaccessibility of its remaining land, except Egypt's (`ANCHORS`): its widest land is now the Sudan, so its counter is placed in the Nile delta. The build fails if any counter comes within 4 units of a wasteland.
+
+| Scenery (separates nothing) | Over | Kind |
 |---|---|---|
+| Rocky Mountains | Canada, Pacific States, Great Plains | mountains |
 | Greenland Ice Cap | Scandinavia (Greenland) | ice |
 | Empty Quarter | Arabia | desert |
-| Gobi | Mongolia | desert |
-| Great Sandy Desert | Australasia | desert |
+| Gobi | Mongolia, Manchuria | desert |
+| Western Desert | Australasia | desert |
 | Karakum | Central Asia | desert |
 
-`REDRAWN` replaces a shared source border by a hand-drawn line in both members: the Western Sahara staircase and the ruler-straight Sahara–West Africa line. West Africa's counter moved 0.2 units as a result (the pole search depends on the outline's extent); its travel times are unchanged.
+`REDRAWN` replaces a shared source border by a hand-drawn line in both members: the Western Sahara staircase (Maghreb–West Africa, now the coastal road's edge).
 
 | Wasteland | Cut from | Keeps apart | Chokepoint it creates |
 |---|---|---|---|
 | **Himalayas** (mountains) | India and Tibet | India–Tibet | India is reached through Afghanistan (the north-west) or Indochina (Burma), or by sea. Qing loses its direct front with British India. Tibet still touches Indochina east of the range. |
-| **Urals** (mountains) | Siberia | Moscow–Siberia | European and Asian Russia meet only through Central Asia, so Siberia is a separate front, reinforced the long way round. |
-| **Alps** (mountains) | Southern France and Italy | Italy–Southern France | Italy is entered through the Danube lands (the eastern passes) or by sea. France's southern flank is shut; the Rhine and the Low Countries stay the Franco-German front. Southern France keeps its short border with the Danube lands (the Swiss gap). |
-| **Sahara** (desert) | Sahel (Libya, the northern Sahara) | Maghreb–Sahel | The Maghreb reaches sub-Saharan Africa only along the Atlantic coast, through West Africa (v7), or by sea. The Sahel is entered from West Africa, the Congo or up the Nile from Egypt. |
+| **Urals** (mountains) | Moscow and Siberia | Moscow–Siberia | European and Asian Russia meet only through Central Asia, so Siberia is a separate front, reinforced the long way round. |
+| **Alps** (mountains) | Southern France, Italy, the Danube, Bavaria | Italy–Southern France | Italy is entered through the Danube lands (the eastern passes) or by sea. France's southern flank is shut; the Rhine and the Low Countries stay the Franco-German front. Southern France keeps its short border with the Danube lands (the Rhine valley). |
+| **Sahara** (desert) | Maghreb, West Africa, Sahel, Egypt | Maghreb–Sahel | The Maghreb reaches sub-Saharan Africa only along the Atlantic coast, through West Africa, or by sea. The Sahel is entered from West Africa, the Congo or from Egypt across the Sudan. |
 
 v6 also separated the Maghreb from West Africa. v7 connects them, at the user's request: the coastal road through the Western Sahara is the historical way round the desert. Both start French, so the change gives France an inland road between its two African holdings and gives anyone who takes West Africa a way into the Maghreb.
 
@@ -217,7 +230,7 @@ Tried and dropped (v6, as barriers):
 - **Gobi**. It would leave Qing a single neutral neighbour.
 
 In the UI (`public/atlas.js`, `public/map-layers.css`):
-- A wasteland is filled with its own ground colour (grey rock, sand, ice) under static art drawn in map units: shaded peaks with snow lines for mountains, dune crests for desert, crevasses for ice (`terrainMarks` in `public/map-geometry.js` spreads them evenly inside the shape). The art is built once at three glyph sizes, and the atlas shows the one for its zoom (`data-terrain-scale`: far, mid, close), so peaks never become gravel far out or boulders close in. Nothing animates, so it adds no per-frame repaint.
+- A wasteland is filled with its own ground colour (rock, sand, ice) under a static **relief texture** clipped to its shape: `public/terrain/<id>.webp`, painted by `scripts/map-source/terrain-textures.py` from NOAA ETOPO 2022 elevation over the box `terrainBox` (in `public/map-geometry.js`) gives, at 8 pixels per map unit. Hill shading lit from the north-west over an elevation ramp in the map's muted palette; snow above each range's snow line; on sand, a seamless dune tile (`scripts/map-source/dunes-tile.webp`, AI-generated for this game) where the ground is flat, in patches like real ergs, so the Ahaggar, Tibesti and the Nile's desert edges show through. The textures total about 450 KiB; the geometry test fails if one no longer matches its box (regenerate after a terrain change). Nothing animates, so it adds no per-frame repaint.
 - At the middle zoom each wasteland carries its name along its long axis, sized to fit the shape (`span`), and the seas are named (Mediterranean, Black Sea, Caspian, Baltic, North Sea, Caribbean, Gulf of Mexico, Arabian Sea, Bay of Bengal, South China Sea, Sea of Japan, Hudson Bay).
 - Its edge against a province is a dark terrain edge, neither a province nor a country border: war fronts never run along it, and alliance outlines close over it like a coast.
 - Hovering or tapping it names it and its neighbours, for example "Himalayas. Impassable mountains between Afghanistan, Tibet, Indochina and India. No army can cross it or hold it." (a scenery hole says "in Arabia"). A tapped tooltip stays until the next touch on phones.
@@ -225,15 +238,16 @@ In the UI (`public/atlas.js`, `public/map-layers.css`):
 - The map key lists the impassable kinds: mountains, desert, ice.
 - **Agents** see only the ordinary adjacency (`neighbors`, `edges`); `map.terrain` names the wastelands. A march to a province across one is refused like any other non-bordering target.
 
-The v7 gate run (`npm run test:balance -- --rounds 32 --mode diplomacy`, seeds 1000–1031, 0 invariant failures): Germany 13, Qing 12, USA 12, France 11, Ottoman 11, Britain 7, Russia 6, Japan 4; 22 decisive, 10 deadline wins, no draws. At 32 rounds this is noise-level (v6: max/min 16 / 5); no 256-round run was made for v7.
+The v7 gate run (`npm run test:balance -- --rounds 32 --mode diplomacy`, seeds 1000–1031, 0 invariant failures): Germany 13, Qing 12, USA 12, France 11, Ottoman 11, Britain 7, Russia 6, Japan 4; 22 decisive, 10 deadline wins, no draws. After the traced terrain (same seeds, 0 invariant failures): USA 19, Ottoman 15, France 10, Qing 9, Britain 7, Germany 7, Japan 6, Russia 4; 21 decisive, no draws. Adjacency is unchanged, so any shift comes from the moved counters (travel times); 32 heuristic matches cannot tell it from noise (v6: max/min 16 / 5), and no 256-round run was made.
 
-Screenshots (local bot match, Britain seat, not a live match):
+Screenshots (local bot match, Britain seat, not a live match; after the traced terrain):
 
 | | |
 |---|---|
 | ![World, 1920×1080](media/map-v7-world-1920.png) | ![World, 390×844](media/map-v7-world-390.png) |
+| ![Sahara](media/map-v7-sahara.png) | ![Rocky Mountains](media/map-v7-rockies.png) |
 | ![Himalayas](media/map-v7-himalayas.png) | ![Urals and Karakum](media/map-v7-urals.png) |
-| ![Alps and Sahara](media/map-v7-alps.png) | ![Greenland](media/map-v7-greenland.png) |
+| ![Alps](media/map-v7-alps.png) | ![Greenland](media/map-v7-greenland.png) |
 | ![Arabia](media/map-v7-arabia.png) | ![Gobi](media/map-v7-gobi.png) |
 | ![Australasia](media/map-v7-outback.png) | ![Himalayas, close zoom](media/map-v7-himalayas-close.png) |
 
