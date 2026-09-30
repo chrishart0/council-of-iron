@@ -144,7 +144,29 @@ The whole recorded experiment used approximately **$0.206 in Jev API charges**:
 
 Recorded LLM usage across main attempts, pilots and position trials was **29,663,938 total tokens**: 9,954,786 uncached input, 481,340 output and 19,227,812 cached input. The OpenRouter credit failure does not establish the initial account balance or attribute other account activity to this study.
 
-## Verification results
+## Hypothetical GPT-6 Luna billing
+
+Repricing the recorded planner tokens at [GPT-6 Luna Standard rates](https://developers.openai.com/api/docs/pricing), checked on 30 September: $0.10/million uncached input, $0.01/million cached input, $0.125/million cache writes and $0.50/million output. Retain the observed cache-hit pattern and zero cache writes. The largest recorded turn's input plus cached reads was 85,542 tokens, below the 272K long-context threshold. No Fast, regional or other premiums are applied. This is a price scenario, not an actual Luna gameplay run; tokenization, caching, reasoning and outcomes could differ with Luna.
+
+| Eight completed replacement starts | Repriced LLM cost | Total per game |
+| --- | ---: | ---: |
+| Current PI | $0.38584 | 4.82¢ |
+| LLM + code | $0.31379 | 3.92¢ |
+
+Code is **18.7% cheaper** under this scenario, saving about 0.90¢ per game. The cost reduction is smaller than the 34.3% total-token reduction because cached reads are inexpensive.
+
+For the four completed original matched code/Jev starts, calculated separately:
+
+| Controller | Repriced LLM cost | Jev fee | Total per game |
+| --- | ---: | ---: | ---: |
+| LLM + code | $0.09472 | $0 | 2.37¢ |
+| LLM + Jev | $0.11106 | approximately $0.0383 | 3.73¢ |
+
+The Jev hybrid was **57.7% more expensive** than code in this selected subset. Its average components were 2.78¢ of LLM and 0.96¢ of Jev per game. Do not compare these four-game averages directly with the later eight-game averages, or infer a general Jev cost penalty from the incomplete sample.
+
+The whole experiment, including pilots and unfinished trials, would have cost **$1.634**: $1.428 for LLM tokens and $0.206 for Jev. [jev-luna-costs.json](jev-luna-costs.json) records the rates, assumptions, usage and calculations.
+
+## Verification
 
 `npm test` passed all 244 tests; `npm run check` passed. The full native `python tests/browser.py` run passed live, recorded review, voice, phone performance, UI tasks and UI suites. `node scripts/build-imperial-v6.js --check` passed. `npm run test:balance -- --rounds 32 --mode diplomacy` completed with zero invariant failures. No runtime dependency was added. Engine, map, practice bots and default PI player are unchanged. Research units were collected after completion; the live deployment was never touched.
 

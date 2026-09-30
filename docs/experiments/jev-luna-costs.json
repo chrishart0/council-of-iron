@@ -1,0 +1,94 @@
+{
+  "hypothetical": true,
+  "pricingModel": "gpt-6-luna",
+  "pricingSource": "https://developers.openai.com/api/docs/pricing",
+  "pricingCheckedDate": "2026-09-30",
+  "tier": "Standard, short context",
+  "USDPerMillionTokens": {
+    "input": 0.1,
+    "output": 0.5,
+    "cacheRead": 0.01,
+    "cacheWrite": 0.125
+  },
+  "assumptions": [
+    "Reprice recorded Space Bunny tokens; Luna was not run.",
+    "Retain recorded cache hits and zero cache writes.",
+    "Largest recorded turn input plus cache reads was 85542 tokens, below 272000 threshold.",
+    "Exclude regional premiums, local compute and coding assistant costs."
+  ],
+  "completedReplacementControls": {
+    "baseline": {
+      "matches": 8,
+      "plannerTokens": {
+        "input": 2550023,
+        "output": 134444,
+        "cacheRead": 6361319,
+        "cacheWrite": 0
+      },
+      "hypotheticalPlannerUSD": 0.38583749,
+      "reportedJevUSD": 0,
+      "totalUSD": 0.38583749,
+      "perMatchUSD": 0.04822968625
+    },
+    "heuristic": {
+      "matches": 8,
+      "plannerTokens": {
+        "input": 2268452,
+        "output": 102498,
+        "cacheRead": 3569691,
+        "cacheWrite": 0
+      },
+      "hypotheticalPlannerUSD": 0.31379111,
+      "reportedJevUSD": 0,
+      "totalUSD": 0.31379111,
+      "perMatchUSD": 0.03922388875
+    }
+  },
+  "originalCompleteMatchedSubset": {
+    "countries": [
+      "britain",
+      "germany",
+      "ottoman",
+      "qing"
+    ],
+    "warning": "Completion-selected four-pair subset, descriptive only; not comparable to the later eight-game averages.",
+    "heuristic": {
+      "matches": 4,
+      "plannerTokens": {
+        "input": 664714,
+        "output": 32370,
+        "cacheRead": 1206280,
+        "cacheWrite": 0
+      },
+      "hypotheticalPlannerUSD": 0.09471920000000002,
+      "reportedJevUSD": 0,
+      "totalUSD": 0.09471920000000002,
+      "perMatchUSD": 0.023679800000000004
+    },
+    "jev": {
+      "matches": 4,
+      "plannerTokens": {
+        "input": 802482,
+        "output": 36291,
+        "cacheRead": 1266685,
+        "cacheWrite": 0
+      },
+      "hypotheticalPlannerUSD": 0.11106055000000002,
+      "reportedJevUSD": 0.0383,
+      "totalUSD": 0.14936055000000004,
+      "perMatchUSD": 0.03734013750000001
+    }
+  },
+  "wholeExperiment": {
+    "plannerTokens": {
+      "input": 9954786,
+      "output": 481340,
+      "cacheRead": 19227812,
+      "cacheWrite": 0
+    },
+    "hypotheticalPlannerUSD": 1.42842672,
+    "reportedJevUSD": 0.20570844,
+    "totalUSD": 1.63413516,
+    "scope": "All 64 main attempts, eight pilots, position trials and Jev smoke request, including unfinished trials."
+  }
+}
