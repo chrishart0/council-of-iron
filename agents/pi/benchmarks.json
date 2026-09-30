@@ -7803,6 +7803,600 @@
           "ownProvinces": null
         }
       ]
+    },
+    {
+      "id": "2026-09-30T18-16-51-907Z-f3104274",
+      "match": "v6-current-germany-05",
+      "mapId": "imperial-1910-v6",
+      "combatSeed": "v6-current-germany-05",
+      "startedAt": "2026-09-30T18:16:51.920Z",
+      "modelGroup": "external",
+      "modelId": "stealth/space-bunny-alpha",
+      "client": "Pi",
+      "access": "MCP",
+      "harness": "Pi",
+      "arena": "seven practice bots",
+      "sourceRevision": "bd881a9ec319",
+      "country": "germany",
+      "interfaceVersion": "decision-turn-v9",
+      "turnView": "decision",
+      "strategy": "decision view in prompt",
+      "maxTurnSeconds": 120,
+      "decisionIntervalTicks": 30,
+      "sessionMode": "fresh",
+      "preset": "standard",
+      "status": "finished",
+      "resultReason": "domination",
+      "finalTick": 706,
+      "result": "win",
+      "won": true,
+      "industry": 12,
+      "acceptedActions": 47,
+      "rejectedActions": 0,
+      "toolCalls": 65,
+      "failedToolCalls": 0,
+      "firstActionSeconds": 4.15,
+      "failureRatePct": 0,
+      "inputTokens": 578011,
+      "outputTokens": 11901,
+      "cacheReadTokens": 395501,
+      "totalTokens": 589912,
+      "uncachedTokens": 194411,
+      "tokensPerAction": 12551.32,
+      "tokenTurnsReported": 24,
+      "tokenTurns": 24,
+      "turns": 24,
+      "timedOutTurns": 0,
+      "meanTurnSeconds": 11.03,
+      "durationSeconds": 707.35,
+      "progress": [
+        {
+          "tick": 0,
+          "ownIndustry": 10,
+          "sideIndustry": 10,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 30,
+          "ownIndustry": 12,
+          "sideIndustry": 12,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 60,
+          "ownIndustry": 12,
+          "sideIndustry": 25,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 75,
+          "ownIndustry": 12,
+          "sideIndustry": 24,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 105,
+          "ownIndustry": 12,
+          "sideIndustry": 25,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 135,
+          "ownIndustry": 12,
+          "sideIndustry": 23,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 165,
+          "ownIndustry": 12,
+          "sideIndustry": 22,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 195,
+          "ownIndustry": 8,
+          "sideIndustry": 19,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 230,
+          "ownIndustry": 7,
+          "sideIndustry": 20,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 260,
+          "ownIndustry": 4,
+          "sideIndustry": 17,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 290,
+          "ownIndustry": 7,
+          "sideIndustry": 31,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 320,
+          "ownIndustry": 6,
+          "sideIndustry": 34,
+          "ownProvinces": 3
+        },
+        {
+          "tick": 350,
+          "ownIndustry": 9,
+          "sideIndustry": 38,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 380,
+          "ownIndustry": 9,
+          "sideIndustry": 42,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 410,
+          "ownIndustry": 9,
+          "sideIndustry": 42,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 440,
+          "ownIndustry": 10,
+          "sideIndustry": 43,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 470,
+          "ownIndustry": 13,
+          "sideIndustry": 47,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 500,
+          "ownIndustry": 10,
+          "sideIndustry": 47,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 530,
+          "ownIndustry": 13,
+          "sideIndustry": 50,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 560,
+          "ownIndustry": 12,
+          "sideIndustry": 50,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 590,
+          "ownIndustry": 11,
+          "sideIndustry": 54,
+          "ownProvinces": 4
+        },
+        {
+          "tick": 620,
+          "ownIndustry": 12,
+          "sideIndustry": 58,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 650,
+          "ownIndustry": 12,
+          "sideIndustry": 63,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 680,
+          "ownIndustry": 12,
+          "sideIndustry": 63,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 706,
+          "ownIndustry": 12,
+          "sideIndustry": null,
+          "ownProvinces": null
+        }
+      ]
+    },
+    {
+      "id": "2026-09-30T18-16-51-906Z-bfdcc252",
+      "match": "v6-bunny-france-01",
+      "mapId": "imperial-1910-v6",
+      "combatSeed": "v6-bunny-france-01",
+      "startedAt": "2026-09-30T18:16:51.923Z",
+      "modelGroup": "external",
+      "modelId": "stealth/space-bunny-alpha",
+      "client": "Pi",
+      "access": "MCP",
+      "harness": "Pi",
+      "arena": "seven practice bots",
+      "sourceRevision": "bd881a9ec319",
+      "country": "france",
+      "interfaceVersion": "decision-turn-v9",
+      "turnView": "decision",
+      "strategy": "decision view in prompt",
+      "maxTurnSeconds": 120,
+      "decisionIntervalTicks": 30,
+      "sessionMode": "fresh",
+      "preset": "standard",
+      "status": "finished",
+      "resultReason": "domination",
+      "finalTick": 523,
+      "result": "win",
+      "won": true,
+      "industry": 8,
+      "acceptedActions": 38,
+      "rejectedActions": 2,
+      "toolCalls": 50,
+      "failedToolCalls": 3,
+      "firstActionSeconds": 3.2,
+      "failureRatePct": 6,
+      "inputTokens": 484049,
+      "outputTokens": 8847,
+      "cacheReadTokens": 341400,
+      "totalTokens": 492896,
+      "uncachedTokens": 151496,
+      "tokensPerAction": 12970.95,
+      "tokenTurnsReported": 18,
+      "tokenTurns": 18,
+      "turns": 18,
+      "timedOutTurns": 0,
+      "meanTurnSeconds": 11.46,
+      "durationSeconds": 524.51,
+      "progress": [
+        {
+          "tick": 0,
+          "ownIndustry": 10,
+          "sideIndustry": 10,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 30,
+          "ownIndustry": 10,
+          "sideIndustry": 10,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 45,
+          "ownIndustry": 10,
+          "sideIndustry": 22,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 75,
+          "ownIndustry": 10,
+          "sideIndustry": 23,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 107,
+          "ownIndustry": 11,
+          "sideIndustry": 39,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 137,
+          "ownIndustry": 8,
+          "sideIndustry": 37,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 167,
+          "ownIndustry": 8,
+          "sideIndustry": 39,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 197,
+          "ownIndustry": 8,
+          "sideIndustry": 42,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 227,
+          "ownIndustry": 8,
+          "sideIndustry": 45,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 257,
+          "ownIndustry": 8,
+          "sideIndustry": 46,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 287,
+          "ownIndustry": 8,
+          "sideIndustry": 48,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 317,
+          "ownIndustry": 8,
+          "sideIndustry": 50,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 347,
+          "ownIndustry": 8,
+          "sideIndustry": 53,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 377,
+          "ownIndustry": 8,
+          "sideIndustry": 55,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 407,
+          "ownIndustry": 8,
+          "sideIndustry": 54,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 437,
+          "ownIndustry": 8,
+          "sideIndustry": 58,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 467,
+          "ownIndustry": 7,
+          "sideIndustry": 57,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 497,
+          "ownIndustry": 7,
+          "sideIndustry": 57,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 523,
+          "ownIndustry": 8,
+          "sideIndustry": null,
+          "ownProvinces": null
+        }
+      ]
+    },
+    {
+      "id": "2026-09-30T18-16-51-906Z-27e06053",
+      "match": "v6-bunny-japan-02",
+      "mapId": "imperial-1910-v6",
+      "combatSeed": "v6-bunny-japan-02",
+      "startedAt": "2026-09-30T18:16:51.925Z",
+      "modelGroup": "external",
+      "modelId": "stealth/space-bunny-alpha",
+      "client": "Pi",
+      "access": "MCP",
+      "harness": "Pi",
+      "arena": "seven practice bots",
+      "sourceRevision": "bd881a9ec319",
+      "country": "japan",
+      "interfaceVersion": "decision-turn-v9",
+      "turnView": "decision",
+      "strategy": "decision view in prompt",
+      "maxTurnSeconds": 120,
+      "decisionIntervalTicks": 30,
+      "sessionMode": "fresh",
+      "preset": "standard",
+      "status": "finished",
+      "resultReason": "domination",
+      "finalTick": 925,
+      "result": "win",
+      "won": true,
+      "industry": 6,
+      "acceptedActions": 49,
+      "rejectedActions": 2,
+      "toolCalls": 67,
+      "failedToolCalls": 3,
+      "firstActionSeconds": 2.47,
+      "failureRatePct": 4.48,
+      "inputTokens": 610942,
+      "outputTokens": 12344,
+      "cacheReadTokens": 447156,
+      "totalTokens": 623286,
+      "uncachedTokens": 176130,
+      "tokensPerAction": 12720.12,
+      "tokenTurnsReported": 30,
+      "tokenTurns": 30,
+      "turns": 30,
+      "timedOutTurns": 0,
+      "meanTurnSeconds": 14.08,
+      "durationSeconds": 926.64,
+      "progress": [
+        {
+          "tick": 0,
+          "ownIndustry": 6,
+          "sideIndustry": 6,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 30,
+          "ownIndustry": 6,
+          "sideIndustry": 6,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 60,
+          "ownIndustry": 6,
+          "sideIndustry": 20,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 71,
+          "ownIndustry": 6,
+          "sideIndustry": 20,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 95,
+          "ownIndustry": 6,
+          "sideIndustry": 18,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 125,
+          "ownIndustry": 6,
+          "sideIndustry": 27,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 155,
+          "ownIndustry": 6,
+          "sideIndustry": 28,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 185,
+          "ownIndustry": 6,
+          "sideIndustry": 30,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 215,
+          "ownIndustry": 6,
+          "sideIndustry": 34,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 245,
+          "ownIndustry": 6,
+          "sideIndustry": 34,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 275,
+          "ownIndustry": 6,
+          "sideIndustry": 33,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 305,
+          "ownIndustry": 6,
+          "sideIndustry": 34,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 335,
+          "ownIndustry": 6,
+          "sideIndustry": 33,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 436,
+          "ownIndustry": 6,
+          "sideIndustry": 35,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 466,
+          "ownIndustry": 6,
+          "sideIndustry": 35,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 496,
+          "ownIndustry": 6,
+          "sideIndustry": 36,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 526,
+          "ownIndustry": 6,
+          "sideIndustry": 39,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 556,
+          "ownIndustry": 6,
+          "sideIndustry": 41,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 586,
+          "ownIndustry": 6,
+          "sideIndustry": 41,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 616,
+          "ownIndustry": 6,
+          "sideIndustry": 44,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 646,
+          "ownIndustry": 6,
+          "sideIndustry": 48,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 676,
+          "ownIndustry": 6,
+          "sideIndustry": 48,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 706,
+          "ownIndustry": 6,
+          "sideIndustry": 52,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 736,
+          "ownIndustry": 6,
+          "sideIndustry": 55,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 766,
+          "ownIndustry": 6,
+          "sideIndustry": 54,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 796,
+          "ownIndustry": 6,
+          "sideIndustry": 55,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 826,
+          "ownIndustry": 6,
+          "sideIndustry": 57,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 856,
+          "ownIndustry": 6,
+          "sideIndustry": 64,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 886,
+          "ownIndustry": 6,
+          "sideIndustry": 72,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 916,
+          "ownIndustry": 6,
+          "sideIndustry": 72,
+          "ownProvinces": 2
+        },
+        {
+          "tick": 925,
+          "ownIndustry": 6,
+          "sideIndustry": null,
+          "ownProvinces": null
+        }
+      ]
     }
   ]
 }
