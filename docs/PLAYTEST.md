@@ -21,6 +21,16 @@ Verification after merging master's map v7 (`791beb2`): `npm test` passed 235 te
 
 On the v7 map (`v7-germany-01`, Germany, revision `edebad5`), Space Bunny won by domination at tick 1551 with 3 own industry (5 failed of 122 calls) and Qwen lost at the deadline to a solo French bot with 1 own industry (52 failed of 409). Nineteen of Qwen's failures were direct messages refused with "That country is not in this match": the recorded arguments of the next run showed the cause, a `dm` with no `to`. A DM without a recipient now says so and lists the country ids, and the Pi raw run keeps each failed call's arguments. The rerun on the same seed (`d5839cd`) won by domination at tick 1467 with 3 own industry and 12 failed of 207 calls: one recipient-less DM (instead of nineteen), five developments already under way or complete, two messages sent after the match ended, and one each of a preview without a border, a source with no free troops, a stale turn-around and a missing workspace file. Qwen's persistent workspace still holds its own note from the first run that "DMs are broken", which the harness leaves as the model's memory.
 
+All on `v7-germany-01` (Germany, v7 map, normal speed, seven practice bots), failed calls of all calls:
+
+| Interface | Space Bunny (Pi) | Qwen (Pi) | DeepSeek (Pi) |
+| --- | --- | --- | --- |
+| `decision-turn-v9` | Win t1551, 3 own industry, 5 of 122 | Loss, 1, 52 of 409; rerun win t1467, 3, 12 of 207 | — |
+| `decision-turn-v10` (`5fef685`: develop every ready province, turn stops at the finish, "your own industry is your score" line) | Loss, 0, 10 of 141 | Loss, 0, 28 of 293 | Loss, 0, 4 of 156 |
+| `decision-turn-v11` (`46d1cd9`: the v10 strategy line removed, `send_message` takes one required `to`) | **Win t654, 20**, 2 of 72 | **Win t946, 26**, 9 of 189 | Loss (eliminated t1110), 0, 8 of 174 |
+
+All three v10 games lost a seed on which two of the three v9 runs had won; the only strategy change in v10 was the one-line reminder that own industry is the score, so it was removed. One run per cell cannot show that the line caused the losses. With it gone, v11 won two of three, with 20 and 26 own industry against 0–3 in every earlier Pi run on this seed. Qwen's v11 run had no recipient-less messages. Its and DeepSeek's remaining failures were stale sources, rally points that were not their own, previews of a province to itself (the refusal now says that province's defenders and incoming armies are on the board) and targets without a border. The same Space Bunny model through the Hermes CLI harness, on the same MCP and seed (`v7-germany-01`), won by domination at tick 556 with 22 own industry and **1 failed call of 46**; before these changes its Hermes games had 5 of 69 and 4 of 99.
+
 # v6 agent results — 29 September 2026
 
 ## Current Pi baselines — 29 September 2026

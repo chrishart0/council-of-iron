@@ -275,7 +275,7 @@ export function marchPlan(g, map, country, action, { assumeWar = false } = {}) {
   const owned = inputs.filter(input => {
     const source = province(g, input.from);
     if (source.owner !== country) { skip(source.id, 'not yours', 'You do not own the source province.', 403); return false; }
-    if (source.id === target.id) { skip(source.id, 'it is the destination', 'Choose a different destination.'); return false; }
+    if (source.id === target.id) { skip(source.id, 'it is the destination', `Choose a different destination: ${target.id} is the source itself. Its defenders and the armies heading for it are on the board (own[], armies).`); return false; }
     return true;
   });
   if (!owned.length) requireRule(false, ...refusals[0]);
