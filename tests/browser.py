@@ -3,7 +3,7 @@
 A real match through the real controls: the browser (USA), a separate CLI process (Britain, later driven by
 agents/bot.js) and six idle agent seats, on an accelerated clock (the whole clock is scaled; no endpoint advances
 time). Idle seats never act, so every assertion that needs a province's owner is deterministic. `--full` fills those
-six seats with practice bots instead (a live soak match, as does `--gif`) and runs the long performance checks.
+six seats with practice bots instead (a live soak match, as does `--recording`) and runs the long performance checks.
 Then the focused suites run: recorded-match review, UI layout/tasks on paused recorded positions, voice, and
 mobile performance budgets.
 
@@ -85,14 +85,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--bridge', action='store_true')
     parser.add_argument('--full', action='store_true', help='Practice bots in the six idle seats (a live soak match) and the long performance run.')
-    parser.add_argument('--gif', help='Write an actual browser-capture GIF of a live bot match (implies --full) to this path.')
+    parser.add_argument('--recording', help='Write an actual browser-capture animated WebP of a live bot match (implies --full) to this path (the README recording).')
     parser.add_argument('--ui-gif', help='Record a labeled tour of the command interface.')
     parser.add_argument('--review-gif', help='Also record the focused after-action review as a GIF.')
     parser.add_argument('--executable', default=os.environ.get('BROWSER_EXECUTABLE'))
     parser.add_argument('--artifacts', default=str(ROOT / 'artifacts'))
     parser.add_argument('--only', help='Comma-separated suites to run: ' + ','.join(SUITES))
     args = parser.parse_args()
-    args.full = args.full or bool(args.gif)
+    args.full = args.full or bool(args.recording)
     artifacts = Path(args.artifacts); artifacts.mkdir(parents=True, exist_ok=True)
     chosen = args.only.split(',') if args.only else list(SUITES)
     assert set(chosen) <= set(SUITES), chosen
@@ -138,11 +138,16 @@ def main():
     if any(not r.startswith('passed') for r in results.values()): sys.exit(1)
 
 def live_match(args, artifacts):
-    gif_frames=[]
-    def capture(page,duration=140):
-        if not args.gif:return
+    frames_seen=[];clip=[]
+    def capture(page,duration=110):
+        """One frame of the README recording: the map area only (the top bar kept, the right-hand panels cropped off).
+        A screenshot takes longer than a frame shows, so bursts play back a little faster than real time, smoothly."""
+        if not args.recording:return
         page.evaluate('window.scrollTo(0,0)')
-        gif_frames.append((page.screenshot(),duration))
+        if not clip:
+            right=page.evaluate("()=>Math.min(innerWidth,...[...document.querySelectorAll('[data-region=powers],[data-region=comms]')].filter(e=>e.offsetParent).map(e=>e.getBoundingClientRect().left))")
+            clip.append({'x':0,'y':0,'width':int(right)//2*2,'height':page.viewport_size['height']})
+        frames_seen.append((page.screenshot(clip=clip[0],type='jpeg',quality=95),duration))
     report = {'transport': 'python-http-bridge' if args.bridge else 'native-browser-http', 'assertions': [], 'pageErrors': []}
     with tempfile.TemporaryDirectory(prefix='council-browser-') as tmp:
         env = {**os.environ, 'PORT': '0', 'TEST_DB': str(Path(tmp)/'test.db'), 'TEST_CLOCK_SCALE': '12'}
@@ -388,12 +393,12 @@ def live_match(args, artifacts):
                 assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1'), 'Mobile horizontal overflow'
                 page.set_viewport_size({'width':1600,'height':1050})
                 report['assertions'].append('390-pixel mobile layout displayed controls without horizontal page overflow.')
-                def gif_note(page):
+                def recording_note(page):
                     page.evaluate('''() => { const note=document.createElement('div');note.textContent='ACTUAL BROWSER CAPTURE · 12× TEST CLOCK · PRACTICE BOTS';note.style.cssText='position:fixed;left:18px;bottom:10px;z-index:20;padding:6px 10px;background:#142c34ee;border:1px solid #c6a87280;color:#e4d6ae;font:10px system-ui;letter-spacing:.7px;border-radius:3px;pointer-events:none';document.body.append(note); }''')
                 def rest(page):
                     """Park the pointer on the top bar: no map hover tooltip in the frame."""
                     page.mouse.move(page.viewport_size['width']*.5,8)
-                def gif_attack(page):
+                def recorded_attack(page):
                     """The recording opens with a real order: drag from a USA counter onto a neighbour (the snapped arrow shows
                     troops and arrival), release, and send it from the order card. Real pointer input, the shared action path."""
                     world=http('/map.json');state=http(f'/api/games/{room}');owner={p['id']:p for p in state['provinces']}
@@ -405,39 +410,39 @@ def live_match(args, artifacts):
                     if not options:report['assertions'].append('GIF: USA had no province to attack from; recorded the war only.');return
                     _,src,dst=max(options)
                     page.keyboard.press('Escape');page.locator('#home-view').click();page.wait_for_timeout(300);bring(page,src)
-                    rest(page);page.wait_for_timeout(300);capture(page,700)
+                    rest(page);page.wait_for_timeout(300);capture(page,900)
                     sx,sy=centre(page.locator(f'#marker-{src} .counter-body'));tx,ty=centre(page.locator(f'#marker-{dst} .counter-body'))
                     page.mouse.move(sx,sy);page.mouse.down()
-                    for i in range(1,13):
-                        page.mouse.move(sx+(tx-sx)*i/12,sy+(ty-sy)*i/12);page.wait_for_timeout(40)
-                        if i%3==0:capture(page,220)
-                    expect(page.locator('#map-armies .draft-arrow.snapped')).to_have_count(1);capture(page,1100)
-                    page.mouse.up();expect(page.locator('#primary')).to_be_visible();capture(page,1000)
+                    for i in range(1,25):
+                        page.mouse.move(sx+(tx-sx)*i/24,sy+(ty-sy)*i/24);capture(page,45)  # the arrow follows the pointer smoothly
+                    expect(page.locator('#map-armies .draft-arrow.snapped')).to_have_count(1);capture(page,1200)
+                    page.mouse.up();expect(page.locator('#primary')).to_be_visible();capture(page,1200)
                     page.locator('#primary').click()
                     if page.locator('#confirm-dialog').is_visible():page.locator('#confirm-dialog [value="confirm"]').click()
                     deadline=time.monotonic()+6
                     while time.monotonic()<deadline and not any(a['country']=='usa' and (a.get('path') or [a['to']])[-1]==dst for a in http(f'/api/games/{room}')['armies']):
                         page.wait_for_timeout(200)
                     page.keyboard.press('Escape');rest(page)
-                    for _ in range(6):capture(page,300);page.wait_for_timeout(500)
-                    report['assertions'].append(f'GIF: dragged a real order arrow from {src} to {dst} and sent it from the order card.')
+                    for _ in range(30):capture(page)  # the column sets off
+                    report['assertions'].append(f'Recording: dragged a real order arrow from {src} to {dst} and sent it from the order card.')
                 def first_room_result():
                     # Do not advance the clock through a privileged endpoint: wait for wall-clock play. Standard is 30 game
                     # minutes, 150 s at 12x from the start, sooner if a side holds 60% of the industry.
                     page.goto(url+f'/?match={room}') if not args.bridge else None
-                    if args.gif:
+                    if args.recording:
                         expect(page.locator('#connection')).to_have_text('Live')
                         if page.locator('#coach').is_visible():page.locator('#coach-skip').click()
-                        gif_note(page);gif_attack(page)
-                        # Then watch the war: armies march with their arrows, battles roll, fronts move. Camera only.
-                        views=['europe','world']
-                        deadline=time.monotonic()+240;frame=0
-                        while not page.locator('#result').is_visible() and time.monotonic()<deadline:
-                            if frame%14==0:camera(page,views[frame//14%2]);page.keyboard.press('Escape');rest(page)
-                            capture(page,160);frame+=1
-                            page.wait_for_timeout(900)
+                        recording_note(page);recorded_attack(page)
+                        # Then watch the war in short bursts (armies march with their arrows, battles roll), a few game
+                        # minutes apart, alternating Europe and the world. Camera only.
+                        views=['europe','world'];burst=0
+                        while not page.locator('#result').is_visible() and burst<12:
+                            camera(page,views[burst%2]);page.keyboard.press('Escape');rest(page);page.wait_for_timeout(400)
+                            for _ in range(24):
+                                if page.locator('#result').is_visible():break
+                                capture(page)
+                            burst+=1;page.wait_for_timeout(3000)
                     expect(page.locator('#result')).to_be_visible(timeout=240000)
-                    capture(page,2200)
                     result=http(f'/api/games/{room}')
                     assert result['status']=='finished' and len(result['outcome']['scores'])==8
                     report['outcome']=result['outcome']
@@ -618,26 +623,21 @@ def live_match(args, artifacts):
                     assert shared_room['status']=='running' and len(shared_room['players'])==2,shared_room
                     report['assertions'].append('A seatless host started a shared lobby that two agent seats had joined, and watched the running match.')
 
-                # The other rooms fill the wait for the first match's result (a GIF records the first match to the end).
-                if args.gif:first_room_result();other_rooms()
+                # The other rooms fill the wait for the first match's result (a recording follows the first match to the end).
+                if args.recording:first_room_result();other_rooms()
                 else:other_rooms();first_room_result()
                 assert not report['pageErrors'],report['pageErrors']
-                if args.gif:
+                if args.recording:
+                    # Animated WebP: full colour (a GIF's 256-colour palette bands the map), plays inline in a GitHub README.
                     from io import BytesIO
                     from PIL import Image
-                    images=[]
-                    for data,_ in gif_frames:
+                    width=960;images=[]
+                    for data,_ in frames_seen:
                         image=Image.open(BytesIO(data)).convert('RGB')
-                        image=image.resize((1100,round(image.height*1100/image.width)),Image.Resampling.LANCZOS)
-                        images.append(image)
-                    samples=images[::max(1,len(images)//16)][:16]
-                    montage=Image.new('RGB',(640,400))
-                    for i,image in enumerate(samples):montage.paste(image.resize((160,100)),((i%4)*160,(i//4)*100))
-                    palette=montage.quantize(colors=192)
-                    frames=[image.quantize(palette=palette,dither=Image.Dither.NONE) for image in images]
-                    gif_path=Path(args.gif);gif_path.parent.mkdir(parents=True,exist_ok=True)
-                    frames[0].save(gif_path,save_all=True,append_images=frames[1:],duration=[d for _,d in gif_frames],loop=0,optimize=True,disposal=1)
-                    report['gif']={'frames':len(frames),'path':str(gif_path),'bytes':gif_path.stat().st_size,'simulationClockScale':12}
+                        images.append(image.resize((width,round(image.height*width/image.width)),Image.Resampling.LANCZOS))
+                    path=Path(args.recording);path.parent.mkdir(parents=True,exist_ok=True)
+                    images[0].save(path,format='WEBP',save_all=True,append_images=images[1:],duration=[d for _,d in frames_seen],loop=0,quality=72,method=6)
+                    report['recording']={'frames':len(images),'path':str(path),'bytes':path.stat().st_size,'simulationClockScale':12}
                 report['status']='passed'
                 browser.close()
         finally:

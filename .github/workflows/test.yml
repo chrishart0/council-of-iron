@@ -22,7 +22,7 @@ jobs:
         run: |
           node scripts/tournament.js --rounds 32 --seed 910000 --mode solo --out artifacts/ci-solo.json
           node scripts/tournament.js --rounds 32 --seed 920000 --mode diplomacy --out artifacts/ci-diplomacy.json
-      - run: python tests/browser.py --gif artifacts/gameplay.gif
+      - run: python tests/browser.py --recording artifacts/gameplay.webp
       - uses: actions/upload-artifact@v4
         if: always()
         with:

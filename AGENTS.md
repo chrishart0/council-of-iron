@@ -32,7 +32,7 @@ The rules are README "How to play" (humans) and `docs/AGENT-RULES.md` (agents); 
 
 ## v0.2 test discipline
 
-Run `npm run test:balance -- --rounds 32 --mode diplomacy` as well as the rules tests. Balance candidates live in `tests/balance-cases.json`, never silently in the published map. Do not overfit starting-army handicaps to the heuristic controller. Preserve explicit room/identity fetch cancellation and same-operation-ID network retry. Record gameplay with `python tests/browser.py --gif docs/media/gameplay.gif`; never substitute a generated mockup for the README recording.
+Run `npm run test:balance -- --rounds 32 --mode diplomacy` as well as the rules tests. Balance candidates live in `tests/balance-cases.json`, never silently in the published map. Do not overfit starting-army handicaps to the heuristic controller. Preserve explicit room/identity fetch cancellation and same-operation-ID network retry. Record gameplay with `python tests/browser.py --recording docs/media/gameplay.webp` (an animated WebP: full colour, plays inline on GitHub); never substitute a generated mockup for the README recording.
 
 ## Orders contract
 
