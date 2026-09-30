@@ -63,21 +63,30 @@ for (const name of ['imperial-map.json']) {
     }
   });
 
-  test(`${name}: a shared border is a land link or a declared barrier; every other link is a declared sea link`, () => {
+  test(`${name}: a shared border between provinces is a land link; terrain is never a link; every other link is a declared sea link`, () => {
     const { shared, borders, coast } = borderNetwork(map);
     const key = e => [e.from, e.to].sort().join('|');
-    const land = map.edges.filter(e => !e.sea).map(key), sea = map.edges.filter(e => e.sea), any = new Set(map.edges.map(key));
+    const land = map.edges.filter(e => !e.sea).map(key), sea = map.edges.filter(e => e.sea);
     assert.equal(new Set(map.edges.map(key)).size, map.edges.length, 'one edge per pair');
-    // No exceptions list: a land link needs a readable shared border; a shared border is a land link, or it is
-    // a declared barrier (impassable terrain, drawn on the map), never both.
-    const barriers = (map.barriers || []).map(b => [b.a, b.b].sort().join('|'));
-    assert.equal(new Set(barriers).size, barriers.length, 'one barrier per pair');
+    // Impassable terrain is unowned land drawn between provinces: not a province, never an edge end.
+    const ids = new Set(map.provinces.map(p => p.id)), terrain = new Set(map.terrain.map(t => t.id));
+    assert.equal(terrain.size, map.terrain.length, 'one entry per terrain id');
+    assert.deepEqual([...terrain].filter(id => ids.has(id)), [], 'terrain ids are not province ids');
+    for (const t of map.terrain) {
+      assert.ok(['mountains', 'desert'].includes(t.terrain), t.id);
+      assert.ok(typeof t.name === 'string' && t.name.length > 2, `${t.id} has a name`);
+      assert.ok(provinceRings(t.path).length > 0 && Number.isFinite(t.x) && Number.isFinite(t.y), `${t.id} has a drawable shape`);
+    }
+    assert.deepEqual(map.edges.filter(e => terrain.has(e.from) || terrain.has(e.to)).map(key), [], 'terrain is never linked');
+    // No exceptions list: a land link needs a readable shared border, and a shared border between two provinces is
+    // a land link. A shared run against terrain is never a link.
     assert.deepEqual(land.filter(k => !(shared.get(k) >= 1)).sort(), []);
-    assert.deepEqual(barriers.filter(k => !(shared.get(k) >= 1) || any.has(k)), [], 'a barrier is a shared border without a link');
-    assert.deepEqual([...shared].filter(([k, length]) => length > .05 && !land.includes(k) && !barriers.includes(k)).map(([k]) => k).sort(), []);
-    for (const b of map.barriers || []) {
-      assert.ok(['mountains', 'desert'].includes(b.terrain), b.name);
-      assert.ok(b.name.length > 2 && b.around.length > 10, `${b.name} says how to go around`);
+    const betweenProvinces = k => k.split('|').every(id => ids.has(id));
+    assert.deepEqual([...shared].filter(([k, length]) => length > .05 && betweenProvinces(k) && !land.includes(k)).map(([k]) => k).sort(), []);
+    // Each wasteland separates a pair that would otherwise meet: they share no border, and each borders the terrain.
+    for (const [a, b, between] of [['india', 'tibet', 'himalayas'], ['siberia', 'west-russia', 'urals'], ['italy', 'south-france', 'alps'], ['maghreb', 'sahel', 'sahara']]) {
+      assert.ok(!shared.has(`${a}|${b}`) && !land.includes(`${a}|${b}`), `${a} and ${b} share no border`);
+      for (const id of [a, b]) assert.ok(shared.get([id, between].sort().join('|')) >= 1, `${id} borders the ${between}`);
     }
     // A sea link joins provinces that do not touch, and says which strait or lane it is.
     for (const e of sea) {

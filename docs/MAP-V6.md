@@ -1,6 +1,13 @@
-# Map imperial-1910-v6: a simpler board, read like Risk
+# Map imperial-1910-v7: a simpler board, read like Risk
 
 The user asked to "simplify the map and make the borders look better. Think about Risk, how balanced the map is." This page records the analysis of v5, the v6 design and the evidence. Automated self-play numbers below come from the heuristic practice bots (`tests/simulation.js`). **They are not a claim about human balance or fun.**
+
+**v7** is the v6 board with one change of representation and one of adjacency (30 September 2026). The user asked to "actually show mountains and deserts on the map as unoccupied space. Think about how CK3 handles mountains and deserts", and for "West Africa and Maghreb … really they should be connected":
+- The impassable mountains and desert are now **wastelands**: unowned land cut out of the provinces around them and painted as terrain, as Crusader Kings III does. They replace v6's "barriers" (a drawn border with no link). See "Impassable terrain" below.
+- The Maghreb and West Africa are neighbours again (their Western Sahara border is a land link).
+- The Sahara province lost its northern desert and is now **Sahel** (id `sahel`, was `sahara`).
+
+Nothing else changed: every other adjacency, holding and garrison is the v6 one. The Part 3 evidence was measured on v6; the v7 gate run is at the end of "Impassable terrain".
 
 Reproduce everything:
 
@@ -86,7 +93,7 @@ The required gate run (`--rounds 32 --mode diplomacy`, seeds 1000+) gave:
 
 ### Province count: 59
 
-v6 has 59 provinces (40 held at the start, 19 neutral), 87 land borders, 34 sea links and 5 impassable borders (see below).
+v7 has 59 provinces (40 held at the start, 19 neutral), 88 land borders, 34 sea links and 4 impassable wastelands (see below).
 
 The count is set by the smallest province worth its own counter at world zoom on a phone. Classic Risk has 42 territories for up to 6 players; 8 powers with colonies need more. 59 is the count where every European province is at least ~140 units², double v5's smallest mainland province, so it is several phone taps wide at the mid zoom. Going lower would merge historical cores (Prussia with Bavaria, Moscow with Ukraine) and would leave too few provinces for an eight-way expansion race.
 
@@ -99,11 +106,11 @@ Merges:
 | Europe (13) | Ireland, **Great Britain** (England, Midlands, Scotland), Iberia, **Northern France** (Île-de-France, Normandy), **Southern France** (Aquitaine, Occitania, Alpine France), **Low Countries** (Netherlands, Belgium), **Rhineland** (Ruhr, Rhineland), **Prussia** (Brandenburg, East Prussia), **Bavaria** (+ Saxony), **Italy** (Northern + Southern), Scandinavia, Danube, **Balkans** (Serbia, Bulgaria) |
 | Russia (7) | Poland, Baltic, Moscow, Ukraine, **Siberia** (+ Urals), Russian Far East, Central Asia |
 | Near East (7) | Anatolia, **Caucasus** (Eastern Anatolia), Levant, Mesopotamia, Arabia, Persia, Afghanistan |
-| Africa (10) | Maghreb, Egypt, West Africa, **Sahara** (+ Sahel), **Congo** (+ Angola), East Africa, Tanganyika, South West Africa, South Africa, Madagascar |
+| Africa (10) | Maghreb, Egypt, West Africa, **Sahel** (Sahara + Sahel; its northern desert is the Sahara wasteland), **Congo** (+ Angola), East Africa, Tanganyika, South West Africa, South Africa, Madagascar |
 | Asia (9) | **India** (Northern + Southern), Tibet, Mongolia, Manchuria, Northern China, Southern China, Korea, **Japan** (Northern + Southern), Indochina |
 | Oceania (4) | East Indies, Philippines, **Australasia** (+ New Zealand), Hawaii |
 
-Province ids that survive keep their id, so agents, docs and bots mostly still read the same. Merged provinces take the id of their main member: `england`, `ruhr`, `prussia`, `bavaria`, `italy`, `india`, `siberia`, `sahara`, `congo`, `brazil`, `andes`, `australia`, `mexico`. Four ids are new: `canada`, `japan`, `balkans` (now Serbia + Bulgaria; the old Danube-lands `balkans` is `danube`) and `caucasus`.
+Province ids that survive keep their id, so agents, docs and bots mostly still read the same. Merged provinces take the id of their main member: `england`, `ruhr`, `prussia`, `bavaria`, `italy`, `india`, `siberia`, `congo`, `brazil`, `andes`, `australia`, `mexico`. Five ids are new: `canada`, `japan`, `balkans` (now Serbia + Bulgaria; the old Danube-lands `balkans` is `danube`), `caucasus` and (v7) `sahel`, which was `sahara` in v6.
 
 Regions are presentation only. No rule reads them and there is no continent bonus (see "Optional" below).
 
@@ -170,31 +177,43 @@ Land links are exactly the pairs that share a border arc. Every other link is in
 
 v5's direct Pacific States–Japan and Pacific States–Philippines lanes are gone. **Hawaii is now the only mid-Pacific crossing** (the Bering Strait remains in the north), a real stepping stone that the USA and Japan both want. At the end of the 256 final diplomacy matches the USA held it in 160, Qing in 43 and Japan in 38. The transatlantic Atlantic States–Great Britain lane is gone too. The Atlantic crossings are the northern Canada–Ireland lane and the southern Brazil–West Africa narrows, so Britain and the USA meet in Canada rather than across open sea.
 
-### Impassable terrain (user request: "use mountains/deserts … to bottleneck gameplay")
+### Impassable terrain: wastelands, as in Crusader Kings III
 
-A barrier is a drawn border that is **not** a link: no new rule, the two provinces are simply not neighbours, and the map draws the terrain that explains why. They are declared in `BARRIERS` in the builder and published as `barriers[]` (`a`, `b`, `terrain`, `name`, `around`). The geometry test accepts a shared border only as a land link or a declared barrier. It also checks that every province stays reachable and that every power still borders neutral land.
+CK3 does not mark impassable ground with a special border. The Himalayas and the deep Sahara are **wasteland**: land that belongs to no county, cannot be held or crossed, and is painted as terrain. Counties simply stop at its edge, so two realms on either side have no border. v7 does the same (v6 drew a "barrier" border between the two provinces instead). There is still no rule for it: a wasteland is not a province and has no links, so the provinces on either side do not share a border and are not neighbours, exactly like any other two provinces that do not touch.
 
-| Barrier | Border | Chokepoint it creates |
-|---|---|---|
-| **Himalayas** (mountains) | India–Tibet | India is reached through Afghanistan (the north-west) or Indochina (Burma), or by sea. Qing loses its direct front with British India. |
-| **Urals** (mountains) | Moscow–Siberia | European and Asian Russia meet only through Central Asia, so Siberia is a separate front, reinforced the long way round. |
-| **Alps** (mountains) | Italy–Southern France | Italy is entered through the Danube lands (the eastern passes) or by sea. France's southern flank is shut; the Rhine and the Low Countries stay the Franco-German front. |
-| **Sahara** (desert) | Maghreb–Sahara, Maghreb–West Africa | North Africa is cut off from sub-Saharan Africa. The Maghreb is reached by sea (Gibraltar, Marseille, Sicily). Africa is entered up the Nile (Egypt–Sahara, Egypt–Congo), through East Africa or by sea. |
+The builder cuts each wasteland out of the v5 members beside it. `WASTELANDS` in `scripts/build-imperial-v6.js` gives, per member, a cut line whose ends snap to the member's boundary; the smaller side becomes wasteland, and the pieces cut from two neighbours merge into one area (their old shared border dissolves). The new edges are generalised like any land border. The build fails if a cut line leaves its member, and `SEPARATED` fails it if a separated pair still shares a border. The map publishes `terrain[]` (`id`, `name`, `terrain`: `mountains` or `desert`, label `x`/`y`, `path`); it is never in `edges`, and the geometry test checks that a shared border between two provinces is always a land link.
 
-Tried and dropped:
+| Wasteland | Cut from | Keeps apart | Chokepoint it creates |
+|---|---|---|---|
+| **Himalayas** (mountains) | India and Tibet | India–Tibet | India is reached through Afghanistan (the north-west) or Indochina (Burma), or by sea. Qing loses its direct front with British India. Tibet still touches Indochina east of the range. |
+| **Urals** (mountains) | Siberia | Moscow–Siberia | European and Asian Russia meet only through Central Asia, so Siberia is a separate front, reinforced the long way round. |
+| **Alps** (mountains) | Southern France and Italy | Italy–Southern France | Italy is entered through the Danube lands (the eastern passes) or by sea. France's southern flank is shut; the Rhine and the Low Countries stay the Franco-German front. Southern France keeps its short border with the Danube lands (the Swiss gap). |
+| **Sahara** (desert) | Sahel (Libya, the northern Sahara) | Maghreb–Sahel | The Maghreb reaches sub-Saharan Africa only along the Atlantic coast, through West Africa (v7), or by sea. The Sahel is entered from West Africa, the Congo or up the Nile from Egypt. |
+
+v6 also separated the Maghreb from West Africa. v7 connects them, at the user's request: the coastal road through the Western Sahara is the historical way round the desert. Both start French, so the change gives France an inland road between its two African holdings and gives anyone who takes West Africa a way into the Maghreb.
+
+Tried and dropped (v6, as barriers):
 - **Swiss Alps** (Southern France–Danube) and the **Libyan Desert** (Egypt–Sahara). With all seven barriers, France's Maghreb, Sahara and Alpine flank were sealed together. France's winning-side appearances rose from 130 to 165 of 256 (diplomacy), a safe backyard no one could contest.
 - **Andes** (Andes–Brazil), a Pacific coast strip. It changed nothing beyond noise (USA 151 → 143 of 256).
 - **Pyrenees**. Iberia would have been reachable only by sea.
 - **Gobi**. It would leave Qing a single neutral neighbour.
 
-In the UI:
-- Mountains are drawn as a brown ridge band with small upright peaks. The peaks are regenerated per zoom so they keep a constant screen size.
-- Deserts are a stippled sand band.
-- Terrain sits above the alliance glow and below counters, and is quieter at near zoom. The border line is drawn as terrain, not as a province or country border. War fronts never run along it, but alliance outlines still close over it.
-- Hovering or tapping it explains it, for example "The Himalayas: impassable. Mountains between India and Tibet. India is reached through Afghanistan or Indochina, or by sea."
-- Dragging a march onto a province across it shows "Himalayas · impassable" with the same explanation.
-- The map key lists the barriers by terrain.
-- **Agents** read `barriers` in `map` and `board.own[].impassable`. A refused attack or march names the barrier and the way around.
+In the UI (`public/atlas.js`, `public/map-layers.css`):
+- A wasteland is filled with its own ground colour (grey rock, sand) under static art drawn once in map units: shaded peaks with snow lines for mountains, dune crests for desert (`terrainMarks` in `public/map-geometry.js` spreads them evenly inside the shape). Nothing animates, so it adds no per-frame repaint.
+- Its edge against a province is a dark terrain edge, neither a province nor a country border: war fronts never run along it, and alliance outlines close over it like a coast.
+- Hovering or tapping it names it and its neighbours, for example "Himalayas. Impassable mountains between Afghanistan, Tibet, Indochina and India. No army can cross it or hold it." A tapped tooltip stays until the next touch on phones.
+- Dragging a march over it shows "Himalayas · impassable".
+- The map key lists the wastelands by terrain.
+- **Agents** see only the ordinary adjacency (`neighbors`, `edges`); `map.terrain` names the wastelands. A march to a province across one is refused like any other non-bordering target.
+
+The v7 gate run (`npm run test:balance -- --rounds 32 --mode diplomacy`, seeds 1000–1031, 0 invariant failures): Germany 13, Qing 12, USA 12, France 11, Ottoman 11, Britain 7, Russia 6, Japan 4; 22 decisive, 10 deadline wins, no draws. At 32 rounds this is noise-level (v6: max/min 16 / 5); no 256-round run was made for v7.
+
+Screenshots (local bot match, Britain seat, not a live match):
+
+| | |
+|---|---|
+| ![Himalayas](media/map-v6-himalayas.png) | ![Urals](media/map-v6-urals.png) |
+| ![Alps](media/map-v6-alps.png) | ![Sahara](media/map-v6-sahara.png) |
 
 ### Starting setups
 
@@ -306,15 +325,13 @@ Readings (not claims):
 
 ### Screenshots
 
-These are from a bot-played local preview position at 04:00, not a live match. They show the Britain seat's view, an Entente alliance and several wars.
+These are from a bot-played local preview position at 04:00, not a live match, taken on v6. They show the Britain seat's view, an Entente alliance and several wars; the impassable terrain in them is v6's barrier borders (current close-ups are under "Impassable terrain").
 
 | | |
 |---|---|
 | ![World, 1920×1080](media/map-v6-world-1920.png) | ![Europe mid zoom, 1920×1080](media/map-v6-mid-1920.png) |
 | ![Europe near zoom, 1920×1080](media/map-v6-near-1920.png) | ![World, 390×844](media/map-v6-world-390.png) |
-| ![Europe and Africa, 390×844](media/map-v6-near-390.png) | ![Himalayas](media/map-v6-himalayas.png) |
-| ![Urals](media/map-v6-urals.png) | ![Sahara](media/map-v6-sahara.png) |
-| ![Alps](media/map-v6-alps.png) | |
+| ![Europe and Africa, 390×844](media/map-v6-near-390.png) | |
 
 ## Optional, not implemented: region bonuses
 

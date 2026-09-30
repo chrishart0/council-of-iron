@@ -2,6 +2,15 @@
 
 **Heuristic self-play does not prove balance or fun.** The practice bots (`agents/industrial-policy.js`, seeded styles in `tests/simulation.js`) attack only with clear superiority, never tire and do not bargain. These runs check invariants (troop conservation, valid garrisons and armies, the deadline, consistent results, the alliance size cap) and that matches still resolve. Starting positions are deliberately asymmetric; do not tune starting armies to these bots.
 
+## Map v7 (2026-09-30)
+
+The published map became `imperial-1910-v7`, the v6 board with three changes:
+- the impassable borders became impassable land (`terrain`): the Himalayas, the Urals, the Alps and the Sahara are unowned mountains and desert between provinces, not provinces and nobody's neighbours; India–Tibet, Moscow–Siberia, Italy–Southern France and Maghreb–Sahel share no border;
+- the Maghreb and West Africa are now connected by land;
+- the province `sahara` is now `sahel` (Sahel).
+
+A 32-match diplomacy check (seeds 1000–1031) ran with no invariant failures and 22 decisive matches; winning-side appearances: Britain 7, France 11, Germany 13, Russia 6, Ottoman 11, Qing 12, Japan 4, USA 12. The v6 tables below were not re-run on v7.
+
 ## Map v6 (2026-09-28)
 
 The published map became `imperial-1910-v6`:

@@ -25,7 +25,7 @@ test('report results are the original saved results',()=>{
   assert.deepEqual(review.report.outcome,recorded.outcome);
   assert.equal(review.report.alliances.length,3);
   const winner=review.report.alliances.find(a=>a.won);
-  assert.equal(winner.economy,40);assert.deepEqual(winner.members,['britain','france','usa']);
+  assert.equal(winner.economy,39);assert.deepEqual(winner.members,['britain','france','usa']);
   for(const p of review.report.players)assert.equal(p.result,winner.members.includes(p.country)?'win':'loss');
   for(const p of review.report.players)assert.equal(p.industry,p.economy);
   assert.equal(JSON.stringify(recorded),original,'Building a report must not mutate its source match.');
@@ -49,8 +49,8 @@ test('review excludes all private conversations, offers, waiting orders, credent
   assert.equal(review.report.events.some(e=>e.type==='message'),false);
 });
 test('military and economic report reconciles neutral forces, shared battles and investments',()=>{
-  assert.deepEqual(review.report.totals,{battles:49,casualties:969,interned:0,recruited:8054,invested:24,upgrades:1,initialTroops:509,remainingTroops:7570});
-  assert.equal(total(review.report.metrics.map(p=>p.recruited)),8054);
+  assert.deepEqual(review.report.totals,{battles:47,casualties:1025,interned:0,recruited:8051,invested:24,upgrades:1,initialTroops:509,remainingTroops:7511});
+  assert.equal(total(review.report.metrics.map(p=>p.recruited)),8051);
   assert.equal(review.report.series.at(-1).tick,1800);
   // Investment and upgrades, in a short match of its own.
   const g=fresh(),p=g.provinces.find(p=>p.id==='alaska');Object.assign(p,{owner:'usa',troops:60,development:1});g.rules.duration=130;start(g);
@@ -60,7 +60,7 @@ test('military and economic report reconciles neutral forces, shared battles and
   assert.equal(built.metrics.find(m=>m.country==='usa').invested,24);
 });
 test('timeline records broken economic holds and alliance changes',()=>{
-  // On the v6 board the recorded match goes to the deadline without a 60% hold.
+  // On the current board the recorded match goes to the deadline without a 60% hold.
   assert.deepEqual(review.report.events.filter(e=>e.type==='dominance').map(e=>e.tick),[]);
   assert.ok(review.report.events.some(e=>e.type==='alliance_activated' && e.tick===335 && e.roster.includes('usa')));
   // A hold broken by an opponent's growth, in a short match of its own.

@@ -358,7 +358,7 @@ test('industrial HTTP plans are private, atomic, synchronized, recallable and pe
   assert.equal(new Set(receipt.orders.map(o=>o.arrivesAt)).size,1);
   f.app.step(f.app.games.get(id),1);await f.restart();
   const restored=(await f.call(`/api/games/${id}`,'GET',undefined,usa.token)).data;
-  assert.equal(restored.scenario,'imperial-1910-v6');assert.ok(restored.armies.some(a=>a.groupId===receipt.groupId));
+  assert.equal(restored.scenario,'imperial-1910-v7');assert.ok(restored.armies.some(a=>a.groupId===receipt.groupId));
   const recall={opId:'return',action:{type:'recall',id:receipt.groupId}};
   assert.equal((await f.call(`/api/games/${id}/actions`,'POST',recall,usa.token)).status,200);
   f.app.step(f.app.games.get(id),10);

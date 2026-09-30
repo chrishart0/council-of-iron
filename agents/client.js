@@ -71,8 +71,9 @@ export class CouncilClient {
   }
   list() {return this.request('/api/games','GET',undefined,'');}
   map() {return this.request(this.match ? this.gamePath('/map') : '/map.json','GET',undefined,'');}
-  /** The map without its decorative SVG paths: IDs, adjacency, coordinates, connections, barriers, countries. */
-  async mapData() {const map=await this.map();return {...map,provinces:map.provinces.map(({path,...province})=>province)};}
+  /** The map without its decorative SVG paths: IDs, adjacency, coordinates, connections, countries and the impassable
+   * terrain (mountains and deserts drawn as unowned land; not provinces, never neighbours). */
+  async mapData() {const map=await this.map();return {...map,provinces:map.provinces.map(({path,...province})=>province),terrain:map.terrain.map(({path,...area})=>area)};}
   start() {return this.request(this.gamePath('/start'),'POST',{});}
   bots() {return this.request(this.gamePath('/bots'),'POST',{});}
   standings() {return this.request('/api/standings','GET',undefined,'');}

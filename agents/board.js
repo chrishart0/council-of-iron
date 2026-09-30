@@ -40,11 +40,6 @@ export function boardView(observation, map) {
     return {
       id: p.id, troops: p.troops, industry: p.development,
       available: available.get(p.id), ...(develop ? { develop } : {}),
-      ...(() => { // borders you can see but not cross (the map's impassable terrain)
-        const blocked = (map.barriers || []).filter(b => b.a === p.id || b.b === p.id)
-          .map(b => ({ id: b.a === p.id ? b.b : b.a, terrain: b.terrain, name: b.name, around: b.around }));
-        return blocked.length ? { impassable: blocked } : {};
-      })(),
       neighbors: place.neighbors.map(id => {
         const target = provinces.get(id), hostile = target.owner && !allies.has(target.owner);
         const war = hostile && atWar(o, o.you, target.owner), truce = hostile && !war ? truceUntil(o, o.you, target.owner) : null;
@@ -70,6 +65,6 @@ export function boardView(observation, map) {
       .map(a => ({ id: a.id, country: a.country, to: a.path?.at(-1) ?? a.to, amount: a.amount, arrivesAt: a.arrivesAt,
         ...(a.returning ? { returning: true } : {}) })),
     outcome: o.outcome,
-    note: 'Province rows are [id, owner, troops, industry]. Your side wins by holding victoryRule.targetIndustry (60% of all owned industry) for victoryRule.holdTicks; at the deadline the side with the most industry wins. A side with winsAt wins then if its hold lasts. attackReady means a war is active (or march with declareWar:true). You can attack any province that borders your own territory (own[].neighbors; an ally\'s border is not enough), sending troops from anywhere in your empire: each column takes the quickest way through your own and allied land. Several sources at once: sources, or fromAllBordering:true. own[].impassable lists borders you cannot cross (mountains, deserts) and the way around. Available troops already leave one at home. Develop only where own[].develop.ready (= readyDevelopments). truces: no war declaration before until. Use preview for battle odds; inbox: unread messages and offers awaiting you.',
+    note: 'Province rows are [id, owner, troops, industry]. Your side wins by holding victoryRule.targetIndustry (60% of all owned industry) for victoryRule.holdTicks; at the deadline the side with the most industry wins. A side with winsAt wins then if its hold lasts. attackReady means a war is active (or march with declareWar:true). You can attack any province that borders your own territory (own[].neighbors; an ally\'s border is not enough), sending troops from anywhere in your empire: each column takes the quickest way through your own and allied land. Several sources at once: sources, or fromAllBordering:true. Available troops already leave one at home. Develop only where own[].develop.ready (= readyDevelopments). truces: no war declaration before until. Use preview for battle odds; inbox: unread messages and offers awaiting you.',
   };
 }
