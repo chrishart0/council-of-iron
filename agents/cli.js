@@ -38,7 +38,7 @@ const help=`Council of Iron CLI (Node 22.13+)
                                      army ID marches again toward its target (at most twice per army)
   rally FROM[,FROM...] TO|clear [--preview]
                                      New troops from FROM march to your province TO at each recruitment
-  develop FROM                       Spend local troops to raise the province's industry
+  develop [FROM]                     Spend local troops to raise FROM's industry; without FROM, every ready province
   war COUNTRY                        Declare war (your whole alliance and theirs)
   peace COUNTRY                      Offer peace to a side you are at war with
   accept-peace OFFER_ID              Accept a peace offer made to your side
@@ -92,7 +92,7 @@ try {
       const from=args[0].split(','),action={type:'rally',from:from.length===1?from[0]:from,to:args[1]==='clear'?null:args[1]};
       result=previewOnly?await client.plan(action):await client.action(action);break;
     }
-    case 'develop':result=await client.action({type:'develop',from:args[0]});break;
+    case 'develop':result=args[0]?await client.action({type:'develop',from:args[0]}):await client.developReady();break;
     case 'war':result=await client.action({type:'declare_war',country:args[0]});break;
     case 'peace':result=await client.action({type:'offer_peace',country:args[0]});break;
     case 'accept-peace':result=await client.action({type:'accept_peace',offerId:args[0]});break;

@@ -459,6 +459,16 @@ test('HTTP join notice: new rooms announce post-match alliance chat; unflagged r
   const plain=await f.call(`/api/games/${old}/join`,'POST',{country:'britain'},guest.token);
   assert.equal(plain.status,200);assert.deepEqual(plain.data.notices,[]);
 });
+test('develop without a province develops exactly the ready ones; nothing ready is a note, not a refusal',async t=>{
+  const f=await fixture(t),{id,sa}=await f.boot();await f.launch(id,sa.token);
+  const g=f.app.games.get(id);for(const p of g.provinces.filter(p=>p.owner==='usa'))p.troops=p.id==='west-us'?60:3;
+  const client=new CouncilClient({url:f.url,token:sa.token,match:id,sessionPath:pathJoin(f.dir,'develop.session.json')});
+  const first=await client.developReady();
+  assert.deepEqual(first.developed.map(d=>d.from),['west-us']);
+  assert.deepEqual(g.orders.filter(o=>o.type==='develop').map(o=>o.from),['west-us']);
+  const again=await client.developReady();
+  assert.deepEqual(again.developed,[]);assert.match(again.note,/No province/);
+});
 test('HTTP declare-and-march shares the engine path and retry receipt',async t=>{
   const f=await fixture(t),{id,sa,sb}=await f.boot();await f.launch(id,sa.token);
   const g=f.app.games.get(id),mexico=g.provinces.find(p=>p.id==='mexico');mexico.owner='britain';mexico.troops=3;

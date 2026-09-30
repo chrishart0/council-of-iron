@@ -74,8 +74,9 @@ tool('turn_around','Bring troops back, or send them back again. Pass a march gro
 tool('rally','Rally point: at every recruitment, the new troops of each source province march to a different province you own along the quickest path through your or allied land. A province already keeps its own recruits without a rally; from and to must differ. They never attack. to:null clears. Set it once and your fronts are fed without further orders. preview:true only forecasts the paths.',
   {from:{type:['string','array'],minItems:1,maxItems:16,items:string},to:{type:['string','null']},preview:{type:'boolean'},...op},['from','to'],
   a=>a.preview?client.plan({type:'rally',from:a.from,to:a.to}):client.action({type:'rally',from:a.from,to:a.to},a.opId));
-tool('develop','Spend local troops to raise a province\'s industry (more troops every 20 s, +1 on the best defending die). I→II costs 24 and takes 120 s; II→III costs 48 and takes 180 s. Use a province from board.readyDevelopments. Capture keeps finished factories but loses unfinished work.',
-  {from:string,...op},['from'],a=>client.action({type:'develop',from:a.from},a.opId));
+tool('develop','Spend local troops to raise a province\'s industry (more troops every 20 s, +1 on the best defending die). I→II costs 24 and takes 120 s; II→III costs 48 and takes 180 s. Omit from to develop every province that is ready now (readyDevelopments); name from for one of them. Capture keeps finished factories but loses unfinished work.',
+  {from:{type:'string',description:'One province from readyDevelopments; omit to develop all of them.'},...op},[],
+  a=>a.from ? client.action({type:'develop',from:a.from},a.opId) : client.developReady(a.opId));
 tool('declare_war','Declare war on a country: your whole alliance and theirs are at war at once. You must be at war before attacking another country\'s province (or march with declareWar:true).',
   {country:string,...op},['country'],a=>client.action({type:'declare_war',country:a.country},a.opId));
 tool('offer_peace','Offer peace to a country you are at war with (and its alliance). Anyone on their side can accept within 60 s; attacks between the sides then turn home.',

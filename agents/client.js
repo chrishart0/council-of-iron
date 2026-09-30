@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { boardView } from './board.js';
 
 export class CouncilClient {
   constructor({ url = process.env.COUNCIL_URL || 'http://127.0.0.1:3107', token = process.env.COUNCIL_TOKEN || '',
@@ -79,6 +80,16 @@ export class CouncilClient {
   async turnAround(id,opId) {
     const o=await this.observe(Number.MAX_SAFE_INTEGER),army=o.armies.find(a=>a.id===id && a.country===o.you);
     return this.action(army?.returning?{type:'turn_around',armyId:id}:{type:'recall',id},opId);
+  }
+  /** Develop every province that is ready now (the board's readyDevelopments), one ordinary develop order each;
+   * one that stopped being ready meanwhile is skipped with its reason. Nothing ready is not an error. */
+  async developReady(opId=randomUUID()) {
+    const ready=boardView(await this.observe(Number.MAX_SAFE_INTEGER),await this.map()).readyDevelopments,developed=[],skipped=[];
+    for(const r of ready){
+      try{developed.push({from:r.from,...await this.action({type:'develop',from:r.from},`${opId}-${r.from}`.slice(0,80))});}
+      catch(error){if(!error.status)throw error;skipped.push({from:r.from,reason:error.message});}
+    }
+    return {developed,...(skipped.length?{skipped}:{}),...(ready.length?{}:{note:'No province has the free troops to develop now.'})};
   }
   list() {return this.request('/api/games','GET',undefined,'');}
   map() {return this.request(this.match ? this.gamePath('/map') : '/map.json','GET',undefined,'');}
