@@ -8396,6 +8396,168 @@
           "ownProvinces": null
         }
       ]
+    },
+    {
+      "id": "2026-09-30T18-39-34-630Z-b263f5ee",
+      "match": "v6-current-germany-05",
+      "mapId": "imperial-1910-v6",
+      "combatSeed": "v6-current-germany-05",
+      "startedAt": "2026-09-30T18:39:34.635Z",
+      "modelGroup": "deepseek",
+      "modelId": "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
+      "client": "Pi",
+      "access": "MCP",
+      "harness": "Pi",
+      "arena": "seven practice bots",
+      "sourceRevision": "352c25574539",
+      "country": "germany",
+      "interfaceVersion": "decision-turn-v9",
+      "turnView": "decision",
+      "strategy": "decision view in prompt",
+      "maxTurnSeconds": 120,
+      "decisionIntervalTicks": 30,
+      "sessionMode": "fresh",
+      "preset": "standard",
+      "status": "finished",
+      "resultReason": "domination",
+      "finalTick": 571,
+      "result": "win",
+      "won": true,
+      "industry": 25,
+      "acceptedActions": 37,
+      "rejectedActions": 0,
+      "toolCalls": 115,
+      "failedToolCalls": 0,
+      "firstActionSeconds": 3.52,
+      "failureRatePct": 0,
+      "inputTokens": 1126720,
+      "outputTokens": 62155,
+      "cacheReadTokens": 832512,
+      "totalTokens": 1188875,
+      "uncachedTokens": 356363,
+      "tokensPerAction": 32131.76,
+      "tokenTurnsReported": 18,
+      "tokenTurns": 18,
+      "turns": 18,
+      "timedOutTurns": 0,
+      "meanTurnSeconds": 22.08,
+      "durationSeconds": 571.85,
+      "progress": [
+        {
+          "tick": 0,
+          "ownIndustry": 10,
+          "sideIndustry": 10,
+          "ownProvinces": 5
+        },
+        {
+          "tick": 30,
+          "ownIndustry": 11,
+          "sideIndustry": 11,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 47,
+          "ownIndustry": 11,
+          "sideIndustry": 23,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 88,
+          "ownIndustry": 11,
+          "sideIndustry": 25,
+          "ownProvinces": 6
+        },
+        {
+          "tick": 118,
+          "ownIndustry": 12,
+          "sideIndustry": 27,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 148,
+          "ownIndustry": 12,
+          "sideIndustry": 26,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 178,
+          "ownIndustry": 12,
+          "sideIndustry": 35,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 208,
+          "ownIndustry": 13,
+          "sideIndustry": 36,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 238,
+          "ownIndustry": 12,
+          "sideIndustry": 35,
+          "ownProvinces": 7
+        },
+        {
+          "tick": 268,
+          "ownIndustry": 15,
+          "sideIndustry": 40,
+          "ownProvinces": 8
+        },
+        {
+          "tick": 298,
+          "ownIndustry": 16,
+          "sideIndustry": 41,
+          "ownProvinces": 9
+        },
+        {
+          "tick": 328,
+          "ownIndustry": 19,
+          "sideIndustry": 49,
+          "ownProvinces": 10
+        },
+        {
+          "tick": 369,
+          "ownIndustry": 23,
+          "sideIndustry": 52,
+          "ownProvinces": 12
+        },
+        {
+          "tick": 401,
+          "ownIndustry": 22,
+          "sideIndustry": 54,
+          "ownProvinces": 11
+        },
+        {
+          "tick": 431,
+          "ownIndustry": 23,
+          "sideIndustry": 55,
+          "ownProvinces": 12
+        },
+        {
+          "tick": 461,
+          "ownIndustry": 24,
+          "sideIndustry": 55,
+          "ownProvinces": 13
+        },
+        {
+          "tick": 533,
+          "ownIndustry": 24,
+          "sideIndustry": 60,
+          "ownProvinces": 13
+        },
+        {
+          "tick": 563,
+          "ownIndustry": 25,
+          "sideIndustry": 63,
+          "ownProvinces": 13
+        },
+        {
+          "tick": 571,
+          "ownIndustry": 25,
+          "sideIndustry": null,
+          "ownProvinces": null
+        }
+      ]
     }
   ]
 }

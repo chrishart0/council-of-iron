@@ -25,7 +25,7 @@ and the menu are sheets that replace the dock. Short landscape (< 500 px tall): 
 the dock as a column on the right.
 ```
 
-`#map` is exactly the viewport and the document never scrolls. The camera receives the covered edges as insets (`atlas.setInsets({left,right,top})` and `{insets}` on focus/fit), so Home, World view and card reveals frame the uncovered map. **Expand** (camera cluster, and the replay map's corner) is a CSS pseudo-fullscreen that works without the Fullscreen API (iPhone Safari); the web app manifest makes *Add to Home Screen* open without browser chrome.
+`#map` is exactly the viewport and the document never scrolls. The camera receives the covered edges as insets (`atlas.setInsets({left,right,top})` and `{insets}` on focus/fit), so Home, World view and card reveals frame the uncovered map. **Expand** (camera cluster, and the replay map's corner) is a CSS pseudo-fullscreen that works without the Fullscreen API (iPhone Safari); the web app manifest makes *Add to Home Screen* open without browser chrome. On phones the zoom buttons leave the camera column while a card is open (zoom stays on pinch, wheel and Q/E), so a tall peek card never pushes the column over the card's controls.
 
 ## Screens
 
