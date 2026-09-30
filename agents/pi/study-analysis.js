@@ -3,6 +3,7 @@
 import { readFileSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 
 export const mean = values => values.length ? values.reduce((n, x) => n + x, 0) / values.length : null;
 export function quantile(values, p) {
@@ -58,7 +59,8 @@ export function summarizeStudyRun(raw, arm) {
   let area = 0;
   for (let i = 1; i < progress.length; i++) area += progress[i - 1].ownIndustry * (progress[i].tick - progress[i - 1].tick);
   const firstMilitary = military.find(a => a.ok), first = actions.find(a => a.ok);
-  const elapsed = at => at ? (Date.parse(at) - Date.parse(raw.playStartedAt || raw.startedAt)) / 1000 : null;
+  // Both runners anchor first-action timing at runner startup, including setup; no inferred game-start time.
+  const elapsed = at => at ? (Date.parse(at) - Date.parse(raw.startedAt)) / 1000 : null;
   const usageFields = ['input', 'output', 'cacheRead', 'cacheWrite', 'total'];
   const usage = Object.fromEntries(usageFields.map(k => [k, Number.isFinite(raw.usage?.[k]) ? raw.usage[k] : null]));
   const rejectionCategory = error => /Membership change already pending/.test(error || '') ? 'pending-membership'
@@ -74,7 +76,9 @@ export function summarizeStudyRun(raw, arm) {
     const category = rejectionCategory(a.error); rejectionCounts[category] = (rejectionCounts[category] || 0) + 1;
   }
   return { runId: raw.runId, country: raw.country, combatSeed: raw.combatSeed, arm,
-    model: raw.modelId, mapId: raw.mapId, sourceRevision: raw.sourceRevision, interfaceVersion: raw.interfaceVersion,
+    model: arm === 'pure-jev' ? decisions.find(d => d.model)?.model || 'typesafe/jev-1.13' : raw.modelId,
+    plannerModel: arm === 'pure-jev' ? null : raw.modelId,
+    mapId: raw.mapId, sourceRevision: raw.sourceRevision, interfaceVersion: raw.interfaceVersion,
     startedAt: raw.startedAt, finishedAt: raw.finishedAt ?? null, status: complete ? 'finished' : 'incomplete',
     result: complete ? raw.score.result : null, ownIndustry: complete ? raw.score.industry : null,
     finalTick: complete ? raw.finalTick : null, survived: complete ? raw.score.industry > 0 : null,
@@ -133,11 +137,39 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const manifest = JSON.parse(readFileSync(resolve(dir, 'manifest.json')));
   const rawFiles = readdirSync(resolve(root, 'data/pi')).filter(f => f.endsWith('.json') && !f.endsWith('.session.json'));
   const raw = rawFiles.map(f => JSON.parse(readFileSync(resolve(root, 'data/pi', f))));
-  const runs = manifest.jobs.map(j => {
+  const processes = execFileSync('ps', ['-eo', 'args'], { encoding: 'utf8' });
+  const batchRows = (batch, batchLabel) => batch.jobs.map(j => {
     const r = raw.find(r => r.playerModel === j.alias); if (!r) throw new Error(`No raw run for ${j.alias}`);
-    return { ...summarizeStudyRun(r, j.arm), processExitCode: j.exitCode ?? null };
+    let workerStatus;
+    if (j.statusFile) try { workerStatus = JSON.parse(readFileSync(j.statusFile)); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    const row = summarizeStudyRun(r, j.arm);
+    const processRunning = processes.includes(`--model ${j.alias} `);
+    return { ...row, batch: batchLabel, processExitCode: workerStatus?.exitCode ?? j.exitCode ?? null,
+      processSignal: workerStatus?.signal ?? j.signal ?? null,
+      executionStatus: row.status === 'finished' ? 'completed-record' : processRunning ? 'running' : 'interrupted-or-failed' };
   });
-  if (!process.argv.includes('--partial') && runs.some(r => r.processExitCode === null)) throw new Error('Study still running. Use --partial for progress only.');
+  const original = batchRows(manifest, 'original');
+  const replacementIndex = process.argv.indexOf('--baseline-replacement');
+  let replacementManifest, replacement = [];
+  if (replacementIndex >= 0) {
+    replacementManifest = JSON.parse(readFileSync(resolve(root, process.argv[replacementIndex + 1], 'manifest.json')));
+    if (replacementManifest.protocolSha256 !== manifest.protocolSha256) throw new Error('Replacement protocol differs.');
+    replacement = batchRows(replacementManifest, 'baseline-replacement');
+    if (replacement.length !== 8 || replacement.some(r => r.arm !== 'baseline')) throw new Error('Expected all eight baseline replacement cases.');
+  }
+  const hybridIndex = process.argv.indexOf('--hybrid-replacement');
+  let hybridManifest, hybridReplacement = [];
+  if (hybridIndex >= 0) {
+    hybridManifest = JSON.parse(readFileSync(resolve(root, process.argv[hybridIndex + 1], 'manifest.json')));
+    if (hybridManifest.protocolSha256 !== manifest.protocolSha256) throw new Error('Hybrid replacement protocol differs.');
+    hybridReplacement = batchRows(hybridManifest, 'hybrid-replacement');
+    if (hybridReplacement.length !== 24 || hybridReplacement.some(r => r.arm === 'baseline')) throw new Error('Expected all 24 hybrid replacement cases.');
+  }
+  const hybrids = hybridReplacement.length ? hybridReplacement : original.filter(r => r.arm !== 'baseline');
+  const runs = replacement.length ? [...hybrids, ...replacement] : original;
+  const attempts = [...original, ...replacement, ...hybridReplacement];
+  if (!process.argv.includes('--partial') && attempts.some(r => r.executionStatus === 'running'))
+    throw new Error('Study still running. Use --partial for progress only.');
   const arms = {};
   for (const arm of ['baseline', 'heuristic', 'jev', 'pure-jev']) {
     const group = runs.filter(r => r.arm === arm), complete = group.filter(r => r.status === 'finished');
@@ -168,7 +200,15 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const positions = summarizePositions(JSON.parse(readFileSync(resolve(root, 'data/jev-study/positions/results.private.json'))));
   const result = { study: 'jev-council-v1', phase: manifest.phase, generatedAt: new Date().toISOString(),
     startedAt: manifest.startedAt, finishedAt: manifest.finishedAt ?? null, protocolSha256: manifest.protocolSha256,
-    partial: runs.some(r => r.processExitCode === null), arms, paired, positions, runs };
+    partial: attempts.some(r => r.executionStatus === 'running'), arms, paired, positions, runs, attempts,
+    hybridReplacement: hybridReplacement.length ? { startedAt: hybridManifest.startedAt, attempted: 24,
+      originalFinished: original.filter(r => r.arm !== 'baseline' && r.status === 'finished').length,
+      originalInterrupted: original.filter(r => r.arm !== 'baseline' && r.status !== 'finished' && r.executionStatus !== 'running').length,
+      reason: 'Six unfinished original hybrid workers disappeared after the launcher interruption. All 24 hybrid cases repeated durably, using unchanged controller files, to avoid selecting only early finishes. Final hybrid comparisons use only this complete replacement batch.' } : null,
+    baselineReplacement: replacement.length ? { startedAt: replacementManifest.startedAt, attempted: replacement.length,
+      originalFinished: original.filter(r => r.arm === 'baseline' && r.status === 'finished').length,
+      originalInterrupted: original.filter(r => r.arm === 'baseline' && r.status !== 'finished' && r.executionStatus !== 'running').length,
+      reason: 'Original launcher exited with SIGTERM; seven baseline workers disappeared without final records. Cause unknown. All eight baseline cases repeated as one later batch. Baseline comparisons are exploratory and have a different concurrency window.' } : null };
   const output = resolve(root, process.argv.includes('--partial') ? 'data/jev-study/progress.json' : 'docs/experiments/jev-results.json');
   mkdirSync(dirname(output), { recursive: true }); writeFileSync(output, JSON.stringify(result, null, 2) + '\n');
   console.log(JSON.stringify({ output, partial: result.partial, arms, paired }, null, 2));

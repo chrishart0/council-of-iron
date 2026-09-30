@@ -43,6 +43,12 @@ node --env-file=/path/to/private.env agents/pi/position-bench.js space_bunny
 node --env-file=/path/to/private.env agents/pi/jev-study.js --phase main --out data/jev-study/main
 ```
 
+For long runs, use durable workers (independent transient user units, with per-job exit records):
+
+```sh
+node --env-file=/path/to/private.env agents/pi/jev-study.js --phase main --out data/jev-study/main-durable --durable-env-file /path/to/private.env
+```
+
 `hybrid-play.js` has no live-room URL option. Raw runs, databases, credentials, strategy outputs and chats remain ignored under `data/` and model workspaces. Only allowlisted aggregate statistics are published. A code or configuration fix after a main run begins requires a new labeled implementation batch; do not silently pool it with the frozen batch.
 
 ## Pilot observations
@@ -50,3 +56,18 @@ node --env-file=/path/to/private.env agents/pi/jev-study.js --phase main --out d
 An authenticated Jev smoke test returned in 328 ms and reported cost $0.00001449. Initial hybrid pilots rejected the LLM request because the experiment omitted the existing profile's `offReasoningEffort=low` compatibility mapping; they are retained as incomplete pilot attempts. The mapping was corrected before the main study. Four replacement pilot arms exercised the candidate builder and ordinary HTTP order validation. Quick games verify integration and are not used for playing-strength comparisons.
 
 Main results will be recorded after completion, with no claim of human enjoyment, human-opponent strength or game balance.
+
+## Original-batch interruption and complete replacement
+
+The original launcher exited with signal 15, observed through the execution tool. Seven baseline processes disappeared without authoritative final records. Six unfinished hybrid processes subsequently disappeared too. The cause is not established; the system earlyoom log inspected during the incident did not report a kill. No missing final result is counted as a loss, and no unfinished run is imported into a completed-match ledger.
+
+All eight baseline cases were repeated in one durable batch, including the one original baseline that finished. All 24 hybrid cases were also repeated in one durable batch, including earlier completed cases, to avoid selecting only the fast-finish survivors. The model settings, seeds and controller files were unchanged (`git diff fbaf56c -- agents/pi/hybrid-play.js agents/pi/tactical-candidates.js agents/pi/decision-api.js agents/pi/play.js src/engine.js public/imperial-map.json` was empty before replacement launch). Changes concern only launch durability and analysis bookkeeping.
+
+The primary paired Jev-versus-code comparison uses only the complete replacement hybrid batch. Baselines started earlier in a separate replacement window, so baseline comparisons are exploratory and cannot attribute differences solely to architecture or model latency. The complete original records are retained as descriptive attempts, not pooled into the final eight-per-arm summary. The published exporter includes every attempt and its status. Durable workers keep exit status independently of the launcher; saved finished results also remain usable when a launcher disappears.
+
+Replacement analysis command:
+
+```sh
+node agents/pi/study-analysis.js data/jev-study/main --baseline-replacement data/jev-study/baseline2 --hybrid-replacement data/jev-study/hybrid2
+python scripts/plot-jev-study.py
+```
