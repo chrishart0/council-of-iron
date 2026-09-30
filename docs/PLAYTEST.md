@@ -17,6 +17,8 @@ Across every recorded agent run so far (Pi raw runs and playtest MCP logs), 757 
 
 DeepSeek V4 Flash through Pi on `decision-turn-v9` (revision `352c255`, same Germany seed) won by domination at tick 571 with 25 own industry and **0 failed calls of 115**; on `decision-turn-v6` it had won the same start at tick 1625 with 9 own industry and 17 failed of 337. The v9 Space Bunny rows total 6 failed of 182 calls (3.3%, against 8–11% per Pi game before). All v9 remaining failures were single-source orders with no free troops, a develop that was not ready, a march to the source itself, a preview without a border and a develop on a fully developed province. One run per start: the wins show the interface no longer gets in the way; they do not rank the models, and the lower own industry in several coalition wins is a strategy question, not a tool one.
 
+Verification after merging master's map v7 (`791beb2`): `npm test` passed 235 tests, `npm run check` passed, the 32-round diplomacy balance run had zero invariant failures (22 decisive, 10 deadline wins, no draws), and the native `python tests/browser.py` suites passed (live, review, UI, UI tasks, voice, performance). The engine change moves the handplay replay (43 more recorded marches go through, 204 → 247 accepted actions), which moved the UI fixture: at 390×844 a tall peek card let the camera column cover its fold button, so the zoom buttons now leave the camera beside an open card on phones, and the recorded "line held" check moved from India at tick 600 to India at tick 610.
+
 # v6 agent results — 29 September 2026
 
 ## Current Pi baselines — 29 September 2026
