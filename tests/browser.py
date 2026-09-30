@@ -205,9 +205,6 @@ def live_match(args, artifacts):
                 expect(page.locator('#phase')).to_have_text('In session')  # Start means start
                 assert http(f'/api/games/{room}')['status']=='running'
                 report['assertions'].append(f'Separate CLI process joined Britain; {"six practice bots" if args.full else "six idle agent seats"} filled the room; the host pressed Start and the match began at once.')
-                if args.gif:
-                    page.evaluate('''() => { const note=document.createElement('div');note.textContent='ACTUAL BROWSER CAPTURE · 12× TEST CLOCK · HEURISTIC AGENTS';note.style.cssText='position:fixed;right:18px;bottom:10px;z-index:20;padding:6px 10px;background:#142c34ee;border:1px solid #c6a87280;color:#e4d6ae;font:9px system-ui;letter-spacing:.7px;border-radius:3px;pointer-events:none';document.body.append(note); }''')
-                capture(page,800)
                 # Simulate the randomUUID restriction of plain-HTTP LAN browsers.
                 page.evaluate('crypto.randomUUID = undefined')
                 # Real DOM inputs -> shared action endpoint. No direct state mutation.
@@ -237,7 +234,6 @@ def live_match(args, artifacts):
                 province(page,'central-us');expect(page.locator('#rally-province')).to_contain_text('Rally →')
                 page.keyboard.press('Escape')
                 report['assertions'].append('Browser and CLI committed armies; the browser set a rally point (Central US → West US) that the map draws.')
-                capture(page,1000)
                 country_card(page,'britain')
                 page.locator('#primary').click()  # Propose alliance: an inline name field with a default
                 expect(page.locator('#card-body .proposal')).to_contain_text('Sending is your approval')
@@ -248,7 +244,6 @@ def live_match(args, artifacts):
                 page.locator('#coalition-name').fill('Atlantic Accord');page.locator('#primary').click()
                 expect(page.locator('#card-status')).to_contain_text('ALLIANCE OFFER PENDING')
                 expect(page.locator('#card-status')).to_contain_text('Atlantic Accord')
-                capture(page,1000)
                 agent_state=cli('state')
                 offer=next(q for q in agent_state['proposals'] if q['name']=='Atlantic Accord')
                 cli('accept',offer['id'])
@@ -272,7 +267,6 @@ def live_match(args, artifacts):
                 page.locator('[data-lb-mode="teams"]').click()
                 report['assertions'].append(f'Relations: the HUD names the alliance (Atlantic Accord); the leaderboard marks Britain as ally and {enemies or "nobody"} as enemies, matching the public war list.')
                 report['assertions'].append('Browser proposed an alliance; CLI accepted; after the public notice both shared the alliance.')
-                capture(page,1000)
                 # Cancellation must not file an accidental irreversible departure.
                 page.locator('#hud-standard').click();page.locator('#card-actions button',has_text='Leave alliance').click()
                 expect(page.locator('#confirm-dialog')).to_be_visible()
@@ -314,7 +308,6 @@ def live_match(args, artifacts):
                 page.locator('#cx-text').fill('Unsent draft survives live updates.')
                 page.wait_for_timeout(900)
                 expect(page.locator('#cx-text')).to_have_value('Unsent draft survives live updates.')
-                capture(page,1200)
                 report['assertions'].append('A DM shown in its open thread clears the Messages unread count; an unsent draft survives live polling.')
                 assert not page.evaluate('Boolean(window.INJECTED)')
                 public_state=http(f'/api/games/{room}')
@@ -367,8 +360,7 @@ def live_match(args, artifacts):
                     page.wait_for_timeout(300)
                 assert any(e['type']=='battle' and e.get('province')=='mexico' for e in state['events'])
                 page.screenshot(path=str(artifacts/'02-campaign.png'),full_page=True)
-                capture(page,800)
-                camera(page,'europe');capture(page,900);page.screenshot(path=str(artifacts/'03-europe.png'),full_page=True)
+                camera(page,'europe');page.screenshot(path=str(artifacts/'03-europe.png'),full_page=True)
                 camera(page,'world')
                 report['assertions'].append('Browser-issued attack fought for Mexico after travel and multiple combat rounds; world and Europe zoom rendered.')
                 # Reconnect a second page with the same browser identity, not another join.
@@ -396,15 +388,54 @@ def live_match(args, artifacts):
                 assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1'), 'Mobile horizontal overflow'
                 page.set_viewport_size({'width':1600,'height':1050})
                 report['assertions'].append('390-pixel mobile layout displayed controls without horizontal page overflow.')
+                def gif_note(page):
+                    page.evaluate('''() => { const note=document.createElement('div');note.textContent='ACTUAL BROWSER CAPTURE · 12× TEST CLOCK · PRACTICE BOTS';note.style.cssText='position:fixed;left:18px;bottom:10px;z-index:20;padding:6px 10px;background:#142c34ee;border:1px solid #c6a87280;color:#e4d6ae;font:10px system-ui;letter-spacing:.7px;border-radius:3px;pointer-events:none';document.body.append(note); }''')
+                def rest(page):
+                    """Park the pointer on the top bar: no map hover tooltip in the frame."""
+                    page.mouse.move(page.viewport_size['width']*.5,8)
+                def gif_attack(page):
+                    """The recording opens with a real order: drag from a USA counter onto a neighbour (the snapped arrow shows
+                    troops and arrival), release, and send it from the order card. Real pointer input, the shared action path."""
+                    world=http('/map.json');state=http(f'/api/games/{room}');owner={p['id']:p for p in state['provinces']}
+                    land={(e['from'],e['to']) for e in world['edges'] if not e['sea']}|{(e['to'],e['from']) for e in world['edges'] if not e['sea']}
+                    enemies={b if a=='usa' else a for a,b in (w.split(':') for w in state['wars']) if 'usa' in (a,b)}
+                    busy={o['from'] for o in state.get('orders',[])}|{a['from'] for a in state['armies'] if a['country']=='usa'}
+                    options=[(owner[a]['troops'],a,b) for a,b in sorted(land) if owner[a]['owner']=='usa' and a not in busy and owner[a]['troops']>=6
+                             and (owner[b]['owner'] is None or owner[b]['owner'] in enemies)]
+                    if not options:report['assertions'].append('GIF: USA had no province to attack from; recorded the war only.');return
+                    _,src,dst=max(options)
+                    page.keyboard.press('Escape');page.locator('#home-view').click();page.wait_for_timeout(300);bring(page,src)
+                    rest(page);page.wait_for_timeout(300);capture(page,700)
+                    sx,sy=centre(page.locator(f'#marker-{src} .counter-body'));tx,ty=centre(page.locator(f'#marker-{dst} .counter-body'))
+                    page.mouse.move(sx,sy);page.mouse.down()
+                    for i in range(1,13):
+                        page.mouse.move(sx+(tx-sx)*i/12,sy+(ty-sy)*i/12);page.wait_for_timeout(40)
+                        if i%3==0:capture(page,220)
+                    expect(page.locator('#map-armies .draft-arrow.snapped')).to_have_count(1);capture(page,1100)
+                    page.mouse.up();expect(page.locator('#primary')).to_be_visible();capture(page,1000)
+                    page.locator('#primary').click()
+                    if page.locator('#confirm-dialog').is_visible():page.locator('#confirm-dialog [value="confirm"]').click()
+                    deadline=time.monotonic()+6
+                    while time.monotonic()<deadline and not any(a['country']=='usa' and (a.get('path') or [a['to']])[-1]==dst for a in http(f'/api/games/{room}')['armies']):
+                        page.wait_for_timeout(200)
+                    page.keyboard.press('Escape');rest(page)
+                    for _ in range(6):capture(page,300);page.wait_for_timeout(500)
+                    report['assertions'].append(f'GIF: dragged a real order arrow from {src} to {dst} and sent it from the order card.')
                 def first_room_result():
                     # Do not advance the clock through a privileged endpoint: wait for wall-clock play. Standard is 30 game
                     # minutes, 150 s at 12x from the start, sooner if a side holds 60% of the industry.
                     page.goto(url+f'/?match={room}') if not args.bridge else None
                     if args.gif:
-                        deadline=time.monotonic()+240
+                        expect(page.locator('#connection')).to_have_text('Live')
+                        if page.locator('#coach').is_visible():page.locator('#coach-skip').click()
+                        gif_note(page);gif_attack(page)
+                        # Then watch the war: armies march with their arrows, battles roll, fronts move. Camera only.
+                        views=['europe','world']
+                        deadline=time.monotonic()+240;frame=0
                         while not page.locator('#result').is_visible() and time.monotonic()<deadline:
-                            capture(page)
-                            page.wait_for_timeout(1800)
+                            if frame%14==0:camera(page,views[frame//14%2]);page.keyboard.press('Escape');rest(page)
+                            capture(page,160);frame+=1
+                            page.wait_for_timeout(900)
                     expect(page.locator('#result')).to_be_visible(timeout=240000)
                     capture(page,2200)
                     result=http(f'/api/games/{room}')
@@ -493,7 +524,6 @@ def live_match(args, artifacts):
                     expect(page.locator('#sources .source-chip')).to_have_count(2);expect(page.locator('#card-title')).to_have_text(names[target])
                     page.locator('#card-size').click();expect(page.locator('#order-details')).to_contain_text('arrive together')
                     page.screenshot(path=str(artifacts/'06-coordinated-plan.png'),full_page=True)
-                    capture(page,1300)
                     page.locator('#primary').click()
                     # The server has the order (a brief "Sent" toast may lose the one slot to news that affects you).
                     sent=lambda:(lambda g:any(o.get('to')==target or (o.get('path') or [None])[-1]==target for o in g.get('orders',[])+g['armies'] if o.get('country','usa')=='usa'))(http(f'/api/games/{room2}'))
@@ -508,7 +538,6 @@ def live_match(args, artifacts):
                     confirmed(page,'Recall queued')
                     expect(page.locator('.march-row.returning').first).to_be_visible(timeout=5000)
                     page.screenshot(path=str(artifacts/'07-recalling.png'),full_page=True)
-                    capture(page,1300)
                     report['assertions'].append(f'Browser committed a two-source attack ({src} and {second} on {target}, the second added by tapping it beside the target) as one order, then recalled the group with real return time.')
                     # Develop a province of the USA (the lowest level it can pay for); natural recruitment funds the construction.
                     usa_state=lambda:{p['id']:p for p in http(f'/api/games/{room2}')['provinces']}
@@ -530,7 +559,6 @@ def live_match(args, artifacts):
                     confirmed(page,'Investment committed')
                     expect(develop).to_contain_text(re.compile('Construction queued|Building level'),timeout=6000)
                     page.screenshot(path=str(artifacts/'08-development.png'),full_page=True)
-                    capture(page,1300)
                     # Construction takes 120 (I→II) or 180 (II→III) game seconds: 10 or 15 s at 12x.
                     deadline=time.monotonic()+40
                     while time.monotonic()<deadline and usa_state()[build]['development']==level:page.wait_for_timeout(300)

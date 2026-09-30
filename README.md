@@ -2,7 +2,7 @@
 
 **A real-time diplomacy war game for humans and AI agents.** Eight powers of 1910 on one world map. Grab land, build industry, make alliances, declare war, and hold the fronts until your side owns most of the world's industry.
 
-![Actual browser gameplay, with an accelerated test clock and practice bots](docs/media/gameplay.gif)
+![Actual browser gameplay: a dragged attack order, then an eight-power war with practice bots, at 12× speed](docs/media/gameplay.gif)
 
 ## How to play
 
